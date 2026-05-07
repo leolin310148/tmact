@@ -52,6 +52,73 @@ actions:
 	}
 }
 
+func TestLoadConfigParsesFlows(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+flows:
+  - name: maintenance-cycle
+    every: 20m
+    initial_delay: 1m
+    only_when_idle: true
+    max_runs: 3
+    steps:
+      - type: send_keys
+        keys: ["C-u"]
+        post_delay: 500ms
+      - name: clear-context
+        type: clear
+        post_delay: 5s
+      - type: send_text
+        text: continue
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flow := cfg.Flows[0]
+	if flow.Name != "maintenance-cycle" {
+		t.Fatalf("flow name = %q", flow.Name)
+	}
+	if flow.Every.Duration != 20*time.Minute {
+		t.Fatalf("flow every = %s", flow.Every.Duration)
+	}
+	if flow.InitialDelay.Duration != time.Minute {
+		t.Fatalf("flow initial_delay = %s", flow.InitialDelay.Duration)
+	}
+	if !flow.OnlyWhenIdle {
+		t.Fatal("flow should be idle-gated")
+	}
+	if flow.MaxRuns != 3 {
+		t.Fatalf("flow max_runs = %d", flow.MaxRuns)
+	}
+	if flow.Steps[0].Name != "step-1" {
+		t.Fatalf("first step name = %q", flow.Steps[0].Name)
+	}
+	if flow.Steps[1].Name != "clear-context" {
+		t.Fatalf("second step name = %q", flow.Steps[1].Name)
+	}
+	if flow.Steps[0].PostDelay.Duration != 500*time.Millisecond {
+		t.Fatalf("first step post_delay = %s", flow.Steps[0].PostDelay.Duration)
+	}
+}
+
+func TestLoadConfigRejectsFlowStepSchedule(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+flows:
+  - name: invalid-cycle
+    steps:
+      - type: clear
+        every: 5m
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadConfigRejectsInvalidIdleIgnorePattern(t *testing.T) {
 	path := writeTempConfig(t, `
 target: sample:0.0
@@ -78,6 +145,23 @@ actions:
 	_, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestLoadExampleConfigs(t *testing.T) {
+	examples := []string{
+		"night-loop.yaml",
+		"example-org-sample-project-loop.yaml",
+		"z-sample-project-loop.yaml",
+		"z-sample-project-loop.yaml",
+	}
+
+	for _, name := range examples {
+		t.Run(name, func(t *testing.T) {
+			if _, err := LoadConfig(filepath.Join("..", "..", "examples", name)); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

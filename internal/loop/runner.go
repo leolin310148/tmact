@@ -34,6 +34,12 @@ type actionState struct {
 	runs    int
 }
 
+type flowState struct {
+	config  FlowConfig
+	nextRun time.Time
+	runs    int
+}
+
 type paneState struct {
 	Hash             string                  `json:"hash"`
 	Idle             bool                    `json:"idle"`
@@ -75,6 +81,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	actions := make([]actionState, 0, len(r.cfg.Actions))
 	for _, cfg := range r.cfg.Actions {
 		actions = append(actions, actionState{
+			config:  cfg,
+			nextRun: start.Add(cfg.InitialDelay.Duration),
+		})
+	}
+	flows := make([]flowState, 0, len(r.cfg.Flows))
+	for _, cfg := range r.cfg.Flows {
+		flows = append(flows, flowState{
 			config:  cfg,
 			nextRun: start.Add(cfg.InitialDelay.Duration),
 		})
@@ -121,6 +134,17 @@ func (r *Runner) Run(ctx context.Context) error {
 			if executed {
 				actionCount++
 			}
+		}
+		for i := range flows {
+			if r.cfg.MaxActions > 0 && actionCount >= r.cfg.MaxActions {
+				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
+			}
+
+			executed, err := r.maybeRunFlow(now, state, &flows[i])
+			if err != nil {
+				return err
+			}
+			actionCount += executed
 		}
 
 		if r.options.Once {
@@ -194,7 +218,90 @@ func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionSt
 		return false, nil
 	}
 
-	err := r.executeAction(action.config)
+	if err := r.runAction(now, action.config.Name, action.config); err != nil {
+		return false, err
+	}
+
+	action.runs++
+	if action.config.Every.Duration > 0 {
+		action.nextRun = now.Add(action.config.Every.Duration)
+	} else {
+		action.nextRun = time.Time{}
+		action.config.MaxRuns = action.runs
+	}
+	return true, nil
+}
+
+func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState) (int, error) {
+	if now.Before(flow.nextRun) {
+		return 0, nil
+	}
+	if flow.config.MaxRuns > 0 && flow.runs >= flow.config.MaxRuns {
+		return 0, nil
+	}
+	if flow.config.OnlyWhenIdle && !state.Idle {
+		if r.cfg.LogSkippedActions {
+			return 0, r.emit(event{
+				Timestamp: now.Format(time.RFC3339),
+				Type:      "skip",
+				Target:    r.cfg.Target,
+				Action:    flow.config.Name,
+				Status:    "not_idle",
+				Details:   state,
+			})
+		}
+		return 0, nil
+	}
+
+	if err := r.emit(event{
+		Timestamp: now.Format(time.RFC3339),
+		Type:      "flow",
+		Target:    r.cfg.Target,
+		Action:    flow.config.Name,
+		DryRun:    r.options.DryRun,
+		Status:    "start",
+		Details: map[string]interface{}{
+			"steps": len(flow.config.Steps),
+		},
+	}); err != nil {
+		return 0, err
+	}
+
+	executed := 0
+	for _, step := range flow.config.Steps {
+		stepName := flow.config.Name + "." + step.Name
+		if err := r.runAction(now, stepName, step); err != nil {
+			return executed, err
+		}
+		executed++
+	}
+
+	if err := r.emit(event{
+		Timestamp: now.Format(time.RFC3339),
+		Type:      "flow",
+		Target:    r.cfg.Target,
+		Action:    flow.config.Name,
+		DryRun:    r.options.DryRun,
+		Status:    "ok",
+		Details: map[string]interface{}{
+			"steps": executed,
+		},
+	}); err != nil {
+		return executed, err
+	}
+
+	flow.runs++
+	if flow.config.Every.Duration > 0 {
+		flow.nextRun = now.Add(flow.config.Every.Duration)
+	} else {
+		flow.nextRun = time.Time{}
+		flow.config.MaxRuns = flow.runs
+	}
+	return executed, nil
+}
+
+func (r *Runner) runAction(now time.Time, name string, action ActionConfig) error {
+	err := r.executeAction(action)
 	status := "ok"
 	reason := ""
 	if err != nil {
@@ -206,33 +313,25 @@ func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionSt
 		Timestamp: now.Format(time.RFC3339),
 		Type:      "action",
 		Target:    r.cfg.Target,
-		Action:    action.config.Name,
+		Action:    name,
 		DryRun:    r.options.DryRun,
 		Status:    status,
 		Reason:    reason,
 		Details: map[string]interface{}{
-			"type":       action.config.Type,
-			"post_delay": action.config.PostDelay.Duration.String(),
+			"type":       action.Type,
+			"post_delay": action.PostDelay.Duration.String(),
 		},
 	}); emitErr != nil && err == nil {
 		err = emitErr
 	}
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	if action.config.PostDelay.Duration > 0 && !r.options.DryRun {
-		time.Sleep(action.config.PostDelay.Duration)
+	if action.PostDelay.Duration > 0 && !r.options.DryRun {
+		time.Sleep(action.PostDelay.Duration)
 	}
-
-	action.runs++
-	if action.config.Every.Duration > 0 {
-		action.nextRun = now.Add(action.config.Every.Duration)
-	} else {
-		action.nextRun = time.Time{}
-		action.config.MaxRuns = action.runs
-	}
-	return true, nil
+	return nil
 }
 
 func (r *Runner) executeAction(action ActionConfig) error {

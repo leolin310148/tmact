@@ -89,6 +89,32 @@ The loop is config-driven rather than hard-coded. Each action can set:
 - `max_runs`
 - `enter`
 
+Related actions can also be grouped into a scheduled `flow`. Flow-level timing
+and idle rules apply once to the whole sequence, while each step keeps its own
+action fields such as `type`, `keys`, `text`, `enter`, and `post_delay`:
+
+```yaml
+flows:
+  - name: improvement-cycle
+    every: 20m
+    initial_delay: 20m
+    only_when_idle: true
+    max_runs: 24
+    steps:
+      - name: clear-input
+        type: send_keys
+        keys: ["C-u"]
+        post_delay: 500ms
+      - name: clear-context
+        type: clear
+        post_delay: 5s
+      - name: improvement-prompt
+        type: send_text
+        enter: true
+        text: |
+          Continue with one small scoped improvement.
+```
+
 The loop can also stop when a permission prompt is visible, which is safer than
 silently granting access while an agent is running unattended.
 
