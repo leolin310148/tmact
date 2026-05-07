@@ -1,0 +1,56 @@
+# Minimal midnight tmux agent loop.
+#
+# Run a one-pass dry run:
+#   go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once
+#
+# Run the loop:
+#   go run ./cmd/tmact loop --config examples/night-loop.yaml
+
+target: z_sample-project_sample:0.0
+capture_lines: 160
+poll_interval: 30s
+idle_after: 3m
+assume_idle_on_start: false
+max_runtime: 8h
+max_actions: 80
+log_path: .tmact/night-loop.jsonl
+
+# For now, stop instead of auto-answering permission prompts. This keeps the
+# loop useful overnight without silently granting a new filesystem boundary.
+stop_on_permission_prompt: true
+
+actions:
+  - name: midnight-test-prompt
+    type: send_text
+    every: 45m
+    initial_delay: 0s
+    only_when_idle: true
+    max_runs: 8
+    enter: true
+    text: |
+      Continue the current coding task. Focus on one small, safe improvement:
+      add or improve tests, fix a minor UI/UX issue, or tighten docs around the
+      changed behavior. Keep changes scoped. Run the relevant tests before
+      summarizing. If blocked by permissions or unclear product behavior, stop
+      and explain the blocker.
+
+  - name: pre-clear-summary
+    type: send_text
+    every: 90m
+    initial_delay: 80m
+    only_when_idle: true
+    max_runs: 5
+    enter: true
+    text: |
+      Before context is cleared, write a compact handoff summary with:
+      current goal, files changed, tests run, failures still open, decisions
+      made, and the exact next action.
+
+  - name: clear-context
+    type: clear
+    every: 90m
+    initial_delay: 85m
+    only_when_idle: true
+    max_runs: 5
+    command: /clear
+    enter: true
