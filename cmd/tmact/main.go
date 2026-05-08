@@ -44,6 +44,8 @@ func run(args []string) error {
 		return runInbox(args[1:])
 	case "summarize":
 		return runSummarize(args[1:])
+	case "broadcast":
+		return runBroadcast(args[1:])
 	case "loop":
 		return runLoop(args[1:])
 	case "watch":
@@ -181,6 +183,53 @@ func runSummarize(args []string) error {
 	}
 
 	printSummary(report)
+	return nil
+}
+
+func runBroadcast(args []string) error {
+	fs := flag.NewFlagSet("broadcast", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to agent registry YAML config")
+	agentName := fs.String("agent", "", "agent name to send to")
+	role := fs.String("role", "", "role to send to")
+	all := fs.Bool("all", false, "send to every configured agent")
+	text := fs.String("text", "", "text to send")
+	enter := fs.Bool("enter", false, "press Enter after sending text")
+	execute := fs.Bool("execute", false, "actually send text to tmux; default is dry-run")
+	onlyIdle := fs.Bool("only-idle", false, "skip agents that do not appear idle")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := agents.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	report, err := agents.Broadcast(cfg, agents.BroadcastOptions{
+		Agent:    *agentName,
+		Role:     *role,
+		All:      *all,
+		Text:     *text,
+		Enter:    *enter,
+		Execute:  *execute,
+		OnlyIdle: *onlyIdle,
+	})
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printBroadcast(report)
 	return nil
 }
 
@@ -367,6 +416,28 @@ func printGitSummary(git *agents.GitSummary) {
 	}
 }
 
+func printBroadcast(report agents.BroadcastReport) {
+	fmt.Printf("ts: %s\n", report.Timestamp)
+	if report.DryRun {
+		fmt.Println("mode: dry-run")
+	} else {
+		fmt.Println("mode: execute")
+	}
+	for _, result := range report.Results {
+		fmt.Printf("%s\t%s\t%s", result.Agent, result.Target, result.Status)
+		if result.State != "" {
+			fmt.Printf("\tstate:%s", result.State)
+		}
+		if result.Reason != "" {
+			fmt.Printf("\treason:%s", result.Reason)
+		}
+		if result.Error != "" {
+			fmt.Printf("\terror:%s", result.Error)
+		}
+		fmt.Println()
+	}
+}
+
 func usage() error {
 	fmt.Fprint(os.Stderr, usageText())
 	return nil
@@ -380,6 +451,7 @@ Usage:
   tmact status --config examples/agents.yaml [--json]
   tmact inbox --config examples/agents.yaml [--json]
   tmact summarize --config examples/agents.yaml [--agent z-sample-project] [--json]
+  tmact broadcast --config examples/agents.yaml --agent z-sample-project --text "summarize progress" [--enter] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
 
@@ -388,6 +460,7 @@ Commands:
   status    summarize configured agent panes
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity
+  broadcast safely send text to selected agent panes
   loop      run a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
 `
