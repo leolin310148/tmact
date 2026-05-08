@@ -1,0 +1,19 @@
+capture_lines: 160
+agents:
+  - name: z-sample-project
+    target: z_sample-project:0.0
+    repo: /Users/example/workspace
+    type: codex
+    role: library-maintenance
+
+  - name: z-sample-project
+    target: z_sample-project:0.0
+    repo: /Users/example/workspace
+    type: codex
+    role: product-maintenance
+
+  - name: example-org-sample-project
+    target: example-org_sample-project:0.0
+    repo: /Users/example/workspace
+    type: claude
+    role: frontend-maintenance

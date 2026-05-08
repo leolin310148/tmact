@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"tmact/internal/agents"
 	"tmact/internal/loop"
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
@@ -37,6 +38,12 @@ func run(args []string) error {
 	switch args[0] {
 	case "detect":
 		return runDetect(args[1:])
+	case "status":
+		return runStatus(args[1:])
+	case "inbox":
+		return runInbox(args[1:])
+	case "summarize":
+		return runSummarize(args[1:])
 	case "loop":
 		return runLoop(args[1:])
 	case "watch":
@@ -81,6 +88,99 @@ func runDetect(args []string) error {
 	if !result.Found {
 		return nil
 	}
+	return nil
+}
+
+func runStatus(args []string) error {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to agent registry YAML config")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := agents.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	report := agents.Collect(cfg)
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printStatusReport(report)
+	return nil
+}
+
+func runInbox(args []string) error {
+	fs := flag.NewFlagSet("inbox", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to agent registry YAML config")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := agents.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	inbox := agents.InboxFromReport(agents.Collect(cfg))
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(inbox)
+	}
+
+	printInbox(inbox)
+	return nil
+}
+
+func runSummarize(args []string) error {
+	fs := flag.NewFlagSet("summarize", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to agent registry YAML config")
+	agentName := fs.String("agent", "", "agent name to summarize; omit for all agents")
+	lines := fs.Int("lines", 12, "number of recent pane lines to include")
+	commits := fs.Int("commits", 5, "number of recent git commits to include")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := agents.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	report, err := agents.Summarize(cfg, *agentName, *lines, *commits)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printSummary(report)
 	return nil
 }
 
@@ -175,6 +275,98 @@ func printDetectResult(result detectResult, jsonOutput bool) {
 	}
 }
 
+func printStatusReport(report agents.Report) {
+	fmt.Printf("ts: %s\n", report.Timestamp)
+	for _, agent := range report.Agents {
+		fmt.Printf("%s\t%s\t%s", agent.Name, agent.Target, agent.State)
+		if agent.Git != nil {
+			dirty := "clean"
+			if agent.Git.Dirty {
+				dirty = "dirty"
+			}
+			if agent.Git.Error != "" {
+				fmt.Printf("\tgit:%s", agent.Git.Error)
+			} else if agent.Git.Branch != "" {
+				fmt.Printf("\tgit:%s/%s", agent.Git.Branch, dirty)
+			} else {
+				fmt.Printf("\tgit:%s", dirty)
+			}
+		}
+		if agent.LastLine != "" {
+			fmt.Printf("\t%s", agent.LastLine)
+		}
+		if agent.Error != "" {
+			fmt.Printf("\terror:%s", agent.Error)
+		}
+		fmt.Println()
+	}
+}
+
+func printInbox(inbox agents.Inbox) {
+	fmt.Printf("ts: %s\n", inbox.Timestamp)
+	if len(inbox.Items) == 0 {
+		fmt.Println("inbox: empty")
+		return
+	}
+	for _, item := range inbox.Items {
+		fmt.Printf("%s\t%s\t%s\t%s", item.Agent, item.Target, item.Kind, item.Severity)
+		if item.Summary != "" {
+			fmt.Printf("\t%s", item.Summary)
+		}
+		fmt.Println()
+	}
+}
+
+func printSummary(report agents.SummaryReport) {
+	fmt.Printf("ts: %s\n", report.Timestamp)
+	for _, summary := range report.Summaries {
+		fmt.Printf("\n%s\t%s\t%s\n", summary.Name, summary.Target, summary.State)
+		if summary.Role != "" || summary.Type != "" {
+			fmt.Printf("role: %s\ttype: %s\n", summary.Role, summary.Type)
+		}
+		if summary.Git != nil {
+			printGitSummary(summary.Git)
+		}
+		if summary.Error != "" {
+			fmt.Printf("error: %s\n", summary.Error)
+		}
+		if summary.NextAction != "" {
+			fmt.Printf("next: %s\n", summary.NextAction)
+		}
+		if len(summary.LastLines) > 0 {
+			fmt.Println("recent:")
+			for _, line := range summary.LastLines {
+				fmt.Printf("  %s\n", line)
+			}
+		}
+	}
+}
+
+func printGitSummary(git *agents.GitSummary) {
+	if git.Error != "" {
+		fmt.Printf("git: %s\n", git.Error)
+		return
+	}
+	dirty := "clean"
+	if git.Dirty {
+		dirty = "dirty"
+	}
+	if git.Branch != "" {
+		fmt.Printf("git: %s/%s\n", git.Branch, dirty)
+	} else {
+		fmt.Printf("git: %s\n", dirty)
+	}
+	if len(git.ChangedFiles) > 0 {
+		fmt.Printf("changed: %d files\n", len(git.ChangedFiles))
+	}
+	if len(git.RecentCommits) > 0 {
+		fmt.Println("commits:")
+		for _, commit := range git.RecentCommits {
+			fmt.Printf("  %s %s\n", commit.Hash, commit.Subject)
+		}
+	}
+}
+
 func usage() error {
 	fmt.Fprint(os.Stderr, usageText())
 	return nil
@@ -185,11 +377,17 @@ func usageText() string {
 
 Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
+  tmact status --config examples/agents.yaml [--json]
+  tmact inbox --config examples/agents.yaml [--json]
+  tmact summarize --config examples/agents.yaml [--agent z-sample-project] [--json]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
 
 Commands:
   detect    capture a tmux pane and detect a directory-access prompt
+  status    summarize configured agent panes
+  inbox     list agent panes that need human intervention
+  summarize summarize recent pane and git activity
   loop      run a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
 `
