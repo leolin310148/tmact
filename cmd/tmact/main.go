@@ -12,6 +12,7 @@ import (
 	"tmact/internal/loop"
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
+	"tmact/internal/watch"
 )
 
 type detectResult struct {
@@ -38,6 +39,8 @@ func run(args []string) error {
 		return runDetect(args[1:])
 	case "loop":
 		return runLoop(args[1:])
+	case "watch":
+		return runWatch(args[1:])
 	case "help", "-h", "--help":
 		return usage()
 	default:
@@ -112,6 +115,33 @@ func runLoop(args []string) error {
 	return runner.Run(context.Background())
 }
 
+func runWatch(args []string) error {
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to watch YAML config")
+	dryRun := fs.Bool("dry-run", false, "print decisions without sending anything to tmux")
+	once := fs.Bool("once", false, "run one watch pass and exit")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := watch.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+
+	runner := watch.NewRunner(cfg, watch.Options{
+		DryRun: *dryRun,
+		Once:   *once,
+	})
+	return runner.Run(context.Background())
+}
+
 func printDetectResult(result detectResult, jsonOutput bool) {
 	if jsonOutput {
 		encoder := json.NewEncoder(os.Stdout)
@@ -156,9 +186,11 @@ func usageText() string {
 Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
+  tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
 
 Commands:
   detect    capture a tmux pane and detect a directory-access prompt
   loop      run a configurable tmux automation loop
+  watch     watch a pane and answer allowlisted prompts
 `
 }

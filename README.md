@@ -69,6 +69,7 @@ The first runnable slice is intentionally tmux-only:
 tmact detect --target z_sample-project_sample:0.0 --json
 tmact loop --config examples/night-loop.yaml --dry-run --once
 tmact loop --config examples/night-loop.yaml
+tmact watch --config examples/accept-question-watch.yaml --dry-run --once
 ```
 
 `detect` captures a pane and detects a known directory-access prompt.
@@ -117,6 +118,30 @@ flows:
 
 The loop can also stop when a permission prompt is visible, which is safer than
 silently granting access while an agent is running unattended.
+
+`watch` is a narrow prompt watcher for unattended agent panes. The first
+supported scenario is accepting Codex directory-access prompts when every
+requested path is under a configured allowlist:
+
+```yaml
+target: z_sample-project_sample:0.0
+rules:
+  - name: accept-sample-project-directory-access
+    type: directory_access_prompt
+    allow_paths:
+      - /Users/example/workspace
+    allow_path_patterns:
+      - /tmp/sample-project-rn-*
+    accept_option: selected
+    cooldown: 30s
+    max_runs: 10
+```
+
+When the selected option is already safe to accept, the watcher sends `Enter`.
+If any requested path is outside `allow_paths` and does not match
+`allow_path_patterns`, it logs a blocked decision and does not press a key.
+Patterns use Go filepath glob syntax, so `*` matches within a single path
+segment.
 
 Real smoke test notes are tracked in `docs/smoke-test.md`.
 

@@ -1,0 +1,34 @@
+# Watch z_sample-project_sample and accept Codex directory-access prompts only when every
+# requested path is under an explicit allowlist entry or matches an explicit
+# allowlist pattern.
+#
+# Dry-run one pass:
+#   go run ./cmd/tmact watch --config examples/accept-question-watch.yaml --dry-run --once
+#
+# Start the watcher:
+#   go run ./cmd/tmact watch --config examples/accept-question-watch.yaml
+
+target: z_sample-project_sample:0.0
+capture_lines: 160
+poll_interval: 5s
+max_runtime: 8h
+log_path: .tmact/accept-question-watch.jsonl
+
+rules:
+  - name: accept-sample-project-directory-access
+    type: directory_access_prompt
+    allow_paths:
+      - /Users/example/workspace
+      - /Users/example/workspace
+      - /Users/example/workspace
+      - ../sample-project
+      - ../sample-project-rn-example
+      - sample-project
+      - sample-project-rn-example
+    allow_path_patterns:
+      - /tmp/sample-project*
+      - /tmp/sample-project-rn-*
+      - /tmp/sample-project-expo-*
+    accept_option: selected
+    cooldown: 30s
+    max_runs: 10
