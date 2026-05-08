@@ -14,6 +14,7 @@ import (
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
+	"tmact/internal/workflow"
 )
 
 type detectResult struct {
@@ -50,6 +51,8 @@ func run(args []string) error {
 		return runLoop(args[1:])
 	case "watch":
 		return runWatch(args[1:])
+	case "workflow":
+		return runWorkflow(args[1:])
 	case "help", "-h", "--help":
 		return usage()
 	default:
@@ -98,16 +101,19 @@ func runStatus(args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	configPath := fs.String("config", "", "path to agent registry YAML config")
+	agentName := fs.String("agent", "", "agent name to include")
+	role := fs.String("role", "", "role to include")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *configPath == "" {
-		return errors.New("--config is required")
-	}
 
-	cfg, err := agents.LoadConfig(*configPath)
+	cfg, err := loadAgentConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	cfg, err = agents.FilterConfig(cfg, agents.Filter{Agent: *agentName, Role: *role})
 	if err != nil {
 		return err
 	}
@@ -127,16 +133,19 @@ func runInbox(args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	configPath := fs.String("config", "", "path to agent registry YAML config")
+	agentName := fs.String("agent", "", "agent name to include")
+	role := fs.String("role", "", "role to include")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *configPath == "" {
-		return errors.New("--config is required")
-	}
 
-	cfg, err := agents.LoadConfig(*configPath)
+	cfg, err := loadAgentConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	cfg, err = agents.FilterConfig(cfg, agents.Filter{Agent: *agentName, Role: *role})
 	if err != nil {
 		return err
 	}
@@ -164,11 +173,8 @@ func runSummarize(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *configPath == "" {
-		return errors.New("--config is required")
-	}
 
-	cfg, err := agents.LoadConfig(*configPath)
+	cfg, err := loadAgentConfig(*configPath)
 	if err != nil {
 		return err
 	}
@@ -203,11 +209,8 @@ func runBroadcast(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *configPath == "" {
-		return errors.New("--config is required")
-	}
 
-	cfg, err := agents.LoadConfig(*configPath)
+	cfg, err := loadAgentConfig(*configPath)
 	if err != nil {
 		return err
 	}
@@ -231,6 +234,14 @@ func runBroadcast(args []string) error {
 
 	printBroadcast(report)
 	return nil
+}
+
+func loadAgentConfig(configPath string) (agents.Config, error) {
+	resolved, err := agents.ResolveConfigPath(configPath)
+	if err != nil {
+		return agents.Config{}, err
+	}
+	return agents.LoadConfig(resolved)
 }
 
 func runLoop(args []string) error {
@@ -287,6 +298,35 @@ func runWatch(args []string) error {
 	runner := watch.NewRunner(cfg, watch.Options{
 		DryRun: *dryRun,
 		Once:   *once,
+	})
+	return runner.Run(context.Background())
+}
+
+func runWorkflow(args []string) error {
+	fs := flag.NewFlagSet("workflow", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to workflow YAML config")
+	dryRun := fs.Bool("dry-run", false, "print workflow actions without sending anything to tmux")
+	once := fs.Bool("once", false, "run one workflow observe/action pass and exit")
+	assumeIdleOnStart := fs.Bool("assume-idle-on-start", false, "treat the pane as already idle when the workflow starts")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+
+	cfg, err := workflow.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+
+	runner := workflow.NewRunner(cfg, workflow.Options{
+		DryRun:            *dryRun,
+		Once:              *once,
+		AssumeIdleOnStart: *assumeIdleOnStart,
 	})
 	return runner.Run(context.Background())
 }
@@ -448,12 +488,13 @@ func usageText() string {
 
 Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
-  tmact status --config examples/agents.yaml [--json]
-  tmact inbox --config examples/agents.yaml [--json]
-  tmact summarize --config examples/agents.yaml [--agent z-sample-project] [--json]
-  tmact broadcast --config examples/agents.yaml --agent z-sample-project --text "summarize progress" [--enter] [--execute]
+  tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
+  tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
+  tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
+  tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
+  tmact workflow --config examples/implement-review-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start]
 
 Commands:
   detect    capture a tmux pane and detect a directory-access prompt
@@ -463,5 +504,6 @@ Commands:
   broadcast safely send text to selected agent panes
   loop      run a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
+  workflow  run a staged prompt workflow such as implement then review
 `
 }
