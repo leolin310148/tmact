@@ -59,6 +59,31 @@ stages:
 	}
 }
 
+func TestLoadConfigDefaultsClearBeforePrompt(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+clear_before_prompt: true
+stages:
+  - prompt: implement
+    complete_when:
+      idle: true
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ClearBeforePrompt {
+		t.Fatal("clear_before_prompt should be true")
+	}
+	if cfg.ClearCommand != "/clear" {
+		t.Fatalf("clear_command = %q", cfg.ClearCommand)
+	}
+	if cfg.ClearPostDelay.Duration != 5*time.Second {
+		t.Fatalf("clear_post_delay = %s", cfg.ClearPostDelay.Duration)
+	}
+}
+
 func TestLoadConfigRejectsMissingTarget(t *testing.T) {
 	path := writeTempConfig(t, `
 stages:

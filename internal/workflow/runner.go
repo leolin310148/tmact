@@ -408,9 +408,10 @@ func (r *Runner) startStage(now time.Time, cycle int, repeatIndex int, stage Sta
 		Status:    status,
 		Reason:    reason,
 		Details: map[string]interface{}{
-			"post_delay":   stage.PostDelay.Duration.String(),
-			"repeat_index": repeatIndex,
-			"repeat_total": r.stageRepeatTotal(stage),
+			"clear_before_prompt": r.cfg.ClearBeforePrompt,
+			"post_delay":          stage.PostDelay.Duration.String(),
+			"repeat_index":        repeatIndex,
+			"repeat_total":        r.stageRepeatTotal(stage),
 		},
 	}); emitErr != nil && err == nil {
 		err = emitErr
@@ -432,6 +433,17 @@ func (r *Runner) sendStagePrompt(stage StageConfig) error {
 	target := r.stageTarget(stage)
 	if err := r.sendKeys(target, []string{"C-u"}); err != nil {
 		return err
+	}
+	if r.cfg.ClearBeforePrompt {
+		if err := r.pasteText(target, r.cfg.ClearCommand, true); err != nil {
+			return err
+		}
+		if r.cfg.ClearPostDelay.Duration > 0 {
+			r.sleep(r.cfg.ClearPostDelay.Duration)
+		}
+		if err := r.sendKeys(target, []string{"C-u"}); err != nil {
+			return err
+		}
 	}
 	return r.pasteText(target, stage.Prompt, true)
 }

@@ -43,6 +43,47 @@ func TestRunnerStartsStageWhenIdle(t *testing.T) {
 	}
 }
 
+func TestRunnerClearsBeforeStagePromptWhenConfigured(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.ClearBeforePrompt = true
+	runner.cfg.ClearCommand = "/clear"
+	runner.cfg.ClearPostDelay.Duration = 5 * time.Second
+	var sentKeys [][]string
+	var sentText []string
+	var slept []time.Duration
+	runner.sendKeys = func(_ string, keys []string) error {
+		sentKeys = append(sentKeys, append([]string(nil), keys...))
+		return nil
+	}
+	runner.pasteText = func(_ string, text string, enter bool) error {
+		if !enter {
+			t.Fatal("expected enter")
+		}
+		sentText = append(sentText, text)
+		return nil
+	}
+	runner.sleep = func(duration time.Duration) {
+		slept = append(slept, duration)
+	}
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+
+	state := runState{lastChanged: testNow.Add(-time.Minute), nextCycleRun: testNow}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(sentKeys) != 2 || strings.Join(sentKeys[0], ",") != "C-u" || strings.Join(sentKeys[1], ",") != "C-u" {
+		t.Fatalf("sent keys = %#v", sentKeys)
+	}
+	if len(sentText) != 2 || sentText[0] != "/clear" || sentText[1] != "implement prompt" {
+		t.Fatalf("sent text = %#v", sentText)
+	}
+	if len(slept) != 1 || slept[0] != 5*time.Second {
+		t.Fatalf("slept = %#v", slept)
+	}
+}
+
 func TestRunnerDryRunDoesNotSendStagePrompt(t *testing.T) {
 	runner := newTestRunner()
 	runner.options.DryRun = true

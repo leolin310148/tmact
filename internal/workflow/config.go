@@ -37,6 +37,9 @@ type Config struct {
 	IdleAfter              Duration      `yaml:"idle_after"`
 	StageEvery             Duration      `yaml:"stage_every"`
 	CycleEvery             Duration      `yaml:"cycle_every"`
+	ClearBeforePrompt      bool          `yaml:"clear_before_prompt"`
+	ClearCommand           string        `yaml:"clear_command"`
+	ClearPostDelay         Duration      `yaml:"clear_post_delay"`
 	MaxRuntime             Duration      `yaml:"max_runtime"`
 	MaxCycles              int           `yaml:"max_cycles"`
 	LogPath                string        `yaml:"log_path"`
@@ -87,6 +90,14 @@ func applyDefaults(cfg *Config) {
 	if cfg.IdleAfter.Duration == 0 {
 		cfg.IdleAfter.Duration = 2 * time.Minute
 	}
+	if cfg.ClearBeforePrompt {
+		if cfg.ClearCommand == "" {
+			cfg.ClearCommand = "/clear"
+		}
+		if cfg.ClearPostDelay.Duration == 0 {
+			cfg.ClearPostDelay.Duration = 5 * time.Second
+		}
+	}
 	for i := range cfg.Stages {
 		if cfg.Stages[i].Name == "" {
 			cfg.Stages[i].Name = fmt.Sprintf("stage-%d", i+1)
@@ -119,6 +130,12 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.StageEvery.Duration < 0 {
 		return errors.New("stage_every cannot be negative")
+	}
+	if cfg.ClearPostDelay.Duration < 0 {
+		return errors.New("clear_post_delay cannot be negative")
+	}
+	if cfg.ClearBeforePrompt && cfg.ClearCommand == "" {
+		return errors.New("clear_command is required when clear_before_prompt is true")
 	}
 	if cfg.MaxRuntime.Duration < 0 {
 		return errors.New("max_runtime cannot be negative")

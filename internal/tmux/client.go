@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -191,7 +192,7 @@ func PasteText(target string, text string, enter bool) error {
 		return nil
 	}
 
-	bufferName := "tmact-paste"
+	bufferName := fmt.Sprintf("tmact-paste-%d-%d", os.Getpid(), time.Now().UnixNano())
 	load := exec.Command("tmux", "load-buffer", "-b", bufferName, "-")
 	load.Stdin = bytes.NewBufferString(text)
 
@@ -203,6 +204,9 @@ func PasteText(target string, text string, enter bool) error {
 		}
 		return fmt.Errorf("tmux load-buffer failed: %w", err)
 	}
+	defer func() {
+		_ = runTmux("delete-buffer", "-b", bufferName)
+	}()
 
 	if err := runTmux("paste-buffer", "-t", target, "-b", bufferName); err != nil {
 		return err
