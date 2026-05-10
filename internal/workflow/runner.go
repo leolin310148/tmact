@@ -21,6 +21,7 @@ type Options struct {
 	DryRun            bool
 	Once              bool
 	AssumeIdleOnStart bool
+	StartStage        string
 }
 
 type Runner struct {
@@ -62,6 +63,7 @@ type runState struct {
 	stageRepeatsDone  int
 	cyclesDone        int
 	stopped           bool
+	nextStageRun      time.Time
 	nextCycleRun      time.Time
 	lastHash          string
 	lastChanged       time.Time
@@ -142,6 +144,13 @@ func (r *Runner) Run(ctx context.Context) error {
 		nextCycleRun:      start,
 		lastChanged:       lastChanged,
 		defaultLastChange: lastChanged,
+	}
+	if r.options.StartStage != "" {
+		index, err := r.stageIndex(r.options.StartStage)
+		if err != nil {
+			return err
+		}
+		state.stageIndex = index
 	}
 
 	ticker := time.NewTicker(r.cfg.PollInterval.Duration)
@@ -279,6 +288,18 @@ func (r *Runner) maybeStartStage(now time.Time, state *runState, pane paneState)
 			Details:   map[string]interface{}{"next_cycle_run": state.nextCycleRun.Format(time.RFC3339)},
 		})
 	}
+	if !state.nextStageRun.IsZero() && now.Before(state.nextStageRun) {
+		return r.emit(event{
+			Timestamp: now.Format(time.RFC3339),
+			Type:      "skip",
+			Target:    r.currentStageTarget(state.stageIndex),
+			Stage:     r.currentStageName(state.stageIndex),
+			Cycle:     state.cyclesDone + 1,
+			Status:    "not_due",
+			Reason:    "stage_every",
+			Details:   map[string]interface{}{"next_stage_run": state.nextStageRun.Format(time.RFC3339)},
+		})
+	}
 	if !pane.Idle || pane.AgentState == agents.StateWorking {
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
@@ -295,6 +316,7 @@ func (r *Runner) maybeStartStage(now time.Time, state *runState, pane paneState)
 	if err := r.startStage(now, state.cyclesDone+1, state.stageRepeatsDone+1, stage); err != nil {
 		return err
 	}
+	r.scheduleNextStageStart(now, state)
 	state.stageStarted = true
 	return nil
 }
@@ -340,18 +362,30 @@ func (r *Runner) maybeCompleteStage(now time.Time, state *runState, pane paneSta
 		state.cyclesDone++
 		state.stageIndex = 0
 		state.nextCycleRun = now.Add(r.cfg.CycleEvery.Duration)
+		details := map[string]interface{}{
+			"next_cycle_run": state.nextCycleRun.Format(time.RFC3339),
+		}
+		if !state.nextStageRun.IsZero() {
+			details["next_stage_run"] = state.nextStageRun.Format(time.RFC3339)
+		}
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "cycle_complete",
 			Target:    r.currentStageTarget(state.stageIndex),
 			Cycle:     state.cyclesDone,
 			Status:    "ok",
-			Details: map[string]interface{}{
-				"next_cycle_run": state.nextCycleRun.Format(time.RFC3339),
-			},
+			Details:   details,
 		})
 	}
 	return nil
+}
+
+func (r *Runner) scheduleNextStageStart(now time.Time, state *runState) {
+	if r.cfg.StageEvery.Duration <= 0 {
+		state.nextStageRun = time.Time{}
+		return
+	}
+	state.nextStageRun = now.Add(r.cfg.StageEvery.Duration)
 }
 
 func (r *Runner) startStage(now time.Time, cycle int, repeatIndex int, stage StageConfig) error {
@@ -440,6 +474,15 @@ func (r *Runner) stageTarget(stage StageConfig) string {
 		return stage.Target
 	}
 	return r.cfg.Target
+}
+
+func (r *Runner) stageIndex(name string) (int, error) {
+	for i, stage := range r.cfg.Stages {
+		if stage.Name == name {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("stage %q not found", name)
 }
 
 func (r *Runner) stageRepeatTotal(stage StageConfig) int {

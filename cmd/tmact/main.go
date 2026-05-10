@@ -11,6 +11,7 @@ import (
 
 	"tmact/internal/agents"
 	"tmact/internal/loop"
+	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
@@ -22,6 +23,20 @@ type detectResult struct {
 	Found  bool                    `json:"found"`
 	Prompt *prompt.DirectoryAccess `json:"prompt,omitempty"`
 	Error  string                  `json:"error,omitempty"`
+}
+
+type repeatedStrings []string
+
+func (r *repeatedStrings) String() string {
+	return strings.Join(*r, ",")
+}
+
+func (r *repeatedStrings) Set(value string) error {
+	if value == "" {
+		return errors.New("value cannot be empty")
+	}
+	*r = append(*r, value)
+	return nil
 }
 
 func main() {
@@ -39,6 +54,8 @@ func run(args []string) error {
 	switch args[0] {
 	case "detect":
 		return runDetect(args[1:])
+	case "inspect":
+		return runInspect(args[1:])
 	case "status":
 		return runStatus(args[1:])
 	case "inbox":
@@ -95,6 +112,69 @@ func runDetect(args []string) error {
 	if !result.Found {
 		return nil
 	}
+	return nil
+}
+
+func runInspect(args []string) error {
+	fs := flag.NewFlagSet("inspect", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	target := fs.String("target", "", "tmux target pane/window to inspect")
+	session := fs.String("session", "", "tmux session to inspect")
+	window := fs.String("window", "", "tmux window to inspect; combine with --session to avoid ambiguity")
+	all := fs.Bool("all", false, "inspect every tmux pane")
+	lines := fs.Int("lines", 120, "number of pane history lines to capture")
+	samples := fs.Int("sample", 1, "number of captures per pane for idle/running detection")
+	interval := fs.Duration("interval", 0, "delay between samples, for example 1s")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	var idleIgnore repeatedStrings
+	fs.Var(&idleIgnore, "idle-ignore", "regexp for lines ignored by sample hashing; may be repeated")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *lines <= 0 {
+		return errors.New("--lines must be positive")
+	}
+	if *samples <= 0 {
+		return errors.New("--sample must be positive")
+	}
+	if *samples == 1 && *interval != 0 {
+		return errors.New("--interval is only useful when --sample is greater than 1")
+	}
+	if *interval < 0 {
+		return errors.New("--interval cannot be negative")
+	}
+	selectors := 0
+	for _, selected := range []bool{*target != "", *session != "" || *window != "", *all} {
+		if selected {
+			selectors++
+		}
+	}
+	if selectors > 1 {
+		return errors.New("choose only one selector: --target, --session/--window, or --all")
+	}
+
+	report, err := panestatus.Inspect(panestatus.Options{
+		Target:             *target,
+		Session:            *session,
+		Window:             *window,
+		All:                *all,
+		Lines:              *lines,
+		Samples:            *samples,
+		Interval:           *interval,
+		IdleIgnorePatterns: idleIgnore,
+	})
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printInspectReport(report)
 	return nil
 }
 
@@ -367,6 +447,7 @@ func runWorkflow(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "print workflow actions without sending anything to tmux")
 	once := fs.Bool("once", false, "run one workflow observe/action pass and exit")
 	assumeIdleOnStart := fs.Bool("assume-idle-on-start", false, "treat the pane as already idle when the workflow starts")
+	startStage := fs.String("start-stage", "", "start from the named workflow stage")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -384,6 +465,7 @@ func runWorkflow(args []string) error {
 		DryRun:            *dryRun,
 		Once:              *once,
 		AssumeIdleOnStart: *assumeIdleOnStart,
+		StartStage:        *startStage,
 	})
 	return runner.Run(context.Background())
 }
@@ -443,6 +525,26 @@ func printStatusReport(report agents.Report) {
 		}
 		if agent.Error != "" {
 			fmt.Printf("\terror:%s", agent.Error)
+		}
+		fmt.Println()
+	}
+}
+
+func printInspectReport(report panestatus.Report) {
+	fmt.Printf("ts: %s\n", report.Timestamp)
+	for _, pane := range report.Panes {
+		fmt.Printf("%s\t%s\t%s\tidle:%t", pane.Target, pane.Runtime, pane.State, pane.Idle)
+		if pane.CurrentCommand != "" {
+			fmt.Printf("\tcmd:%s", pane.CurrentCommand)
+		}
+		if pane.CWD != "" {
+			fmt.Printf("\tcwd:%s", pane.CWD)
+		}
+		if pane.LastLine != "" {
+			fmt.Printf("\t%s", pane.LastLine)
+		}
+		if pane.Error != "" {
+			fmt.Printf("\terror:%s", pane.Error)
 		}
 		fmt.Println()
 	}
@@ -564,6 +666,7 @@ func usageText() string {
 
 Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
+  tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
@@ -572,10 +675,11 @@ Usage:
   tmact panels ensure [--config examples/agents.yaml] [--session IDLL] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start]
+  tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start] [--start-stage name]
 
 Commands:
   detect    capture a tmux pane and detect a directory-access prompt
+  inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,42 @@ func TestRunnerUsesStageTarget(t *testing.T) {
 	}
 }
 
+func TestRunnerStartsFromNamedStage(t *testing.T) {
+	runner := newTestRunner()
+	runner.options.StartStage = "review"
+	runner.options.Once = true
+	runner.options.AssumeIdleOnStart = true
+	var sentText []string
+	runner.pasteText = func(_ string, text string, enter bool) error {
+		sentText = append(sentText, text)
+		return nil
+	}
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+
+	if err := runner.Run(testContext()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sentText) != 1 || sentText[0] != "review prompt" {
+		t.Fatalf("sent text = %#v", sentText)
+	}
+}
+
+func TestRunnerRejectsUnknownStartStage(t *testing.T) {
+	runner := newTestRunner()
+	runner.options.StartStage = "missing"
+	runner.options.Once = true
+	runner.capturePane = func(string, int) (string, error) {
+		t.Fatal("capturePane should not run")
+		return "", nil
+	}
+
+	if err := runner.Run(testContext()); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestRunnerRepeatsStageBeforeAdvancing(t *testing.T) {
 	runner := newTestRunner()
 	runner.cfg.Stages[0].Repeat = 3
@@ -115,6 +152,122 @@ func TestRunnerRepeatsStageBeforeAdvancing(t *testing.T) {
 	}
 	if state.stageRepeatsDone != 1 {
 		t.Fatalf("stage repeats done = %d", state.stageRepeatsDone)
+	}
+}
+
+func TestRunnerWaitsStageEveryBetweenRepeats(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.StageEvery = Duration{Duration: 20 * time.Minute}
+	runner.cfg.Stages[0].Repeat = 2
+	runner.capturePane = func(string, int) (string, error) {
+		return "commit hash abc123\nenter your prompt", nil
+	}
+
+	state := runState{
+		stageIndex:   0,
+		stageStarted: true,
+		lastChanged:  testNow.Add(-time.Minute),
+		lastHash:     hashText("commit hash abc123\nenter your prompt"),
+		nextStageRun: testNow.Add(20 * time.Minute),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.nextStageRun.Equal(testNow.Add(20 * time.Minute)) {
+		t.Fatalf("next stage run = %s", state.nextStageRun)
+	}
+
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+	runner.sendKeys = func(string, []string) error {
+		t.Fatal("sendKeys should not run before stage_every elapses")
+		return nil
+	}
+	if err := runner.runOnce(testNow.Add(10*time.Minute), &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.stageStarted {
+		t.Fatal("stage should not restart before stage_every elapses")
+	}
+
+	var sentText []string
+	runner.sendKeys = func(string, []string) error { return nil }
+	runner.pasteText = func(_ string, text string, enter bool) error {
+		sentText = append(sentText, text)
+		return nil
+	}
+	if err := runner.runOnce(testNow.Add(20*time.Minute), &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.stageStarted {
+		t.Fatal("stage should restart after stage_every elapses")
+	}
+	if len(sentText) != 1 || sentText[0] != "implement prompt" {
+		t.Fatalf("sent text = %#v", sentText)
+	}
+}
+
+func TestRunnerWaitsStageEveryBetweenStages(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.StageEvery = Duration{Duration: 20 * time.Minute}
+	runner.capturePane = func(string, int) (string, error) {
+		return "commit hash abc123\nenter your prompt", nil
+	}
+
+	state := runState{
+		stageIndex:   0,
+		stageStarted: true,
+		lastChanged:  testNow.Add(-time.Minute),
+		lastHash:     hashText("commit hash abc123\nenter your prompt"),
+		nextStageRun: testNow.Add(20 * time.Minute),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.stageIndex != 1 {
+		t.Fatalf("stage index = %d", state.stageIndex)
+	}
+	if !state.nextStageRun.Equal(testNow.Add(20 * time.Minute)) {
+		t.Fatalf("next stage run = %s", state.nextStageRun)
+	}
+
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+	runner.sendKeys = func(string, []string) error {
+		t.Fatal("sendKeys should not run before stage_every elapses")
+		return nil
+	}
+	if err := runner.runOnce(testNow.Add(10*time.Minute), &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.stageStarted {
+		t.Fatal("review stage should not start before stage_every elapses")
+	}
+}
+
+func TestRunnerSchedulesStageEveryFromStageStart(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.StageEvery = Duration{Duration: 20 * time.Minute}
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+
+	state := runState{
+		lastChanged:  testNow.Add(-time.Minute),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.stageStarted {
+		t.Fatal("stage should be started")
+	}
+	if !state.nextStageRun.Equal(testNow.Add(20 * time.Minute)) {
+		t.Fatalf("next stage run = %s", state.nextStageRun)
 	}
 }
 
@@ -245,9 +398,10 @@ var testNow = time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
 
 func newTestRunner() *Runner {
 	cfg := Config{
-		Target:     "sample:0.0",
-		IdleAfter:  Duration{Duration: time.Second},
-		CycleEvery: Duration{Duration: 20 * time.Minute},
+		Target:       "sample:0.0",
+		PollInterval: Duration{Duration: time.Second},
+		IdleAfter:    Duration{Duration: time.Second},
+		CycleEvery:   Duration{Duration: 20 * time.Minute},
 		Stages: []StageConfig{
 			{
 				Name:   "implement",
@@ -273,6 +427,10 @@ func newTestRunner() *Runner {
 	runner.sendKeys = func(string, []string) error { return nil }
 	runner.pasteText = func(string, string, bool) error { return nil }
 	return runner
+}
+
+func testContext() context.Context {
+	return context.Background()
 }
 
 func permissionPrompt() string {

@@ -137,7 +137,10 @@ conditions match. Stages can override the default tmux target, which lets a
 larger feature move through PM/stakeholder, planner, SWE, and reviewer panes via
 a shared `.agent-inbox` folder. Stages can also set `repeat` for small
 maintenance loops, for example three implementation passes followed by review,
-review fixes, and final review.
+review fixes, and final review. Set `stage_every` to require a fixed delay
+between stage starts and repeated stage passes; for example, `stage_every: 20m`
+with `repeat: 5` runs five improvement slots 20 minutes apart before advancing
+to the review/fix stage.
 
 For unattended feature phases, keep the loop going past technical review:
 UAT/player feedback, stakeholder acceptance, feedback planning/fixes, and a

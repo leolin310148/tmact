@@ -14,6 +14,19 @@ type Layout struct {
 	Windows  map[string]map[string]bool
 }
 
+type Pane struct {
+	Session        string
+	WindowIndex    int
+	WindowName     string
+	PaneIndex      int
+	PaneID         string
+	PanePID        int
+	CurrentCommand string
+	CurrentPath    string
+	Active         bool
+	InMode         bool
+}
+
 func ListLayout() (Layout, error) {
 	layout := Layout{
 		Sessions: map[string]bool{},
@@ -42,6 +55,24 @@ func ListLayout() (Layout, error) {
 	return layout, nil
 }
 
+func ListAllPanes() ([]Pane, error) {
+	return listPanes([]string{"list-panes", "-a", "-F", paneListFormat})
+}
+
+func ListPanes(target string) ([]Pane, error) {
+	if target == "" {
+		return nil, fmt.Errorf("target cannot be empty")
+	}
+	return listPanes([]string{"list-panes", "-t", target, "-F", paneListFormat})
+}
+
+func ListSessionPanes(session string) ([]Pane, error) {
+	if session == "" {
+		return nil, fmt.Errorf("session cannot be empty")
+	}
+	return listPanes([]string{"list-panes", "-s", "-t", session, "-F", paneListFormat})
+}
+
 func NewSession(session string, window string, cwd string, command []string) error {
 	args := []string{"new-session", "-d", "-s", session}
 	if window != "" {
@@ -68,6 +99,54 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 		args = append(args, strings.Join(command, " "))
 	}
 	return runTmux(args...)
+}
+
+const paneListFormat = "#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}\t#{pane_in_mode}"
+
+func listPanes(args []string) ([]Pane, error) {
+	output, err := outputTmux(args...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePanes(output)
+}
+
+func ParsePanes(output string) ([]Pane, error) {
+	var panes []Pane
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 10 {
+			return nil, fmt.Errorf("invalid tmux pane row %q", line)
+		}
+		windowIndex, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid window index %q: %w", parts[1], err)
+		}
+		paneIndex, err := strconv.Atoi(parts[3])
+		if err != nil {
+			return nil, fmt.Errorf("invalid pane index %q: %w", parts[3], err)
+		}
+		panePID, err := strconv.Atoi(parts[5])
+		if err != nil {
+			return nil, fmt.Errorf("invalid pane pid %q: %w", parts[5], err)
+		}
+		panes = append(panes, Pane{
+			Session:        parts[0],
+			WindowIndex:    windowIndex,
+			WindowName:     parts[2],
+			PaneIndex:      paneIndex,
+			PaneID:         parts[4],
+			PanePID:        panePID,
+			CurrentCommand: parts[6],
+			CurrentPath:    parts[7],
+			Active:         parts[8] == "1",
+			InMode:         parts[9] == "1",
+		})
+	}
+	return panes, nil
 }
 
 func CapturePane(target string, lines int) (string, error) {

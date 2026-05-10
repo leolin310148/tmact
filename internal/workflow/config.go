@@ -35,6 +35,7 @@ type Config struct {
 	IdleIgnorePatterns     []string      `yaml:"idle_ignore_patterns"`
 	PollInterval           Duration      `yaml:"poll_interval"`
 	IdleAfter              Duration      `yaml:"idle_after"`
+	StageEvery             Duration      `yaml:"stage_every"`
 	CycleEvery             Duration      `yaml:"cycle_every"`
 	MaxRuntime             Duration      `yaml:"max_runtime"`
 	MaxCycles              int           `yaml:"max_cycles"`
@@ -113,6 +114,9 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.CycleEvery.Duration < 0 {
 		return errors.New("cycle_every cannot be negative")
+	}
+	if cfg.StageEvery.Duration < 0 {
+		return errors.New("stage_every cannot be negative")
 	}
 	if cfg.MaxRuntime.Duration < 0 {
 		return errors.New("max_runtime cannot be negative")

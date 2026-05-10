@@ -29,11 +29,33 @@ stages:
 	if cfg.IdleAfter.Duration != 2*time.Minute {
 		t.Fatalf("idle_after = %s", cfg.IdleAfter.Duration)
 	}
+	if cfg.StageEvery.Duration != 0 {
+		t.Fatalf("stage_every = %s", cfg.StageEvery.Duration)
+	}
 	if cfg.Stages[0].Name != "stage-1" {
 		t.Fatalf("stage name = %q", cfg.Stages[0].Name)
 	}
 	if cfg.Stages[0].Repeat != 1 {
 		t.Fatalf("stage repeat = %d", cfg.Stages[0].Repeat)
+	}
+}
+
+func TestLoadConfigParsesStageEvery(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+stage_every: 20m
+stages:
+  - prompt: implement
+    complete_when:
+      idle: true
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.StageEvery.Duration != 20*time.Minute {
+		t.Fatalf("stage_every = %s", cfg.StageEvery.Duration)
 	}
 }
 
@@ -139,6 +161,23 @@ stages:
 	}
 }
 
+func TestLoadConfigRejectsNegativeStageEvery(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+stage_every: -1s
+stages:
+  - name: implement
+    prompt: implement
+    complete_when:
+      idle: true
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadConfigRejectsNegativeRepeat(t *testing.T) {
 	path := writeTempConfig(t, `
 target: sample:0.0
@@ -161,6 +200,9 @@ func TestLoadExampleWorkflowConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "simple-improvement-workflow.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "five-improvement-review-workflow.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }
