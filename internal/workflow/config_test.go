@@ -146,6 +146,44 @@ stages:
 	}
 }
 
+func TestLoadConfigAcceptsStateCompletion(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+stages:
+  - name: implement
+    prompt: implement
+    complete_when:
+      state_path: .agent-inbox/features/demo/status.yaml
+      state_in:
+        - review
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Stages[0].CompleteWhen.StatePath != ".agent-inbox/features/demo/status.yaml" {
+		t.Fatalf("state_path = %q", cfg.Stages[0].CompleteWhen.StatePath)
+	}
+}
+
+func TestLoadConfigRejectsStateInWithoutStatePath(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+stages:
+  - name: implement
+    prompt: implement
+    complete_when:
+      state_in:
+        - review
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadConfigRejectsNegativeDuration(t *testing.T) {
 	path := writeTempConfig(t, `
 target: sample:0.0
@@ -203,6 +241,12 @@ func TestLoadExampleWorkflowConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "five-improvement-review-workflow.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-source-fidelity-slice-workflow.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-roadmap-data-workflow.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }

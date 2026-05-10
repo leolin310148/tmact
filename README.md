@@ -142,6 +142,13 @@ between stage starts and repeated stage passes; for example, `stage_every: 20m`
 with `repeat: 5` runs five improvement slots 20 minutes apart before advancing
 to the review/fix stage.
 
+`state` stores agent workflow progress in YAML status files and appends JSONL
+events next to them. Agents can call commands such as
+`tmact state transition --path .agent-inbox/features/example/status.yaml --from planning --to implementation`
+after writing handoff notes. `workflow` stages can use
+`complete_when.state_path` and `state_in` as an additive completion source; a
+relative `state_path` is resolved under the workflow `repo`.
+
 For unattended feature phases, keep the loop going past technical review:
 UAT/player feedback, stakeholder acceptance, feedback planning/fixes, and a
 commit-check stage help the workflow converge without a human deciding each

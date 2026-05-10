@@ -111,6 +111,9 @@ func TestLoadExampleIDLLAgentsConfig(t *testing.T) {
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-agents.yaml")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-roadmap-data-agents.yaml")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestResolveConfigPathUsesExplicitPath(t *testing.T) {

@@ -87,6 +87,15 @@ func TestLoadExampleConfigs(t *testing.T) {
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "accept-question-watch.yaml")); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{
+		"idll-roadmap-data-watch-codex.yaml",
+		"idll-roadmap-data-watch-coordinator.yaml",
+		"idll-roadmap-data-watch-gemini.yaml",
+	} {
+		if _, err := LoadConfig(filepath.Join("..", "..", "examples", name)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
 }
 
 func writeTempConfig(t *testing.T, content string) string {

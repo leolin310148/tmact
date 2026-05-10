@@ -14,6 +14,7 @@ import (
 
 	"tmact/internal/agents"
 	"tmact/internal/prompt"
+	workflowstate "tmact/internal/state"
 	"tmact/internal/tmux"
 )
 
@@ -436,6 +437,9 @@ func (r *Runner) sendStagePrompt(stage StageConfig) error {
 }
 
 func (r *Runner) stageComplete(index int, stage StageConfig, pane paneState) bool {
+	if r.stageStateComplete(stage) {
+		return true
+	}
 	if pane.AgentState == agents.StateWorking {
 		return false
 	}
@@ -453,6 +457,30 @@ func (r *Runner) stageComplete(index int, stage StageConfig, pane paneState) boo
 		}
 	}
 	return false
+}
+
+func (r *Runner) stageStateComplete(stage StageConfig) bool {
+	if stage.CompleteWhen.StatePath == "" || len(stage.CompleteWhen.StateIn) == 0 {
+		return false
+	}
+	status, err := workflowstate.Load(r.resolveStatePath(stage.CompleteWhen.StatePath))
+	if err != nil {
+		return false
+	}
+	current := status.State()
+	for _, accepted := range stage.CompleteWhen.StateIn {
+		if current == accepted {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) resolveStatePath(path string) string {
+	if path == "" || filepath.IsAbs(path) || r.cfg.Repo == "" {
+		return path
+	}
+	return filepath.Join(r.cfg.Repo, path)
 }
 
 func (r *Runner) currentStageName(index int) string {

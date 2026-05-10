@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -328,6 +330,63 @@ func TestRunnerCompletesCycleAfterReview(t *testing.T) {
 	}
 }
 
+func TestRunnerCompletesStageFromAcceptedState(t *testing.T) {
+	runner := newTestRunner()
+	repo := t.TempDir()
+	statusPath := filepath.Join(".agent-inbox", "features", "demo", "status.yaml")
+	writeWorkflowStatus(t, filepath.Join(repo, statusPath), "state: review\n")
+	runner.cfg.Repo = repo
+	runner.cfg.Stages[0].CompleteWhen.StatePath = statusPath
+	runner.cfg.Stages[0].CompleteWhen.StateIn = []string{"review"}
+	runner.capturePane = func(string, int) (string, error) {
+		return "stale output without marker\nenter your prompt", nil
+	}
+
+	state := runState{
+		stageIndex:   0,
+		stageStarted: true,
+		lastChanged:  testNow.Add(-time.Minute),
+		lastHash:     hashText("stale output without marker\nenter your prompt"),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.stageStarted {
+		t.Fatal("stage should complete from status state")
+	}
+	if state.stageIndex != 1 {
+		t.Fatalf("stage index = %d", state.stageIndex)
+	}
+}
+
+func TestRunnerDoesNotCompleteStageFromUnacceptedState(t *testing.T) {
+	runner := newTestRunner()
+	statusPath := writeWorkflowStatus(t, filepath.Join(t.TempDir(), "status.yaml"), "state: planning\n")
+	runner.cfg.Stages[0].CompleteWhen.StatePath = statusPath
+	runner.cfg.Stages[0].CompleteWhen.StateIn = []string{"review"}
+	runner.capturePane = func(string, int) (string, error) {
+		return "stale output without marker\nenter your prompt", nil
+	}
+
+	state := runState{
+		stageIndex:   0,
+		stageStarted: true,
+		lastChanged:  testNow.Add(-time.Minute),
+		lastHash:     hashText("stale output without marker\nenter your prompt"),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.stageStarted {
+		t.Fatal("stage should remain incomplete")
+	}
+	if state.stageIndex != 0 {
+		t.Fatalf("stage index = %d", state.stageIndex)
+	}
+}
+
 func TestRunnerStopsAfterMaxCycles(t *testing.T) {
 	runner := newTestRunner()
 	runner.cfg.MaxCycles = 1
@@ -444,4 +503,16 @@ func permissionPrompt() string {
 │   2. No                                                │
 ╰────────────────────────────────────────────────────────╯
 `
+}
+
+func writeWorkflowStatus(t *testing.T, path string, content string) string {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

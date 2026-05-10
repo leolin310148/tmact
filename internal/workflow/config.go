@@ -56,6 +56,8 @@ type StageConfig struct {
 type CompleteWhenConfig struct {
 	Idle                bool     `yaml:"idle"`
 	RecentOutputMatches []string `yaml:"recent_output_matches"`
+	StatePath           string   `yaml:"state_path"`
+	StateIn             []string `yaml:"state_in"`
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -148,8 +150,11 @@ func validateStage(stage StageConfig) error {
 	if stage.Repeat < 0 {
 		return fmt.Errorf("%s: repeat cannot be negative", context)
 	}
-	if !stage.CompleteWhen.Idle && len(stage.CompleteWhen.RecentOutputMatches) == 0 {
+	if !stage.CompleteWhen.Idle && len(stage.CompleteWhen.RecentOutputMatches) == 0 && len(stage.CompleteWhen.StateIn) == 0 {
 		return fmt.Errorf("%s: complete_when is required", context)
+	}
+	if len(stage.CompleteWhen.StateIn) > 0 && stage.CompleteWhen.StatePath == "" {
+		return fmt.Errorf("%s: complete_when.state_path is required when state_in is set", context)
 	}
 	for _, pattern := range stage.CompleteWhen.RecentOutputMatches {
 		if pattern == "" {
@@ -157,6 +162,11 @@ func validateStage(stage StageConfig) error {
 		}
 		if _, err := regexp.Compile(pattern); err != nil {
 			return fmt.Errorf("%s: invalid recent_output_matches entry %q: %w", context, pattern, err)
+		}
+	}
+	for _, state := range stage.CompleteWhen.StateIn {
+		if state == "" {
+			return fmt.Errorf("%s: state_in cannot contain empty entries", context)
 		}
 	}
 	return nil

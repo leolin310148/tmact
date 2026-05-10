@@ -7,15 +7,20 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"tmact/internal/agents"
 	"tmact/internal/loop"
 	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
+	agentstate "tmact/internal/state"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
 	"tmact/internal/workflow"
+
+	"gopkg.in/yaml.v3"
 )
 
 type detectResult struct {
@@ -39,6 +44,31 @@ func (r *repeatedStrings) Set(value string) error {
 	return nil
 }
 
+type optionalInt struct {
+	value int
+	set   bool
+}
+
+func (i *optionalInt) String() string {
+	if !i.set {
+		return ""
+	}
+	return strconv.Itoa(i.value)
+}
+
+func (i *optionalInt) Set(value string) error {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	if parsed < 0 {
+		return errors.New("value cannot be negative")
+	}
+	i.value = parsed
+	i.set = true
+	return nil
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -58,6 +88,8 @@ func run(args []string) error {
 		return runInspect(args[1:])
 	case "status":
 		return runStatus(args[1:])
+	case "state":
+		return runState(args[1:])
 	case "inbox":
 		return runInbox(args[1:])
 	case "summarize":
@@ -77,6 +109,185 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usageText())
 	}
+}
+
+func runState(args []string) error {
+	if len(args) == 0 {
+		return errors.New("state requires a subcommand: get, set, transition, or event")
+	}
+
+	switch args[0] {
+	case "get":
+		return runStateGet(args[1:])
+	case "set":
+		return runStateSet(args[1:])
+	case "transition":
+		return runStateTransition(args[1:])
+	case "event":
+		return runStateEvent(args[1:])
+	default:
+		return fmt.Errorf("unknown state subcommand %q", args[0])
+	}
+}
+
+func runStateGet(args []string) error {
+	fs := flag.NewFlagSet("state get", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	path := fs.String("path", "", "path to status.yaml")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" {
+		return errors.New("--path is required")
+	}
+
+	status, err := agentstate.Load(*path)
+	if err != nil {
+		return err
+	}
+	data, err := status.Data()
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(data)
+	}
+	encoded, err := yaml.Marshal(data)
+	if err != nil {
+		return err
+	}
+	fmt.Print(string(encoded))
+	return nil
+}
+
+func runStateSet(args []string) error {
+	fs := flag.NewFlagSet("state set", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	path := fs.String("path", "", "path to status.yaml")
+	stateName := fs.String("state", "", "state to write")
+	owner := fs.String("owner", "", "owner to write")
+	stage := fs.String("stage", "", "stage to write")
+	var cycle optionalInt
+	fs.Var(&cycle, "cycle", "cycle number to write")
+	var blockers repeatedStrings
+	fs.Var(&blockers, "blocker", "blocker text to write; may be repeated")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" {
+		return errors.New("--path is required")
+	}
+	if *stateName == "" {
+		return errors.New("--state is required")
+	}
+
+	update := agentStateUpdate(*stateName, *owner, *stage, cycle, blockers)
+	data, event, err := agentstate.Set(*path, update)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(map[string]interface{}{"status": data, "event": event})
+	}
+	printStateChange(*path, data, event)
+	return nil
+}
+
+func runStateTransition(args []string) error {
+	fs := flag.NewFlagSet("state transition", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	path := fs.String("path", "", "path to status.yaml")
+	from := fs.String("from", "", "required current state")
+	to := fs.String("to", "", "state to transition to")
+	owner := fs.String("owner", "", "owner to write")
+	stage := fs.String("stage", "", "stage to write")
+	var cycle optionalInt
+	fs.Var(&cycle, "cycle", "cycle number to write")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" {
+		return errors.New("--path is required")
+	}
+	if *from == "" {
+		return errors.New("--from is required")
+	}
+	if *to == "" {
+		return errors.New("--to is required")
+	}
+
+	update := agentStateUpdate(*to, *owner, *stage, cycle, nil)
+	data, event, err := agentstate.Transition(*path, *from, update)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(map[string]interface{}{"status": data, "event": event})
+	}
+	printStateChange(*path, data, event)
+	return nil
+}
+
+func runStateEvent(args []string) error {
+	fs := flag.NewFlagSet("state event", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	path := fs.String("path", "", "path to status.yaml")
+	kind := fs.String("kind", "", "event kind")
+	stage := fs.String("stage", "", "stage name")
+	agent := fs.String("agent", "", "agent name")
+	message := fs.String("message", "", "event message")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" {
+		return errors.New("--path is required")
+	}
+	if *kind == "" {
+		return errors.New("--kind is required")
+	}
+
+	event := agentstate.Event{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Kind:      *kind,
+		Path:      *path,
+		Stage:     *stage,
+		Agent:     *agent,
+		Message:   *message,
+	}
+	if err := agentstate.AppendEvent(*path, event); err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(event)
+	}
+	fmt.Printf("event: %s\npath: %s\n", event.Kind, event.Path)
+	return nil
+}
+
+func agentStateUpdate(stateName string, owner string, stage string, cycle optionalInt, blockers repeatedStrings) agentstate.Update {
+	update := agentstate.Update{
+		State:       stateName,
+		Owner:       owner,
+		Stage:       stage,
+		SetBlockers: blockers != nil,
+		Blockers:    blockers,
+	}
+	if cycle.set {
+		update.Cycle = &cycle.value
+	}
+	return update
 }
 
 func runDetect(args []string) error {
@@ -503,6 +714,22 @@ func printDetectResult(result detectResult, jsonOutput bool) {
 	}
 }
 
+func printJSON(value interface{}) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
+}
+
+func printStateChange(path string, data map[string]interface{}, event agentstate.Event) {
+	fmt.Printf("path: %s\n", path)
+	if stateName, ok := data["state"].(string); ok {
+		fmt.Printf("state: %s\n", stateName)
+	}
+	if event.Kind != "" {
+		fmt.Printf("event: %s\n", event.Kind)
+	}
+}
+
 func printStatusReport(report agents.Report) {
 	fmt.Printf("ts: %s\n", report.Timestamp)
 	for _, agent := range report.Agents {
@@ -668,6 +895,10 @@ Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
   tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
+  tmact state get --path .agent-inbox/features/example/status.yaml [--json]
+  tmact state set --path .agent-inbox/features/example/status.yaml --state planning [--owner OWNER] [--stage STAGE]
+  tmact state transition --path .agent-inbox/features/example/status.yaml --from planning --to implementation
+  tmact state event --path .agent-inbox/features/example/status.yaml --kind note [--message TEXT]
   tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
   tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
@@ -681,6 +912,7 @@ Commands:
   detect    capture a tmux pane and detect a directory-access prompt
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
+  state     read and update agent-inbox workflow status files
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity
   broadcast safely send text to selected agent panes
