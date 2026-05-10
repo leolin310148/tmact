@@ -47,6 +47,8 @@ func run(args []string) error {
 		return runSummarize(args[1:])
 	case "broadcast":
 		return runBroadcast(args[1:])
+	case "panels":
+		return runPanels(args[1:])
 	case "loop":
 		return runLoop(args[1:])
 	case "watch":
@@ -233,6 +235,61 @@ func runBroadcast(args []string) error {
 	}
 
 	printBroadcast(report)
+	return nil
+}
+
+func runPanels(args []string) error {
+	if len(args) == 0 {
+		return errors.New("panels requires a subcommand: plan or ensure")
+	}
+	action := args[0]
+	if action != "plan" && action != "ensure" {
+		return fmt.Errorf("unknown panels subcommand %q", action)
+	}
+
+	fs := flag.NewFlagSet("panels "+action, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to agent registry YAML config")
+	agentName := fs.String("agent", "", "agent name to include")
+	role := fs.String("role", "", "role to include")
+	session := fs.String("session", "", "override target tmux session for selected agents")
+	execute := fs.Bool("execute", false, "apply planned tmux panel changes")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if action == "plan" && *execute {
+		return errors.New("--execute is only valid with panels ensure")
+	}
+
+	cfg, err := loadAgentConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	cfg, err = agents.FilterConfig(cfg, agents.Filter{Agent: *agentName, Role: *role})
+	if err != nil {
+		return err
+	}
+
+	opts := agents.PanelOptions{Session: *session, Execute: action == "ensure" && *execute}
+	var report agents.PanelReport
+	if action == "ensure" {
+		report, err = agents.EnsurePanels(cfg, opts)
+	} else {
+		report, err = agents.PlanPanels(cfg, opts)
+	}
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printPanelReport(report)
 	return nil
 }
 
@@ -478,6 +535,25 @@ func printBroadcast(report agents.BroadcastReport) {
 	}
 }
 
+func printPanelReport(report agents.PanelReport) {
+	fmt.Printf("ts: %s\n", report.Timestamp)
+	if report.DryRun {
+		fmt.Println("mode: dry-run")
+	} else {
+		fmt.Println("mode: execute")
+	}
+	for _, op := range report.Operations {
+		fmt.Printf("%s\t%s\t%s\t%s", op.Agent, op.Action, op.Target, op.Status)
+		if len(op.Command) > 0 {
+			fmt.Printf("\tcmd:%s", strings.Join(op.Command, " "))
+		}
+		if op.Error != "" {
+			fmt.Printf("\terror:%s", op.Error)
+		}
+		fmt.Println()
+	}
+}
+
 func usage() error {
 	fmt.Fprint(os.Stderr, usageText())
 	return nil
@@ -492,6 +568,8 @@ Usage:
   tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
   tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
+  tmact panels plan [--config examples/agents.yaml] [--session IDLL] [--json]
+  tmact panels ensure [--config examples/agents.yaml] [--session IDLL] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
   tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start]
@@ -502,6 +580,7 @@ Commands:
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity
   broadcast safely send text to selected agent panes
+  panels    plan or ensure configured agent tmux panels
   loop      run a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
   workflow  run a staged prompt workflow such as agent-inbox feature work

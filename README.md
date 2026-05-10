@@ -67,6 +67,8 @@ The first runnable slice is intentionally tmux-only:
 
 ```sh
 tmact detect --target z_sample-project_sample:0.0 --json
+tmact panels plan --config examples/idll-agents.yaml
+tmact panels ensure --config examples/idll-agents.yaml --execute
 tmact loop --config examples/night-loop.yaml --dry-run --once
 tmact loop --config examples/night-loop.yaml
 tmact watch --config examples/accept-question-watch.yaml --dry-run --once
@@ -74,6 +76,14 @@ tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --on
 ```
 
 `detect` captures a pane and detects a known directory-access prompt.
+
+`panels` reconciles configured agent panes into tmux sessions/windows. Agent
+config can name a desired `session`, `window`, `repo`, and allowlisted
+`launcher` (`codex`, `claude`, `copilot`, or `gemini`). Missing sessions or
+windows are created with the launcher command; existing panes are left alone.
+`copilot` can opt into `allow_all_tools`, which launches
+`copilot --allow-all-tools`. Use `panels plan` to inspect changes and
+`panels ensure --execute` to apply them.
 
 `loop` is a configurable overnight harness for terminal agents. It repeatedly captures
 one tmux pane, tracks whether output has changed, waits for idle windows, and runs

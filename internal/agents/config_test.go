@@ -25,6 +25,25 @@ agents:
 	}
 }
 
+func TestLoadConfigDerivesTargetFromPanelFields(t *testing.T) {
+	path := writeTempConfig(t, `
+agents:
+  - name: sample
+    session: agents
+    window: sample
+    launcher: copilot
+    allow_all_tools: true
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agents[0].Target != "agents:sample.0" {
+		t.Fatalf("target = %q", cfg.Agents[0].Target)
+	}
+}
+
 func TestLoadConfigRejectsDuplicateNames(t *testing.T) {
 	path := writeTempConfig(t, `
 agents:
@@ -40,8 +59,56 @@ agents:
 	}
 }
 
+func TestLoadConfigRejectsUnsafeLauncher(t *testing.T) {
+	path := writeTempConfig(t, `
+agents:
+  - name: sample
+    target: sample:0.0
+    launcher: bash
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadConfigAllowsUnknownMetadataType(t *testing.T) {
+	path := writeTempConfig(t, `
+agents:
+  - name: sample
+    target: sample:0.0
+    type: reviewer
+`)
+
+	if _, err := LoadConfig(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadConfigRejectsAllowAllToolsForNonCopilot(t *testing.T) {
+	path := writeTempConfig(t, `
+agents:
+  - name: sample
+    target: sample:0.0
+    launcher: claude
+    allow_all_tools: true
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadExampleAgentsConfig(t *testing.T) {
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "agents.yaml")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadExampleIDLLAgentsConfig(t *testing.T) {
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-agents.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }

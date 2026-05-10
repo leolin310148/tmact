@@ -20,12 +20,16 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	Name         string `yaml:"name"`
-	Target       string `yaml:"target"`
-	Repo         string `yaml:"repo"`
-	Type         string `yaml:"type"`
-	Role         string `yaml:"role"`
-	CaptureLines int    `yaml:"capture_lines"`
+	Name          string `yaml:"name"`
+	Target        string `yaml:"target"`
+	Session       string `yaml:"session"`
+	Window        string `yaml:"window"`
+	Repo          string `yaml:"repo"`
+	Type          string `yaml:"type"`
+	Role          string `yaml:"role"`
+	Launcher      string `yaml:"launcher"`
+	AllowAllTools bool   `yaml:"allow_all_tools"`
+	CaptureLines  int    `yaml:"capture_lines"`
 }
 
 type Filter struct {
@@ -101,6 +105,9 @@ func applyDefaults(cfg *Config) {
 		if cfg.Agents[i].CaptureLines <= 0 {
 			cfg.Agents[i].CaptureLines = cfg.CaptureLines
 		}
+		if cfg.Agents[i].Target == "" && cfg.Agents[i].Session != "" && cfg.Agents[i].Window != "" {
+			cfg.Agents[i].Target = cfg.Agents[i].Session + ":" + cfg.Agents[i].Window + ".0"
+		}
 	}
 }
 
@@ -119,14 +126,53 @@ func validateConfig(cfg Config) error {
 			return fmt.Errorf("%s: duplicate name %q", context, agent.Name)
 		}
 		names[agent.Name] = true
-		if agent.Target == "" {
-			return fmt.Errorf("%s %q: target is required", context, agent.Name)
+		if agent.Target == "" && (agent.Session == "" || agent.Window == "") {
+			return fmt.Errorf("%s %q: target is required unless session and window are set", context, agent.Name)
 		}
 		if agent.CaptureLines < 0 {
 			return fmt.Errorf("%s %q: capture_lines cannot be negative", context, agent.Name)
 		}
+		if err := validateLauncher(agent); err != nil {
+			return fmt.Errorf("%s %q: %w", context, agent.Name, err)
+		}
 	}
 	return nil
+}
+
+func validateLauncher(agent AgentConfig) error {
+	launcher := agentLauncher(agent)
+	if launcher == "" {
+		if agent.AllowAllTools {
+			return errors.New("allow_all_tools requires launcher or type")
+		}
+		return nil
+	}
+	if !isSupportedLauncher(launcher) {
+		return fmt.Errorf("unsupported launcher %q", launcher)
+	}
+	if agent.AllowAllTools && launcher != "copilot" {
+		return fmt.Errorf("allow_all_tools is only supported for copilot, not %s", launcher)
+	}
+	return nil
+}
+
+func agentLauncher(agent AgentConfig) string {
+	if agent.Launcher != "" {
+		return agent.Launcher
+	}
+	if isSupportedLauncher(agent.Type) {
+		return agent.Type
+	}
+	return ""
+}
+
+func isSupportedLauncher(launcher string) bool {
+	switch launcher {
+	case "codex", "claude", "copilot", "gemini":
+		return true
+	default:
+		return false
+	}
 }
 
 func joinConfigPaths(paths []string) string {
