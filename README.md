@@ -70,6 +70,7 @@ tmact detect --target z_sample-project_sample:0.0 --json
 tmact loop --config examples/night-loop.yaml --dry-run --once
 tmact loop --config examples/night-loop.yaml
 tmact watch --config examples/accept-question-watch.yaml --dry-run --once
+tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start
 ```
 
 `detect` captures a pane and detects a known directory-access prompt.
@@ -118,6 +119,24 @@ flows:
 
 The loop can also stop when a permission prompt is visible, which is safer than
 silently granting access while an agent is running unattended.
+
+`workflow` is a staged harness for implementation flows that should not be a
+single repeated prompt. Each stage waits for the selected pane to become idle,
+sends a role-specific prompt, and advances only when the configured completion
+conditions match. Stages can override the default tmux target, which lets a
+larger feature move through PM/stakeholder, planner, SWE, and reviewer panes via
+a shared `.agent-inbox` folder. Stages can also set `repeat` for small
+maintenance loops, for example three implementation passes followed by review,
+review fixes, and final review.
+
+For unattended feature phases, keep the loop going past technical review:
+UAT/player feedback, stakeholder acceptance, feedback planning/fixes, and a
+commit-check stage help the workflow converge without a human deciding each
+turn. The commit-check stage should commit only cohesive accepted diffs and
+defer oversized or mixed changes for another split cycle.
+
+See `docs/agent-inbox.md`, `examples/implement-review-workflow.yaml`, and
+`examples/simple-improvement-workflow.yaml`.
 
 `watch` is a narrow prompt watcher for unattended agent panes. The first
 supported scenario is accepting Codex directory-access prompts when every

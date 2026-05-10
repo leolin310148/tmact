@@ -64,6 +64,60 @@ func TestRunnerDryRunDoesNotSendStagePrompt(t *testing.T) {
 	}
 }
 
+func TestRunnerUsesStageTarget(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.Stages[0].Target = "planner:0.0"
+	var capturedTarget string
+	var sentTarget string
+	runner.capturePane = func(target string, _ int) (string, error) {
+		capturedTarget = target
+		return "enter your prompt", nil
+	}
+	runner.sendKeys = func(target string, keys []string) error {
+		sentTarget = target
+		return nil
+	}
+
+	state := runState{lastChanged: testNow.Add(-time.Minute), nextCycleRun: testNow}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if capturedTarget != "planner:0.0" {
+		t.Fatalf("captured target = %q", capturedTarget)
+	}
+	if sentTarget != "planner:0.0" {
+		t.Fatalf("sent target = %q", sentTarget)
+	}
+}
+
+func TestRunnerRepeatsStageBeforeAdvancing(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.Stages[0].Repeat = 3
+	runner.capturePane = func(string, int) (string, error) {
+		return "commit hash abc123\nenter your prompt", nil
+	}
+
+	state := runState{
+		stageIndex:   0,
+		stageStarted: true,
+		lastChanged:  testNow.Add(-time.Minute),
+		lastHash:     hashText("commit hash abc123\nenter your prompt"),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.stageStarted {
+		t.Fatal("stage should no longer be active")
+	}
+	if state.stageIndex != 0 {
+		t.Fatalf("stage index = %d", state.stageIndex)
+	}
+	if state.stageRepeatsDone != 1 {
+		t.Fatalf("stage repeats done = %d", state.stageRepeatsDone)
+	}
+}
+
 func TestRunnerAdvancesFromImplementToReview(t *testing.T) {
 	runner := newTestRunner()
 	runner.capturePane = func(string, int) (string, error) {
@@ -121,6 +175,30 @@ func TestRunnerCompletesCycleAfterReview(t *testing.T) {
 	}
 }
 
+func TestRunnerStopsAfterMaxCycles(t *testing.T) {
+	runner := newTestRunner()
+	runner.cfg.MaxCycles = 1
+	runner.capturePane = func(string, int) (string, error) {
+		return "enter your prompt", nil
+	}
+	runner.sendKeys = func(string, []string) error {
+		t.Fatal("sendKeys should not run after max cycles")
+		return nil
+	}
+
+	state := runState{
+		cyclesDone:   1,
+		lastChanged:  testNow.Add(-time.Minute),
+		nextCycleRun: testNow,
+	}
+	if err := runner.runOnce(testNow, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.stopped {
+		t.Fatal("runner should be stopped")
+	}
+}
+
 func TestRunnerDoesNotStartWhenPaneWorking(t *testing.T) {
 	runner := newTestRunner()
 	runner.capturePane = func(string, int) (string, error) {
@@ -157,6 +235,9 @@ func TestRunnerStopsOnPermissionPrompt(t *testing.T) {
 	}
 	if state.stageStarted {
 		t.Fatal("stage should not be started")
+	}
+	if !state.stopped {
+		t.Fatal("runner should be stopped")
 	}
 }
 

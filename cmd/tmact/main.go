@@ -494,7 +494,7 @@ Usage:
   tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact workflow --config examples/implement-review-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start]
+  tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start]
 
 Commands:
   detect    capture a tmux pane and detect a directory-access prompt
@@ -504,6 +504,6 @@ Commands:
   broadcast safely send text to selected agent panes
   loop      run a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
-  workflow  run a staged prompt workflow such as implement then review
+  workflow  run a staged prompt workflow such as agent-inbox feature work
 `
 }

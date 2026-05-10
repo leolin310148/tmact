@@ -57,12 +57,51 @@ type event struct {
 }
 
 type runState struct {
-	stageIndex   int
-	stageStarted bool
-	cyclesDone   int
-	nextCycleRun time.Time
-	lastHash     string
-	lastChanged  time.Time
+	stageIndex        int
+	stageStarted      bool
+	stageRepeatsDone  int
+	cyclesDone        int
+	stopped           bool
+	nextCycleRun      time.Time
+	lastHash          string
+	lastChanged       time.Time
+	targetStates      map[string]targetRunState
+	defaultLastChange time.Time
+}
+
+type targetRunState struct {
+	lastHash    string
+	lastChanged time.Time
+}
+
+func (s *runState) stateForTarget(target string) targetRunState {
+	if s.targetStates != nil {
+		if state, ok := s.targetStates[target]; ok {
+			return state
+		}
+	}
+
+	lastChanged := s.defaultLastChange
+	if lastChanged.IsZero() {
+		lastChanged = s.lastChanged
+	}
+	lastHash := ""
+	if len(s.targetStates) == 0 {
+		lastHash = s.lastHash
+	}
+	return targetRunState{
+		lastHash:    lastHash,
+		lastChanged: lastChanged,
+	}
+}
+
+func (s *runState) setStateForTarget(target string, targetState targetRunState) {
+	if s.targetStates == nil {
+		s.targetStates = map[string]targetRunState{}
+	}
+	s.targetStates[target] = targetState
+	s.lastHash = targetState.lastHash
+	s.lastChanged = targetState.lastChanged
 }
 
 func NewRunner(cfg Config, options Options) *Runner {
@@ -100,8 +139,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		lastChanged = start.Add(-r.cfg.IdleAfter.Duration)
 	}
 	state := runState{
-		nextCycleRun: start,
-		lastChanged:  lastChanged,
+		nextCycleRun:      start,
+		lastChanged:       lastChanged,
+		defaultLastChange: lastChanged,
 	}
 
 	ticker := time.NewTicker(r.cfg.PollInterval.Duration)
@@ -110,11 +150,14 @@ func (r *Runner) Run(ctx context.Context) error {
 	for {
 		now := r.now()
 		if r.cfg.MaxRuntime.Duration > 0 && now.Sub(start) >= r.cfg.MaxRuntime.Duration {
-			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_runtime"})
+			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.currentStageTarget(state.stageIndex), Reason: "max_runtime"})
 		}
 
 		if err := r.runOnce(now, &state); err != nil {
 			return err
+		}
+		if state.stopped {
+			return nil
 		}
 		if r.options.Once {
 			return nil
@@ -129,25 +172,19 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 func (r *Runner) runOnce(now time.Time, state *runState) error {
-	pane, changed, err := r.observe(now, state.lastHash, state.lastChanged)
+	stageTarget := r.currentStageTarget(state.stageIndex)
+	pane, err := r.observeCurrentTarget(now, state, stageTarget)
 	if err != nil {
-		_ = r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "error", Target: r.cfg.Target, Status: "failed", Reason: err.Error()})
+		_ = r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "error", Target: stageTarget, Status: "failed", Reason: err.Error()})
 		return err
-	}
-	if state.lastHash == "" {
-		state.lastHash = pane.Hash
-	} else if changed {
-		state.lastHash = pane.Hash
-		state.lastChanged = now
-		pane.Idle = false
-		pane.IdleFor = "0s"
 	}
 
 	if pane.PermissionPrompt != nil && r.cfg.StopOnPermissionPrompt {
+		state.stopped = true
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "stop",
-			Target:    r.cfg.Target,
+			Target:    stageTarget,
 			Reason:    "permission_prompt",
 			Details:   pane.PermissionPrompt,
 		})
@@ -157,7 +194,7 @@ func (r *Runner) runOnce(now time.Time, state *runState) error {
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "blocked",
-			Target:    r.cfg.Target,
+			Target:    stageTarget,
 			Cycle:     state.cyclesDone + 1,
 			Stage:     r.currentStageName(state.stageIndex),
 			Details:   pane,
@@ -170,8 +207,24 @@ func (r *Runner) runOnce(now time.Time, state *runState) error {
 	return r.maybeStartStage(now, state, pane)
 }
 
-func (r *Runner) observe(now time.Time, previousHash string, lastChanged time.Time) (paneState, bool, error) {
-	raw, err := r.capturePane(r.cfg.Target, r.cfg.CaptureLines)
+func (r *Runner) observeCurrentTarget(now time.Time, state *runState, target string) (paneState, error) {
+	targetState := state.stateForTarget(target)
+	pane, changed, err := r.observe(target, now, targetState.lastHash, targetState.lastChanged)
+	if err != nil {
+		return paneState{}, err
+	}
+	targetState.lastHash = pane.Hash
+	if changed {
+		targetState.lastChanged = now
+		pane.Idle = false
+		pane.IdleFor = "0s"
+	}
+	state.setStateForTarget(target, targetState)
+	return pane, nil
+}
+
+func (r *Runner) observe(target string, now time.Time, previousHash string, lastChanged time.Time) (paneState, bool, error) {
+	raw, err := r.capturePane(target, r.cfg.CaptureLines)
 	if err != nil {
 		return paneState{}, false, err
 	}
@@ -213,13 +266,14 @@ func (r *Runner) idleText(raw string) string {
 
 func (r *Runner) maybeStartStage(now time.Time, state *runState, pane paneState) error {
 	if r.cfg.MaxCycles > 0 && state.cyclesDone >= r.cfg.MaxCycles {
-		return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_cycles"})
+		state.stopped = true
+		return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.currentStageTarget(state.stageIndex), Reason: "max_cycles"})
 	}
 	if now.Before(state.nextCycleRun) {
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "skip",
-			Target:    r.cfg.Target,
+			Target:    r.currentStageTarget(state.stageIndex),
 			Status:    "not_due",
 			Reason:    "cycle_every",
 			Details:   map[string]interface{}{"next_cycle_run": state.nextCycleRun.Format(time.RFC3339)},
@@ -229,7 +283,7 @@ func (r *Runner) maybeStartStage(now time.Time, state *runState, pane paneState)
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "skip",
-			Target:    r.cfg.Target,
+			Target:    r.currentStageTarget(state.stageIndex),
 			Stage:     r.currentStageName(state.stageIndex),
 			Cycle:     state.cyclesDone + 1,
 			Status:    "not_idle",
@@ -238,7 +292,7 @@ func (r *Runner) maybeStartStage(now time.Time, state *runState, pane paneState)
 	}
 
 	stage := r.cfg.Stages[state.stageIndex]
-	if err := r.startStage(now, state.cyclesDone+1, stage); err != nil {
+	if err := r.startStage(now, state.cyclesDone+1, state.stageRepeatsDone+1, stage); err != nil {
 		return err
 	}
 	state.stageStarted = true
@@ -251,7 +305,7 @@ func (r *Runner) maybeCompleteStage(now time.Time, state *runState, pane paneSta
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "skip",
-			Target:    r.cfg.Target,
+			Target:    r.currentStageTarget(state.stageIndex),
 			Stage:     stage.Name,
 			Cycle:     state.cyclesDone + 1,
 			Status:    "stage_incomplete",
@@ -262,16 +316,25 @@ func (r *Runner) maybeCompleteStage(now time.Time, state *runState, pane paneSta
 	if err := r.emit(event{
 		Timestamp: now.Format(time.RFC3339),
 		Type:      "stage_complete",
-		Target:    r.cfg.Target,
+		Target:    r.currentStageTarget(state.stageIndex),
 		Stage:     stage.Name,
 		Cycle:     state.cyclesDone + 1,
 		Status:    "ok",
-		Details:   pane,
+		Details: map[string]interface{}{
+			"pane":         pane,
+			"repeat_index": state.stageRepeatsDone + 1,
+			"repeat_total": r.stageRepeatTotal(stage),
+		},
 	}); err != nil {
 		return err
 	}
 
 	state.stageStarted = false
+	state.stageRepeatsDone++
+	if state.stageRepeatsDone < r.stageRepeatTotal(stage) {
+		return nil
+	}
+	state.stageRepeatsDone = 0
 	state.stageIndex++
 	if state.stageIndex >= len(r.cfg.Stages) {
 		state.cyclesDone++
@@ -280,7 +343,7 @@ func (r *Runner) maybeCompleteStage(now time.Time, state *runState, pane paneSta
 		return r.emit(event{
 			Timestamp: now.Format(time.RFC3339),
 			Type:      "cycle_complete",
-			Target:    r.cfg.Target,
+			Target:    r.currentStageTarget(state.stageIndex),
 			Cycle:     state.cyclesDone,
 			Status:    "ok",
 			Details: map[string]interface{}{
@@ -291,7 +354,7 @@ func (r *Runner) maybeCompleteStage(now time.Time, state *runState, pane paneSta
 	return nil
 }
 
-func (r *Runner) startStage(now time.Time, cycle int, stage StageConfig) error {
+func (r *Runner) startStage(now time.Time, cycle int, repeatIndex int, stage StageConfig) error {
 	err := r.sendStagePrompt(stage)
 	status := "ok"
 	reason := ""
@@ -303,14 +366,16 @@ func (r *Runner) startStage(now time.Time, cycle int, stage StageConfig) error {
 	if emitErr := r.emit(event{
 		Timestamp: now.Format(time.RFC3339),
 		Type:      "stage_start",
-		Target:    r.cfg.Target,
+		Target:    r.stageTarget(stage),
 		Stage:     stage.Name,
 		Cycle:     cycle,
 		DryRun:    r.options.DryRun,
 		Status:    status,
 		Reason:    reason,
 		Details: map[string]interface{}{
-			"post_delay": stage.PostDelay.Duration.String(),
+			"post_delay":   stage.PostDelay.Duration.String(),
+			"repeat_index": repeatIndex,
+			"repeat_total": r.stageRepeatTotal(stage),
 		},
 	}); emitErr != nil && err == nil {
 		err = emitErr
@@ -329,10 +394,11 @@ func (r *Runner) sendStagePrompt(stage StageConfig) error {
 	if r.options.DryRun {
 		return nil
 	}
-	if err := r.sendKeys(r.cfg.Target, []string{"C-u"}); err != nil {
+	target := r.stageTarget(stage)
+	if err := r.sendKeys(target, []string{"C-u"}); err != nil {
 		return err
 	}
-	return r.pasteText(r.cfg.Target, stage.Prompt, true)
+	return r.pasteText(target, stage.Prompt, true)
 }
 
 func (r *Runner) stageComplete(index int, stage StageConfig, pane paneState) bool {
@@ -360,6 +426,27 @@ func (r *Runner) currentStageName(index int) string {
 		return ""
 	}
 	return r.cfg.Stages[index].Name
+}
+
+func (r *Runner) currentStageTarget(index int) string {
+	if index < 0 || index >= len(r.cfg.Stages) {
+		return r.cfg.Target
+	}
+	return r.stageTarget(r.cfg.Stages[index])
+}
+
+func (r *Runner) stageTarget(stage StageConfig) string {
+	if stage.Target != "" {
+		return stage.Target
+	}
+	return r.cfg.Target
+}
+
+func (r *Runner) stageRepeatTotal(stage StageConfig) int {
+	if stage.Repeat > 0 {
+		return stage.Repeat
+	}
+	return 1
 }
 
 func (r *Runner) emit(e event) error {

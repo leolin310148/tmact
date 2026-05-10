@@ -45,9 +45,11 @@ type Config struct {
 
 type StageConfig struct {
 	Name         string             `yaml:"name"`
+	Target       string             `yaml:"target"`
 	Prompt       string             `yaml:"prompt"`
 	CompleteWhen CompleteWhenConfig `yaml:"complete_when"`
 	PostDelay    Duration           `yaml:"post_delay"`
+	Repeat       int                `yaml:"repeat"`
 }
 
 type CompleteWhenConfig struct {
@@ -86,15 +88,22 @@ func applyDefaults(cfg *Config) {
 		if cfg.Stages[i].Name == "" {
 			cfg.Stages[i].Name = fmt.Sprintf("stage-%d", i+1)
 		}
+		if cfg.Stages[i].Repeat == 0 {
+			cfg.Stages[i].Repeat = 1
+		}
 	}
 }
 
 func validateConfig(cfg Config) error {
-	if cfg.Target == "" {
-		return errors.New("target is required")
-	}
 	if len(cfg.Stages) == 0 {
 		return errors.New("at least one stage is required")
+	}
+	if cfg.Target == "" {
+		for _, stage := range cfg.Stages {
+			if stage.Target == "" {
+				return errors.New("target is required when a stage does not set target")
+			}
+		}
 	}
 	if cfg.PollInterval.Duration < 0 {
 		return errors.New("poll_interval cannot be negative")
@@ -131,6 +140,9 @@ func validateStage(stage StageConfig) error {
 	}
 	if stage.PostDelay.Duration < 0 {
 		return fmt.Errorf("%s: post_delay cannot be negative", context)
+	}
+	if stage.Repeat < 0 {
+		return fmt.Errorf("%s: repeat cannot be negative", context)
 	}
 	if !stage.CompleteWhen.Idle && len(stage.CompleteWhen.RecentOutputMatches) == 0 {
 		return fmt.Errorf("%s: complete_when is required", context)

@@ -85,7 +85,28 @@ func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
 	}
 
 	lines := cleanedLines(raw)
-	for _, line := range lines {
+	if len(lines) == 0 {
+		return StateUnknown, nil
+	}
+
+	last := strings.ToLower(lastInteractiveLine(lines))
+	if looksLikeAgentPrompt(last) || looksLikeShellPrompt(last) {
+		return StateIdle, nil
+	}
+	if containsAny(last, []string{
+		"waiting for input",
+		"enter your prompt",
+		"type a message",
+		"what would you like",
+	}) {
+		return StateIdle, nil
+	}
+
+	recent := recentLines(lines, 20)
+	for _, line := range recent {
+		if isAgentChromeLine(line) || looksLikeAgentPrompt(line) {
+			continue
+		}
 		lower := strings.ToLower(line)
 		if containsAny(lower, []string{
 			"working",
@@ -105,20 +126,6 @@ func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
 		}) {
 			return StateBlocked, nil
 		}
-	}
-
-	if len(lines) == 0 {
-		return StateUnknown, nil
-	}
-
-	last := strings.ToLower(lines[len(lines)-1])
-	if containsAny(last, []string{
-		"waiting for input",
-		"enter your prompt",
-		"type a message",
-		"what would you like",
-	}) || looksLikeShellPrompt(last) {
-		return StateIdle, nil
 	}
 
 	return StateUnknown, nil
@@ -150,6 +157,52 @@ func containsAny(text string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+func recentLines(lines []string, max int) []string {
+	if len(lines) <= max {
+		return lines
+	}
+	return lines[len(lines)-max:]
+}
+
+func lastInteractiveLine(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if isAgentChromeLine(line) {
+			continue
+		}
+		return line
+	}
+	return ""
+}
+
+func isAgentChromeLine(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return true
+	}
+	return containsAny(text, []string{
+		"welcome back",
+		"tips for getting",
+		"what's new",
+		"run /init",
+		"/release-notes",
+		"token usage:",
+		"to continue this session",
+		"codex app",
+		"claude code",
+		"openai codex",
+		"model:",
+		"directory:",
+		"context ",
+		"cost:",
+	})
+}
+
+func looksLikeAgentPrompt(text string) bool {
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, "❯") || strings.HasPrefix(text, "›")
 }
 
 func looksLikeShellPrompt(text string) bool {

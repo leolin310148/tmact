@@ -32,6 +32,9 @@ stages:
 	if cfg.Stages[0].Name != "stage-1" {
 		t.Fatalf("stage name = %q", cfg.Stages[0].Name)
 	}
+	if cfg.Stages[0].Repeat != 1 {
+		t.Fatalf("stage repeat = %d", cfg.Stages[0].Repeat)
+	}
 }
 
 func TestLoadConfigRejectsMissingTarget(t *testing.T) {
@@ -45,6 +48,24 @@ stages:
 	_, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestLoadConfigAllowsStageTargetsWithoutDefaultTarget(t *testing.T) {
+	path := writeTempConfig(t, `
+stages:
+  - target: planner:0.0
+    prompt: plan
+    complete_when:
+      idle: true
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Stages[0].Target != "planner:0.0" {
+		t.Fatalf("stage target = %q", cfg.Stages[0].Target)
 	}
 }
 
@@ -118,8 +139,28 @@ stages:
 	}
 }
 
+func TestLoadConfigRejectsNegativeRepeat(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+stages:
+  - name: implement
+    repeat: -1
+    prompt: implement
+    complete_when:
+      idle: true
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadExampleWorkflowConfig(t *testing.T) {
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "implement-review-workflow.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "simple-improvement-workflow.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }
