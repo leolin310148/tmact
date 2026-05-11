@@ -274,6 +274,9 @@ func TestLoadExampleWorkflowConfig(t *testing.T) {
 	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-roadmap-data-workflow.yaml")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := LoadConfig(filepath.Join("..", "..", "examples", "idll-roadmap-large-data-followup-workflow.yaml")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeTempConfig(t *testing.T, content string) string {

@@ -90,6 +90,7 @@ func TestLoadExampleConfigs(t *testing.T) {
 	for _, name := range []string{
 		"idll-roadmap-data-watch-codex.yaml",
 		"idll-roadmap-data-watch-coordinator.yaml",
+		"idll-roadmap-data-watch-copilot.yaml",
 		"idll-roadmap-data-watch-gemini.yaml",
 	} {
 		if _, err := LoadConfig(filepath.Join("..", "..", "examples", name)); err != nil {

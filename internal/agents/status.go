@@ -108,6 +108,9 @@ func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
 			continue
 		}
 		lower := strings.ToLower(line)
+		if isKnownIdleOutputLine(lower) {
+			continue
+		}
 		if containsAny(lower, []string{
 			"working",
 			"thinking",
@@ -129,6 +132,13 @@ func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
 	}
 
 	return StateUnknown, nil
+}
+
+func isKnownIdleOutputLine(text string) bool {
+	return containsAny(text, []string{
+		"nothing to commit, working tree clean",
+		"working tree clean",
+	})
 }
 
 func LastMeaningfulLine(raw string) string {

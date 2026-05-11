@@ -58,6 +58,19 @@ func TestClassifyPaneIgnoresAgentPromptPlaceholder(t *testing.T) {
 	}
 }
 
+func TestClassifyPaneIgnoresCleanGitStatus(t *testing.T) {
+	state, _ := ClassifyPane(`
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
+❯
+~  14%/6:30AM  T0  none  O(H)  Cost: $0.00
+`)
+	if state != StateIdle {
+		t.Fatalf("state = %q", state)
+	}
+}
+
 func TestClassifyPaneIgnoresClaudeWelcomeChrome(t *testing.T) {
 	state, _ := ClassifyPane(`
 ╭─── Claude Code v2.1.133 ─────────────────────────────────────────────────────╮
