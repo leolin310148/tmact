@@ -38,15 +38,13 @@ It manages tmux panes/windows, sends scheduled text or keys, watches pane output
 ## Command Shape
 
 ```sh
-tmact list
-tmact list --json
+tmact ls
+tmact ls --json
 
-tmact send --to ops:0.0 "continue"
-tmact send --to ops:0.0 --enter "continue"
+tmact -t 0 send --command "go test ./..." --execute
+tmact -t 0 send --text "continue" --enter --execute
+tmact -t %42 send --keys C-u,Enter --execute
 tmact send --interactive
-
-tmact key --to hc-api:0.0 Enter
-tmact key --to hc-api:0.0 1 Enter
 
 tmact schedule add --to ops:0.0 --after 10m --text "continue" --enter
 tmact schedule add --to hc-api:0.0 --at 23:30 --keys "1,Enter"
@@ -66,6 +64,10 @@ tmact serve --addr 127.0.0.1:8765
 The first runnable slice is intentionally tmux-only:
 
 ```sh
+tmact ls
+tmact -t 0 send --command "go test ./..." --execute
+tmact -t 0 send --text "summarize progress" --enter --execute
+tmact -t 0 send --key Enter --execute
 tmact detect --target z_sample-project_sample:0.0 --json
 tmact panels plan --config examples/idll-agents.yaml
 tmact panels ensure --config examples/idll-agents.yaml --execute
@@ -74,6 +76,12 @@ tmact loop --config examples/night-loop.yaml
 tmact watch --config examples/accept-question-watch.yaml --dry-run --once
 tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start
 ```
+
+`ls` lists tmux panes with stable pane IDs and writes a short-lived numbered
+target cache under `.cache/tmact-targets.json`. `send` can then use
+`tmact -t 0 ...` from that list, or a direct tmux target such as `%42` or
+`session:window.pane`. Sends are dry-run by default; add `--execute` to press
+keys or paste text into tmux.
 
 `detect` captures a pane and detects a known directory-access prompt.
 
@@ -487,16 +495,16 @@ The HTTP layer should be a thin wrapper around the same action runner used by th
   - capture pane
   - send keys
   - paste text
-- Implement `tmact list`.
+- Implement `tmact ls`.
 - Implement direct `tmact send`.
-- Implement direct `tmact key`.
+- Support key sends through `tmact send --key` and `--keys`.
 
 ### Phase 2: Config And Targets
 
 - Add YAML config loader.
 - Add target resolver for direct targets and named groups.
 - Support `--to <target>`.
-- Add `--json` output for `list`.
+- Add `--json` output for `ls`.
 
 ### Phase 3: Action Runner
 
@@ -584,9 +592,9 @@ examples/
 
 ## MVP Acceptance Criteria
 
-- `tmact list` shows all panes with stable pane IDs and human-readable targets.
-- `tmact send --to ops:0.0 "hello" --enter` works.
-- `tmact key --to ops:0.0 Enter` works.
+- `tmact ls` shows all panes with stable pane IDs and human-readable targets.
+- `tmact -t 0 send --text "hello" --enter --execute` works.
+- `tmact -t 0 send --key Enter --execute` works.
 - `tmact schedule add --after 10m ...` persists and runs via `tmact run`.
 - `tmact watch` can detect a configured regex in a target pane.
 - Watcher does not repeatedly trigger the same visible match.

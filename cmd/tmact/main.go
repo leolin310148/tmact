@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"tmact/internal/agents"
@@ -28,6 +30,40 @@ type detectResult struct {
 	Found  bool                    `json:"found"`
 	Prompt *prompt.DirectoryAccess `json:"prompt,omitempty"`
 	Error  string                  `json:"error,omitempty"`
+}
+
+type globalOptions struct {
+	Target string
+}
+
+type listPaneRow struct {
+	Index          int       `json:"index"`
+	Target         string    `json:"target"`
+	Session        string    `json:"session"`
+	WindowIndex    int       `json:"window_index"`
+	WindowName     string    `json:"window_name"`
+	PaneIndex      int       `json:"pane_index"`
+	CurrentCommand string    `json:"current_command"`
+	CurrentPath    string    `json:"current_path"`
+	Active         bool      `json:"active"`
+	InMode         bool      `json:"in_mode"`
+	GeneratedAt    time.Time `json:"-"`
+}
+
+type targetCache struct {
+	GeneratedAt time.Time     `json:"generated_at"`
+	Panes       []listPaneRow `json:"panes"`
+}
+
+type sendReport struct {
+	Selector  string   `json:"selector"`
+	Target    string   `json:"target"`
+	Mode      string   `json:"mode"`
+	Text      string   `json:"text,omitempty"`
+	Keys      []string `json:"keys,omitempty"`
+	Enter     bool     `json:"enter,omitempty"`
+	ClearLine bool     `json:"clear_line,omitempty"`
+	Execute   bool     `json:"execute"`
 }
 
 type repeatedStrings []string
@@ -76,39 +112,343 @@ func main() {
 	}
 }
 
+var (
+	listAllTmuxPanes    = tmux.ListAllPanes
+	listTargetTmuxPanes = tmux.ListPanes
+	pasteTmuxText       = tmux.PasteText
+	sendTmuxKeys        = tmux.SendKeys
+	tmactNow            = time.Now
+)
+
+const targetCacheMaxAge = 30 * time.Minute
+
 func run(args []string) error {
+	globals, args, err := parseGlobalArgs(args)
+	if err != nil {
+		return err
+	}
 	if len(args) == 0 {
 		return usage()
 	}
 
 	switch args[0] {
+	case "ls":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is not valid with ls")
+		}
+		return runList(args[1:])
+	case "send":
+		return runSend(args[1:], globals)
 	case "detect":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runDetect(args[1:])
 	case "inspect":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runInspect(args[1:])
 	case "status":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runStatus(args[1:])
 	case "state":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runState(args[1:])
 	case "inbox":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runInbox(args[1:])
 	case "summarize":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runSummarize(args[1:])
 	case "broadcast":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runBroadcast(args[1:])
 	case "panels":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runPanels(args[1:])
 	case "loop":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runLoop(args[1:])
 	case "watch":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runWatch(args[1:])
 	case "workflow":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
 		return runWorkflow(args[1:])
 	case "help", "-h", "--help":
 		return usage()
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usageText())
 	}
+}
+
+func parseGlobalArgs(args []string) (globalOptions, []string, error) {
+	var opts globalOptions
+	for len(args) > 0 {
+		arg := args[0]
+		switch {
+		case arg == "-t" || arg == "--target":
+			if len(args) < 2 || args[1] == "" {
+				return opts, args, fmt.Errorf("%s requires a value", arg)
+			}
+			opts.Target = args[1]
+			args = args[2:]
+		case strings.HasPrefix(arg, "-t="):
+			opts.Target = strings.TrimPrefix(arg, "-t=")
+			args = args[1:]
+		case strings.HasPrefix(arg, "--target="):
+			opts.Target = strings.TrimPrefix(arg, "--target=")
+			args = args[1:]
+		default:
+			return opts, args, nil
+		}
+		if opts.Target == "" {
+			return opts, args, errors.New("target cannot be empty")
+		}
+	}
+	return opts, args, nil
+}
+
+func runList(args []string) error {
+	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	panes, err := listAllTmuxPanes()
+	if err != nil {
+		return err
+	}
+	rows := paneRows(panes, tmactNow())
+	cache := targetCache{GeneratedAt: tmactNow(), Panes: rows}
+	if err := writeTargetCache(cache); err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(cache)
+	}
+	printPaneRows(rows)
+	return nil
+}
+
+func runSend(args []string, globals globalOptions) error {
+	fs := flag.NewFlagSet("send", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	text := fs.String("text", "", "text to send")
+	command := fs.String("command", "", "command to send followed by Enter")
+	var keyFlags repeatedStrings
+	fs.Var(&keyFlags, "key", "tmux key to send; may be repeated")
+	keysCSV := fs.String("keys", "", "comma-separated tmux keys to send")
+	enter := fs.Bool("enter", false, "press Enter after sending text")
+	clearLine := fs.Bool("clear-line", false, "send C-u before text or command")
+	execute := fs.Bool("execute", false, "actually send to tmux; default is dry-run")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if globals.Target == "" {
+		return errors.New("global -t/--target is required for send")
+	}
+
+	keys, err := collectKeys(keyFlags, *keysCSV)
+	if err != nil {
+		return err
+	}
+	modeCount := 0
+	mode := ""
+	if *text != "" {
+		modeCount++
+		mode = "text"
+	}
+	if *command != "" {
+		modeCount++
+		mode = "command"
+	}
+	if len(keys) > 0 {
+		modeCount++
+		mode = "keys"
+	}
+	if modeCount != 1 {
+		return errors.New("send requires exactly one of --text, --command, --key, or --keys")
+	}
+	if mode == "keys" && (*enter || *clearLine) {
+		return errors.New("--enter and --clear-line are only valid with --text or --command")
+	}
+
+	target, err := resolveTarget(globals.Target)
+	if err != nil {
+		return err
+	}
+
+	report := sendReport{
+		Selector:  globals.Target,
+		Target:    target,
+		Mode:      mode,
+		Keys:      keys,
+		Enter:     *enter || mode == "command",
+		ClearLine: *clearLine,
+		Execute:   *execute,
+	}
+	switch mode {
+	case "text":
+		report.Text = *text
+	case "command":
+		report.Text = *command
+	}
+
+	if *execute {
+		if err := executeSend(report); err != nil {
+			return err
+		}
+	}
+	if *jsonOutput {
+		return printJSON(report)
+	}
+	printSendReport(report)
+	return nil
+}
+
+func collectKeys(keyFlags []string, keysCSV string) ([]string, error) {
+	var keys []string
+	for _, key := range keyFlags {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return nil, errors.New("key cannot be empty")
+		}
+		keys = append(keys, key)
+	}
+	if keysCSV == "" {
+		return keys, nil
+	}
+	for _, part := range strings.Split(keysCSV, ",") {
+		key := strings.TrimSpace(part)
+		if key == "" {
+			return nil, fmt.Errorf("invalid empty key in %q", keysCSV)
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+func executeSend(report sendReport) error {
+	if report.ClearLine {
+		if err := sendTmuxKeys(report.Target, []string{"C-u"}); err != nil {
+			return err
+		}
+	}
+	if report.Mode == "keys" {
+		return sendTmuxKeys(report.Target, report.Keys)
+	}
+	return pasteTmuxText(report.Target, report.Text, report.Enter)
+}
+
+func resolveTarget(selector string) (string, error) {
+	index, err := strconv.Atoi(selector)
+	if err != nil {
+		return selector, nil
+	}
+	if index < 0 {
+		return "", fmt.Errorf("target index %d is invalid", index)
+	}
+	cache, err := readTargetCache()
+	if err != nil {
+		return "", err
+	}
+	if tmactNow().Sub(cache.GeneratedAt) > targetCacheMaxAge {
+		return "", fmt.Errorf("target cache is older than %s; run `tmact ls` again", targetCacheMaxAge)
+	}
+	if index >= len(cache.Panes) {
+		return "", fmt.Errorf("target index %d not found; run `tmact ls` again", index)
+	}
+	row := cache.Panes[index]
+	if _, err := listTargetTmuxPanes(row.Target); err != nil {
+		return "", fmt.Errorf("cached target %d (%s) is no longer available; run `tmact ls` again: %w", index, row.Target, err)
+	}
+	return row.Target, nil
+}
+
+func paneRows(panes []tmux.Pane, generatedAt time.Time) []listPaneRow {
+	rows := make([]listPaneRow, 0, len(panes))
+	for index, pane := range panes {
+		rows = append(rows, listPaneRow{
+			Index:          index,
+			Target:         paneTarget(pane),
+			Session:        pane.Session,
+			WindowIndex:    pane.WindowIndex,
+			WindowName:     pane.WindowName,
+			PaneIndex:      pane.PaneIndex,
+			CurrentCommand: pane.CurrentCommand,
+			CurrentPath:    pane.CurrentPath,
+			Active:         pane.Active,
+			InMode:         pane.InMode,
+			GeneratedAt:    generatedAt,
+		})
+	}
+	return rows
+}
+
+func paneTarget(pane tmux.Pane) string {
+	if pane.PaneID != "" {
+		return pane.PaneID
+	}
+	return fmt.Sprintf("%s:%d.%d", pane.Session, pane.WindowIndex, pane.PaneIndex)
+}
+
+func targetCachePath() string {
+	return filepath.Join(".cache", "tmact-targets.json")
+}
+
+func writeTargetCache(cache targetCache) error {
+	path := targetCachePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644)
+}
+
+func readTargetCache() (targetCache, error) {
+	var cache targetCache
+	data, err := os.ReadFile(targetCachePath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cache, errors.New("target cache not found; run `tmact ls` first")
+		}
+		return cache, err
+	}
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return cache, fmt.Errorf("read target cache: %w", err)
+	}
+	return cache, nil
 }
 
 func runState(args []string) error {
@@ -720,6 +1060,43 @@ func printJSON(value interface{}) error {
 	return encoder.Encode(value)
 }
 
+func printPaneRows(rows []listPaneRow) {
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, "#\ttarget\tsession\twindow\tpane\tcommand\tcwd")
+	for _, row := range rows {
+		window := fmt.Sprintf("%d:%s", row.WindowIndex, row.WindowName)
+		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%d\t%s\t%s\n", row.Index, row.Target, row.Session, window, row.PaneIndex, row.CurrentCommand, row.CurrentPath)
+	}
+	_ = writer.Flush()
+}
+
+func printSendReport(report sendReport) {
+	prefix := ""
+	if !report.Execute {
+		prefix = "dry-run: would "
+	}
+	switch report.Mode {
+	case "keys":
+		fmt.Printf("%ssend keys to %s: %s\n", prefix, report.Target, strings.Join(report.Keys, ","))
+	case "command":
+		if report.ClearLine {
+			fmt.Printf("%sclear line and send command to %s: %s\n", prefix, report.Target, report.Text)
+			return
+		}
+		fmt.Printf("%ssend command to %s: %s\n", prefix, report.Target, report.Text)
+	case "text":
+		enter := ""
+		if report.Enter {
+			enter = " and Enter"
+		}
+		if report.ClearLine {
+			fmt.Printf("%sclear line and send text%s to %s: %s\n", prefix, enter, report.Target, report.Text)
+			return
+		}
+		fmt.Printf("%ssend text%s to %s: %s\n", prefix, enter, report.Target, report.Text)
+	}
+}
+
 func printStateChange(path string, data map[string]interface{}, event agentstate.Event) {
 	fmt.Printf("path: %s\n", path)
 	if stateName, ok := data["state"].(string); ok {
@@ -892,6 +1269,11 @@ func usageText() string {
 	return `tmact minimal POC
 
 Usage:
+  tmact ls [--json]
+  tmact -t 0 send --command "go test ./..." [--execute]
+  tmact -t 0 send --text "summarize progress" [--enter] [--execute]
+  tmact -t 0 send --key Enter [--execute]
+  tmact -t 0 send --keys C-u,Enter [--execute]
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
   tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
@@ -909,6 +1291,8 @@ Usage:
   tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start] [--start-stage name]
 
 Commands:
+  ls        list tmux panes and cache numbered targets for -t
+  send      send text, a command, or keys to a selected tmux target
   detect    capture a tmux pane and detect a directory-access prompt
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
