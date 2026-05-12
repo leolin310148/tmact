@@ -138,6 +138,15 @@ flows:
 The loop can also stop when a permission prompt is visible, which is safer than
 silently granting access while an agent is running unattended.
 
+Long-running loop processes write metadata under `.tmact/runs`, so they can be
+inspected and stopped without remembering the tmux window:
+
+```sh
+tmact loop status
+tmact loop stop --id loop-night-loop-123
+tmact loop stop --config examples/night-loop.yaml
+```
+
 `workflow` is a staged harness for implementation flows that should not be a
 single repeated prompt. Each stage waits for the selected pane to become idle,
 sends a role-specific prompt, and advances only when the configured completion
@@ -162,6 +171,14 @@ UAT/player feedback, stakeholder acceptance, feedback planning/fixes, and a
 commit-check stage help the workflow converge without a human deciding each
 turn. The commit-check stage should commit only cohesive accepted diffs and
 defer oversized or mixed changes for another split cycle.
+
+Long-running workflows use the same runtime metadata commands:
+
+```sh
+tmact workflow status
+tmact workflow stop --id workflow-simple-improvement-workflow-123
+tmact workflow stop --config examples/simple-improvement-workflow.yaml
+```
 
 See `docs/agent-inbox.md`, `examples/implement-review-workflow.yaml`, and
 `examples/simple-improvement-workflow.yaml`.

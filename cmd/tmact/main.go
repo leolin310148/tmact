@@ -19,6 +19,7 @@ import (
 	"tmact/internal/loop"
 	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
+	"tmact/internal/runmeta"
 	agentstate "tmact/internal/state"
 	"tmact/internal/statusd"
 	"tmact/internal/tmux"
@@ -1137,6 +1138,15 @@ func loadAgentConfig(configPath string) (agents.Config, error) {
 }
 
 func runLoop(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "status":
+			return runRuntimeStatus("loop", args[1:])
+		case "stop":
+			return runRuntimeStop("loop", args[1:])
+		}
+	}
+
 	fs := flag.NewFlagSet("loop", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
@@ -1144,6 +1154,7 @@ func runLoop(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "print actions without sending anything to tmux")
 	once := fs.Bool("once", false, "run one observe/action pass and exit")
 	assumeIdleOnStart := fs.Bool("assume-idle-on-start", false, "treat the pane as already idle when the loop starts")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1164,7 +1175,13 @@ func runLoop(args []string) error {
 		DryRun: *dryRun,
 		Once:   *once,
 	})
-	return runner.Run(context.Background())
+	if *once {
+		return runner.Run(context.Background())
+	}
+
+	return runManagedRunner(*runDir, "loop", *configPath, cfg.Target, cfg.LogPath, func(ctx context.Context) error {
+		return runner.Run(ctx)
+	})
 }
 
 func runWatch(args []string) error {
@@ -1195,6 +1212,15 @@ func runWatch(args []string) error {
 }
 
 func runWorkflow(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "status":
+			return runRuntimeStatus("workflow", args[1:])
+		case "stop":
+			return runRuntimeStop("workflow", args[1:])
+		}
+	}
+
 	fs := flag.NewFlagSet("workflow", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
@@ -1203,6 +1229,7 @@ func runWorkflow(args []string) error {
 	once := fs.Bool("once", false, "run one workflow observe/action pass and exit")
 	assumeIdleOnStart := fs.Bool("assume-idle-on-start", false, "treat the pane as already idle when the workflow starts")
 	startStage := fs.String("start-stage", "", "start from the named workflow stage")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1222,7 +1249,139 @@ func runWorkflow(args []string) error {
 		AssumeIdleOnStart: *assumeIdleOnStart,
 		StartStage:        *startStage,
 	})
-	return runner.Run(context.Background())
+	if *once {
+		return runner.Run(context.Background())
+	}
+
+	target := cfg.Target
+	if target == "" && len(cfg.Stages) > 0 {
+		target = cfg.Stages[0].Target
+	}
+	return runManagedRunner(*runDir, "workflow", *configPath, target, cfg.LogPath, func(ctx context.Context) error {
+		return runner.Run(ctx)
+	})
+}
+
+func runManagedRunner(runDir string, kind string, configPath string, target string, logPath string, run func(context.Context) error) error {
+	startedAt := tmactNow()
+	record, err := runmeta.Register(runDir, runmeta.RegisterOptions{
+		Kind:       kind,
+		ConfigPath: configPath,
+		Target:     target,
+		LogPath:    logPath,
+		Tmux:       currentTmuxInfo(),
+		Now:        startedAt,
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	err = run(ctx)
+	status := "stopped"
+	reason := "complete"
+	if errors.Is(err, context.Canceled) {
+		err = nil
+		reason = "interrupted"
+	} else if err != nil {
+		status = "error"
+		reason = err.Error()
+	}
+	if finishErr := runmeta.Finish(runDir, record, status, reason, tmactNow()); finishErr != nil && err == nil {
+		err = finishErr
+	}
+	return err
+}
+
+func runRuntimeStatus(kind string, args []string) error {
+	fs := flag.NewFlagSet(kind+" status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	statuses, err := runmeta.List(*runDir, kind, tmactNow())
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(statuses)
+	}
+	printRuntimeStatuses(statuses)
+	return nil
+}
+
+func runRuntimeStop(kind string, args []string) error {
+	fs := flag.NewFlagSet(kind+" stop", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	id := fs.String("id", "", "runtime id to stop")
+	configPath := fs.String("config", "", "stop the runtime registered for this config")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	statuses, err := runmeta.List(*runDir, kind, tmactNow())
+	if err != nil {
+		return err
+	}
+	selected, err := runmeta.SelectStatus(statuses, *id, *configPath)
+	if err != nil {
+		return err
+	}
+	if selected.RuntimeStatus != "running" && selected.RuntimeStatus != "stopping" {
+		return fmt.Errorf("%s %s is not running (status: %s)", kind, selected.Run.ID, selected.RuntimeStatus)
+	}
+	record := selected.Run
+
+	stoppedBy := "process"
+	if record.Tmux.PaneID != "" {
+		if err := sendTmuxKeys(record.Tmux.PaneID, []string{"C-c"}); err != nil {
+			return err
+		}
+		stoppedBy = "tmux"
+	} else {
+		process, err := os.FindProcess(record.PID)
+		if err != nil {
+			return err
+		}
+		if err := process.Signal(os.Interrupt); err != nil {
+			return err
+		}
+	}
+	if err := runmeta.Mark(*runDir, record, "stopping", stoppedBy, tmactNow()); err != nil {
+		return err
+	}
+	if *jsonOutput {
+		record.Status = "stopping"
+		record.Reason = stoppedBy
+		return printJSON(record)
+	}
+	fmt.Printf("sent stop to %s %s via %s\n", kind, record.ID, stoppedBy)
+	return nil
+}
+
+func currentTmuxInfo() runmeta.TmuxInfo {
+	paneID := os.Getenv("TMUX_PANE")
+	if paneID == "" {
+		return runmeta.TmuxInfo{}
+	}
+	info := runmeta.TmuxInfo{PaneID: paneID}
+	panes, err := listTargetTmuxPanes(paneID)
+	if err != nil || len(panes) == 0 {
+		return info
+	}
+	pane := panes[0]
+	info.Session = pane.Session
+	info.WindowIndex = pane.WindowIndex
+	info.WindowName = pane.WindowName
+	info.PaneIndex = pane.PaneIndex
+	return info
 }
 
 func printDetectResult(result detectResult, jsonOutput bool) {
@@ -1336,6 +1495,60 @@ func printStatusReport(report agents.Report) {
 		}
 		fmt.Println()
 	}
+}
+
+func printRuntimeStatuses(statuses []runmeta.Status) {
+	if len(statuses) == 0 {
+		fmt.Println("no registered runs")
+		return
+	}
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(writer, "id\tstatus\tpid\ttarget\tconfig\tlast")
+	for _, status := range statuses {
+		run := status.Run
+		last := ""
+		if status.LastEvent != nil {
+			last = formatRuntimeEvent(*status.LastEvent)
+		}
+		fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\n", run.ID, status.RuntimeStatus, run.PID, run.Target, run.ConfigPath, last)
+		if run.Tmux.PaneID != "" {
+			window := run.Tmux.WindowName
+			if window != "" {
+				window = fmt.Sprintf("%d:%s", run.Tmux.WindowIndex, window)
+			}
+			fmt.Fprintf(writer, "\t\t\tpane:%s\t%s\t%s\n", run.Tmux.PaneID, run.Tmux.Session, window)
+		}
+		for _, problem := range status.RecentProblems {
+			fmt.Fprintf(writer, "\tproblem\t\t\t\t%s\n", formatRuntimeEvent(problem))
+		}
+	}
+	_ = writer.Flush()
+}
+
+func formatRuntimeEvent(event runmeta.EventSummary) string {
+	parts := []string{}
+	if !event.Timestamp.IsZero() {
+		parts = append(parts, event.Timestamp.Format(time.RFC3339))
+	}
+	if event.Type != "" {
+		parts = append(parts, event.Type)
+	}
+	if event.Stage != "" {
+		parts = append(parts, "stage:"+event.Stage)
+	}
+	if event.Action != "" {
+		parts = append(parts, "action:"+event.Action)
+	}
+	if event.Cycle > 0 {
+		parts = append(parts, fmt.Sprintf("cycle:%d", event.Cycle))
+	}
+	if event.Status != "" {
+		parts = append(parts, "status:"+event.Status)
+	}
+	if event.Reason != "" {
+		parts = append(parts, "reason:"+event.Reason)
+	}
+	return strings.Join(parts, " ")
 }
 
 func printStatusdSnapshot(snapshot statusd.Snapshot, now time.Time) {
@@ -1535,8 +1748,12 @@ Usage:
   tmact panels plan [--config examples/agents.yaml] [--session IDLL] [--json]
   tmact panels ensure [--config examples/agents.yaml] [--session IDLL] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
+  tmact loop status [--run-dir .tmact/runs] [--json]
+  tmact loop stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
   tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start] [--start-stage name]
+  tmact workflow status [--run-dir .tmact/runs] [--json]
+  tmact workflow stop (--id ID | --config path)
 
 Commands:
   ls        list tmux panes and cache numbered targets for -t
@@ -1550,8 +1767,8 @@ Commands:
   summarize summarize recent pane and git activity
   broadcast safely send text to selected agent panes
   panels    plan or ensure configured agent tmux panels
-  loop      run a configurable tmux automation loop
+  loop      run, inspect, or stop a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
-  workflow  run a staged prompt workflow such as agent-inbox feature work
+  workflow  run, inspect, or stop a staged prompt workflow such as agent-inbox feature work
 `
 }
