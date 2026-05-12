@@ -1,0 +1,250 @@
+package panestate
+
+import (
+	"strings"
+
+	"tmact/internal/prompt"
+)
+
+const (
+	StateBlocked           = "blocked"
+	StateIdle              = "idle"
+	StateUnknown           = "unknown"
+	StateWaitingPermission = "waiting_permission"
+	StateWorking           = "working"
+)
+
+type Result struct {
+	State    string
+	Asking   bool
+	Prompt   *prompt.DirectoryAccess
+	LastLine string
+	Signals  []string
+}
+
+func Classify(raw string) Result {
+	result := Result{
+		State:    StateUnknown,
+		LastLine: LastMeaningfulLine(raw),
+	}
+	if detected := prompt.DetectDirectoryAccess(raw); detected != nil {
+		result.State = StateWaitingPermission
+		result.Asking = true
+		result.Prompt = detected
+		result.Signals = appendSignal(result.Signals, "permission_prompt")
+		return result
+	}
+	if looksLikeTrustPrompt(raw) {
+		result.State = StateWaitingPermission
+		result.Asking = true
+		result.Signals = appendSignal(result.Signals, "trust_prompt")
+		return result
+	}
+	if looksLikeAskingPrompt(raw) {
+		result.State = StateWaitingPermission
+		result.Asking = true
+		result.Signals = appendSignal(result.Signals, "asking_prompt")
+		return result
+	}
+
+	lines := CleanedLines(raw)
+	if len(lines) == 0 {
+		return result
+	}
+
+	last := strings.ToLower(lastInteractiveLine(lines))
+	if looksLikeAgentPrompt(last) || looksLikeShellPrompt(last) {
+		result.State = StateIdle
+		result.Signals = appendSignal(result.Signals, "idle_text")
+		return result
+	}
+	if containsAny(last,
+		"waiting for input",
+		"enter your prompt",
+		"type a message",
+		"what would you like",
+	) {
+		result.State = StateIdle
+		result.Signals = appendSignal(result.Signals, "idle_text")
+		return result
+	}
+
+	recent := recentLines(lines, 20)
+	for _, line := range recent {
+		if isAgentChromeLine(line) || looksLikeAgentPrompt(line) {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if isKnownIdleOutputLine(lower) {
+			continue
+		}
+		if containsAny(lower,
+			"working",
+			"thinking",
+			"running",
+			"executing",
+			"esc to interrupt",
+			"ctrl-c to interrupt",
+		) {
+			result.State = StateWorking
+			result.Signals = appendSignal(result.Signals, "working_text")
+			return result
+		}
+		if containsAny(lower,
+			"permission denied",
+			"merge conflict",
+		) {
+			result.State = StateBlocked
+			result.Signals = appendSignal(result.Signals, "blocked_text")
+			return result
+		}
+	}
+
+	return result
+}
+
+func LastMeaningfulLine(raw string) string {
+	lines := CleanedLines(raw)
+	if len(lines) == 0 {
+		return ""
+	}
+	return truncate(lines[len(lines)-1], 180)
+}
+
+func CleanedLines(raw string) []string {
+	var lines []string
+	for _, line := range strings.Split(raw, "\n") {
+		cleaned := prompt.CleanLine(line)
+		if cleaned != "" {
+			lines = append(lines, cleaned)
+		}
+	}
+	return lines
+}
+
+func looksLikeTrustPrompt(raw string) bool {
+	text := strings.ToLower(raw)
+	return strings.Contains(text, "do you trust the files in this folder?") ||
+		strings.Contains(text, "confirm folder trust")
+}
+
+func looksLikeAskingPrompt(raw string) bool {
+	lines := strings.Split(raw, "\n")
+	start := 0
+	if len(lines) > 20 {
+		start = len(lines) - 20
+	}
+	for _, line := range lines[start:] {
+		text := strings.ToLower(prompt.CleanLine(line))
+		if text == "" {
+			continue
+		}
+		if isAskingLine(text) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAskingLine(text string) bool {
+	text = strings.TrimSpace(text)
+	switch {
+	case strings.HasPrefix(text, "waiting for approval"):
+		return true
+	case strings.HasPrefix(text, "waiting for confirmation"):
+		return true
+	case strings.HasPrefix(text, "allow command?"):
+		return true
+	case strings.HasPrefix(text, "allow this command?"):
+		return true
+	case strings.HasPrefix(text, "apply this patch?"):
+		return true
+	case strings.HasPrefix(text, "do you want to proceed?"):
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownIdleOutputLine(text string) bool {
+	return containsAny(text,
+		"nothing to commit, working tree clean",
+		"working tree clean",
+	)
+}
+
+func recentLines(lines []string, max int) []string {
+	if len(lines) <= max {
+		return lines
+	}
+	return lines[len(lines)-max:]
+}
+
+func lastInteractiveLine(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if isAgentChromeLine(line) {
+			continue
+		}
+		return line
+	}
+	return ""
+}
+
+func isAgentChromeLine(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return true
+	}
+	return containsAny(text,
+		"welcome back",
+		"tips for getting",
+		"what's new",
+		"run /init",
+		"/release-notes",
+		"token usage:",
+		"to continue this session",
+		"codex app",
+		"claude code",
+		"openai codex",
+		"model:",
+		"directory:",
+		"context ",
+		"cost:",
+	)
+}
+
+func looksLikeAgentPrompt(text string) bool {
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, "❯") || strings.HasPrefix(text, "›")
+}
+
+func looksLikeShellPrompt(text string) bool {
+	text = strings.TrimSpace(text)
+	return strings.HasSuffix(text, "$") || strings.HasSuffix(text, "%") || strings.HasSuffix(text, ">")
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendSignal(signals []string, signal string) []string {
+	for _, existing := range signals {
+		if existing == signal {
+			return signals
+		}
+	}
+	return append(signals, signal)
+}
+
+func truncate(text string, max int) string {
+	if len(text) <= max {
+		return text
+	}
+	return text[:max] + "..."
+}

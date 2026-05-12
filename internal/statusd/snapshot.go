@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"path"
 	"sort"
-	"strings"
 	"time"
 
-	"tmact/internal/agents"
+	"tmact/internal/panestate"
 	"tmact/internal/panestatus"
 	"tmact/internal/tmux"
 )
@@ -157,12 +156,12 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 	running, lastChangedAt, hasHistory := runningState(pane, cfg, mem, now)
 	asking := isAsking(pane)
 	state := pane.State
-	if running && state == agents.StateUnknown {
-		state = agents.StateWorking
+	if running && state == panestate.StateUnknown {
+		state = panestate.StateWorking
 	}
 	idle := !running && pane.Idle
-	if hasHistory && !running && state == agents.StateUnknown && !asking && pane.Error == "" {
-		state = agents.StateIdle
+	if hasHistory && !running && state == panestate.StateUnknown && !asking && pane.Error == "" {
+		state = panestate.StateIdle
 		idle = true
 	}
 
@@ -199,17 +198,17 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 
 func runningState(pane panestatus.PaneStatus, cfg Config, mem *Memory, now time.Time) (bool, time.Time, bool) {
 	if pane.PaneID == "" || pane.NormalizedHash == "" || pane.Error != "" {
-		return pane.State == agents.StateWorking, time.Time{}, false
+		return pane.State == panestate.StateWorking, time.Time{}, false
 	}
 
 	previous, ok := mem.panes[pane.PaneID]
 	lastChangedAt := previous.LastChangedAt
 	if !ok {
-		if pane.State == agents.StateWorking {
+		if pane.State == panestate.StateWorking {
 			lastChangedAt = now
 		}
 		mem.panes[pane.PaneID] = paneMemory{Hash: pane.NormalizedHash, LastChangedAt: lastChangedAt}
-		return pane.State == agents.StateWorking, lastChangedAt, false
+		return pane.State == panestate.StateWorking, lastChangedAt, false
 	}
 
 	if previous.Hash != pane.NormalizedHash {
@@ -218,21 +217,16 @@ func runningState(pane panestatus.PaneStatus, cfg Config, mem *Memory, now time.
 	mem.panes[pane.PaneID] = paneMemory{Hash: pane.NormalizedHash, LastChangedAt: lastChangedAt}
 
 	if lastChangedAt.IsZero() {
-		return pane.State == agents.StateWorking, lastChangedAt, true
+		return pane.State == panestate.StateWorking, lastChangedAt, true
 	}
 	return now.Sub(lastChangedAt) <= cfg.RunningDebounce, lastChangedAt, true
 }
 
 func isAsking(pane panestatus.PaneStatus) bool {
-	if pane.Asking || pane.Prompt != nil || pane.State == agents.StateWaitingPermission {
+	if pane.Asking || pane.Prompt != nil || pane.State == panestate.StateWaitingPermission {
 		return true
 	}
-	last := strings.ToLower(pane.LastLine)
-	return strings.Contains(last, "waiting for approval") ||
-		strings.Contains(last, "waiting for confirmation") ||
-		strings.Contains(last, "allow command?") ||
-		strings.Contains(last, "apply this patch?") ||
-		strings.Contains(last, "do you want to proceed?")
+	return false
 }
 
 func buildSessions(panes map[string]PaneStatus, now time.Time) map[string]SessionStatus {
@@ -277,7 +271,7 @@ func buildSessions(panes map[string]PaneStatus, now time.Time) map[string]Sessio
 
 func activePane(panes []PaneStatus) PaneStatus {
 	if len(panes) == 0 {
-		return PaneStatus{Runtime: panestatus.RuntimeUnknown, Tag: RuntimeTag(panestatus.RuntimeUnknown), State: agents.StateUnknown}
+		return PaneStatus{Runtime: panestatus.RuntimeUnknown, Tag: RuntimeTag(panestatus.RuntimeUnknown), State: panestate.StateUnknown}
 	}
 	for _, pane := range panes {
 		if pane.WindowActive && pane.Active {
@@ -315,7 +309,7 @@ func summarize(snapshot Snapshot) Summary {
 		Errors:   len(snapshot.Errors),
 	}
 	for _, pane := range snapshot.Panes {
-		if pane.State == agents.StateWorking || pane.Running {
+		if pane.State == panestate.StateWorking || pane.Running {
 			summary.Working++
 		}
 		if pane.Asking {

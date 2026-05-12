@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"tmact/internal/panestate"
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
 )
@@ -110,7 +111,7 @@ func LastMeaningfulLines(raw string, count int) []string {
 		return nil
 	}
 
-	lines := cleanedLines(raw)
+	lines := panestate.CleanedLines(raw)
 	if len(lines) == 0 {
 		return nil
 	}
@@ -121,6 +122,13 @@ func LastMeaningfulLines(raw string, count int) []string {
 		lines[i] = truncate(lines[i], 180)
 	}
 	return lines
+}
+
+func truncate(text string, max int) string {
+	if len(text) <= max {
+		return text
+	}
+	return text[:max] + "..."
 }
 
 func InspectGitSummary(repo string, commitLimit int) *GitSummary {

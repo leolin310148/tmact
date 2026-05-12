@@ -6,16 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"tmact/internal/panestate"
 	"tmact/internal/prompt"
 	"tmact/internal/tmux"
 )
 
 const (
-	StateBlocked           = "blocked"
-	StateIdle              = "idle"
-	StateUnknown           = "unknown"
-	StateWaitingPermission = "waiting_permission"
-	StateWorking           = "working"
+	StateBlocked           = panestate.StateBlocked
+	StateIdle              = panestate.StateIdle
+	StateUnknown           = panestate.StateUnknown
+	StateWaitingPermission = panestate.StateWaitingPermission
+	StateWorking           = panestate.StateWorking
 )
 
 type Report struct {
@@ -80,151 +81,12 @@ func collectAgent(agent AgentConfig) AgentStatus {
 }
 
 func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
-	if detected := prompt.DetectDirectoryAccess(raw); detected != nil {
-		return StateWaitingPermission, detected
-	}
-
-	lines := cleanedLines(raw)
-	if len(lines) == 0 {
-		return StateUnknown, nil
-	}
-
-	last := strings.ToLower(lastInteractiveLine(lines))
-	if looksLikeAgentPrompt(last) || looksLikeShellPrompt(last) {
-		return StateIdle, nil
-	}
-	if containsAny(last, []string{
-		"waiting for input",
-		"enter your prompt",
-		"type a message",
-		"what would you like",
-	}) {
-		return StateIdle, nil
-	}
-
-	recent := recentLines(lines, 20)
-	for _, line := range recent {
-		if isAgentChromeLine(line) || looksLikeAgentPrompt(line) {
-			continue
-		}
-		lower := strings.ToLower(line)
-		if isKnownIdleOutputLine(lower) {
-			continue
-		}
-		if containsAny(lower, []string{
-			"working",
-			"thinking",
-			"running",
-			"executing",
-			"esc to interrupt",
-			"ctrl-c to interrupt",
-		}) {
-			return StateWorking, nil
-		}
-		if containsAny(lower, []string{
-			"waiting for approval",
-			"waiting for confirmation",
-			"permission denied",
-			"merge conflict",
-		}) {
-			return StateBlocked, nil
-		}
-	}
-
-	return StateUnknown, nil
-}
-
-func isKnownIdleOutputLine(text string) bool {
-	return containsAny(text, []string{
-		"nothing to commit, working tree clean",
-		"working tree clean",
-	})
+	result := panestate.Classify(raw)
+	return result.State, result.Prompt
 }
 
 func LastMeaningfulLine(raw string) string {
-	lines := cleanedLines(raw)
-	if len(lines) == 0 {
-		return ""
-	}
-	return truncate(lines[len(lines)-1], 180)
-}
-
-func cleanedLines(raw string) []string {
-	var lines []string
-	for _, line := range strings.Split(raw, "\n") {
-		cleaned := prompt.CleanLine(line)
-		if cleaned != "" {
-			lines = append(lines, cleaned)
-		}
-	}
-	return lines
-}
-
-func containsAny(text string, needles []string) bool {
-	for _, needle := range needles {
-		if strings.Contains(text, needle) {
-			return true
-		}
-	}
-	return false
-}
-
-func recentLines(lines []string, max int) []string {
-	if len(lines) <= max {
-		return lines
-	}
-	return lines[len(lines)-max:]
-}
-
-func lastInteractiveLine(lines []string) string {
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := lines[i]
-		if isAgentChromeLine(line) {
-			continue
-		}
-		return line
-	}
-	return ""
-}
-
-func isAgentChromeLine(text string) bool {
-	text = strings.ToLower(strings.TrimSpace(text))
-	if text == "" {
-		return true
-	}
-	return containsAny(text, []string{
-		"welcome back",
-		"tips for getting",
-		"what's new",
-		"run /init",
-		"/release-notes",
-		"token usage:",
-		"to continue this session",
-		"codex app",
-		"claude code",
-		"openai codex",
-		"model:",
-		"directory:",
-		"context ",
-		"cost:",
-	})
-}
-
-func looksLikeAgentPrompt(text string) bool {
-	text = strings.TrimSpace(text)
-	return strings.HasPrefix(text, "❯") || strings.HasPrefix(text, "›")
-}
-
-func looksLikeShellPrompt(text string) bool {
-	text = strings.TrimSpace(text)
-	return strings.HasSuffix(text, "$") || strings.HasSuffix(text, "%") || strings.HasSuffix(text, ">")
-}
-
-func truncate(text string, max int) string {
-	if len(text) <= max {
-		return text
-	}
-	return text[:max] + "..."
+	return panestate.LastMeaningfulLine(raw)
 }
 
 func InspectGit(repo string) *GitStatus {
