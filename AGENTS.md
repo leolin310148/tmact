@@ -2,55 +2,78 @@
 
 ## Project Structure & Module Organization
 
-`tmact` is a small Go CLI for local tmux automation. The entrypoint lives in
-`cmd/tmact/main.go`; command parsing is intentionally simple and delegates to
-packages under `internal/`. Core packages include `internal/loop` for scheduled
-agent loops, `internal/watch` for prompt watchers, `internal/prompt` for prompt
-detection, and `internal/tmux` for tmux command wrappers. Example YAML configs
-are in `examples/`, and operational notes are in `docs/` and `RUNNING_LOOPS.md`.
+`tmact` is a Go CLI for local tmux automation. The entrypoint is
+`cmd/tmact/main.go`; subcommand parsing uses the stdlib `flag` package and
+delegates to packages under `internal/`. Notable packages:
+
+- `internal/tmux` — tmux command wrappers (list, capture-pane, send-keys, options).
+- `internal/prompt` — directory-access prompt detection.
+- `internal/panestate` / `internal/panestatus` — runtime + idle/running/asking classification and rollups.
+- `internal/statusd` — long-running status daemon that publishes a JSON snapshot.
+- `internal/loop` — single-pane scheduled action loop.
+- `internal/watch` — narrow prompt watcher (allowlisted answerer).
+- `internal/workflow` — multi-stage prompt workflow with per-stage targets and repeat.
+- `internal/state` — agent-inbox `status.yaml` + JSONL event log.
+- `internal/agents` — `agents.yaml` config used by panels/broadcast/status/inbox/summarize.
+- `internal/runmeta` — `.tmact/runs/` metadata for inspect/stop of long-running processes.
+
+Example YAML configs live in `examples/`, operational notes in `docs/` and
+`RUNNING_LOOPS.md`, and the macOS launchd plist for `statusd` in `launchd/`.
 
 ## Build, Test, and Development Commands
 
-- `go test ./...`: run all unit tests, including config parsing and prompt
-  decision tests.
-- `go run ./cmd/tmact detect --target session:0.0 --json`: capture a tmux pane
-  and report detected directory-access prompts.
-- `go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once`:
-  validate one loop pass without sending keys to tmux.
-- `go run ./cmd/tmact watch --config examples/accept-question-watch.yaml --dry-run --once`:
-  validate watcher decisions without pressing keys.
-- `go build -o .cache/tmact ./cmd/tmact`: build a local binary used by smoke
-  tests and long-running loops.
+- `go test ./...` — run all unit tests (config parsing, prompt detection, classifiers, runners).
+- `go build -o .cache/tmact ./cmd/tmact` — build the local binary used by smoke tests, the launchd `statusd`, and long-running loops.
+- `go run ./cmd/tmact ls` — list tmux panes and refresh the numbered-target cache.
+- `go run ./cmd/tmact detect --target session:0.0 --json` — capture a pane and detect a directory-access prompt.
+- `go run ./cmd/tmact inspect --all --json` — classify runtime + idle state for every pane.
+- `go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once` — validate one loop pass without sending keys.
+- `go run ./cmd/tmact watch --config examples/accept-question-watch.yaml --dry-run --once` — validate one watcher pass.
+- `go run ./cmd/tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start` — validate workflow stage transitions.
+
+Only external dependency is `gopkg.in/yaml.v3` (Go 1.26). No SQLite, cobra, or
+gocron despite earlier design notes — keep new dependencies minimal.
 
 ## Coding Style & Naming Conventions
 
 Use standard Go formatting: run `gofmt` on edited Go files before committing.
-Keep package names short and lowercase (`loop`, `watch`, `prompt`). Prefer
-table-driven or focused `TestXxx` tests and descriptive config field names that
-match YAML keys already used in `examples/`, such as `idle_after`,
-`post_delay`, and `allow_path_patterns`. Keep tmux side effects isolated behind
-`internal/tmux` helpers when possible.
+Keep package names short and lowercase (`loop`, `watch`, `prompt`,
+`panestate`). Prefer table-driven or focused `TestXxx` tests. Config field
+names should match the YAML keys already used in `examples/` (`idle_after`,
+`post_delay`, `allow_path_patterns`, `clear_before_prompt`, `stage_every`,
+`complete_when`). Keep tmux side effects isolated behind `internal/tmux`
+helpers; the rest of the code should be testable without a live tmux session.
 
 ## Testing Guidelines
 
-Place tests next to the package they cover using `_test.go` files. Tests should
-exercise validation, defaults, and safety decisions without requiring a live tmux
-session. For tmux-facing behavior, prefer `--dry-run --once` smoke checks and
-record notable manual findings in `docs/smoke-test.md`. When adding or changing
-example configs, include a test that loads them successfully.
+Place tests next to the package they cover using `_test.go`. Tests should
+exercise validation, defaults, and safety decisions without requiring tmux.
+For tmux-facing behavior, prefer `--dry-run --once` smoke checks and record
+notable manual findings in `docs/smoke-test.md`. When adding or changing an
+example config, include a loader test so it stays parseable.
 
 ## Commit & Pull Request Guidelines
 
-The existing history uses concise imperative commit subjects, for example
-`Add prompt watcher automation`. Follow that style and keep each commit scoped
-to one behavior or documentation change. Pull requests should describe the user
-visible effect, list validation commands run, and call out any live tmux smoke
-testing. Include screenshots only when terminal output or external UI behavior
-is relevant.
+The history uses concise imperative commit subjects (e.g. `Add prompt watcher
+automation`, `Improve pane status detection`). Follow that style and keep
+each commit scoped to one behavior or documentation change. PRs should
+describe the user-visible effect, list the validation commands run, and call
+out any live tmux smoke testing. Include screenshots only when terminal output
+or external UI behavior is relevant.
 
 ## Safety & Configuration Notes
 
-This tool can press keys in live tmux panes. Default to dry-run commands while
-developing, keep target panes explicit, and preserve allowlist checks for prompt
-acceptance. Do not add actions that execute arbitrary shell commands or approve
-unbounded paths without clear local safety controls.
+This tool presses keys in live tmux panes. While developing:
+
+- Default to dry-run; only add `--execute` once the printed plan is correct.
+- Keep target panes explicit; do not broaden a config's target glob without
+  the user asking for it.
+- Preserve allowlist checks (`allow_paths`, `allow_path_patterns`) in the
+  watcher; never add bypasses.
+- Loops should stop on permission prompts rather than auto-confirming.
+- Do not add actions that execute arbitrary shell commands or approve
+  unbounded paths without clear local safety controls.
+
+Long-running daemons belong in the detached `tmact-loops` tmux session — not
+the working `tmact` session, which would block development. See
+`RUNNING_LOOPS.md` for the live inventory.

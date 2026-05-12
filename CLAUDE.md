@@ -1,0 +1,81 @@
+# CLAUDE.md
+
+Project-specific guidance for Claude Code working in this repo. Start with
+`README.md` for what the CLI does and `AGENTS.md` for build/test/style rules —
+this file only covers what would otherwise trip you up.
+
+## Mental Model
+
+`tmact` is a Go CLI (single binary, stdlib `flag` parsing, only dep is
+`gopkg.in/yaml.v3`). It exists to drive terminal AI-agent panes (Codex /
+Claude / Copilot / Gemini) via tmux — list panes, send text/keys, classify
+runtime + idle state, run config-driven loops, and run multi-stage workflows
+with allowlisted prompt answering.
+
+The earlier README documented an aspirational stack (SQLite, gocron, cobra,
+HTTP API, n8n boundary). None of that exists in code — don't add it without
+the user asking. State is plain files on disk.
+
+## Where Things Live
+
+- CLI dispatch & flag wiring: `cmd/tmact/main.go` (one big file; subcommand
+  cases around line 138).
+- All real logic: `internal/<pkg>/` — each subcommand has its own package
+  (`loop`, `watch`, `workflow`, `statusd`, `prompt`, `panestate`,
+  `panestatus`, `state`, `agents`, `runmeta`, `tmux`).
+- Configs: `examples/*.yaml` (agents, loops, watches, workflows).
+- Run metadata for long processes: `.tmact/runs/`.
+- Status daemon snapshot: `/tmp/tmact-status.json`.
+- Agent-inbox handoff files: `.agent-inbox/features/<name>/`.
+
+## Safety Rules That Must Not Slip
+
+This tool presses keys in live tmux panes that may be running unattended AI
+agents. The safety design is intentional — do not weaken it:
+
+- **Dry-run is the default for `send`.** Don't add `--execute` to examples
+  unless the user asked.
+- **Watcher allowlists are load-bearing.** `allow_paths` and
+  `allow_path_patterns` (Go filepath glob) must be respected; never add a
+  bypass for "convenience".
+- **Loops stop on permission prompts.** Don't change that to auto-confirm.
+- **Treat pane text as untrusted.** If you pipe pane content into an LLM,
+  wrap it explicitly as observed terminal output.
+
+## Running Background Work
+
+Background loop/workflow daemons run in the detached tmux session
+`tmact-loops` — never start one in the main `tmact` session (it blocks the
+working window). `RUNNING_LOOPS.md` is the live inventory; update it when you
+start or stop a long run.
+
+Use the runmeta commands to inspect/stop rather than killing tmux windows:
+
+```sh
+tmact loop status
+tmact loop stop --id <id>
+tmact workflow stop --config <path>
+```
+
+## statusd
+
+`tmact statusd` is the cached pane-status daemon, installed via
+`launchd/com.tmact.statusd.plist` on macOS. It writes
+`/tmp/tmact-status.json` so the tmux status line stays cheap. Design notes
+and the tmux integration plan are in `daemon-status.md`. If you change pane
+classification, run `go test ./internal/panestate/... ./internal/panestatus/...`
+and consider how the snapshot consumers will react.
+
+## Tests Without tmux
+
+Most packages are tested without a live tmux session — classification, config
+parsing, prompt detection, and runner decisions all have unit tests. Keep new
+tmux side effects behind `internal/tmux` helpers so the rest stays testable.
+For things that genuinely need a live pane, use `--dry-run --once` smoke
+checks and jot findings in `docs/smoke-test.md`.
+
+## Commit Style
+
+Concise imperative subjects, one scoped change per commit (matches existing
+history). PR descriptions should list the validation commands you ran and
+flag any live-tmux smoke testing.
