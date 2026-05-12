@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -18,6 +20,7 @@ import (
 	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
 	agentstate "tmact/internal/state"
+	"tmact/internal/statusd"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
 	"tmact/internal/workflow"
@@ -154,6 +157,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runStatus(args[1:])
+	case "statusd":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runStatusd(args[1:])
 	case "state":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -761,6 +769,198 @@ func runStatus(args []string) error {
 	return nil
 }
 
+func runStatusd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("statusd requires a subcommand: start, once, read, status, stop")
+	}
+	switch args[0] {
+	case "start":
+		return runStatusdStart(args[1:])
+	case "once":
+		return runStatusdOnce(args[1:])
+	case "read":
+		return runStatusdRead(args[1:])
+	case "status":
+		return runStatusdStatus(args[1:])
+	case "stop":
+		return errors.New("statusd stop is not available without background mode; stop the foreground process instead")
+	case "help", "-h", "--help":
+		return statusdUsage()
+	default:
+		return fmt.Errorf("unknown statusd subcommand %q", args[0])
+	}
+}
+
+func runStatusdStart(args []string) error {
+	fs := flag.NewFlagSet("statusd start", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	flags := statusdFlags(fs)
+	once := fs.Bool("once", false, "run one scan then exit")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg := flags.config()
+	if err := validateStatusdConfig(cfg); err != nil {
+		return err
+	}
+
+	daemon := statusd.NewDaemon(cfg)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	if *once {
+		snapshot, err := daemon.RunOnce(ctx)
+		if *flags.JSON {
+			if printErr := printJSON(snapshot); printErr != nil && err == nil {
+				err = printErr
+			}
+		}
+		return err
+	}
+	if *flags.JSON {
+		return errors.New("--json is only valid with --once for statusd start")
+	}
+	err := daemon.Start(ctx)
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
+}
+
+func runStatusdOnce(args []string) error {
+	fs := flag.NewFlagSet("statusd once", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	flags := statusdFlags(fs)
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg := flags.config()
+	if err := validateStatusdConfig(cfg); err != nil {
+		return err
+	}
+
+	snapshot, err := statusd.NewDaemon(cfg).RunOnce(context.Background())
+	if *flags.JSON {
+		if printErr := printJSON(snapshot); printErr != nil && err == nil {
+			err = printErr
+		}
+	} else {
+		printStatusdSnapshot(snapshot, tmactNow())
+	}
+	return err
+}
+
+func runStatusdRead(args []string) error {
+	fs := flag.NewFlagSet("statusd read", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	statePath := fs.String("state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	snapshot, err := statusd.ReadSnapshot(*statePath)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(snapshot)
+	}
+	printStatusdSnapshot(snapshot, tmactNow())
+	return nil
+}
+
+func runStatusdStatus(args []string) error {
+	fs := flag.NewFlagSet("statusd status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	statePath := fs.String("state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	snapshot, err := statusd.ReadSnapshot(*statePath)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(snapshot)
+	}
+	now := tmactNow()
+	fmt.Printf("state_path: %s\n", *statePath)
+	fmt.Printf("last_update: %s\n", snapshot.Timestamp.Format(time.RFC3339))
+	fmt.Printf("age: %s\n", formatAge(now.Sub(snapshot.Timestamp)))
+	fmt.Printf("stale: %t\n", snapshot.IsStale(now))
+	fmt.Printf("panes: %d\n", snapshot.Summary.Panes)
+	fmt.Printf("sessions: %d\n", snapshot.Summary.Sessions)
+	fmt.Printf("errors: %d\n", snapshot.Summary.Errors)
+	return nil
+}
+
+type statusdFlagValues struct {
+	Config         statusd.Config
+	JSON           *bool
+	NoTmuxOptions  *bool
+	IdleIgnore     repeatedStrings
+	IncludeSession repeatedStrings
+	ExcludeSession repeatedStrings
+}
+
+func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
+	values := &statusdFlagValues{Config: statusd.Config{TmuxOptions: true}}
+	fs.DurationVar(&values.Config.Interval, "interval", statusd.DefaultInterval, "scan interval")
+	fs.StringVar(&values.Config.StatePath, "state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	fs.StringVar(&values.Config.LogPath, "log-path", "", "optional JSONL daemon log path")
+	fs.BoolVar(&values.Config.TmuxOptions, "tmux-options", true, "write @ai-* tmux options")
+	values.NoTmuxOptions = fs.Bool("no-tmux-options", false, "only write the state file")
+	fs.IntVar(&values.Config.CaptureLines, "capture-lines", statusd.DefaultCaptureLines, "number of pane history lines to capture")
+	fs.DurationVar(&values.Config.RunningDebounce, "running-debounce", statusd.DefaultRunningDebounce, "keep running indicator after changes")
+	fs.DurationVar(&values.Config.StaleAfter, "stale-after", statusd.DefaultStaleAfter, "mark snapshot stale after this age")
+	fs.Var(&values.IdleIgnore, "idle-ignore", "regexp for lines ignored by sample hashing; may be repeated")
+	fs.Var(&values.IncludeSession, "session", "include sessions matching glob; may be repeated")
+	fs.Var(&values.ExcludeSession, "exclude-session", "exclude sessions matching glob; may be repeated")
+	values.JSON = fs.Bool("json", false, "print JSON output")
+	return values
+}
+
+func (v *statusdFlagValues) config() statusd.Config {
+	cfg := v.Config
+	if *v.NoTmuxOptions {
+		cfg.TmuxOptions = false
+	}
+	cfg.IdleIgnorePatterns = v.IdleIgnore
+	cfg.IncludeSessions = v.IncludeSession
+	cfg.ExcludeSessions = v.ExcludeSession
+	return cfg
+}
+
+func validateStatusdConfig(cfg statusd.Config) error {
+	if cfg.Interval <= 0 {
+		return errors.New("--interval must be positive")
+	}
+	if cfg.CaptureLines <= 0 {
+		return errors.New("--capture-lines must be positive")
+	}
+	if cfg.RunningDebounce <= 0 {
+		return errors.New("--running-debounce must be positive")
+	}
+	if cfg.StaleAfter <= 0 {
+		return errors.New("--stale-after must be positive")
+	}
+	return nil
+}
+
+func statusdUsage() error {
+	fmt.Fprint(os.Stderr, `Usage:
+  tmact statusd start [--interval 1s] [--state-path /tmp/tmact-status.json] [--no-tmux-options]
+  tmact statusd once [--json] [--state-path /tmp/tmact-status.json]
+  tmact statusd read [--json] [--state-path /tmp/tmact-status.json]
+  tmact statusd status [--state-path /tmp/tmact-status.json]
+`)
+	return nil
+}
+
 func runInbox(args []string) error {
 	fs := flag.NewFlagSet("inbox", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -1134,6 +1334,35 @@ func printStatusReport(report agents.Report) {
 	}
 }
 
+func printStatusdSnapshot(snapshot statusd.Snapshot, now time.Time) {
+	fmt.Printf("ts: %s age: %s stale: %t\n", snapshot.Timestamp.Format(time.RFC3339), formatAge(now.Sub(snapshot.Timestamp)), snapshot.IsStale(now))
+	sessions := make([]statusd.SessionStatus, 0, len(snapshot.Sessions))
+	for _, session := range snapshot.Sessions {
+		sessions = append(sessions, session)
+	}
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Session < sessions[j].Session
+	})
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	for _, session := range sessions {
+		fmt.Fprintf(writer, "%s\t%s\t%s\ttag:%s\trunning:%t\tasking:%t\n", session.ActiveTarget, session.Runtime, session.State, session.Tag, session.Running, session.Asking)
+	}
+	_ = writer.Flush()
+	if len(snapshot.Errors) > 0 {
+		fmt.Printf("errors: %d\n", len(snapshot.Errors))
+	}
+}
+
+func formatAge(age time.Duration) string {
+	if age < 0 {
+		age = 0
+	}
+	if age < time.Second {
+		return age.Truncate(time.Millisecond).String()
+	}
+	return age.Truncate(100 * time.Millisecond).String()
+}
+
 func printInspectReport(report panestatus.Report) {
 	fmt.Printf("ts: %s\n", report.Timestamp)
 	for _, pane := range report.Panes {
@@ -1277,6 +1506,7 @@ Usage:
   tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
   tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
+  tmact statusd start|once|read|status [--state-path /tmp/tmact-status.json]
   tmact state get --path .agent-inbox/features/example/status.yaml [--json]
   tmact state set --path .agent-inbox/features/example/status.yaml --state planning [--owner OWNER] [--stage STAGE]
   tmact state transition --path .agent-inbox/features/example/status.yaml --from planning --to implementation
@@ -1296,6 +1526,7 @@ Commands:
   detect    capture a tmux pane and detect a directory-access prompt
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
+  statusd   maintain a cached tmux pane status snapshot
   state     read and update agent-inbox workflow status files
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity

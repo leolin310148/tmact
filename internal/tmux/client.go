@@ -19,6 +19,7 @@ type Pane struct {
 	Session        string
 	WindowIndex    int
 	WindowName     string
+	WindowActive   bool
 	PaneIndex      int
 	PaneID         string
 	PanePID        int
@@ -102,7 +103,7 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 	return runTmux(args...)
 }
 
-const paneListFormat = "#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}\t#{pane_in_mode}"
+const paneListFormat = "#{session_name}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_pid}|#{pane_current_command}|#{pane_current_path}|#{pane_active}|#{pane_in_mode}|#{window_active}"
 
 func listPanes(args []string) ([]Pane, error) {
 	output, err := outputTmux(args...)
@@ -118,8 +119,11 @@ func ParsePanes(output string) ([]Pane, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.Split(line, "\t")
-		if len(parts) != 10 {
+		parts := strings.Split(line, "|")
+		if len(parts) == 1 {
+			parts = strings.Split(line, "\t")
+		}
+		if len(parts) != 10 && len(parts) != 11 {
 			return nil, fmt.Errorf("invalid tmux pane row %q", line)
 		}
 		windowIndex, err := strconv.Atoi(parts[1])
@@ -134,10 +138,15 @@ func ParsePanes(output string) ([]Pane, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid pane pid %q: %w", parts[5], err)
 		}
+		windowActive := true
+		if len(parts) == 11 {
+			windowActive = parts[10] == "1"
+		}
 		panes = append(panes, Pane{
 			Session:        parts[0],
 			WindowIndex:    windowIndex,
 			WindowName:     parts[2],
+			WindowActive:   windowActive,
 			PaneIndex:      paneIndex,
 			PaneID:         parts[4],
 			PanePID:        panePID,
@@ -228,6 +237,16 @@ func SendKeys(target string, keys []string) error {
 	}
 	args := append([]string{"send-keys", "-t", target}, keys...)
 	return runTmux(args...)
+}
+
+func SetSessionOption(session string, key string, value string) error {
+	if session == "" {
+		return fmt.Errorf("session cannot be empty")
+	}
+	if key == "" {
+		return fmt.Errorf("option key cannot be empty")
+	}
+	return runTmux("set-option", "-q", "-t", session, key, value)
 }
 
 func runTmux(args ...string) error {

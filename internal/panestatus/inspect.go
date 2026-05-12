@@ -56,17 +56,21 @@ type PaneStatus struct {
 	Session        string                  `json:"session"`
 	WindowIndex    int                     `json:"window_index"`
 	Window         string                  `json:"window"`
+	WindowActive   bool                    `json:"-"`
 	PaneIndex      int                     `json:"pane_index"`
+	Active         bool                    `json:"-"`
 	CWD            string                  `json:"cwd,omitempty"`
 	CurrentCommand string                  `json:"current_command,omitempty"`
 	Runtime        string                  `json:"runtime"`
 	State          string                  `json:"state"`
 	Idle           bool                    `json:"idle"`
+	Asking         bool                    `json:"-"`
 	Confidence     string                  `json:"confidence"`
 	LastLine       string                  `json:"last_line,omitempty"`
 	Signals        []string                `json:"signals,omitempty"`
 	Prompt         *prompt.DirectoryAccess `json:"prompt,omitempty"`
 	Error          string                  `json:"error,omitempty"`
+	NormalizedHash string                  `json:"-"`
 }
 
 type RuntimeDetection struct {
@@ -158,7 +162,9 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		Session:        pane.Session,
 		WindowIndex:    pane.WindowIndex,
 		Window:         pane.WindowName,
+		WindowActive:   pane.WindowActive,
 		PaneIndex:      pane.PaneIndex,
+		Active:         pane.Active,
 		CWD:            pane.CurrentPath,
 		CurrentCommand: pane.CurrentCommand,
 		Runtime:        RuntimeUnknown,
@@ -166,12 +172,13 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		Confidence:     ConfidenceLow,
 	}
 
-	raw, changed, err := i.captureSamples(pane.PaneID)
+	raw, changed, normalizedHash, err := i.captureSamples(pane.PaneID)
 	if err != nil {
 		status.State = agents.StateBlocked
 		status.Error = err.Error()
 		return status
 	}
+	status.NormalizedHash = normalizedHash
 
 	runtime := i.detectRuntime(pane, raw)
 	status.Runtime = runtime.Runtime
@@ -182,17 +189,23 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	state, detected := agents.ClassifyPane(raw)
 	textState := state
 	status.State = state
+	status.Asking = looksLikeAskingPrompt(raw)
 	status.Prompt = detected
 	if detected != nil {
+		status.Asking = true
 		status.Idle = false
 		status.Signals = appendSignal(status.Signals, "permission_prompt")
 		return status
 	}
 	if looksLikeTrustPrompt(raw) {
 		status.State = agents.StateWaitingPermission
+		status.Asking = true
 		status.Idle = false
 		status.Signals = appendSignal(status.Signals, "trust_prompt")
 		return status
+	}
+	if status.Asking {
+		status.Signals = appendSignal(status.Signals, "asking_prompt")
 	}
 
 	switch {
@@ -229,7 +242,7 @@ func (i inspector) detectRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	return ClassifyRuntime(pane, raw)
 }
 
-func (i inspector) captureSamples(target string) (string, bool, error) {
+func (i inspector) captureSamples(target string) (string, bool, string, error) {
 	var raw string
 	var previous string
 	changed := false
@@ -239,7 +252,7 @@ func (i inspector) captureSamples(target string) (string, bool, error) {
 		}
 		captured, err := i.capturePane(target, i.options.Lines)
 		if err != nil {
-			return "", false, err
+			return "", false, "", err
 		}
 		raw = captured
 		hash := hashText(i.idleText(captured))
@@ -248,7 +261,7 @@ func (i inspector) captureSamples(target string) (string, bool, error) {
 		}
 		previous = hash
 	}
-	return raw, changed, nil
+	return raw, changed, previous, nil
 }
 
 func (i inspector) idleText(raw string) string {
@@ -357,6 +370,30 @@ func looksLikeTrustPrompt(raw string) bool {
 	text := strings.ToLower(raw)
 	return strings.Contains(text, "do you trust the files in this folder?") ||
 		strings.Contains(text, "confirm folder trust")
+}
+
+func looksLikeAskingPrompt(raw string) bool {
+	lines := strings.Split(raw, "\n")
+	start := 0
+	if len(lines) > 20 {
+		start = len(lines) - 20
+	}
+	for _, line := range lines[start:] {
+		text := strings.ToLower(prompt.CleanLine(line))
+		if text == "" {
+			continue
+		}
+		if containsAny(text,
+			"waiting for approval",
+			"waiting for confirmation",
+			"allow command?",
+			"allow this command?",
+			"apply this patch?",
+		) {
+			return true
+		}
+	}
+	return false
 }
 
 func looksLikeVersion(text string) bool {
