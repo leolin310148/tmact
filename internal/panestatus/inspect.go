@@ -205,7 +205,10 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		return status
 	}
 	if status.Asking {
+		status.State = agents.StateWaitingPermission
+		status.Idle = false
 		status.Signals = appendSignal(status.Signals, "asking_prompt")
+		return status
 	}
 
 	switch {
@@ -389,6 +392,7 @@ func looksLikeAskingPrompt(raw string) bool {
 			"allow command?",
 			"allow this command?",
 			"apply this patch?",
+			"do you want to proceed?",
 		) {
 			return true
 		}

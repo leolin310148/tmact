@@ -30,7 +30,7 @@ func RunningGlyph(running bool) string {
 
 func AskingGlyph(asking bool) string {
 	if asking {
-		return "!"
+		return "?"
 	}
 	return ""
 }

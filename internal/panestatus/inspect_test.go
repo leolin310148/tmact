@@ -181,3 +181,30 @@ func TestInspectPaneDetectsTrustPrompt(t *testing.T) {
 		t.Fatal("pane should not be idle")
 	}
 }
+
+func TestInspectPaneDetectsProceedQuestion(t *testing.T) {
+	panes := []tmux.Pane{{
+		Session:        "hc-api-sb3",
+		WindowIndex:    0,
+		WindowName:     "codex",
+		PaneIndex:      0,
+		PaneID:         "%1",
+		CurrentCommand: "codex",
+	}}
+	report, err := InspectPanes(panes, Options{}, func(string, int) (string, error) {
+		return "Do you want to Proceed?\n1. Yes\n2. No\n", nil
+	}, func(time.Duration) {})
+	if err != nil {
+		t.Fatalf("InspectPanes returned error: %v", err)
+	}
+	status := report.Panes[0]
+	if status.State != agents.StateWaitingPermission {
+		t.Fatalf("state = %q", status.State)
+	}
+	if !status.Asking {
+		t.Fatalf("pane should be asking: %#v", status)
+	}
+	if status.Idle {
+		t.Fatal("pane should not be idle")
+	}
+}

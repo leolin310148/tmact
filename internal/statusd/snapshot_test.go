@@ -140,6 +140,34 @@ func TestBuildSnapshotMarksAskingFromRecentApprovalText(t *testing.T) {
 	}
 }
 
+func TestBuildSnapshotMarksProceedQuestionAsAsking(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	cfg := Config{
+		Now: func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "hc-api-sb3", WindowIndex: 0, WindowActive: true, PaneIndex: 0, PaneID: "%1", CurrentCommand: "codex", Active: true}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			return "Do you want to Proceed?\n  1. Yes\n  2. No\n", nil
+		},
+	}
+
+	snapshot, err := BuildSnapshot(context.Background(), cfg, NewMemory())
+	if err != nil {
+		t.Fatalf("BuildSnapshot returned error: %v", err)
+	}
+	pane := snapshot.Panes["hc-api-sb3:0.0"]
+	if !pane.Asking {
+		t.Fatalf("pane should be asking: %#v", pane)
+	}
+	if pane.State != "waiting_permission" {
+		t.Fatalf("state = %q", pane.State)
+	}
+	if !snapshot.Sessions["hc-api-sb3"].Asking {
+		t.Fatalf("session should be asking: %#v", snapshot.Sessions["hc-api-sb3"])
+	}
+}
+
 func TestRunOnceDoesNotOverwriteSnapshotOnScanFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "status.json")
 	good := newSnapshot(Config{}, time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC))
@@ -216,7 +244,7 @@ func TestPublishTmuxOptions(t *testing.T) {
 	want := []string{
 		"work @ai-tag=cx",
 		"work @ai-running=▸",
-		"work @ai-asking=!",
+		"work @ai-asking=?",
 		"work @row-bucket=2",
 	}
 	if !reflect.DeepEqual(calls, want) {

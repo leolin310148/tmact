@@ -231,7 +231,8 @@ func isAsking(pane panestatus.PaneStatus) bool {
 	return strings.Contains(last, "waiting for approval") ||
 		strings.Contains(last, "waiting for confirmation") ||
 		strings.Contains(last, "allow command?") ||
-		strings.Contains(last, "apply this patch?")
+		strings.Contains(last, "apply this patch?") ||
+		strings.Contains(last, "do you want to proceed?")
 }
 
 func buildSessions(panes map[string]PaneStatus, now time.Time) map[string]SessionStatus {
