@@ -272,6 +272,75 @@ func TestLoopStatusPrintsRegisteredRuns(t *testing.T) {
 	}
 }
 
+func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "top level",
+			args: []string{"--help"},
+			want: []string{"tmact - local tmux automation", "tmact commands --json", "Safety:"},
+		},
+		{
+			name: "loop",
+			args: []string{"loop", "--help"},
+			want: []string{"loop", "Subcommands:", "tmact loop status", "--dry-run", "permission prompts"},
+		},
+		{
+			name: "nested loop status",
+			args: []string{"loop", "status", "--help"},
+			want: []string{"loop status", "Inspect registered loop run metadata", "--run-dir", "last event"},
+		},
+		{
+			name: "panels group",
+			args: []string{"panels", "--help"},
+			want: []string{"panels", "Subcommands:", "plan", "ensure", "--execute"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := captureRun(t, tt.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Fatalf("help output missing %q: %s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestCommandsJSONIsMachineReadable(t *testing.T) {
+	out, err := captureRun(t, "commands", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest helpManifest
+	if err := json.Unmarshal([]byte(out), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Name != "tmact" || len(manifest.Commands) == 0 {
+		t.Fatalf("manifest = %#v", manifest)
+	}
+	foundLoopStatus := false
+	for _, command := range manifest.Commands {
+		if command.Command == "loop status" {
+			foundLoopStatus = true
+			if len(command.Examples) == 0 || len(command.Notes) == 0 {
+				t.Fatalf("loop status help is too sparse: %#v", command)
+			}
+		}
+	}
+	if !foundLoopStatus {
+		t.Fatalf("loop status missing from manifest: %#v", manifest.Commands)
+	}
+}
+
 func captureRun(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
