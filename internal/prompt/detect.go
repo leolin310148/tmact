@@ -16,6 +16,26 @@ type DirectoryAccess struct {
 	Options        []Option `json:"options,omitempty"`
 }
 
+const (
+	TypeCommandApproval     = "command_approval"
+	TypeDirectoryAccess     = "directory_access"
+	TypeGenericConfirmation = "generic_confirmation"
+	TypePatchApproval       = "patch_approval"
+	TypeTrustFolder         = "trust_folder"
+	TypeWaitingApproval     = "waiting_approval"
+)
+
+type Prompt struct {
+	Type           string   `json:"type"`
+	Title          string   `json:"title,omitempty"`
+	Path           string   `json:"path,omitempty"`
+	Paths          []string `json:"paths,omitempty"`
+	Question       string   `json:"question,omitempty"`
+	SelectedOption *Option  `json:"selected_option,omitempty"`
+	Options        []Option `json:"options,omitempty"`
+	Confidence     string   `json:"confidence,omitempty"`
+}
+
 type Option struct {
 	Number   int    `json:"number"`
 	Label    string `json:"label"`
@@ -23,6 +43,29 @@ type Option struct {
 }
 
 var optionPattern = regexp.MustCompile(`^(❯\s*)?([0-9]+)\.\s+(.+)$`)
+
+func Detect(raw string) *Prompt {
+	if detected := DetectDirectoryAccess(raw); detected != nil {
+		return PromptFromDirectoryAccess(detected)
+	}
+	return detectGenericPrompt(raw)
+}
+
+func PromptFromDirectoryAccess(detected *DirectoryAccess) *Prompt {
+	if detected == nil {
+		return nil
+	}
+	return &Prompt{
+		Type:           TypeDirectoryAccess,
+		Title:          detected.Title,
+		Path:           detected.Path,
+		Paths:          append([]string{}, detected.Paths...),
+		Question:       detected.Question,
+		SelectedOption: cloneOption(detected.SelectedOption),
+		Options:        append([]Option{}, detected.Options...),
+		Confidence:     "high",
+	}
+}
 
 func DetectDirectoryAccess(raw string) *DirectoryAccess {
 	var detected *DirectoryAccess
@@ -70,6 +113,105 @@ func DetectDirectoryAccess(raw string) *DirectoryAccess {
 		return nil
 	}
 	return detected
+}
+
+func detectGenericPrompt(raw string) *Prompt {
+	lines := cleanedLines(raw)
+	if len(lines) == 0 {
+		return nil
+	}
+	recent := recentLines(lines, 24)
+	for index, line := range recent {
+		lower := strings.ToLower(line)
+		promptType, title, ok := genericPromptHeader(lower)
+		if !ok {
+			continue
+		}
+		prompt := &Prompt{
+			Type:       promptType,
+			Title:      title,
+			Question:   line,
+			Confidence: "medium",
+		}
+		prompt.Options = collectOptions(recent[index+1:])
+		if selected := selectedOption(prompt.Options); selected != nil {
+			prompt.SelectedOption = selected
+		}
+		if len(prompt.Options) > 0 || promptType == TypeWaitingApproval {
+			return prompt
+		}
+	}
+	return nil
+}
+
+func genericPromptHeader(lower string) (string, string, bool) {
+	text := strings.TrimSpace(lower)
+	switch {
+	case strings.HasPrefix(text, "waiting for approval"):
+		return TypeWaitingApproval, "Waiting for approval", true
+	case strings.HasPrefix(text, "waiting for confirmation"):
+		return TypeWaitingApproval, "Waiting for confirmation", true
+	case strings.HasPrefix(text, "allow command?"):
+		return TypeCommandApproval, "Allow command?", true
+	case strings.HasPrefix(text, "allow this command?"):
+		return TypeCommandApproval, "Allow this command?", true
+	case strings.HasPrefix(text, "apply this patch?"):
+		return TypePatchApproval, "Apply this patch?", true
+	case strings.HasPrefix(text, "do you want to proceed?"):
+		return TypeGenericConfirmation, "Do you want to proceed?", true
+	case strings.Contains(text, "do you trust the files in this folder?"):
+		return TypeTrustFolder, "Do you trust the files in this folder?", true
+	case strings.Contains(text, "confirm folder trust"):
+		return TypeTrustFolder, "Confirm folder trust", true
+	default:
+		return "", "", false
+	}
+}
+
+func collectOptions(lines []string) []Option {
+	options := []Option{}
+	for _, line := range lines {
+		if option := parseOption(line); option != nil {
+			options = append(options, *option)
+		}
+	}
+	return options
+}
+
+func selectedOption(options []Option) *Option {
+	for _, option := range options {
+		if option.Selected {
+			selected := option
+			return &selected
+		}
+	}
+	return nil
+}
+
+func cleanedLines(raw string) []string {
+	var lines []string
+	for _, line := range strings.Split(raw, "\n") {
+		text := CleanLine(line)
+		if text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return lines
+}
+
+func recentLines(lines []string, max int) []string {
+	if len(lines) <= max {
+		return lines
+	}
+	return lines[len(lines)-max:]
+}
+
+func cloneOption(option *Option) *Option {
+	if option == nil {
+		return nil
+	}
+	cloned := *option
+	return &cloned
 }
 
 func parseOption(text string) *Option {

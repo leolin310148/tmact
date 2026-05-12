@@ -16,6 +16,7 @@ const (
 	StateIdle              = panestate.StateIdle
 	StateUnknown           = panestate.StateUnknown
 	StateWaitingPermission = panestate.StateWaitingPermission
+	StateWaitingInput      = panestate.StateWaitingInput
 	StateWorking           = panestate.StateWorking
 )
 
@@ -82,6 +83,9 @@ func collectAgent(agent AgentConfig) AgentStatus {
 
 func ClassifyPane(raw string) (string, *prompt.DirectoryAccess) {
 	result := panestate.Classify(raw)
+	if result.State == panestate.StateWaitingInput {
+		return StateIdle, result.Prompt
+	}
 	return result.State, result.Prompt
 }
 

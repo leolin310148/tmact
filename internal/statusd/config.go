@@ -12,6 +12,7 @@ const (
 	DefaultStaleAfter      = 10 * time.Second
 	DefaultCaptureLines    = 120
 	DefaultRunningDebounce = 5 * time.Second
+	DefaultInitialSamples  = 2
 )
 
 type Config struct {
@@ -20,6 +21,7 @@ type Config struct {
 	LogPath            string
 	TmuxOptions        bool
 	CaptureLines       int
+	InitialSamples     int
 	RunningDebounce    time.Duration
 	StaleAfter         time.Duration
 	IdleIgnorePatterns []string
@@ -42,6 +44,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.CaptureLines <= 0 {
 		c.CaptureLines = DefaultCaptureLines
+	}
+	if c.InitialSamples <= 0 {
+		c.InitialSamples = DefaultInitialSamples
 	}
 	if c.RunningDebounce <= 0 {
 		c.RunningDebounce = DefaultRunningDebounce

@@ -915,6 +915,7 @@ func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
 	fs.BoolVar(&values.Config.TmuxOptions, "tmux-options", true, "write @ai-* tmux options")
 	values.NoTmuxOptions = fs.Bool("no-tmux-options", false, "only write the state file")
 	fs.IntVar(&values.Config.CaptureLines, "capture-lines", statusd.DefaultCaptureLines, "number of pane history lines to capture")
+	fs.IntVar(&values.Config.InitialSamples, "initial-samples", statusd.DefaultInitialSamples, "captures per pane before statusd has history")
 	fs.DurationVar(&values.Config.RunningDebounce, "running-debounce", statusd.DefaultRunningDebounce, "keep running indicator after changes")
 	fs.DurationVar(&values.Config.StaleAfter, "stale-after", statusd.DefaultStaleAfter, "mark snapshot stale after this age")
 	fs.Var(&values.IdleIgnore, "idle-ignore", "regexp for lines ignored by sample hashing; may be repeated")
@@ -942,6 +943,9 @@ func validateStatusdConfig(cfg statusd.Config) error {
 	if cfg.CaptureLines <= 0 {
 		return errors.New("--capture-lines must be positive")
 	}
+	if cfg.InitialSamples <= 0 {
+		return errors.New("--initial-samples must be positive")
+	}
 	if cfg.RunningDebounce <= 0 {
 		return errors.New("--running-debounce must be positive")
 	}
@@ -954,7 +958,7 @@ func validateStatusdConfig(cfg statusd.Config) error {
 func statusdUsage() error {
 	fmt.Fprint(os.Stderr, `Usage:
   tmact statusd start [--interval 1s] [--state-path /tmp/tmact-status.json] [--no-tmux-options]
-  tmact statusd once [--json] [--state-path /tmp/tmact-status.json]
+  tmact statusd once [--json] [--state-path /tmp/tmact-status.json] [--initial-samples 2]
   tmact statusd read [--json] [--state-path /tmp/tmact-status.json]
   tmact statusd status [--state-path /tmp/tmact-status.json]
 `)
@@ -1345,6 +1349,14 @@ func printStatusdSnapshot(snapshot statusd.Snapshot, now time.Time) {
 	})
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, session := range sessions {
+		promptType := ""
+		if pane, ok := snapshot.Panes[session.ActiveTarget]; ok && pane.Prompt != nil {
+			promptType = pane.Prompt.Type
+		}
+		if promptType != "" {
+			fmt.Fprintf(writer, "%s\t%s\t%s\ttag:%s\trunning:%t\tasking:%t\tprompt:%s\n", session.ActiveTarget, session.Runtime, session.State, session.Tag, session.Running, session.Asking, promptType)
+			continue
+		}
 		fmt.Fprintf(writer, "%s\t%s\t%s\ttag:%s\trunning:%t\tasking:%t\n", session.ActiveTarget, session.Runtime, session.State, session.Tag, session.Running, session.Asking)
 	}
 	_ = writer.Flush()
@@ -1367,6 +1379,12 @@ func printInspectReport(report panestatus.Report) {
 	fmt.Printf("ts: %s\n", report.Timestamp)
 	for _, pane := range report.Panes {
 		fmt.Printf("%s\t%s\t%s\tidle:%t", pane.Target, pane.Runtime, pane.State, pane.Idle)
+		if pane.InputReady {
+			fmt.Printf("\tinput_ready:%t", pane.InputReady)
+		}
+		if pane.InteractivePrompt != nil {
+			fmt.Printf("\tprompt:%s", pane.InteractivePrompt.Type)
+		}
 		if pane.CurrentCommand != "" {
 			fmt.Printf("\tcmd:%s", pane.CurrentCommand)
 		}

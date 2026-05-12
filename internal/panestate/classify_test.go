@@ -41,7 +41,7 @@ func TestClassifyDetectsGenericApprovalQuestion(t *testing.T) {
 func TestClassifyDoesNotTreatNarrativeApprovalTextAsPrompt(t *testing.T) {
 	result := Classify("舊 ClassifyPane 對 Waiting for approval 比較可能回 blocked\n›\n")
 
-	if result.State != StateIdle {
+	if result.State != StateWaitingInput {
 		t.Fatalf("state = %q", result.State)
 	}
 	if result.Asking {
@@ -70,7 +70,7 @@ tokens used
 project $
 `)
 
-	if result.State != StateIdle {
+	if result.State != StateWaitingInput {
 		t.Fatalf("state = %q", result.State)
 	}
 	if result.Asking {

@@ -9,6 +9,7 @@ import (
 
 	"tmact/internal/panestate"
 	"tmact/internal/panestatus"
+	"tmact/internal/prompt"
 	"tmact/internal/tmux"
 )
 
@@ -48,28 +49,30 @@ type SessionStatus struct {
 }
 
 type PaneStatus struct {
-	Target         string     `json:"target"`
-	PaneID         string     `json:"pane_id,omitempty"`
-	Session        string     `json:"session"`
-	WindowIndex    int        `json:"window_index"`
-	Window         string     `json:"window,omitempty"`
-	WindowActive   bool       `json:"-"`
-	PaneIndex      int        `json:"pane_index"`
-	Active         bool       `json:"-"`
-	CWD            string     `json:"cwd,omitempty"`
-	CurrentCommand string     `json:"current_command,omitempty"`
-	Runtime        string     `json:"runtime"`
-	Tag            string     `json:"tag"`
-	State          string     `json:"state"`
-	Idle           bool       `json:"idle"`
-	Running        bool       `json:"running"`
-	Asking         bool       `json:"asking"`
-	Confidence     string     `json:"confidence,omitempty"`
-	Signals        []string   `json:"signals,omitempty"`
-	LastLine       string     `json:"last_line,omitempty"`
-	LastChangedAt  *time.Time `json:"last_changed_at,omitempty"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	Error          string     `json:"error,omitempty"`
+	Target         string         `json:"target"`
+	PaneID         string         `json:"pane_id,omitempty"`
+	Session        string         `json:"session"`
+	WindowIndex    int            `json:"window_index"`
+	Window         string         `json:"window,omitempty"`
+	WindowActive   bool           `json:"-"`
+	PaneIndex      int            `json:"pane_index"`
+	Active         bool           `json:"-"`
+	CWD            string         `json:"cwd,omitempty"`
+	CurrentCommand string         `json:"current_command,omitempty"`
+	Runtime        string         `json:"runtime"`
+	Tag            string         `json:"tag"`
+	State          string         `json:"state"`
+	Idle           bool           `json:"idle"`
+	InputReady     bool           `json:"input_ready"`
+	Running        bool           `json:"running"`
+	Asking         bool           `json:"asking"`
+	Confidence     string         `json:"confidence,omitempty"`
+	Signals        []string       `json:"signals,omitempty"`
+	Prompt         *prompt.Prompt `json:"prompt,omitempty"`
+	LastLine       string         `json:"last_line,omitempty"`
+	LastChangedAt  *time.Time     `json:"last_changed_at,omitempty"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Error          string         `json:"error,omitempty"`
 }
 
 type SnapshotError struct {
@@ -106,9 +109,13 @@ func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, erro
 	}
 	panes = filterPanes(panes, cfg.IncludeSessions, cfg.ExcludeSessions)
 
+	samples := 1
+	if len(mem.panes) == 0 {
+		samples = cfg.InitialSamples
+	}
 	report, err := panestatus.InspectPanes(panes, panestatus.Options{
 		Lines:              cfg.CaptureLines,
-		Samples:            1,
+		Samples:            samples,
 		IdleIgnorePatterns: cfg.IdleIgnorePatterns,
 	}, cfg.CapturePane, cfg.Sleep)
 	if err != nil {
@@ -156,7 +163,7 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 	running, lastChangedAt, hasHistory := runningState(pane, cfg, mem, now)
 	asking := isAsking(pane)
 	state := pane.State
-	if running && state == panestate.StateUnknown {
+	if running && !asking {
 		state = panestate.StateWorking
 	}
 	idle := !running && pane.Idle
@@ -164,6 +171,7 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 		state = panestate.StateIdle
 		idle = true
 	}
+	inputReady := !running && pane.InputReady
 
 	var changedAt *time.Time
 	if !lastChangedAt.IsZero() {
@@ -185,10 +193,12 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 		Tag:            RuntimeTag(pane.Runtime),
 		State:          state,
 		Idle:           idle,
+		InputReady:     inputReady,
 		Running:        running,
 		Asking:         asking,
 		Confidence:     pane.Confidence,
 		Signals:        append([]string{}, pane.Signals...),
+		Prompt:         pane.InteractivePrompt,
 		LastLine:       pane.LastLine,
 		LastChangedAt:  changedAt,
 		UpdatedAt:      now,
@@ -223,7 +233,7 @@ func runningState(pane panestatus.PaneStatus, cfg Config, mem *Memory, now time.
 }
 
 func isAsking(pane panestatus.PaneStatus) bool {
-	if pane.Asking || pane.Prompt != nil || pane.State == panestate.StateWaitingPermission {
+	if pane.Asking || pane.Prompt != nil || pane.InteractivePrompt != nil || pane.State == panestate.StateWaitingPermission {
 		return true
 	}
 	return false

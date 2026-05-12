@@ -117,11 +117,14 @@ func TestInspectPaneIgnoresDefaultAgentStatusLines(t *testing.T) {
 		t.Fatalf("InspectPanes returned error: %v", err)
 	}
 	status := report.Panes[0]
-	if status.State != agents.StateIdle {
+	if status.State != agents.StateWaitingInput {
 		t.Fatalf("state = %q", status.State)
 	}
 	if !status.Idle {
 		t.Fatal("pane should be idle")
+	}
+	if !status.InputReady {
+		t.Fatal("pane should be input ready")
 	}
 }
 

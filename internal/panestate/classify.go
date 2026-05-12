@@ -11,15 +11,17 @@ const (
 	StateIdle              = "idle"
 	StateUnknown           = "unknown"
 	StateWaitingPermission = "waiting_permission"
+	StateWaitingInput      = "waiting_input"
 	StateWorking           = "working"
 )
 
 type Result struct {
-	State    string
-	Asking   bool
-	Prompt   *prompt.DirectoryAccess
-	LastLine string
-	Signals  []string
+	State             string
+	Asking            bool
+	Prompt            *prompt.DirectoryAccess
+	InteractivePrompt *prompt.Prompt
+	LastLine          string
+	Signals           []string
 }
 
 func Classify(raw string) Result {
@@ -27,23 +29,14 @@ func Classify(raw string) Result {
 		State:    StateUnknown,
 		LastLine: LastMeaningfulLine(raw),
 	}
-	if detected := prompt.DetectDirectoryAccess(raw); detected != nil {
+	if detected := prompt.Detect(raw); detected != nil {
 		result.State = StateWaitingPermission
 		result.Asking = true
-		result.Prompt = detected
-		result.Signals = appendSignal(result.Signals, "permission_prompt")
-		return result
-	}
-	if looksLikeTrustPrompt(raw) {
-		result.State = StateWaitingPermission
-		result.Asking = true
-		result.Signals = appendSignal(result.Signals, "trust_prompt")
-		return result
-	}
-	if looksLikeAskingPrompt(raw) {
-		result.State = StateWaitingPermission
-		result.Asking = true
-		result.Signals = appendSignal(result.Signals, "asking_prompt")
+		result.InteractivePrompt = detected
+		if detected.Type == prompt.TypeDirectoryAccess {
+			result.Prompt = prompt.DetectDirectoryAccess(raw)
+		}
+		result.Signals = appendSignal(result.Signals, promptSignal(detected.Type))
 		return result
 	}
 
@@ -54,8 +47,8 @@ func Classify(raw string) Result {
 
 	last := strings.ToLower(lastInteractiveLine(lines))
 	if looksLikeAgentPrompt(last) || looksLikeShellPrompt(last) {
-		result.State = StateIdle
-		result.Signals = appendSignal(result.Signals, "idle_text")
+		result.State = StateWaitingInput
+		result.Signals = appendSignal(result.Signals, "waiting_input_text")
 		return result
 	}
 	if containsAny(last,
@@ -64,8 +57,8 @@ func Classify(raw string) Result {
 		"type a message",
 		"what would you like",
 	) {
-		result.State = StateIdle
-		result.Signals = appendSignal(result.Signals, "idle_text")
+		result.State = StateWaitingInput
+		result.Signals = appendSignal(result.Signals, "waiting_input_text")
 		return result
 	}
 
@@ -103,6 +96,21 @@ func Classify(raw string) Result {
 	return result
 }
 
+func promptSignal(promptType string) string {
+	switch promptType {
+	case prompt.TypeDirectoryAccess:
+		return "permission_prompt"
+	case prompt.TypeTrustFolder:
+		return "trust_prompt"
+	case prompt.TypeCommandApproval:
+		return "command_approval_prompt"
+	case prompt.TypePatchApproval:
+		return "patch_approval_prompt"
+	default:
+		return "asking_prompt"
+	}
+}
+
 func LastMeaningfulLine(raw string) string {
 	lines := CleanedLines(raw)
 	if len(lines) == 0 {
@@ -120,50 +128,6 @@ func CleanedLines(raw string) []string {
 		}
 	}
 	return lines
-}
-
-func looksLikeTrustPrompt(raw string) bool {
-	text := strings.ToLower(raw)
-	return strings.Contains(text, "do you trust the files in this folder?") ||
-		strings.Contains(text, "confirm folder trust")
-}
-
-func looksLikeAskingPrompt(raw string) bool {
-	lines := strings.Split(raw, "\n")
-	start := 0
-	if len(lines) > 20 {
-		start = len(lines) - 20
-	}
-	for _, line := range lines[start:] {
-		text := strings.ToLower(prompt.CleanLine(line))
-		if text == "" {
-			continue
-		}
-		if isAskingLine(text) {
-			return true
-		}
-	}
-	return false
-}
-
-func isAskingLine(text string) bool {
-	text = strings.TrimSpace(text)
-	switch {
-	case strings.HasPrefix(text, "waiting for approval"):
-		return true
-	case strings.HasPrefix(text, "waiting for confirmation"):
-		return true
-	case strings.HasPrefix(text, "allow command?"):
-		return true
-	case strings.HasPrefix(text, "allow this command?"):
-		return true
-	case strings.HasPrefix(text, "apply this patch?"):
-		return true
-	case strings.HasPrefix(text, "do you want to proceed?"):
-		return true
-	default:
-		return false
-	}
 }
 
 func isKnownIdleOutputLine(text string) bool {

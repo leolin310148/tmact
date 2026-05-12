@@ -49,3 +49,32 @@ func TestDetectDirectoryAccessPrompt(t *testing.T) {
 		t.Fatalf("options len = %d", len(detected.Options))
 	}
 }
+
+func TestDetectGenericCommandApprovalPrompt(t *testing.T) {
+	raw := `
+Allow this command?
+  1. Yes
+❯ 2. No
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeCommandApproval {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 2 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+}
+
+func TestDetectTrustFolderPrompt(t *testing.T) {
+	detected := Detect("Do you trust the files in this folder?\n1. Trust folder\n3. Don't trust\n")
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeTrustFolder {
+		t.Fatalf("type = %q", detected.Type)
+	}
+}

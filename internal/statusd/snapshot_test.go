@@ -36,7 +36,8 @@ func TestBuildSnapshotAggregatesSessionsAndDebouncesRunning(t *testing.T) {
 	mem := NewMemory()
 	captures := []string{"ready\nproject $\n", "ready\nbeta $\n"}
 	cfg := Config{
-		Now: func() time.Time { return now },
+		InitialSamples: 1,
+		Now:            func() time.Time { return now },
 		ListPanes: func() ([]tmux.Pane, error) {
 			return []tmux.Pane{
 				{Session: "alpha", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "codex", Active: true},
@@ -165,6 +166,37 @@ func TestBuildSnapshotMarksProceedQuestionAsAsking(t *testing.T) {
 	}
 	if !snapshot.Sessions["hc-api-sb3"].Asking {
 		t.Fatalf("session should be asking: %#v", snapshot.Sessions["hc-api-sb3"])
+	}
+	if pane.Prompt == nil || pane.Prompt.Type != "generic_confirmation" {
+		t.Fatalf("prompt = %#v", pane.Prompt)
+	}
+}
+
+func TestBuildSnapshotUsesInitialSamplesOnColdStart(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	captures := 0
+	cfg := Config{
+		InitialSamples: 2,
+		Now:            func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "worker", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "long-job", Active: true}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			captures++
+			return "same output\n", nil
+		},
+	}
+
+	snapshot, err := BuildSnapshot(context.Background(), cfg, NewMemory())
+	if err != nil {
+		t.Fatalf("BuildSnapshot returned error: %v", err)
+	}
+	if captures != 2 {
+		t.Fatalf("captures = %d", captures)
+	}
+	pane := snapshot.Panes["worker:0.0"]
+	if pane.State != "idle" || !pane.Idle {
+		t.Fatalf("pane should be idle after stable cold-start samples: %#v", pane)
 	}
 }
 

@@ -51,26 +51,28 @@ type Report struct {
 }
 
 type PaneStatus struct {
-	Target         string                  `json:"target"`
-	PaneID         string                  `json:"pane_id"`
-	Session        string                  `json:"session"`
-	WindowIndex    int                     `json:"window_index"`
-	Window         string                  `json:"window"`
-	WindowActive   bool                    `json:"-"`
-	PaneIndex      int                     `json:"pane_index"`
-	Active         bool                    `json:"-"`
-	CWD            string                  `json:"cwd,omitempty"`
-	CurrentCommand string                  `json:"current_command,omitempty"`
-	Runtime        string                  `json:"runtime"`
-	State          string                  `json:"state"`
-	Idle           bool                    `json:"idle"`
-	Asking         bool                    `json:"-"`
-	Confidence     string                  `json:"confidence"`
-	LastLine       string                  `json:"last_line,omitempty"`
-	Signals        []string                `json:"signals,omitempty"`
-	Prompt         *prompt.DirectoryAccess `json:"prompt,omitempty"`
-	Error          string                  `json:"error,omitempty"`
-	NormalizedHash string                  `json:"-"`
+	Target            string                  `json:"target"`
+	PaneID            string                  `json:"pane_id"`
+	Session           string                  `json:"session"`
+	WindowIndex       int                     `json:"window_index"`
+	Window            string                  `json:"window"`
+	WindowActive      bool                    `json:"-"`
+	PaneIndex         int                     `json:"pane_index"`
+	Active            bool                    `json:"-"`
+	CWD               string                  `json:"cwd,omitempty"`
+	CurrentCommand    string                  `json:"current_command,omitempty"`
+	Runtime           string                  `json:"runtime"`
+	State             string                  `json:"state"`
+	Idle              bool                    `json:"idle"`
+	InputReady        bool                    `json:"input_ready"`
+	Asking            bool                    `json:"-"`
+	Confidence        string                  `json:"confidence"`
+	LastLine          string                  `json:"last_line,omitempty"`
+	Signals           []string                `json:"signals,omitempty"`
+	Prompt            *prompt.DirectoryAccess `json:"prompt,omitempty"`
+	InteractivePrompt *prompt.Prompt          `json:"interactive_prompt,omitempty"`
+	Error             string                  `json:"error,omitempty"`
+	NormalizedHash    string                  `json:"-"`
 }
 
 type RuntimeDetection struct {
@@ -191,6 +193,8 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	status.State = classified.State
 	status.Asking = classified.Asking
 	status.Prompt = classified.Prompt
+	status.InteractivePrompt = classified.InteractivePrompt
+	status.InputReady = classified.State == panestate.StateWaitingInput
 	for _, signal := range classified.Signals {
 		status.Signals = appendSignal(status.Signals, signal)
 	}
@@ -209,17 +213,22 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		if status.State == panestate.StateUnknown {
 			status.State = panestate.StateIdle
 		}
-		status.Idle = status.State == panestate.StateIdle
+		status.Idle = idleState(status.State)
 	default:
-		status.Idle = status.State == panestate.StateIdle
+		status.Idle = idleState(status.State)
 	}
 	if textState == panestate.StateWorking {
 		status.Signals = appendSignal(status.Signals, "working_text")
 	}
-	if textState == panestate.StateIdle {
+	if textState == panestate.StateIdle || textState == panestate.StateWaitingInput {
 		status.Signals = appendSignal(status.Signals, "idle_text")
 	}
+	status.InputReady = status.State == panestate.StateWaitingInput
 	return status
+}
+
+func idleState(state string) bool {
+	return state == panestate.StateIdle || state == panestate.StateWaitingInput
 }
 
 func (i inspector) detectRuntime(pane tmux.Pane, raw string) RuntimeDetection {
