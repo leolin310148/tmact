@@ -32,3 +32,27 @@ func TestParseCommentsIgnoresAmbiguousProse(t *testing.T) {
 		t.Fatalf("comments = %#v", comments)
 	}
 }
+
+func TestParseCommentsFromWrappedPaneText(t *testing.T) {
+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	raw := `⏺ TMAct-OpenSpec-Comment: role=pm kind=accept change_hash=sha256:152a1e8b27c8507
+  4e22bf8917981eac39af6f615aa8458ff70fa268b757eccf9 openspec_valid=true
+  blocking=false body="accepted current
+  artifacts"
+`
+
+	comments, err := ParseCommentsFromText(raw, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("comments = %#v", comments)
+	}
+	comment := comments[0]
+	if comment.ChangeHash != "sha256:152a1e8b27c85074e22bf8917981eac39af6f615aa8458ff70fa268b757eccf9" {
+		t.Fatalf("change hash = %q", comment.ChangeHash)
+	}
+	if !comment.OpenSpecValid || comment.Blocking || comment.Body != "accepted current artifacts" {
+		t.Fatalf("comment = %#v", comment)
+	}
+}

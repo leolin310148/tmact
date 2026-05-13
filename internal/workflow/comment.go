@@ -34,18 +34,14 @@ func CommentsPath(changeDir string) string {
 
 func ParseCommentsFromText(text string, now time.Time) ([]Comment, error) {
 	var comments []Comment
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	for scanner.Scan() {
-		comment, ok, err := ParseCommentLine(scanner.Text(), now)
+	for _, line := range markerLogicalLines(text, CommentMarker) {
+		comment, ok, err := ParseCommentLine(line, now)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
 			comments = append(comments, comment)
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return comments, nil
 }
@@ -140,6 +136,101 @@ func parseQuoted(text string) (string, string, error) {
 		}
 	}
 	return "", "", fmt.Errorf("unterminated quoted marker value")
+}
+
+func markerLogicalLines(text string, marker string) []string {
+	var lines []string
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	current := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		if index := strings.Index(line, marker); index >= 0 {
+			if current != "" {
+				lines = append(lines, current)
+			}
+			current = strings.TrimSpace(line[index:])
+			continue
+		}
+		if current == "" {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if markerContinuation(current, trimmed) {
+			current = appendMarkerContinuation(current, trimmed)
+			continue
+		}
+		lines = append(lines, current)
+		current = ""
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
+}
+
+func markerContinuation(current string, next string) bool {
+	if next == "" {
+		return false
+	}
+	if strings.HasPrefix(next, "❯") || strings.HasPrefix(next, "⏺") || strings.HasPrefix(next, "✻") || strings.HasPrefix(next, "─") {
+		return false
+	}
+	if markerQuoteOpen(current) {
+		return true
+	}
+	if markerHashSplit(current, next) {
+		return true
+	}
+	return strings.Contains(next, "=")
+}
+
+func appendMarkerContinuation(current string, next string) string {
+	if markerHashSplit(current, next) {
+		return current + next
+	}
+	return current + " " + next
+}
+
+func markerHashSplit(current string, next string) bool {
+	if !strings.Contains(current, "change_hash=sha256:") {
+		return false
+	}
+	tail := current[strings.LastIndex(current, "change_hash=sha256:")+len("change_hash=sha256:"):]
+	if strings.ContainsAny(tail, " \t") || len(tail) >= 64 {
+		return false
+	}
+	first := next
+	if index := strings.IndexAny(first, " \t"); index >= 0 {
+		first = first[:index]
+	}
+	if first == "" || len(tail)+len(first) > 64 {
+		return false
+	}
+	for _, r := range first {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+func markerQuoteOpen(text string) bool {
+	escaped := false
+	open := false
+	for _, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			open = !open
+		}
+	}
+	return open
 }
 
 func LoadComments(path string) ([]Comment, error) {

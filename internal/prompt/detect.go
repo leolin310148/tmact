@@ -67,6 +67,20 @@ func PromptFromDirectoryAccess(detected *DirectoryAccess) *Prompt {
 	}
 }
 
+func DirectoryAccessFromPrompt(detected *Prompt) *DirectoryAccess {
+	if detected == nil || detected.Type != TypeDirectoryAccess {
+		return nil
+	}
+	return &DirectoryAccess{
+		Title:          detected.Title,
+		Path:           detected.Path,
+		Paths:          append([]string{}, detected.Paths...),
+		Question:       detected.Question,
+		SelectedOption: cloneOption(detected.SelectedOption),
+		Options:        append([]Option{}, detected.Options...),
+	}
+}
+
 func DetectDirectoryAccess(raw string) *DirectoryAccess {
 	var detected *DirectoryAccess
 

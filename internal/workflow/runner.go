@@ -22,12 +22,13 @@ type Options struct {
 }
 
 type Runner struct {
-	cfg       Config
-	agentCfg  agents.Config
-	bindings  []RoleBinding
-	options   Options
-	validator Validator
-	now       func() time.Time
+	cfg         Config
+	agentCfg    agents.Config
+	bindings    []RoleBinding
+	options     Options
+	validator   Validator
+	now         func() time.Time
+	capturePane func(string, int) (string, error)
 }
 
 type Event struct {
@@ -51,12 +52,13 @@ func NewRunner(cfg Config, agentCfg agents.Config, options Options) (*Runner, er
 		return nil, err
 	}
 	return &Runner{
-		cfg:       cfg,
-		agentCfg:  agentCfg,
-		bindings:  bindings,
-		options:   options,
-		validator: RunOpenSpecValidation,
-		now:       time.Now,
+		cfg:         cfg,
+		agentCfg:    agentCfg,
+		bindings:    bindings,
+		options:     options,
+		validator:   RunOpenSpecValidation,
+		now:         time.Now,
+		capturePane: tmux.CapturePane,
 	}, nil
 }
 
@@ -104,6 +106,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !r.options.DryRun {
 			comments, err = r.observeRolePanes(commentPath, comments)
 			if err != nil {
+				if isPermissionPromptError(err) {
+					state.Change = r.cfg.Change
+					state.Status = "running"
+					state.Phase = "review"
+					state.Gate = GateResult{Reasons: []string{"permission_prompt"}}
+					state.UpdatedAt = r.now()
+					return r.finishWithState(statePath, state, "blocked", err.Error())
+				}
 				return err
 			}
 		}
@@ -175,12 +185,12 @@ func (r *Runner) Run(ctx context.Context) error {
 
 func (r *Runner) observeRolePanes(commentPath string, comments []Comment) ([]Comment, error) {
 	for _, binding := range r.bindings {
-		raw, err := tmux.CapturePane(binding.Agent.Target, captureLines(binding.Agent, r.cfg.Discussion.CaptureLines))
+		raw, err := r.capturePane(binding.Agent.Target, captureLines(binding.Agent, r.cfg.Discussion.CaptureLines))
 		if err != nil {
 			return comments, err
 		}
-		if detected := prompt.DetectDirectoryAccess(raw); detected != nil {
-			return comments, fmt.Errorf("permission_prompt in %s: %s", binding.Role, detected.Title)
+		if detected := prompt.Detect(raw); detected != nil {
+			return comments, PermissionPromptError{Role: binding.Role, Prompt: *detected}
 		}
 		observed, err := ParseCommentsFromText(raw, r.now())
 		if err != nil {

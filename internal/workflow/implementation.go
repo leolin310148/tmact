@@ -104,18 +104,14 @@ func WriteImplementationState(path string, state ImplementationState) error {
 
 func ParseImplementationCommentsFromText(text string, now time.Time) ([]ImplementationComment, error) {
 	var comments []ImplementationComment
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	for scanner.Scan() {
-		comment, ok, err := ParseImplementationCommentLine(scanner.Text(), now)
+	for _, line := range markerLogicalLines(text, Phase2Marker) {
+		comment, ok, err := ParseImplementationCommentLine(line, now)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
 			comments = append(comments, comment)
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return comments, nil
 }

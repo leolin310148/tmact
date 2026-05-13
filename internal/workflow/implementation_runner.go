@@ -15,12 +15,13 @@ import (
 )
 
 type ImplementationRunner struct {
-	cfg       Config
-	agentCfg  agents.Config
-	bindings  []RoleBinding
-	options   Options
-	validator Validator
-	now       func() time.Time
+	cfg         Config
+	agentCfg    agents.Config
+	bindings    []RoleBinding
+	options     Options
+	validator   Validator
+	now         func() time.Time
+	capturePane func(string, int) (string, error)
 }
 
 func NewImplementationRunner(cfg Config, agentCfg agents.Config, options Options) (*ImplementationRunner, error) {
@@ -29,12 +30,13 @@ func NewImplementationRunner(cfg Config, agentCfg agents.Config, options Options
 		return nil, err
 	}
 	return &ImplementationRunner{
-		cfg:       cfg,
-		agentCfg:  agentCfg,
-		bindings:  bindings,
-		options:   options,
-		validator: RunOpenSpecValidation,
-		now:       time.Now,
+		cfg:         cfg,
+		agentCfg:    agentCfg,
+		bindings:    bindings,
+		options:     options,
+		validator:   RunOpenSpecValidation,
+		now:         time.Now,
+		capturePane: tmux.CapturePane,
 	}, nil
 }
 
@@ -196,12 +198,12 @@ func (r *ImplementationRunner) checkPreconditions(changeDir string) (string, str
 
 func (r *ImplementationRunner) observeRolePanes(commentPath string, comments []ImplementationComment) ([]ImplementationComment, error) {
 	for _, binding := range r.bindings {
-		raw, err := tmux.CapturePane(binding.Agent.Target, captureLines(binding.Agent, r.cfg.Implementation.CaptureLines))
+		raw, err := r.capturePane(binding.Agent.Target, captureLines(binding.Agent, r.cfg.Implementation.CaptureLines))
 		if err != nil {
 			return comments, err
 		}
-		if detected := prompt.DetectDirectoryAccess(raw); detected != nil {
-			return comments, fmt.Errorf("permission_prompt in %s: %s", binding.Role, detected.Title)
+		if detected := prompt.Detect(raw); detected != nil {
+			return comments, PermissionPromptError{Role: binding.Role, Prompt: *detected}
 		}
 		observed, err := ParseImplementationCommentsFromText(raw, r.now())
 		if err != nil {

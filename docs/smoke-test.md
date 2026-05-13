@@ -269,7 +269,7 @@ tail -f .tmact/example-org-sample-project-loop.jsonl
 - [ ] Stop automatically on max cost or budget.
 - [ ] Stop automatically after a successful commit.
 - [ ] Stop automatically when worktree is dirty for too long.
-- [ ] Detect permission prompts beyond the initial directory-access prompt.
+- [x] Detect permission prompts beyond the initial directory-access prompt.
 - [x] Add a first-class status command for running loops.
 - [x] Register long-running loop metadata under `.tmact/runs`.
 

@@ -21,7 +21,7 @@ The CLI is a single Go binary (`cmd/tmact`) with these subcommands:
 | `statusd` | Long-running daemon that publishes pane snapshots to `/tmp/tmact-status.json` and optional tmux session options so the tmux status line can read cheaply. See `daemon-status.md`. |
 | `broadcast` | Send the same text/keys to a group of configured agent panes. |
 | `panels` | Plan or reconcile configured agent panes (session/window/repo/launcher) into tmux. |
-| `loop` | Run a configurable polling loop on one pane: pastes prompts, presses keys, clears context, stops on permission prompts. Supports `--dry-run --once`. |
+| `loop` | Run a configurable polling loop on one pane: pastes prompts, presses keys, clears context, stops on known interactive approval prompts. Supports `--dry-run --once`. |
 | `workflow` | Run serialized OpenSpec review and implementation workflows across configured agent panes. |
 | `watch` | Narrow prompt watcher; currently accepts Codex directory-access prompts when every requested path is allowlisted. |
 
@@ -128,7 +128,8 @@ flows:
           Continue with one small scoped improvement.
 ```
 
-Loops stop when a permission prompt is visible — safer for unattended runs.
+Loops stop when a known interactive permission, approval, trust-folder, or
+confirmation prompt is visible — safer for unattended runs.
 
 ### OpenSpec Workflows
 
@@ -210,7 +211,8 @@ openspec/changes/*/phase*-comments.jsonl # workflow comment streams
 
 - Sends are dry-run by default; `--execute` is required to press keys.
 - Watcher decisions enforce allowlists; never widen them silently.
-- Loops stop on permission prompts rather than auto-confirming.
+- Loops and workflows stop on known interactive permission or approval prompts
+  rather than auto-confirming.
 - Terminal output is treated as untrusted input; do not feed pane text to an
   LLM without wrapping it as observed terminal output.
 - Cooldowns, max-runs, and dedupe hashes are first-class in loop/watch configs.

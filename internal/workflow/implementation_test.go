@@ -83,6 +83,28 @@ func TestParseImplementationCommentMarker(t *testing.T) {
 	}
 }
 
+func TestParseImplementationCommentsFromWrappedPaneText(t *testing.T) {
+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	raw := `⏺ TMAct-OpenSpec-Phase2: role=swe stage=apply kind=complete change_hash=sha256:152a1e8b27c8507
+  4e22bf8917981eac39af6f615aa8458ff70fa268b757eccf9 blocking=false
+`
+
+	comments, err := ParseImplementationCommentsFromText(raw, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("comments = %#v", comments)
+	}
+	comment := comments[0]
+	if comment.ChangeHash != "sha256:152a1e8b27c85074e22bf8917981eac39af6f615aa8458ff70fa268b757eccf9" {
+		t.Fatalf("change hash = %q", comment.ChangeHash)
+	}
+	if comment.Role != "swe" || comment.Stage != "apply" || comment.Kind != "complete" || comment.Blocking {
+		t.Fatalf("comment = %#v", comment)
+	}
+}
+
 func TestEvaluateImplementationGateOrdersStagesAndBlocksArchive(t *testing.T) {
 	stages := []string{"swe_apply", "qa_verify", "pm_archive"}
 	validation := &ValidationResult{ChangeHash: "sha256:a", Passed: true}

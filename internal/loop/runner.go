@@ -25,6 +25,7 @@ type Runner struct {
 	cfg                Config
 	options            Options
 	now                func() time.Time
+	capturePane        func(string, int) (string, error)
 	idleIgnorePatterns []*regexp.Regexp
 }
 
@@ -41,10 +42,11 @@ type flowState struct {
 }
 
 type paneState struct {
-	Hash             string                  `json:"hash"`
-	Idle             bool                    `json:"idle"`
-	IdleFor          string                  `json:"idle_for"`
-	PermissionPrompt *prompt.DirectoryAccess `json:"permission_prompt,omitempty"`
+	Hash              string                  `json:"hash"`
+	Idle              bool                    `json:"idle"`
+	IdleFor           string                  `json:"idle_for"`
+	InteractivePrompt *prompt.Prompt          `json:"interactive_prompt,omitempty"`
+	PermissionPrompt  *prompt.DirectoryAccess `json:"permission_prompt,omitempty"`
 }
 
 type event struct {
@@ -67,6 +69,7 @@ func NewRunner(cfg Config, options Options) *Runner {
 		cfg:                cfg,
 		options:            options,
 		now:                time.Now,
+		capturePane:        tmux.CapturePane,
 		idleIgnorePatterns: compiled,
 	}
 }
@@ -118,8 +121,8 @@ func (r *Runner) Run(ctx context.Context) error {
 			state.IdleFor = "0s"
 		}
 
-		if state.PermissionPrompt != nil && r.cfg.StopOnPermissionPrompt {
-			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "permission_prompt", Details: state.PermissionPrompt})
+		if state.InteractivePrompt != nil && r.cfg.StopOnPermissionPrompt {
+			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "permission_prompt", Details: state.InteractivePrompt})
 		}
 
 		for i := range actions {
@@ -160,18 +163,22 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 func (r *Runner) observe(now time.Time, previousHash string, lastChangedAt time.Time) (paneState, bool, error) {
-	raw, err := tmux.CapturePane(r.cfg.Target, r.cfg.CaptureLines)
+	raw, err := r.capturePane(r.cfg.Target, r.cfg.CaptureLines)
 	if err != nil {
 		return paneState{}, false, err
 	}
 
 	hash := hashText(r.idleText(raw))
 	idleFor := now.Sub(lastChangedAt)
+	detected := prompt.Detect(raw)
 	state := paneState{
-		Hash:             hash,
-		Idle:             idleFor >= r.cfg.IdleAfter.Duration,
-		IdleFor:          idleFor.Truncate(time.Second).String(),
-		PermissionPrompt: prompt.DetectDirectoryAccess(raw),
+		Hash:              hash,
+		Idle:              idleFor >= r.cfg.IdleAfter.Duration,
+		IdleFor:           idleFor.Truncate(time.Second).String(),
+		InteractivePrompt: detected,
+	}
+	if detected != nil && detected.Type == prompt.TypeDirectoryAccess {
+		state.PermissionPrompt = prompt.DirectoryAccessFromPrompt(detected)
 	}
 	return state, previousHash != "" && hash != previousHash, nil
 }
