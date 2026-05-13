@@ -11,6 +11,7 @@ import (
 
 	"tmact/internal/runmeta"
 	"tmact/internal/tmux"
+	"tmact/internal/workflow"
 )
 
 func TestListPrintsAndCachesNumberedTargets(t *testing.T) {
@@ -165,6 +166,46 @@ func TestLoopStatusPrintsRegisteredRuns(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatusPrintsLocalState(t *testing.T) {
+	t.Chdir(t.TempDir())
+	changeDir := filepath.Join("openspec", "changes", "demo")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := "workflow.yaml"
+	if err := os.WriteFile(configPath, []byte(`change: demo
+agents_config: agents.yaml
+roles:
+  pm: pm-agent
+  swe: swe-agent
+  qa: qa-agent
+  reviewer: reviewer-agent
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := workflow.WriteState(workflow.StatePath(changeDir), workflow.State{
+		Change:      "demo",
+		Status:      "running",
+		Phase:       "review",
+		Turn:        2,
+		PendingRole: "qa",
+		ChangeHash:  "sha256:abc",
+		Gate:        workflow.GateResult{Reasons: []string{"missing_agreement"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureRun(t, "workflow", "status", "--config", configPath, "--run-dir", filepath.Join(t.TempDir(), "runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"workflow_state: demo", "pending_role: qa", "change_hash: sha256:abc", "gate_reasons: missing_agreement"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("workflow status missing %q: %s", want, out)
+		}
+	}
+}
+
 func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 	tests := []struct {
 		name string
@@ -185,6 +226,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			name: "nested loop status",
 			args: []string{"loop", "status", "--help"},
 			want: []string{"loop status", "Inspect registered loop run metadata", "--run-dir", "last event"},
+		},
+		{
+			name: "workflow",
+			args: []string{"workflow", "--help"},
+			want: []string{"workflow", "OpenSpec artifact review", "PM -> SWE -> QA -> reviewer", "--execute"},
 		},
 		{
 			name: "panels group",
@@ -221,6 +267,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 		t.Fatalf("manifest = %#v", manifest)
 	}
 	foundLoopStatus := false
+	foundWorkflow := false
 	for _, command := range manifest.Commands {
 		if command.Command == "loop status" {
 			foundLoopStatus = true
@@ -228,9 +275,15 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 				t.Fatalf("loop status help is too sparse: %#v", command)
 			}
 		}
+		if command.Command == "workflow" {
+			foundWorkflow = true
+		}
 	}
 	if !foundLoopStatus {
 		t.Fatalf("loop status missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundWorkflow {
+		t.Fatalf("workflow missing from manifest: %#v", manifest.Commands)
 	}
 }
 

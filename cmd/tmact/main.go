@@ -23,6 +23,7 @@ import (
 	"tmact/internal/statusd"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
+	"tmact/internal/workflow"
 )
 
 type detectResult struct {
@@ -184,6 +185,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runLoop(args[1:])
+	case "workflow":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runWorkflow(args[1:])
 	case "watch":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -1056,6 +1062,132 @@ func runLoop(args []string) error {
 	})
 }
 
+func runWorkflow(args []string) error {
+	if wantsHelp(args) {
+		if len(args) > 1 {
+			return printCommandHelp("workflow " + strings.Join(args[1:], " "))
+		}
+		return printCommandHelp("workflow")
+	}
+	if len(args) == 0 {
+		return errors.New("workflow requires a subcommand: discuss, status, stop")
+	}
+	switch args[0] {
+	case "discuss":
+		return runWorkflowDiscuss(args[1:])
+	case "status":
+		return runWorkflowStatus(args[1:])
+	case "stop":
+		return runRuntimeStop("workflow", args[1:])
+	default:
+		return fmt.Errorf("unknown workflow subcommand %q", args[0])
+	}
+}
+
+func runWorkflowDiscuss(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow discuss")
+	}
+	fs := flag.NewFlagSet("workflow discuss", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "", "path to workflow YAML config")
+	dryRun := fs.Bool("dry-run", false, "print the next prompt without sending to tmux; this is the default")
+	execute := fs.Bool("execute", false, "send prompts to tmux panes")
+	once := fs.Bool("once", false, "run one observe/validate/gate/prompt pass and exit")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+	if *dryRun && *execute {
+		return errors.New("--dry-run and --execute are mutually exclusive")
+	}
+
+	cfg, err := workflow.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	agentCfg, err := agents.LoadConfig(cfg.AgentsConfig)
+	if err != nil {
+		return err
+	}
+	bindings, err := workflow.ResolveRoles(cfg, agentCfg)
+	if err != nil {
+		return err
+	}
+	if *once {
+		runner, err := workflow.NewRunner(cfg, agentCfg, workflow.Options{
+			DryRun:     !*execute,
+			Once:       true,
+			ConfigPath: *configPath,
+		})
+		if err != nil {
+			return err
+		}
+		return runner.Run(context.Background())
+	}
+	return runManagedWorkflowRunner(*runDir, *configPath, workflow.TargetSummary(bindings), cfg.LogPath, func(stopRequested func() bool) (*workflow.Runner, error) {
+		return workflow.NewRunner(cfg, agentCfg, workflow.Options{
+			DryRun:        !*execute,
+			Once:          false,
+			ConfigPath:    *configPath,
+			StopRequested: stopRequested,
+		})
+	})
+}
+
+func runWorkflowStatus(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow status")
+	}
+	fs := flag.NewFlagSet("workflow status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	configPath := fs.String("config", "", "workflow config path to include local state")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	statuses, err := runmeta.List(*runDir, "workflow", tmactNow())
+	if err != nil {
+		return err
+	}
+	report := struct {
+		Runs  []runmeta.Status `json:"runs"`
+		State *workflow.State  `json:"state,omitempty"`
+	}{
+		Runs: statuses,
+	}
+	if *configPath != "" {
+		cfg, err := workflow.LoadConfig(*configPath)
+		if err != nil {
+			return err
+		}
+		changeDir, err := workflow.ChangeDir(cfg.Change)
+		if err != nil {
+			return err
+		}
+		state, err := workflow.LoadState(workflow.StatePath(changeDir))
+		if err != nil {
+			return err
+		}
+		report.State = &state
+	}
+	if *jsonOutput {
+		return printJSON(report)
+	}
+	printRuntimeStatuses(statuses)
+	if report.State != nil && report.State.Change != "" {
+		printWorkflowState(*report.State)
+	}
+	return nil
+}
+
 func runWatch(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("watch")
@@ -1104,6 +1236,48 @@ func runManagedRunner(runDir string, kind string, configPath string, target stri
 	defer stop()
 
 	err = run(ctx)
+	status := "stopped"
+	reason := "complete"
+	if errors.Is(err, context.Canceled) {
+		err = nil
+		reason = "interrupted"
+	} else if err != nil {
+		status = "error"
+		reason = err.Error()
+	}
+	if finishErr := runmeta.Finish(runDir, record, status, reason, tmactNow()); finishErr != nil && err == nil {
+		err = finishErr
+	}
+	return err
+}
+
+func runManagedWorkflowRunner(runDir string, configPath string, target string, logPath string, newRunner func(func() bool) (*workflow.Runner, error)) error {
+	startedAt := tmactNow()
+	record, err := runmeta.Register(runDir, runmeta.RegisterOptions{
+		Kind:       "workflow",
+		ConfigPath: configPath,
+		Target:     target,
+		LogPath:    logPath,
+		Tmux:       currentTmuxInfo(),
+		Now:        startedAt,
+	})
+	if err != nil {
+		return err
+	}
+	stopRequested := func() bool {
+		latest, err := runmeta.Read(runDir, record.ID)
+		return err == nil && latest.Status == "stopping"
+	}
+	runner, err := newRunner(stopRequested)
+	if err != nil {
+		_ = runmeta.Finish(runDir, record, "error", err.Error(), tmactNow())
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	err = runner.Run(ctx)
 	status := "stopped"
 	reason := "complete"
 	if errors.Is(err, context.Canceled) {
@@ -1343,6 +1517,35 @@ func printRuntimeStatuses(statuses []runmeta.Status) {
 		}
 	}
 	_ = writer.Flush()
+}
+
+func printWorkflowState(state workflow.State) {
+	fmt.Println()
+	fmt.Printf("workflow_state: %s\n", state.Change)
+	fmt.Printf("status: %s\n", state.Status)
+	if state.Outcome != "" {
+		fmt.Printf("outcome: %s\n", state.Outcome)
+	}
+	if state.Reason != "" {
+		fmt.Printf("reason: %s\n", state.Reason)
+	}
+	fmt.Printf("phase: %s\n", state.Phase)
+	fmt.Printf("turn: %d\n", state.Turn)
+	if state.PendingRole != "" {
+		fmt.Printf("pending_role: %s\n", state.PendingRole)
+	}
+	if state.ChangeHash != "" {
+		fmt.Printf("change_hash: %s\n", state.ChangeHash)
+	}
+	if state.LastValidation != nil {
+		fmt.Printf("openspec_valid: %t\n", state.LastValidation.Passed)
+		if state.LastValidation.Stale {
+			fmt.Println("openspec_validation: stale")
+		}
+	}
+	if len(state.Gate.Reasons) > 0 {
+		fmt.Printf("gate_reasons: %s\n", strings.Join(state.Gate.Reasons, ","))
+	}
 }
 
 func formatRuntimeEvent(event runmeta.EventSummary) string {
@@ -1616,6 +1819,9 @@ Usage:
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact loop status [--run-dir .tmact/runs] [--json]
   tmact loop stop (--id ID | --config path)
+  tmact workflow discuss --config examples/openspec-workflow.yaml [--dry-run] [--once] [--execute]
+  tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
+  tmact workflow stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
   tmact help [command] [--json]
   tmact commands [--json]
@@ -1632,6 +1838,7 @@ Commands:
   broadcast safely send text to selected agent panes
   panels    plan or ensure configured agent tmux panels
   loop      run, inspect, or stop a configurable tmux automation loop
+  workflow  run, inspect, or stop a serialized OpenSpec artifact review
   watch     watch a pane and answer allowlisted prompts
   commands  print a machine-readable command catalog for tools and LLMs
 
@@ -1932,6 +2139,41 @@ func commandHelpCatalog() []commandHelp {
 		},
 		runtimeStatusHelp("loop"),
 		runtimeStopHelp("loop"),
+		{
+			Command:     "workflow",
+			Summary:     "Run, inspect, or stop a serialized OpenSpec artifact review workflow.",
+			Usage:       []string{"tmact workflow discuss --config PATH [--dry-run] [--once] [--execute]", "tmact workflow status [--config PATH] [--run-dir .tmact/runs] [--json]", "tmact workflow stop (--id ID | --config PATH)"},
+			Subcommands: []string{"discuss", "status", "stop"},
+			Examples:    []string{"tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once", "tmact workflow status --config examples/openspec-workflow.yaml", "tmact workflow stop --config examples/openspec-workflow.yaml"},
+			Safety:      []string{"Workflow prompts are dry-run by default. Use --execute only after inspecting the planned prompt and target roles."},
+			Notes:       []string{"v1 uses serialized PM -> SWE -> QA -> reviewer review and gates on the full OpenSpec change hash."},
+		},
+		{
+			Command: "workflow discuss",
+			Summary: "Run one or more serialized OpenSpec artifact review passes.",
+			Usage:   []string{"tmact workflow discuss --config PATH [--dry-run] [--once] [--execute]"},
+			Flags: []helpFlag{
+				{Name: "--config", Value: "PATH", Description: "path to workflow YAML config", Required: true},
+				{Name: "--dry-run", Description: "print planned prompts without sending to tmux; default behavior"},
+				{Name: "--execute", Description: "send prompts to configured tmux panes"},
+				{Name: "--once", Description: "run one observe/validate/gate/prompt pass and exit"},
+				{Name: "--run-dir", Value: "PATH", Description: "directory for runtime metadata"},
+			},
+			Examples: []string{"tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once", "tmact workflow discuss --config examples/openspec-workflow.yaml --execute"},
+			Safety:   []string{"The workflow stops on permission prompts and does not auto-approve tools or filesystem access."},
+		},
+		{
+			Command: "workflow status",
+			Summary: "Inspect workflow run metadata and optional local OpenSpec workflow state.",
+			Usage:   []string{"tmact workflow status [--config PATH] [--run-dir .tmact/runs] [--json]"},
+			Flags: []helpFlag{
+				{Name: "--config", Value: "PATH", Description: "workflow config path; include phase1-state.json details"},
+				{Name: "--run-dir", Value: "PATH", Description: "directory for runtime metadata"},
+				{Name: "--json", Description: "print JSON output"},
+			},
+			Examples: []string{"tmact workflow status", "tmact workflow status --config examples/openspec-workflow.yaml --json"},
+		},
+		runtimeStopHelp("workflow"),
 		{
 			Command: "watch",
 			Summary: "Run a narrow prompt watcher for allowlisted answers.",

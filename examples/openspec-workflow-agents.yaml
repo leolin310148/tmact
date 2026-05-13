@@ -1,0 +1,21 @@
+capture_lines: 180
+agents:
+  - name: pm-agent
+    target: tmact-openspec:pm.0
+    type: claude
+    role: pm
+
+  - name: swe-agent
+    target: tmact-openspec:swe.0
+    type: codex
+    role: swe
+
+  - name: qa-agent
+    target: tmact-openspec:qa.0
+    type: claude
+    role: qa
+
+  - name: reviewer-agent
+    target: tmact-openspec:reviewer.0
+    type: codex
+    role: reviewer

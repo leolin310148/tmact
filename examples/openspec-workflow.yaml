@@ -1,0 +1,16 @@
+change: agent-dev-phase1-discussion
+agents_config: examples/openspec-workflow-agents.yaml
+roles:
+  pm: pm-agent
+  swe: swe-agent
+  qa: qa-agent
+  reviewer: reviewer-agent
+discussion:
+  role_order: [pm, swe, qa, reviewer]
+  max_turns: 24
+  max_runtime: 8h
+  poll_interval: 15s
+  idle_after: 30s
+  capture_lines: 180
+  create_missing_proposal: false
+log_path: .tmact/openspec-workflow.jsonl
