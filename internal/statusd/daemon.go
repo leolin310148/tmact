@@ -9,12 +9,13 @@ import (
 )
 
 type Daemon struct {
-	cfg Config
-	mem *Memory
+	cfg         Config
+	mem         *Memory
+	optionCache *TmuxOptionCache
 }
 
 func NewDaemon(cfg Config) *Daemon {
-	return &Daemon{cfg: cfg.withDefaults(), mem: NewMemory()}
+	return &Daemon{cfg: cfg.withDefaults(), mem: NewMemory(), optionCache: NewTmuxOptionCache()}
 }
 
 func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
@@ -26,7 +27,7 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 		return snapshot, scanErr
 	}
 	if d.cfg.TmuxOptions {
-		if err := PublishTmuxOptions(d.cfg, snapshot); err != nil {
+		if err := PublishTmuxOptions(d.cfg, snapshot, d.optionCache); err != nil {
 			snapshot.addError("tmux_options", "", err)
 			if scanErr == nil {
 				scanErr = err

@@ -283,3 +283,44 @@ func TestPublishTmuxOptions(t *testing.T) {
 		t.Fatalf("calls = %#v, want %#v", calls, want)
 	}
 }
+
+func TestPublishTmuxOptionsSkipsUnchangedWithCache(t *testing.T) {
+	var calls []string
+	cfg := Config{
+		SetSessionOption: func(session string, key string, value string) error {
+			calls = append(calls, session+" "+key+"="+value)
+			return nil
+		},
+	}
+	cache := NewTmuxOptionCache()
+	snapshot := Snapshot{Sessions: map[string]SessionStatus{
+		"work": {Session: "work", Tag: "cx", Running: true, Asking: true, RowBucket: 2},
+	}}
+
+	if err := PublishTmuxOptions(cfg, snapshot, cache); err != nil {
+		t.Fatalf("first PublishTmuxOptions returned error: %v", err)
+	}
+	if err := PublishTmuxOptions(cfg, snapshot, cache); err != nil {
+		t.Fatalf("second PublishTmuxOptions returned error: %v", err)
+	}
+	want := []string{
+		"work @ai-tag=cx",
+		"work @ai-running=▸",
+		"work @ai-asking=?",
+		"work @row-bucket=2",
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %#v, want %#v", calls, want)
+	}
+
+	changed := Snapshot{Sessions: map[string]SessionStatus{
+		"work": {Session: "work", Tag: "cx", Running: false, Asking: true, RowBucket: 2},
+	}}
+	if err := PublishTmuxOptions(cfg, changed, cache); err != nil {
+		t.Fatalf("changed PublishTmuxOptions returned error: %v", err)
+	}
+	want = append(want, "work @ai-running=")
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls after change = %#v, want %#v", calls, want)
+	}
+}
