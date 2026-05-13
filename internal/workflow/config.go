@@ -14,6 +14,7 @@ import (
 )
 
 var DefaultRoleOrder = []string{"pm", "swe", "qa", "reviewer"}
+var DefaultImplementationStageOrder = []string{"swe_apply", "qa_verify", "pm_archive"}
 
 type Duration struct {
 	time.Duration
@@ -33,11 +34,12 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Config struct {
-	Change       string            `yaml:"change"`
-	AgentsConfig string            `yaml:"agents_config"`
-	Roles        map[string]string `yaml:"roles"`
-	Discussion   DiscussionConfig  `yaml:"discussion"`
-	LogPath      string            `yaml:"log_path"`
+	Change         string               `yaml:"change"`
+	AgentsConfig   string               `yaml:"agents_config"`
+	Roles          map[string]string    `yaml:"roles"`
+	Discussion     DiscussionConfig     `yaml:"discussion"`
+	Implementation ImplementationConfig `yaml:"implementation"`
+	LogPath        string               `yaml:"log_path"`
 }
 
 type DiscussionConfig struct {
@@ -48,6 +50,25 @@ type DiscussionConfig struct {
 	IdleAfter             Duration `yaml:"idle_after"`
 	CaptureLines          int      `yaml:"capture_lines"`
 	CreateMissingProposal bool     `yaml:"create_missing_proposal"`
+}
+
+type ImplementationConfig struct {
+	StageOrder               []string        `yaml:"stage_order"`
+	MaxTurns                 int             `yaml:"max_turns"`
+	MaxRuntime               Duration        `yaml:"max_runtime"`
+	PollInterval             Duration        `yaml:"poll_interval"`
+	IdleAfter                Duration        `yaml:"idle_after"`
+	CaptureLines             int             `yaml:"capture_lines"`
+	RequirePhase1Agreed      *bool           `yaml:"require_phase1_agreed"`
+	AllowDryRunWithoutPhase1 bool            `yaml:"allow_dry_run_without_phase1"`
+	ApplyInstructions        CommandConfig   `yaml:"apply_instructions"`
+	VerifyCommands           []CommandConfig `yaml:"verify_commands"`
+	ArchiveCommand           CommandConfig   `yaml:"archive_command"`
+}
+
+type CommandConfig struct {
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
 }
 
 type RoleBinding struct {
@@ -66,6 +87,22 @@ func LoadConfig(path string) (Config, error) {
 	}
 	applyDefaults(&cfg)
 	if err := validateConfig(cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func LoadImplementationConfig(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return Config{}, err
+	}
+	applyImplementationDefaults(&cfg)
+	if err := validateImplementationConfig(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -92,6 +129,46 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.LogPath == "" && cfg.Change != "" {
 		cfg.LogPath = filepath.Join(".tmact", "workflow-"+cfg.Change+".jsonl")
+	}
+}
+
+func applyImplementationDefaults(cfg *Config) {
+	if len(cfg.Implementation.StageOrder) == 0 {
+		cfg.Implementation.StageOrder = append([]string(nil), DefaultImplementationStageOrder...)
+	}
+	if cfg.Implementation.MaxTurns <= 0 {
+		cfg.Implementation.MaxTurns = 12
+	}
+	if cfg.Implementation.MaxRuntime.Duration <= 0 {
+		cfg.Implementation.MaxRuntime.Duration = 8 * time.Hour
+	}
+	if cfg.Implementation.PollInterval.Duration <= 0 {
+		cfg.Implementation.PollInterval.Duration = 15 * time.Second
+	}
+	if cfg.Implementation.IdleAfter.Duration <= 0 {
+		cfg.Implementation.IdleAfter.Duration = 30 * time.Second
+	}
+	if cfg.Implementation.CaptureLines <= 0 {
+		cfg.Implementation.CaptureLines = 180
+	}
+	if cfg.Implementation.RequirePhase1Agreed == nil {
+		require := true
+		cfg.Implementation.RequirePhase1Agreed = &require
+	}
+	if cfg.Implementation.ApplyInstructions.Command == "" && len(cfg.Implementation.ApplyInstructions.Args) == 0 {
+		cfg.Implementation.ApplyInstructions = CommandConfig{Command: "openspec", Args: []string{"instructions", "apply", "--change", "{{change}}"}}
+	}
+	if len(cfg.Implementation.VerifyCommands) == 0 {
+		cfg.Implementation.VerifyCommands = []CommandConfig{
+			{Command: "openspec", Args: []string{"validate", "{{change}}", "--strict"}},
+			{Command: "go", Args: []string{"test", "./..."}},
+		}
+	}
+	if cfg.Implementation.ArchiveCommand.Command == "" && len(cfg.Implementation.ArchiveCommand.Args) == 0 {
+		cfg.Implementation.ArchiveCommand = CommandConfig{Command: "openspec", Args: []string{"archive", "{{change}}", "--yes"}}
+	}
+	if cfg.LogPath == "" && cfg.Change != "" {
+		cfg.LogPath = filepath.Join(".tmact", "implementation-"+cfg.Change+".jsonl")
 	}
 }
 
@@ -142,6 +219,91 @@ func validateConfig(cfg Config) error {
 		return errors.New("discussion.capture_lines must be positive")
 	}
 	return nil
+}
+
+func validateImplementationConfig(cfg Config) error {
+	if strings.TrimSpace(cfg.Change) == "" {
+		return errors.New("change is required")
+	}
+	if _, err := ChangeDir(cfg.Change); err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.AgentsConfig) == "" {
+		return errors.New("agents_config is required")
+	}
+	if len(cfg.Roles) == 0 {
+		return errors.New("roles are required")
+	}
+	for _, role := range []string{"swe", "qa", "pm"} {
+		if strings.TrimSpace(cfg.Roles[role]) == "" {
+			return fmt.Errorf("roles.%s is required", role)
+		}
+	}
+	seen := map[string]bool{}
+	for _, stage := range cfg.Implementation.StageOrder {
+		if _, ok := implementationStageRole(stage); !ok {
+			return fmt.Errorf("implementation.stage_order contains unknown stage %q", stage)
+		}
+		if seen[stage] {
+			return fmt.Errorf("implementation.stage_order contains duplicate stage %q", stage)
+		}
+		seen[stage] = true
+	}
+	for _, stage := range DefaultImplementationStageOrder {
+		if !seen[stage] {
+			return fmt.Errorf("implementation.stage_order missing stage %q", stage)
+		}
+	}
+	if cfg.Implementation.MaxTurns <= 0 {
+		return errors.New("implementation.max_turns must be positive")
+	}
+	if cfg.Implementation.MaxRuntime.Duration <= 0 {
+		return errors.New("implementation.max_runtime must be positive")
+	}
+	if cfg.Implementation.PollInterval.Duration <= 0 {
+		return errors.New("implementation.poll_interval must be positive")
+	}
+	if cfg.Implementation.IdleAfter.Duration <= 0 {
+		return errors.New("implementation.idle_after must be positive")
+	}
+	if cfg.Implementation.CaptureLines <= 0 {
+		return errors.New("implementation.capture_lines must be positive")
+	}
+	if err := validateCommand("implementation.apply_instructions", cfg.Implementation.ApplyInstructions); err != nil {
+		return err
+	}
+	if len(cfg.Implementation.VerifyCommands) == 0 {
+		return errors.New("implementation.verify_commands are required")
+	}
+	for i, command := range cfg.Implementation.VerifyCommands {
+		if err := validateCommand(fmt.Sprintf("implementation.verify_commands[%d]", i), command); err != nil {
+			return err
+		}
+	}
+	if err := validateCommand("implementation.archive_command", cfg.Implementation.ArchiveCommand); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCommand(path string, command CommandConfig) error {
+	if strings.TrimSpace(command.Command) == "" {
+		return fmt.Errorf("%s.command is required", path)
+	}
+	return nil
+}
+
+func implementationStageRole(stage string) (string, bool) {
+	switch stage {
+	case "swe_apply":
+		return "swe", true
+	case "qa_verify":
+		return "qa", true
+	case "pm_archive":
+		return "pm", true
+	default:
+		return "", false
+	}
 }
 
 func ChangeDir(change string) (string, error) {

@@ -1,0 +1,27 @@
+change: agent-dev-phase2-implementation
+agents_config: examples/openspec-workflow-agents.yaml
+roles:
+  pm: pm-agent
+  swe: swe-agent
+  qa: qa-agent
+implementation:
+  stage_order: [swe_apply, qa_verify, pm_archive]
+  max_turns: 12
+  max_runtime: 8h
+  poll_interval: 15s
+  idle_after: 30s
+  capture_lines: 180
+  require_phase1_agreed: true
+  allow_dry_run_without_phase1: true
+  apply_instructions:
+    command: openspec
+    args: ["instructions", "apply", "--change", "{{change}}"]
+  verify_commands:
+    - command: openspec
+      args: ["validate", "{{change}}", "--strict"]
+    - command: go
+      args: ["test", "./..."]
+  archive_command:
+    command: openspec
+    args: ["archive", "{{change}}", "--yes"]
+log_path: .tmact/openspec-implementation.jsonl

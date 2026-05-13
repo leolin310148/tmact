@@ -22,6 +22,7 @@ The CLI is a single Go binary (`cmd/tmact`) with these subcommands:
 | `broadcast` | Send the same text/keys to a group of configured agent panes. |
 | `panels` | Plan or reconcile configured agent panes (session/window/repo/launcher) into tmux. |
 | `loop` | Run a configurable polling loop on one pane: pastes prompts, presses keys, clears context, stops on permission prompts. Supports `--dry-run --once`. |
+| `workflow` | Run serialized OpenSpec review and implementation workflows across configured agent panes. |
 | `watch` | Narrow prompt watcher; currently accepts Codex directory-access prompts when every requested path is allowlisted. |
 
 `loop` writes run metadata under `.tmact/runs/` so long-running processes can
@@ -43,6 +44,8 @@ tmact detect --target z_sample-project_sample:0.0 --json
 tmact inspect --all --json
 tmact panels ensure --config examples/idll-agents.yaml --execute
 tmact loop --config examples/night-loop.yaml --dry-run --once
+tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once
+tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
 tmact watch --config examples/accept-question-watch.yaml --dry-run --once
 ```
 
@@ -68,6 +71,7 @@ internal/statusd/              # status daemon (writes JSON snapshot + tmux opti
 internal/runmeta/              # `.tmact/runs/` metadata for loop processes
 internal/agents/               # agents.yaml config: panels, broadcast, inbox, summary
 internal/loop/                 # configurable single-pane loop runner
+internal/workflow/             # OpenSpec review and implementation workflows
 internal/watch/                # prompt watcher (directory-access acceptor)
 examples/                      # YAML configs for loops, watches, and agents
 docs/                          # smoke test notes
@@ -126,6 +130,38 @@ flows:
 
 Loops stop when a permission prompt is visible — safer for unattended runs.
 
+### OpenSpec Workflows
+
+`tmact workflow discuss` runs the proposal review phase for an OpenSpec change.
+It serializes PM, SWE, QA, and reviewer prompts over the full artifact set
+(`proposal.md`, `design.md`, `tasks.md`, and `specs/*/spec.md`) and gates on
+the current `change_hash`.
+
+`tmact workflow implement` runs the post-agreement phase:
+
+```text
+SWE apply -> QA verify -> PM archive
+```
+
+Live implementation requires `phase1-state.json` to have outcome `agreed` for
+the same current artifact hash. Dry-runs can be configured to preview the next
+prompt before phase 1 agreement, but `--execute` still enforces the agreement
+precondition. Status and stop use the same surfaces:
+
+```sh
+tmact workflow status --config examples/openspec-implementation.yaml
+tmact workflow stop --config examples/openspec-implementation.yaml
+```
+
+Both phases can share one config file when it contains both `discussion` and
+`implementation` sections:
+
+```sh
+tmact workflow example
+tmact workflow discuss --config examples/openspec-full-workflow.yaml --dry-run --once
+tmact workflow implement --config examples/openspec-full-workflow.yaml --dry-run --once
+```
+
 ### Watcher
 
 `tmact watch` polls a target pane with `tmux capture-pane` and applies allow-
@@ -164,6 +200,8 @@ status-line refresh path. Install via `launchd/com.tmact.statusd.plist`
 .cache/tmact-targets.json          # numbered target cache from `ls`
 .tmact/runs/                       # loop run metadata + status
 .tmact/<name>.jsonl                # ad-hoc event logs for long runs
+openspec/changes/*/phase*.json     # workflow phase state
+openspec/changes/*/phase*-comments.jsonl # workflow comment streams
 /tmp/tmact-status.json             # statusd snapshot (see launchd plist)
 /tmp/tmact-statusd.{jsonl,*.log}   # statusd logs
 ```
