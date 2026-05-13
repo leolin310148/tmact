@@ -41,6 +41,19 @@ func TestClassifyRuntimeDetectsShellCommand(t *testing.T) {
 	}
 }
 
+func TestClassifyRuntimeShellCommandBeatsStaleAgentScrollback(t *testing.T) {
+	pane := tmux.Pane{CurrentCommand: "zsh", WindowName: "zsh"}
+	raw := "Claude Code v2.1.139\nold answer\nGemini reviewer failed\n❯"
+
+	detected := ClassifyRuntime(pane, raw)
+	if detected.Runtime != RuntimeShell {
+		t.Fatalf("runtime = %q", detected.Runtime)
+	}
+	if detected.Confidence != ConfidenceHigh {
+		t.Fatalf("confidence = %q", detected.Confidence)
+	}
+}
+
 func TestInspectPaneMarksChangedCaptureWorking(t *testing.T) {
 	panes := []tmux.Pane{{
 		Session:        "work",

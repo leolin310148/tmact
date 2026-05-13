@@ -319,6 +319,9 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	if containsAny(window, "tmact") {
 		return RuntimeDetection{Runtime: RuntimeTmact, Confidence: ConfidenceHigh, Signals: []string{"window_name"}}
 	}
+	if isShellCommand(cmd) {
+		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
+	}
 
 	if looksLikeVersion(cmd) && containsAny(text, "claude code") {
 		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text", "version_command"}}
@@ -335,9 +338,6 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 		return RuntimeDetection{Runtime: RuntimeCopilot, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	}
 
-	if isShellCommand(cmd) {
-		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
-	}
 	if looksLikeShellPrompt(panestate.LastMeaningfulLine(raw)) {
 		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceLow, Signals: []string{"shell_prompt"}}
 	}
