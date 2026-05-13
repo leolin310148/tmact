@@ -37,9 +37,17 @@ type Config struct {
 	Change         string               `yaml:"change"`
 	AgentsConfig   string               `yaml:"agents_config"`
 	Roles          map[string]string    `yaml:"roles"`
+	PromptDispatch PromptDispatchConfig `yaml:"prompt_dispatch"`
 	Discussion     DiscussionConfig     `yaml:"discussion"`
 	Implementation ImplementationConfig `yaml:"implementation"`
 	LogPath        string               `yaml:"log_path"`
+}
+
+type PromptDispatchConfig struct {
+	ClearBeforePrompt    *bool    `yaml:"clear_before_prompt"`
+	ClearCommand         string   `yaml:"clear_command"`
+	ClearDelay           Duration `yaml:"clear_delay"`
+	LegacyMarkerFallback *bool    `yaml:"legacy_marker_fallback"`
 }
 
 type DiscussionConfig struct {
@@ -109,6 +117,7 @@ func LoadImplementationConfig(path string) (Config, error) {
 }
 
 func applyDefaults(cfg *Config) {
+	applyPromptDispatchDefaults(&cfg.PromptDispatch)
 	if len(cfg.Discussion.RoleOrder) == 0 {
 		cfg.Discussion.RoleOrder = append([]string(nil), DefaultRoleOrder...)
 	}
@@ -133,6 +142,7 @@ func applyDefaults(cfg *Config) {
 }
 
 func applyImplementationDefaults(cfg *Config) {
+	applyPromptDispatchDefaults(&cfg.PromptDispatch)
 	if len(cfg.Implementation.StageOrder) == 0 {
 		cfg.Implementation.StageOrder = append([]string(nil), DefaultImplementationStageOrder...)
 	}
@@ -169,6 +179,23 @@ func applyImplementationDefaults(cfg *Config) {
 	}
 	if cfg.LogPath == "" && cfg.Change != "" {
 		cfg.LogPath = filepath.Join(".tmact", "implementation-"+cfg.Change+".jsonl")
+	}
+}
+
+func applyPromptDispatchDefaults(cfg *PromptDispatchConfig) {
+	if cfg.ClearBeforePrompt == nil {
+		value := true
+		cfg.ClearBeforePrompt = &value
+	}
+	if cfg.ClearCommand == "" {
+		cfg.ClearCommand = "/clear"
+	}
+	if cfg.ClearDelay.Duration == 0 {
+		cfg.ClearDelay.Duration = 5 * time.Second
+	}
+	if cfg.LegacyMarkerFallback == nil {
+		value := false
+		cfg.LegacyMarkerFallback = &value
 	}
 }
 
@@ -217,6 +244,9 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.Discussion.CaptureLines <= 0 {
 		return errors.New("discussion.capture_lines must be positive")
+	}
+	if err := validatePromptDispatchConfig(cfg.PromptDispatch); err != nil {
+		return err
 	}
 	return nil
 }
@@ -283,7 +313,28 @@ func validateImplementationConfig(cfg Config) error {
 	if err := validateCommand("implementation.archive_command", cfg.Implementation.ArchiveCommand); err != nil {
 		return err
 	}
+	if err := validatePromptDispatchConfig(cfg.PromptDispatch); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validatePromptDispatchConfig(cfg PromptDispatchConfig) error {
+	if promptDispatchClearEnabled(cfg) && strings.TrimSpace(cfg.ClearCommand) == "" {
+		return errors.New("prompt_dispatch.clear_command is required when clear_before_prompt is enabled")
+	}
+	if cfg.ClearDelay.Duration < 0 {
+		return errors.New("prompt_dispatch.clear_delay cannot be negative")
+	}
+	return nil
+}
+
+func promptDispatchClearEnabled(cfg PromptDispatchConfig) bool {
+	return cfg.ClearBeforePrompt == nil || *cfg.ClearBeforePrompt
+}
+
+func promptDispatchLegacyMarkerFallback(cfg PromptDispatchConfig) bool {
+	return cfg.LegacyMarkerFallback != nil && *cfg.LegacyMarkerFallback
 }
 
 func validateCommand(path string, command CommandConfig) error {

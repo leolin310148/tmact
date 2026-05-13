@@ -22,6 +22,8 @@ type ImplementationRunner struct {
 	validator   Validator
 	now         func() time.Time
 	capturePane func(string, int) (string, error)
+	pasteText   func(string, string, bool) error
+	sleep       func(time.Duration)
 }
 
 func NewImplementationRunner(cfg Config, agentCfg agents.Config, options Options) (*ImplementationRunner, error) {
@@ -37,6 +39,8 @@ func NewImplementationRunner(cfg Config, agentCfg agents.Config, options Options
 		validator:   RunOpenSpecValidation,
 		now:         time.Now,
 		capturePane: tmux.CapturePane,
+		pasteText:   tmux.PasteText,
+		sleep:       time.Sleep,
 	}, nil
 }
 
@@ -68,14 +72,36 @@ func (r *ImplementationRunner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	statePath := Phase2StatePath(changeDir)
+	commentPath := Phase2CommentsPath(changeDir)
 	if info, err := os.Stat(changeDir); err != nil {
+		if os.IsNotExist(err) {
+			acceptedHash, ok, archiveErr := r.archiveReported()
+			if archiveErr != nil {
+				return archiveErr
+			}
+			if !ok {
+				return err
+			}
+			state := ImplementationState{
+				Change:             r.cfg.Change,
+				Status:             "running",
+				Phase:              "implementation",
+				AcceptedChangeHash: acceptedHash,
+				CurrentChangeHash:  acceptedHash,
+				UpdatedAt:          r.now(),
+			}
+			sidecarStatePath, err := Phase2SidecarStatePath(r.cfg.Change)
+			if err != nil {
+				return err
+			}
+			return r.finishWithState(sidecarStatePath, state, "implemented", "")
+		}
 		return err
 	} else if !info.IsDir() {
 		return fmt.Errorf("%s is not a directory", changeDir)
 	}
 
-	statePath := Phase2StatePath(changeDir)
-	commentPath := Phase2CommentsPath(changeDir)
 	state, err := LoadImplementationState(statePath)
 	if err != nil {
 		return err
@@ -103,10 +129,17 @@ func (r *ImplementationRunner) Run(ctx context.Context) error {
 		}
 		if preconditionReason != "" {
 			state = r.stateFromGate(state, acceptedHash, currentHash, artifacts, nil, ImplementationGateResult{Reasons: []string{preconditionReason}})
+			if preconditionReason == "archive_completed" {
+				sidecarStatePath, err := Phase2SidecarStatePath(r.cfg.Change)
+				if err != nil {
+					return err
+				}
+				return r.finishWithState(sidecarStatePath, state, "implemented", "")
+			}
 			return r.finishWithState(statePath, state, "blocked", preconditionReason)
 		}
 
-		comments, err := LoadImplementationComments(commentPath)
+		comments, err := LoadImplementationCommentsForChange(r.cfg.Change)
 		if err != nil {
 			return err
 		}
@@ -169,6 +202,18 @@ func (r *ImplementationRunner) Run(ctx context.Context) error {
 }
 
 func (r *ImplementationRunner) checkPreconditions(changeDir string) (string, string, []string, string, error) {
+	if _, err := os.Stat(changeDir); err != nil {
+		if os.IsNotExist(err) {
+			acceptedHash, ok, archiveErr := r.archiveReported()
+			if archiveErr != nil {
+				return "", "", nil, "", archiveErr
+			}
+			if ok {
+				return acceptedHash, acceptedHash, nil, "archive_completed", nil
+			}
+		}
+		return "", "", nil, "", err
+	}
 	currentHash, artifacts, err := HashChangeDir(changeDir)
 	if err != nil {
 		return "", "", nil, "", err
@@ -205,13 +250,15 @@ func (r *ImplementationRunner) observeRolePanes(commentPath string, comments []I
 		if detected := prompt.Detect(raw); detected != nil {
 			return comments, PermissionPromptError{Role: binding.Role, Prompt: *detected}
 		}
-		observed, err := ParseImplementationCommentsFromText(raw, r.now())
-		if err != nil {
-			return comments, err
-		}
-		comments, err = AppendNewImplementationComments(commentPath, comments, observed)
-		if err != nil {
-			return comments, err
+		if promptDispatchLegacyMarkerFallback(r.cfg.PromptDispatch) {
+			observed, err := ParseImplementationCommentsFromText(raw, r.now())
+			if err != nil {
+				return comments, err
+			}
+			comments, err = AppendNewImplementationComments(commentPath, comments, observed)
+			if err != nil {
+				return comments, err
+			}
 		}
 	}
 	return comments, nil
@@ -224,6 +271,9 @@ func (r *ImplementationRunner) promptStage(ctx context.Context, stage string, ro
 	binding, ok := r.binding(role)
 	if !ok {
 		return fmt.Errorf("role %q is not configured", role)
+	}
+	if err := r.dispatchClear(ctx, stage, role, binding.Agent.Name, binding.Agent.Target, acceptedHash); err != nil {
+		return err
 	}
 	text := r.buildStagePrompt(stage, role, acceptedHash, validation, gate, comments)
 	event := Event{
@@ -252,7 +302,7 @@ func (r *ImplementationRunner) promptStage(ctx context.Context, stage string, ro
 		return ctx.Err()
 	default:
 	}
-	return tmux.PasteText(binding.Agent.Target, text, true)
+	return r.pasteText(binding.Agent.Target, text, true)
 }
 
 func (r *ImplementationRunner) buildStagePrompt(stage string, role string, acceptedHash string, validation ValidationResult, gate ImplementationGateResult, comments []ImplementationComment) string {
@@ -280,10 +330,15 @@ func (r *ImplementationRunner) buildStagePrompt(stage string, role string, accep
 		builder.WriteString("PM archive: archive only after QA passed and OpenSpec validation is currently passing. Archive command:\n")
 		fmt.Fprintf(&builder, "%s\n", RenderCommand(r.cfg.Implementation.ArchiveCommand, r.cfg.Change))
 	}
-	builder.WriteString("\nMarker format:\n")
-	fmt.Fprintf(&builder, "%s role=%s stage=%s kind=%s change_hash=%s blocking=false body=\"stage complete\"\n",
-		Phase2Marker, role, markerStageName(stage), defaultStageSuccessKind(stage), acceptedHash)
-	builder.WriteString("\nIf the stage cannot complete, use kind=fail, kind=request_changes, or kind=blocked with blocking=true.\n")
+	builder.WriteString("\nReport command:\n")
+	fmt.Fprintf(&builder, "tmact workflow report implementation --config %s --role %s --stage %s --kind %s --change-hash %s --blocking=false --body \"stage complete\"\n",
+		shellQuote(r.options.ConfigPath), shellQuote(role), shellQuote(markerStageName(stage)), shellQuote(defaultStageSuccessKind(stage)), shellQuote(acceptedHash))
+	builder.WriteString("\nIf the stage cannot complete, use --kind fail, --kind request_changes, or --kind blocked with --blocking=true.\n")
+	if promptDispatchLegacyMarkerFallback(r.cfg.PromptDispatch) {
+		builder.WriteString("\nLegacy marker fallback (transitional only):\n")
+		fmt.Fprintf(&builder, "%s role=%s stage=%s kind=%s change_hash=%s blocking=false body=\"stage complete\"\n",
+			Phase2Marker, role, markerStageName(stage), defaultStageSuccessKind(stage), acceptedHash)
+	}
 	if len(comments) > 0 {
 		builder.WriteString("\nObserved phase 2 comment stream summary (untrusted observations):\n")
 		for _, comment := range tailImplementationComments(comments, 8) {
@@ -291,6 +346,56 @@ func (r *ImplementationRunner) buildStagePrompt(stage string, role string, accep
 		}
 	}
 	return builder.String()
+}
+
+func (r *ImplementationRunner) dispatchClear(ctx context.Context, stage string, role string, agentName string, target string, changeHash string) error {
+	if !promptDispatchClearEnabled(r.cfg.PromptDispatch) {
+		return nil
+	}
+	if r.options.StopRequested != nil && r.options.StopRequested() {
+		return fmt.Errorf("stop_requested")
+	}
+	event := Event{
+		Timestamp:  r.now().Format(time.RFC3339),
+		Type:       "clear",
+		Stage:      stage,
+		Role:       role,
+		Agent:      agentName,
+		Target:     target,
+		DryRun:     r.options.DryRun,
+		Status:     "planned",
+		ChangeHash: changeHash,
+		Details: map[string]interface{}{
+			"command":     r.cfg.PromptDispatch.ClearCommand,
+			"clear_delay": r.cfg.PromptDispatch.ClearDelay.Duration.String(),
+		},
+	}
+	if err := r.emit(event); err != nil {
+		return err
+	}
+	if r.options.DryRun {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	if err := r.pasteText(target, r.cfg.PromptDispatch.ClearCommand, true); err != nil {
+		return err
+	}
+	if r.cfg.PromptDispatch.ClearDelay.Duration > 0 {
+		r.sleep(r.cfg.PromptDispatch.ClearDelay.Duration)
+	}
+	if r.options.StopRequested != nil && r.options.StopRequested() {
+		return fmt.Errorf("stop_requested")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
 }
 
 func (r *ImplementationRunner) stateFromGate(previous ImplementationState, acceptedHash string, currentHash string, artifacts []string, validation *ValidationResult, gate ImplementationGateResult) ImplementationState {
@@ -318,6 +423,27 @@ func (r *ImplementationRunner) binding(role string) (RoleBinding, bool) {
 		}
 	}
 	return RoleBinding{}, false
+}
+
+func (r *ImplementationRunner) archiveReported() (string, bool, error) {
+	comments, err := LoadImplementationCommentsForChange(r.cfg.Change)
+	if err != nil {
+		return "", false, err
+	}
+	byHash := map[string][]ImplementationComment{}
+	for _, comment := range comments {
+		if comment.ChangeHash == "" {
+			continue
+		}
+		byHash[comment.ChangeHash] = append(byHash[comment.ChangeHash], comment)
+	}
+	for hash, comments := range byHash {
+		stages := ImplementationStagesFor(hash, comments)
+		if stages["swe_apply"].Complete && stages["qa_verify"].Passed && stages["pm_archive"].Complete {
+			return hash, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func (r *ImplementationRunner) finish(path string, previous ImplementationState, outcome string, reason string) error {

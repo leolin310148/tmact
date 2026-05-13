@@ -34,6 +34,12 @@ roles:
 	if cfg.Discussion.MaxTurns != 24 || cfg.Discussion.CaptureLines != 180 {
 		t.Fatalf("defaults not applied: %#v", cfg.Discussion)
 	}
+	if cfg.PromptDispatch.ClearBeforePrompt == nil || !*cfg.PromptDispatch.ClearBeforePrompt || cfg.PromptDispatch.ClearCommand != "/clear" || cfg.PromptDispatch.ClearDelay.Duration == 0 {
+		t.Fatalf("prompt dispatch defaults not applied: %#v", cfg.PromptDispatch)
+	}
+	if cfg.PromptDispatch.LegacyMarkerFallback == nil || *cfg.PromptDispatch.LegacyMarkerFallback {
+		t.Fatalf("legacy marker fallback should default off: %#v", cfg.PromptDispatch)
+	}
 }
 
 func TestChangeDirRejectsEscapes(t *testing.T) {

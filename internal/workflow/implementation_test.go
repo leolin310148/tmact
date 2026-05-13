@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,6 +214,59 @@ func TestImplementationPreconditionRequiresAgreedPhase1Hash(t *testing.T) {
 	}
 	if accepted != hash || current == hash || reason != "accepted_hash_mismatch" {
 		t.Fatalf("precondition mismatch accepted=%q current=%q reason=%q", accepted, current, reason)
+	}
+}
+
+func TestImplementationRunnerFinishesWhenArchiveReportMovedChangeDir(t *testing.T) {
+	t.Chdir(t.TempDir())
+	changeDir := filepath.Join("openspec", "changes", "demo")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{
+		Change: "demo",
+		Roles:  map[string]string{"swe": "swe-agent", "qa": "qa-agent", "pm": "pm-agent"},
+		Implementation: ImplementationConfig{
+			StageOrder: []string{"swe_apply", "qa_verify", "pm_archive"},
+		},
+	}
+	for _, report := range []ImplementationReport{
+		{Role: "swe", Stage: "apply", Kind: "complete", ChangeHash: "sha256:accepted"},
+		{Role: "qa", Stage: "verify", Kind: "pass", ChangeHash: "sha256:accepted"},
+		{Role: "pm", Stage: "archive", Kind: "complete", ChangeHash: "sha256:accepted"},
+	} {
+		if _, err := WriteImplementationReport(cfg, report); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.RemoveAll(changeDir); err != nil {
+		t.Fatal(err)
+	}
+	agentCfg := agents.Config{Agents: []agents.AgentConfig{
+		{Name: "swe-agent", Target: "demo:swe.0"},
+		{Name: "qa-agent", Target: "demo:qa.0"},
+		{Name: "pm-agent", Target: "demo:pm.0"},
+	}}
+	runner, err := NewImplementationRunner(cfg, agentCfg, Options{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	statePath, err := Phase2SidecarStatePath("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := LoadImplementationState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Outcome != "implemented" || state.AcceptedChangeHash != "sha256:accepted" {
+		t.Fatalf("state = %#v", state)
+	}
+	if _, err := os.Stat(changeDir); !os.IsNotExist(err) {
+		t.Fatalf("change dir should not be recreated, err=%v", err)
 	}
 }
 

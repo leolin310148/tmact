@@ -1070,13 +1070,15 @@ func runWorkflow(args []string) error {
 		return printCommandHelp("workflow")
 	}
 	if len(args) == 0 {
-		return errors.New("workflow requires a subcommand: discuss, implement, example, status, stop")
+		return errors.New("workflow requires a subcommand: discuss, implement, report, example, status, stop")
 	}
 	switch args[0] {
 	case "discuss":
 		return runWorkflowDiscuss(args[1:])
 	case "implement":
 		return runWorkflowImplement(args[1:])
+	case "report":
+		return runWorkflowReport(args[1:])
 	case "example":
 		return runWorkflowExample(args[1:])
 	case "status":
@@ -1086,6 +1088,108 @@ func runWorkflow(args []string) error {
 	default:
 		return fmt.Errorf("unknown workflow subcommand %q", args[0])
 	}
+}
+
+func runWorkflowReport(args []string) error {
+	if wantsHelp(args) {
+		if len(args) > 1 {
+			return printCommandHelp("workflow report " + strings.Join(args[1:], " "))
+		}
+		return printCommandHelp("workflow report")
+	}
+	if len(args) == 0 {
+		return errors.New("workflow report requires a subcommand: review, implementation")
+	}
+	switch args[0] {
+	case "review":
+		return runWorkflowReportReview(args[1:])
+	case "implementation":
+		return runWorkflowReportImplementation(args[1:])
+	default:
+		return fmt.Errorf("unknown workflow report subcommand %q", args[0])
+	}
+}
+
+func runWorkflowReportReview(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow report review")
+	}
+	fs := flag.NewFlagSet("workflow report review", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	configPath := fs.String("config", "", "path to workflow YAML config")
+	role := fs.String("role", "", "reporting review role")
+	kind := fs.String("kind", "", "report kind: accept, request_changes, reject, withdraw_accept, decision")
+	changeHash := fs.String("change-hash", "", "expected OpenSpec artifact hash")
+	openspecValid := fs.Bool("openspec-valid", false, "whether OpenSpec validation is passing")
+	blocking := fs.Bool("blocking", false, "whether this report blocks the gate")
+	replyTo := fs.String("reply-to", "", "comment ID this report replies to")
+	body := fs.String("body", "", "short report body")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+	cfg, err := workflow.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	comment, err := workflow.WriteReviewReport(cfg, workflow.ReviewReport{
+		Role:          *role,
+		Kind:          *kind,
+		ChangeHash:    *changeHash,
+		OpenSpecValid: *openspecValid,
+		Blocking:      *blocking,
+		ReplyTo:       *replyTo,
+		Body:          *body,
+		Timestamp:     tmactNow(),
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("review_report: %s\n", comment.ID)
+	return nil
+}
+
+func runWorkflowReportImplementation(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow report implementation")
+	}
+	fs := flag.NewFlagSet("workflow report implementation", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	configPath := fs.String("config", "", "path to implementation workflow YAML config")
+	role := fs.String("role", "", "reporting implementation role")
+	stage := fs.String("stage", "", "implementation stage: apply, verify, archive")
+	kind := fs.String("kind", "", "report kind: complete, pass, fail, request_changes, blocked, decision, withdraw")
+	changeHash := fs.String("change-hash", "", "accepted OpenSpec artifact hash")
+	blocking := fs.Bool("blocking", false, "whether this report blocks the stage")
+	replyTo := fs.String("reply-to", "", "comment ID this report replies to")
+	body := fs.String("body", "", "short report body")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *configPath == "" {
+		return errors.New("--config is required")
+	}
+	cfg, err := workflow.LoadImplementationConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	comment, err := workflow.WriteImplementationReport(cfg, workflow.ImplementationReport{
+		Role:       *role,
+		Stage:      *stage,
+		Kind:       *kind,
+		ChangeHash: *changeHash,
+		Blocking:   *blocking,
+		ReplyTo:    *replyTo,
+		Body:       *body,
+		Timestamp:  tmactNow(),
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("implementation_report: %s\n", comment.ID)
+	return nil
 }
 
 func runWorkflowDiscuss(args []string) error {
@@ -1957,6 +2061,7 @@ Usage:
   tmact loop stop (--id ID | --config path)
   tmact workflow discuss --config examples/openspec-workflow.yaml [--dry-run] [--once] [--execute]
   tmact workflow implement --config examples/openspec-implementation.yaml [--dry-run] [--once] [--execute]
+  tmact workflow report review --config examples/openspec-workflow.yaml --role qa --kind accept --change-hash sha256:...
   tmact workflow example
   tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
   tmact workflow stop (--id ID | --config path)
@@ -1998,6 +2103,11 @@ roles:
   swe: swe-agent
   qa: qa-agent
   reviewer: reviewer-agent
+prompt_dispatch:
+  clear_before_prompt: true
+  clear_command: /clear
+  clear_delay: 5s
+  legacy_marker_fallback: false
 discussion:
   role_order: [pm, swe, qa, reviewer]
   max_turns: 24
@@ -2318,9 +2428,9 @@ func commandHelpCatalog() []commandHelp {
 		{
 			Command:     "workflow",
 			Summary:     "Run, inspect, or stop serialized OpenSpec review and implementation workflows.",
-			Usage:       []string{"tmact workflow example", "tmact workflow discuss --config PATH [--dry-run] [--once] [--execute]", "tmact workflow implement --config PATH [--dry-run] [--once] [--execute]", "tmact workflow status [--config PATH] [--run-dir .tmact/runs] [--json]", "tmact workflow stop (--id ID | --config PATH)"},
-			Subcommands: []string{"example", "discuss", "implement", "status", "stop"},
-			Examples:    []string{"tmact workflow example", "tmact workflow discuss --config examples/openspec-full-workflow.yaml --dry-run --once", "tmact workflow implement --config examples/openspec-full-workflow.yaml --dry-run --once", "tmact workflow status --config examples/openspec-full-workflow.yaml", "tmact workflow stop --config examples/openspec-full-workflow.yaml"},
+			Usage:       []string{"tmact workflow example", "tmact workflow discuss --config PATH [--dry-run] [--once] [--execute]", "tmact workflow implement --config PATH [--dry-run] [--once] [--execute]", "tmact workflow report review --config PATH --role ROLE --kind KIND --change-hash HASH", "tmact workflow report implementation --config PATH --role ROLE --stage STAGE --kind KIND --change-hash HASH", "tmact workflow status [--config PATH] [--run-dir .tmact/runs] [--json]", "tmact workflow stop (--id ID | --config PATH)"},
+			Subcommands: []string{"example", "discuss", "implement", "report", "status", "stop"},
+			Examples:    []string{"tmact workflow example", "tmact workflow discuss --config examples/openspec-full-workflow.yaml --dry-run --once", "tmact workflow implement --config examples/openspec-full-workflow.yaml --dry-run --once", "tmact workflow report review --config examples/openspec-full-workflow.yaml --role qa --kind accept --change-hash sha256:abc --openspec-valid", "tmact workflow status --config examples/openspec-full-workflow.yaml", "tmact workflow stop --config examples/openspec-full-workflow.yaml"},
 			Safety:      []string{"Workflow prompts are dry-run by default. Use --execute only after inspecting the planned prompt and target roles."},
 			Notes:       []string{"Discussion uses serialized PM -> SWE -> QA -> reviewer review. Implementation uses SWE apply -> QA verify -> PM archive."},
 		},
@@ -2358,6 +2468,44 @@ func commandHelpCatalog() []commandHelp {
 			},
 			Examples: []string{"tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once", "tmact workflow implement --config examples/openspec-implementation.yaml --execute"},
 			Safety:   []string{"The implementation workflow requires phase 1 agreement before live execution and does not auto-approve tools or archive prompts."},
+		},
+		{
+			Command:     "workflow report",
+			Summary:     "Record workflow progress through durable JSONL reports.",
+			Usage:       []string{"tmact workflow report review --config PATH --role ROLE --kind KIND --change-hash HASH [--openspec-valid] [--blocking=true|false] [--reply-to ID] [--body TEXT]", "tmact workflow report implementation --config PATH --role ROLE --stage STAGE --kind KIND --change-hash HASH [--blocking=true|false] [--reply-to ID] [--body TEXT]"},
+			Subcommands: []string{"review", "implementation"},
+			Examples:    []string{"tmact workflow report review --config examples/openspec-full-workflow.yaml --role pm --kind accept --change-hash sha256:abc --openspec-valid --body \"accepted current artifacts\"", "tmact workflow report implementation --config examples/openspec-full-workflow.yaml --role qa --stage verify --kind pass --change-hash sha256:abc --body \"tests passed\""},
+			Safety:      []string{"Reports only write workflow state for the configured OpenSpec change and do not send tmux input."},
+		},
+		{
+			Command: "workflow report review",
+			Summary: "Append a phase 1 OpenSpec review report.",
+			Usage:   []string{"tmact workflow report review --config PATH --role ROLE --kind accept|request_changes|reject|withdraw_accept|decision --change-hash HASH [--openspec-valid] [--blocking=true|false] [--reply-to ID] [--body TEXT]"},
+			Flags: []helpFlag{
+				{Name: "--config", Value: "PATH", Description: "path to workflow YAML config", Required: true},
+				{Name: "--role", Value: "ROLE", Description: "review role reporting status", Required: true},
+				{Name: "--kind", Value: "KIND", Description: "accept, request_changes, reject, withdraw_accept, or decision", Required: true},
+				{Name: "--change-hash", Value: "HASH", Description: "OpenSpec artifact hash", Required: true},
+				{Name: "--openspec-valid", Description: "mark the report as based on passing OpenSpec validation"},
+				{Name: "--blocking", Value: "BOOL", Description: "whether this report blocks the review gate"},
+				{Name: "--reply-to", Value: "ID", Description: "comment ID this report resolves or answers"},
+				{Name: "--body", Value: "TEXT", Description: "short report body"},
+			},
+		},
+		{
+			Command: "workflow report implementation",
+			Summary: "Append a phase 2 implementation stage report.",
+			Usage:   []string{"tmact workflow report implementation --config PATH --role swe|qa|pm --stage apply|verify|archive --kind complete|pass|fail|request_changes|blocked|decision|withdraw --change-hash HASH [--blocking=true|false] [--reply-to ID] [--body TEXT]"},
+			Flags: []helpFlag{
+				{Name: "--config", Value: "PATH", Description: "path to implementation workflow YAML config", Required: true},
+				{Name: "--role", Value: "ROLE", Description: "implementation role reporting status", Required: true},
+				{Name: "--stage", Value: "STAGE", Description: "apply, verify, or archive", Required: true},
+				{Name: "--kind", Value: "KIND", Description: "complete, pass, fail, request_changes, blocked, decision, or withdraw", Required: true},
+				{Name: "--change-hash", Value: "HASH", Description: "accepted OpenSpec artifact hash", Required: true},
+				{Name: "--blocking", Value: "BOOL", Description: "whether this report blocks the stage"},
+				{Name: "--reply-to", Value: "ID", Description: "comment ID this report resolves or answers"},
+				{Name: "--body", Value: "TEXT", Description: "short report body"},
+			},
 		},
 		{
 			Command: "workflow status",

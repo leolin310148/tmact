@@ -251,10 +251,77 @@ func TestWorkflowExamplePrintsCombinedYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"change: your-change-id", "discussion:", "implementation:", "stage_order: [swe_apply, qa_verify, pm_archive]", `args: ["archive", "{{change}}", "--yes"]`} {
+	for _, want := range []string{"change: your-change-id", "prompt_dispatch:", "clear_before_prompt: true", "discussion:", "implementation:", "stage_order: [swe_apply, qa_verify, pm_archive]", `args: ["archive", "{{change}}", "--yes"]`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("workflow example missing %q: %s", want, out)
 		}
+	}
+}
+
+func TestWorkflowReportReviewCLIWritesComment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	changeDir := filepath.Join("openspec", "changes", "demo")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := "workflow.yaml"
+	if err := os.WriteFile(configPath, []byte(`change: demo
+agents_config: agents.yaml
+roles:
+  pm: pm-agent
+  swe: swe-agent
+  qa: qa-agent
+  reviewer: reviewer-agent
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmactNow = func() time.Time { return time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC) }
+	out, err := captureRun(t, "workflow", "report", "review", "--config", configPath, "--role", "qa", "--kind", "accept", "--change-hash", "sha256:abc", "--openspec-valid", "--body", "accepted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "review_report: c-") {
+		t.Fatalf("output = %s", out)
+	}
+	comments, err := workflow.LoadComments(workflow.CommentsPath(changeDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 || comments[0].Role != "qa" || !comments[0].OpenSpecValid {
+		t.Fatalf("comments = %#v", comments)
+	}
+}
+
+func TestWorkflowReportImplementationCLIWritesComment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	changeDir := filepath.Join("openspec", "changes", "demo")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := "workflow.yaml"
+	if err := os.WriteFile(configPath, []byte(`change: demo
+agents_config: agents.yaml
+roles:
+  pm: pm-agent
+  swe: swe-agent
+  qa: qa-agent
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmactNow = func() time.Time { return time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC) }
+	out, err := captureRun(t, "workflow", "report", "implementation", "--config", configPath, "--role", "qa", "--stage", "verify", "--kind", "pass", "--change-hash", "sha256:abc", "--body", "tests passed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "implementation_report: p2-") {
+		t.Fatalf("output = %s", out)
+	}
+	comments, err := workflow.LoadImplementationComments(workflow.Phase2CommentsPath(changeDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 || comments[0].Role != "qa" || comments[0].Stage != "verify" || comments[0].Kind != "pass" {
+		t.Fatalf("comments = %#v", comments)
 	}
 }
 
@@ -293,6 +360,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			name: "workflow implement",
 			args: []string{"workflow", "implement", "--help"},
 			want: []string{"workflow implement", "OpenSpec implementation", "--config", "--execute"},
+		},
+		{
+			name: "workflow report",
+			args: []string{"workflow", "report", "--help"},
+			want: []string{"workflow report", "durable JSONL reports", "workflow report review", "workflow report implementation"},
 		},
 		{
 			name: "panels group",

@@ -5,6 +5,11 @@ roles:
   swe: swe-agent
   qa: qa-agent
   reviewer: reviewer-agent
+prompt_dispatch:
+  clear_before_prompt: true
+  clear_command: /clear
+  clear_delay: 5s
+  legacy_marker_fallback: false
 discussion:
   role_order: [pm, swe, qa, reviewer]
   max_turns: 24

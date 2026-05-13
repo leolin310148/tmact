@@ -4,6 +4,11 @@ roles:
   pm: pm-agent
   swe: swe-agent
   qa: qa-agent
+prompt_dispatch:
+  clear_before_prompt: true
+  clear_command: /clear
+  clear_delay: 5s
+  legacy_marker_fallback: false
 implementation:
   stage_order: [swe_apply, qa_verify, pm_archive]
   max_turns: 12

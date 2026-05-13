@@ -72,6 +72,29 @@ func Phase2CommentsPath(changeDir string) string {
 	return filepath.Join(changeDir, "phase2-comments.jsonl")
 }
 
+func Phase2SidecarStatePath(change string) (string, error) {
+	dir, err := workflowSidecarDir(change)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "phase2-state.json"), nil
+}
+
+func Phase2SidecarCommentsPath(change string) (string, error) {
+	dir, err := workflowSidecarDir(change)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "phase2-comments.jsonl"), nil
+}
+
+func workflowSidecarDir(change string) (string, error) {
+	if _, err := ChangeDir(change); err != nil {
+		return "", err
+	}
+	return filepath.Join(".tmact", "workflow", filepath.Clean(change)), nil
+}
+
 func LoadImplementationState(path string) (ImplementationState, error) {
 	var state ImplementationState
 	data, err := os.ReadFile(path)
@@ -179,6 +202,26 @@ func LoadImplementationComments(path string) ([]ImplementationComment, error) {
 	return comments, scanner.Err()
 }
 
+func LoadImplementationCommentsForChange(change string) ([]ImplementationComment, error) {
+	changeDir, err := ChangeDir(change)
+	if err != nil {
+		return nil, err
+	}
+	comments, err := LoadImplementationComments(Phase2CommentsPath(changeDir))
+	if err != nil {
+		return nil, err
+	}
+	sidecarPath, err := Phase2SidecarCommentsPath(change)
+	if err != nil {
+		return nil, err
+	}
+	sidecarComments, err := LoadImplementationComments(sidecarPath)
+	if err != nil {
+		return nil, err
+	}
+	return mergeImplementationComments(comments, sidecarComments), nil
+}
+
 func AppendNewImplementationComments(path string, existing []ImplementationComment, observed []ImplementationComment) ([]ImplementationComment, error) {
 	seen := map[string]bool{}
 	for _, comment := range existing {
@@ -216,6 +259,23 @@ func AppendNewImplementationComments(path string, existing []ImplementationComme
 		existing = append(existing, comment)
 	}
 	return existing, nil
+}
+
+func mergeImplementationComments(primary []ImplementationComment, sidecar []ImplementationComment) []ImplementationComment {
+	merged := append([]ImplementationComment(nil), primary...)
+	seen := map[string]bool{}
+	for _, comment := range merged {
+		seen[implementationCommentFingerprint(comment)] = true
+	}
+	for _, comment := range sidecar {
+		fingerprint := implementationCommentFingerprint(comment)
+		if seen[fingerprint] {
+			continue
+		}
+		merged = append(merged, comment)
+		seen[fingerprint] = true
+	}
+	return merged
 }
 
 func EvaluateImplementationGate(stageOrder []string, acceptedHash string, validation *ValidationResult, comments []ImplementationComment) ImplementationGateResult {

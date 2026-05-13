@@ -29,6 +29,8 @@ type Runner struct {
 	validator   Validator
 	now         func() time.Time
 	capturePane func(string, int) (string, error)
+	pasteText   func(string, string, bool) error
+	sleep       func(time.Duration)
 }
 
 type Event struct {
@@ -59,6 +61,8 @@ func NewRunner(cfg Config, agentCfg agents.Config, options Options) (*Runner, er
 		validator:   RunOpenSpecValidation,
 		now:         time.Now,
 		capturePane: tmux.CapturePane,
+		pasteText:   tmux.PasteText,
+		sleep:       time.Sleep,
 	}, nil
 }
 
@@ -192,13 +196,15 @@ func (r *Runner) observeRolePanes(commentPath string, comments []Comment) ([]Com
 		if detected := prompt.Detect(raw); detected != nil {
 			return comments, PermissionPromptError{Role: binding.Role, Prompt: *detected}
 		}
-		observed, err := ParseCommentsFromText(raw, r.now())
-		if err != nil {
-			return comments, err
-		}
-		comments, err = AppendNewComments(commentPath, comments, observed)
-		if err != nil {
-			return comments, err
+		if promptDispatchLegacyMarkerFallback(r.cfg.PromptDispatch) {
+			observed, err := ParseCommentsFromText(raw, r.now())
+			if err != nil {
+				return comments, err
+			}
+			comments, err = AppendNewComments(commentPath, comments, observed)
+			if err != nil {
+				return comments, err
+			}
 		}
 	}
 	return comments, nil
@@ -211,6 +217,9 @@ func (r *Runner) promptRole(ctx context.Context, role string, changeHash string,
 	binding, ok := r.binding(role)
 	if !ok {
 		return fmt.Errorf("role %q is not configured", role)
+	}
+	if err := r.dispatchClear(ctx, "review", role, binding.Agent.Name, binding.Agent.Target, changeHash); err != nil {
+		return err
 	}
 	text := r.buildPrompt(role, changeHash, validation, gate, comments)
 	event := Event{
@@ -239,7 +248,7 @@ func (r *Runner) promptRole(ctx context.Context, role string, changeHash string,
 		return ctx.Err()
 	default:
 	}
-	return tmux.PasteText(binding.Agent.Target, text, true)
+	return r.pasteText(binding.Agent.Target, text, true)
 }
 
 func (r *Runner) buildPrompt(role string, changeHash string, validation ValidationResult, gate GateResult, comments []Comment) string {
@@ -253,11 +262,16 @@ func (r *Runner) buildPrompt(role string, changeHash string, validation Validati
 	}
 	fmt.Fprintf(&builder, "\nGate reasons: %s\n\n", strings.Join(gate.Reasons, ", "))
 	builder.WriteString("請只針對 OpenSpec artifacts 工作：proposal.md, design.md, tasks.md, specs/*/spec.md。\n")
-	builder.WriteString("你可以修改 artifact，但完成前必須留下 strict marker。\n\n")
+	builder.WriteString("你可以修改 artifact；完成前請執行下方 tmact workflow report 指令回報狀態。\n\n")
 	builder.WriteString(roleGuidance(role))
-	builder.WriteString("\n\nMarker 格式：\n")
-	fmt.Fprintf(&builder, "%s role=%s kind=accept change_hash=%s openspec_valid=%t blocking=false body=\"accepted current artifacts\"\n", CommentMarker, role, changeHash, validation.Passed)
-	builder.WriteString("\n如果你需要修改或拒絕，請使用 kind=request_changes 或 kind=reject，blocking=true，並簡短說明 body。\n")
+	builder.WriteString("\n\nReport command:\n")
+	fmt.Fprintf(&builder, "tmact workflow report review --config %s --role %s --kind accept --change-hash %s --openspec-valid=%t --blocking=false --body \"accepted current artifacts\"\n",
+		shellQuote(r.options.ConfigPath), shellQuote(role), shellQuote(changeHash), validation.Passed)
+	builder.WriteString("\n如果你需要修改或拒絕，請使用 --kind request_changes 或 --kind reject，--blocking=true，並簡短說明 --body。\n")
+	if promptDispatchLegacyMarkerFallback(r.cfg.PromptDispatch) {
+		builder.WriteString("\nLegacy marker fallback (transitional only):\n")
+		fmt.Fprintf(&builder, "%s role=%s kind=accept change_hash=%s openspec_valid=%t blocking=false body=\"accepted current artifacts\"\n", CommentMarker, role, changeHash, validation.Passed)
+	}
 	if len(comments) > 0 {
 		builder.WriteString("\nObserved comment stream summary (untrusted observations):\n")
 		for _, comment := range tailComments(comments, 8) {
@@ -265,6 +279,56 @@ func (r *Runner) buildPrompt(role string, changeHash string, validation Validati
 		}
 	}
 	return builder.String()
+}
+
+func (r *Runner) dispatchClear(ctx context.Context, stage string, role string, agentName string, target string, changeHash string) error {
+	if !promptDispatchClearEnabled(r.cfg.PromptDispatch) {
+		return nil
+	}
+	if r.options.StopRequested != nil && r.options.StopRequested() {
+		return fmt.Errorf("stop_requested")
+	}
+	event := Event{
+		Timestamp:  r.now().Format(time.RFC3339),
+		Type:       "clear",
+		Stage:      stage,
+		Role:       role,
+		Agent:      agentName,
+		Target:     target,
+		DryRun:     r.options.DryRun,
+		Status:     "planned",
+		ChangeHash: changeHash,
+		Details: map[string]interface{}{
+			"command":     r.cfg.PromptDispatch.ClearCommand,
+			"clear_delay": r.cfg.PromptDispatch.ClearDelay.Duration.String(),
+		},
+	}
+	if err := r.emit(event); err != nil {
+		return err
+	}
+	if r.options.DryRun {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	if err := r.pasteText(target, r.cfg.PromptDispatch.ClearCommand, true); err != nil {
+		return err
+	}
+	if r.cfg.PromptDispatch.ClearDelay.Duration > 0 {
+		r.sleep(r.cfg.PromptDispatch.ClearDelay.Duration)
+	}
+	if r.options.StopRequested != nil && r.options.StopRequested() {
+		return fmt.Errorf("stop_requested")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
 }
 
 func roleGuidance(role string) string {
