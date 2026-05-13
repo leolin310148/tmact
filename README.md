@@ -4,8 +4,8 @@
 (Codex, Claude, Copilot, Gemini) and other long-running pane workloads.
 
 It lists tmux panes, sends text/keys to them, watches pane output for known
-prompts, classifies pane runtime/idle state, and runs config-driven loops and
-multi-stage workflows on top of those panes.
+prompts, classifies pane runtime/idle state, and runs config-driven loops on
+top of those panes.
 
 ## What's Built
 
@@ -19,20 +19,17 @@ The CLI is a single Go binary (`cmd/tmact`) with these subcommands:
 | `inspect` | Detect runtime (codex/claude/copilot/gemini/shell/…) and idle-vs-running for one pane, a session, or all panes. |
 | `status` / `inbox` / `summarize` | Roll up configured agent panes into a status view, an attention-needed inbox, or a recent-activity summary. |
 | `statusd` | Long-running daemon that publishes pane snapshots to `/tmp/tmact-status.json` and optional tmux session options so the tmux status line can read cheaply. See `daemon-status.md`. |
-| `state` | Read/write/transition the YAML status files under `.agent-inbox/features/<name>/status.yaml` and append JSONL events. |
 | `broadcast` | Send the same text/keys to a group of configured agent panes. |
 | `panels` | Plan or reconcile configured agent panes (session/window/repo/launcher) into tmux. |
 | `loop` | Run a configurable polling loop on one pane: pastes prompts, presses keys, clears context, stops on permission prompts. Supports `--dry-run --once`. |
 | `watch` | Narrow prompt watcher; currently accepts Codex directory-access prompts when every requested path is allowlisted. |
-| `workflow` | Staged harness for multi-step flows (planner → SWE → reviewer, or N improvement passes then review/fix/push). Stages can run across multiple panes via `.agent-inbox`. |
 
-`loop` and `workflow` write run metadata under `.tmact/runs/` so long-running
-processes can be inspected and stopped without remembering the tmux window:
+`loop` writes run metadata under `.tmact/runs/` so long-running processes can
+be inspected and stopped without remembering the tmux window:
 
 ```sh
 tmact loop status
 tmact loop stop --id loop-night-loop-123
-tmact workflow stop --config examples/simple-improvement-workflow.yaml
 ```
 
 ## Quick Start
@@ -47,7 +44,6 @@ tmact inspect --all --json
 tmact panels ensure --config examples/idll-agents.yaml --execute
 tmact loop --config examples/night-loop.yaml --dry-run --once
 tmact watch --config examples/accept-question-watch.yaml --dry-run --once
-tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start
 ```
 
 Sends are dry-run by default — add `--execute` to actually press keys or paste
@@ -69,14 +65,12 @@ internal/prompt/               # directory-access prompt detection
 internal/panestate/            # classify pane runtime + idle/running/asking
 internal/panestatus/           # pane snapshot + status rollup
 internal/statusd/              # status daemon (writes JSON snapshot + tmux options)
-internal/runmeta/              # `.tmact/runs/` metadata for loop/workflow processes
-internal/state/                # agent-inbox status.yaml + JSONL event log
+internal/runmeta/              # `.tmact/runs/` metadata for loop processes
 internal/agents/               # agents.yaml config: panels, broadcast, inbox, summary
 internal/loop/                 # configurable single-pane loop runner
 internal/watch/                # prompt watcher (directory-access acceptor)
-internal/workflow/             # multi-stage workflow runner
-examples/                      # YAML configs for loops, watches, workflows, agents
-docs/                          # agent-inbox protocol, smoke test notes
+examples/                      # YAML configs for loops, watches, and agents
+docs/                          # smoke test notes
 launchd/                       # macOS launchd plist for `statusd`
 ```
 
@@ -132,26 +126,6 @@ flows:
 
 Loops stop when a permission prompt is visible — safer for unattended runs.
 
-### Workflows
-
-`tmact workflow` is a staged runner. Each stage waits for its pane to become
-idle, sends a role-specific prompt, and advances only when its `complete_when`
-conditions match. Stages can:
-
-- Override the default target (planner/SWE/reviewer on different panes).
-- `repeat` for maintenance loops (e.g. 5 improvement passes then 1 review pass).
-- `stage_every` to enforce a minimum delay between stage starts.
-- Use `complete_when.state_path` + `state_in` as an additive completion source,
-  resolved relative to the workflow `repo`.
-
-For unattended feature work, keep stages going past technical review:
-UAT/player feedback → stakeholder acceptance → feedback fixes → commit-check.
-The commit-check stage should commit only cohesive accepted diffs and defer
-oversized or mixed changes.
-
-See `docs/agent-inbox.md`, `examples/implement-review-workflow.yaml`, and
-`examples/simple-improvement-workflow.yaml`.
-
 ### Watcher
 
 `tmact watch` polls a target pane with `tmux capture-pane` and applies allow-
@@ -183,23 +157,15 @@ goal is to move expensive detection out of `#()` shell commands on the tmux
 status-line refresh path. Install via `launchd/com.tmact.statusd.plist`
 (macOS). Design notes in `daemon-status.md`.
 
-### Agent Inbox
-
-`.agent-inbox/features/<name>/` is a file handoff protocol for multi-agent
-async work. Each feature has a `status.yaml` (state machine, owner, stage) and
-a JSONL event log written by `tmact state`. Workflow stages consult these to
-decide when to advance. Full protocol in `docs/agent-inbox.md`.
-
 ## State And Logs
 
 ```text
 .cache/tmact                       # built binary
 .cache/tmact-targets.json          # numbered target cache from `ls`
-.tmact/runs/                       # loop/workflow run metadata + status
+.tmact/runs/                       # loop run metadata + status
 .tmact/<name>.jsonl                # ad-hoc event logs for long runs
 /tmp/tmact-status.json             # statusd snapshot (see launchd plist)
 /tmp/tmact-statusd.{jsonl,*.log}   # statusd logs
-.agent-inbox/features/<name>/      # workflow status + JSONL events
 ```
 
 ## Safety
@@ -220,7 +186,6 @@ inspection commands.
 ## Further Reading
 
 - `AGENTS.md` — contributor guide (build, test, style, PR conventions).
-- `docs/agent-inbox.md` — multi-agent handoff protocol.
 - `docs/smoke-test.md` — manual smoke-test notes.
 - `daemon-status.md` — `statusd` design and tmux integration plan.
-- `RUNNING_LOOPS.md` — currently-active background workflows.
+- `RUNNING_LOOPS.md` — currently-active background loops.

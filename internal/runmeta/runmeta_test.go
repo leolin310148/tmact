@@ -54,15 +54,15 @@ func TestRegisterAndListRunStatus(t *testing.T) {
 
 func TestSelectRunByConfig(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "workflow.yaml")
+	configPath := filepath.Join(dir, "loop.yaml")
 	if err := os.WriteFile(configPath, []byte("target: work:0.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run, err := Register(dir, RegisterOptions{Kind: "workflow", ConfigPath: configPath, Target: "work:0.0"})
+	run, err := Register(dir, RegisterOptions{Kind: "loop", ConfigPath: configPath, Target: "work:0.0"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	statuses, err := List(dir, "workflow", time.Now())
+	statuses, err := List(dir, "loop", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,12 +76,12 @@ func TestSelectRunByConfig(t *testing.T) {
 }
 
 func TestSelectRunByConfigPrefersActiveRun(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "workflow.yaml")
+	configPath := filepath.Join(t.TempDir(), "loop.yaml")
 	statuses := []Status{
 		{
 			Run: Run{
 				ID:         "old",
-				Kind:       "workflow",
+				Kind:       "loop",
 				ConfigPath: configPath,
 				Status:     "stopped",
 			},
@@ -90,7 +90,7 @@ func TestSelectRunByConfigPrefersActiveRun(t *testing.T) {
 		{
 			Run: Run{
 				ID:         "current",
-				Kind:       "workflow",
+				Kind:       "loop",
 				ConfigPath: configPath,
 				Status:     "running",
 			},

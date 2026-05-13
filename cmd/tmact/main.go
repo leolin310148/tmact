@@ -20,13 +20,9 @@ import (
 	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
 	"tmact/internal/runmeta"
-	agentstate "tmact/internal/state"
 	"tmact/internal/statusd"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
-	"tmact/internal/workflow"
-
-	"gopkg.in/yaml.v3"
 )
 
 type detectResult struct {
@@ -81,31 +77,6 @@ func (r *repeatedStrings) Set(value string) error {
 		return errors.New("value cannot be empty")
 	}
 	*r = append(*r, value)
-	return nil
-}
-
-type optionalInt struct {
-	value int
-	set   bool
-}
-
-func (i *optionalInt) String() string {
-	if !i.set {
-		return ""
-	}
-	return strconv.Itoa(i.value)
-}
-
-func (i *optionalInt) Set(value string) error {
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return err
-	}
-	if parsed < 0 {
-		return errors.New("value cannot be negative")
-	}
-	i.value = parsed
-	i.set = true
 	return nil
 }
 
@@ -188,11 +159,6 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runStatusd(args[1:])
-	case "state":
-		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
-		}
-		return runState(args[1:])
 	case "inbox":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -223,11 +189,6 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runWatch(args[1:])
-	case "workflow":
-		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
-		}
-		return runWorkflow(args[1:])
 	case "commands":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -503,202 +464,6 @@ func readTargetCache() (targetCache, error) {
 		return cache, fmt.Errorf("read target cache: %w", err)
 	}
 	return cache, nil
-}
-
-func runState(args []string) error {
-	if wantsHelp(args) {
-		return printCommandHelp("state")
-	}
-	if len(args) == 0 {
-		return errors.New("state requires a subcommand: get, set, transition, or event")
-	}
-
-	switch args[0] {
-	case "get":
-		return runStateGet(args[1:])
-	case "set":
-		return runStateSet(args[1:])
-	case "transition":
-		return runStateTransition(args[1:])
-	case "event":
-		return runStateEvent(args[1:])
-	case "-h", "--help", "help":
-		return printCommandHelp("state")
-	default:
-		return fmt.Errorf("unknown state subcommand %q", args[0])
-	}
-}
-
-func runStateGet(args []string) error {
-	if wantsHelp(args) {
-		return printCommandHelp("state get")
-	}
-	fs := flag.NewFlagSet("state get", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	path := fs.String("path", "", "path to status.yaml")
-	jsonOutput := fs.Bool("json", false, "print JSON output")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *path == "" {
-		return errors.New("--path is required")
-	}
-
-	status, err := agentstate.Load(*path)
-	if err != nil {
-		return err
-	}
-	data, err := status.Data()
-	if err != nil {
-		return err
-	}
-	if *jsonOutput {
-		return printJSON(data)
-	}
-	encoded, err := yaml.Marshal(data)
-	if err != nil {
-		return err
-	}
-	fmt.Print(string(encoded))
-	return nil
-}
-
-func runStateSet(args []string) error {
-	if wantsHelp(args) {
-		return printCommandHelp("state set")
-	}
-	fs := flag.NewFlagSet("state set", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	path := fs.String("path", "", "path to status.yaml")
-	stateName := fs.String("state", "", "state to write")
-	owner := fs.String("owner", "", "owner to write")
-	stage := fs.String("stage", "", "stage to write")
-	var cycle optionalInt
-	fs.Var(&cycle, "cycle", "cycle number to write")
-	var blockers repeatedStrings
-	fs.Var(&blockers, "blocker", "blocker text to write; may be repeated")
-	jsonOutput := fs.Bool("json", false, "print JSON output")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *path == "" {
-		return errors.New("--path is required")
-	}
-	if *stateName == "" {
-		return errors.New("--state is required")
-	}
-
-	update := agentStateUpdate(*stateName, *owner, *stage, cycle, blockers)
-	data, event, err := agentstate.Set(*path, update)
-	if err != nil {
-		return err
-	}
-	if *jsonOutput {
-		return printJSON(map[string]interface{}{"status": data, "event": event})
-	}
-	printStateChange(*path, data, event)
-	return nil
-}
-
-func runStateTransition(args []string) error {
-	if wantsHelp(args) {
-		return printCommandHelp("state transition")
-	}
-	fs := flag.NewFlagSet("state transition", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	path := fs.String("path", "", "path to status.yaml")
-	from := fs.String("from", "", "required current state")
-	to := fs.String("to", "", "state to transition to")
-	owner := fs.String("owner", "", "owner to write")
-	stage := fs.String("stage", "", "stage to write")
-	var cycle optionalInt
-	fs.Var(&cycle, "cycle", "cycle number to write")
-	jsonOutput := fs.Bool("json", false, "print JSON output")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *path == "" {
-		return errors.New("--path is required")
-	}
-	if *from == "" {
-		return errors.New("--from is required")
-	}
-	if *to == "" {
-		return errors.New("--to is required")
-	}
-
-	update := agentStateUpdate(*to, *owner, *stage, cycle, nil)
-	data, event, err := agentstate.Transition(*path, *from, update)
-	if err != nil {
-		return err
-	}
-	if *jsonOutput {
-		return printJSON(map[string]interface{}{"status": data, "event": event})
-	}
-	printStateChange(*path, data, event)
-	return nil
-}
-
-func runStateEvent(args []string) error {
-	if wantsHelp(args) {
-		return printCommandHelp("state event")
-	}
-	fs := flag.NewFlagSet("state event", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	path := fs.String("path", "", "path to status.yaml")
-	kind := fs.String("kind", "", "event kind")
-	stage := fs.String("stage", "", "stage name")
-	agent := fs.String("agent", "", "agent name")
-	message := fs.String("message", "", "event message")
-	jsonOutput := fs.Bool("json", false, "print JSON output")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *path == "" {
-		return errors.New("--path is required")
-	}
-	if *kind == "" {
-		return errors.New("--kind is required")
-	}
-
-	event := agentstate.Event{
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Kind:      *kind,
-		Path:      *path,
-		Stage:     *stage,
-		Agent:     *agent,
-		Message:   *message,
-	}
-	if err := agentstate.AppendEvent(*path, event); err != nil {
-		return err
-	}
-	if *jsonOutput {
-		return printJSON(event)
-	}
-	fmt.Printf("event: %s\npath: %s\n", event.Kind, event.Path)
-	return nil
-}
-
-func agentStateUpdate(stateName string, owner string, stage string, cycle optionalInt, blockers repeatedStrings) agentstate.Update {
-	update := agentstate.Update{
-		State:       stateName,
-		Owner:       owner,
-		Stage:       stage,
-		SetBlockers: blockers != nil,
-		Blockers:    blockers,
-	}
-	if cycle.set {
-		update.Cycle = &cycle.value
-	}
-	return update
 }
 
 func runDetect(args []string) error {
@@ -1321,63 +1086,6 @@ func runWatch(args []string) error {
 	return runner.Run(context.Background())
 }
 
-func runWorkflow(args []string) error {
-	if wantsHelp(args) {
-		if len(args) > 1 {
-			return printCommandHelp("workflow " + strings.Join(args[1:], " "))
-		}
-		return printCommandHelp("workflow")
-	}
-	if len(args) > 0 {
-		switch args[0] {
-		case "status":
-			return runRuntimeStatus("workflow", args[1:])
-		case "stop":
-			return runRuntimeStop("workflow", args[1:])
-		}
-	}
-
-	fs := flag.NewFlagSet("workflow", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	configPath := fs.String("config", "", "path to workflow YAML config")
-	dryRun := fs.Bool("dry-run", false, "print workflow actions without sending anything to tmux")
-	once := fs.Bool("once", false, "run one workflow observe/action pass and exit")
-	assumeIdleOnStart := fs.Bool("assume-idle-on-start", false, "treat the pane as already idle when the workflow starts")
-	startStage := fs.String("start-stage", "", "start from the named workflow stage")
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *configPath == "" {
-		return errors.New("--config is required")
-	}
-
-	cfg, err := workflow.LoadConfig(*configPath)
-	if err != nil {
-		return err
-	}
-
-	runner := workflow.NewRunner(cfg, workflow.Options{
-		DryRun:            *dryRun,
-		Once:              *once,
-		AssumeIdleOnStart: *assumeIdleOnStart,
-		StartStage:        *startStage,
-	})
-	if *once {
-		return runner.Run(context.Background())
-	}
-
-	target := cfg.Target
-	if target == "" && len(cfg.Stages) > 0 {
-		target = cfg.Stages[0].Target
-	}
-	return runManagedRunner(*runDir, "workflow", *configPath, target, cfg.LogPath, func(ctx context.Context) error {
-		return runner.Run(ctx)
-	})
-}
-
 func runManagedRunner(runDir string, kind string, configPath string, target string, logPath string, run func(context.Context) error) error {
 	startedAt := tmactNow()
 	record, err := runmeta.Register(runDir, runmeta.RegisterOptions{
@@ -1579,16 +1287,6 @@ func printSendReport(report sendReport) {
 			return
 		}
 		fmt.Printf("%ssend text%s to %s: %s\n", prefix, enter, report.Target, report.Text)
-	}
-}
-
-func printStateChange(path string, data map[string]interface{}, event agentstate.Event) {
-	fmt.Printf("path: %s\n", path)
-	if stateName, ok := data["state"].(string); ok {
-		fmt.Printf("state: %s\n", stateName)
-	}
-	if event.Kind != "" {
-		fmt.Printf("event: %s\n", event.Kind)
 	}
 }
 
@@ -1910,10 +1608,6 @@ Usage:
   tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact statusd start|once|read|status [--state-path /tmp/tmact-status.json]
-  tmact state get --path .agent-inbox/features/example/status.yaml [--json]
-  tmact state set --path .agent-inbox/features/example/status.yaml --state planning [--owner OWNER] [--stage STAGE]
-  tmact state transition --path .agent-inbox/features/example/status.yaml --from planning --to implementation
-  tmact state event --path .agent-inbox/features/example/status.yaml --kind note [--message TEXT]
   tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
   tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
@@ -1923,9 +1617,6 @@ Usage:
   tmact loop status [--run-dir .tmact/runs] [--json]
   tmact loop stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact workflow --config examples/simple-improvement-workflow.yaml [--dry-run] [--once] [--assume-idle-on-start] [--start-stage name]
-  tmact workflow status [--run-dir .tmact/runs] [--json]
-  tmact workflow stop (--id ID | --config path)
   tmact help [command] [--json]
   tmact commands [--json]
 
@@ -1936,24 +1627,21 @@ Commands:
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
   statusd   maintain a cached tmux pane status snapshot
-  state     read and update agent-inbox workflow status files
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity
   broadcast safely send text to selected agent panes
   panels    plan or ensure configured agent tmux panels
   loop      run, inspect, or stop a configurable tmux automation loop
   watch     watch a pane and answer allowlisted prompts
-  workflow  run, inspect, or stop a staged prompt workflow such as agent-inbox feature work
   commands  print a machine-readable command catalog for tools and LLMs
 
 Safety:
-  send, broadcast, and panels ensure default to dry-run. For loop, watch, and
-  workflow, validate with --dry-run --once before running a live automation.
+  send, broadcast, and panels ensure default to dry-run. For loop and watch,
+  validate with --dry-run --once before running a live automation.
 
 More help:
   tmact help loop
   tmact help loop status
-  tmact help workflow
   tmact commands --json
 `
 }
@@ -2038,7 +1726,7 @@ func commandHelpFor(name string) (commandHelp, bool) {
 func commandManifest() helpManifest {
 	return helpManifest{
 		Name:    "tmact",
-		Summary: "Local tmux automation CLI for inspecting panes, sending guarded input, and running loop/workflow daemons.",
+		Summary: "Local tmux automation CLI for inspecting panes, sending guarded input, and running loop daemons.",
 		GlobalFlags: []helpFlag{
 			{Name: "-t, --target", Value: "TARGET", Description: "target selector for send; may be a tmux target or a numbered index from tmact ls"},
 		},
@@ -2168,63 +1856,6 @@ func commandHelpCatalog() []commandHelp {
 			Examples: []string{"tmact statusd status"},
 		},
 		{
-			Command:     "state",
-			Summary:     "Read and update agent-inbox status.yaml files and JSONL events.",
-			Usage:       []string{"tmact state get|set|transition|event [flags]"},
-			Subcommands: []string{"get", "set", "transition", "event"},
-			Examples:    []string{"tmact state get --path .agent-inbox/features/example/status.yaml", "tmact state transition --path .agent-inbox/features/example/status.yaml --from planning --to implementation"},
-		},
-		{
-			Command: "state get",
-			Summary: "Read an agent-inbox status.yaml file.",
-			Usage:   []string{"tmact state get --path PATH [--json]"},
-			Flags: []helpFlag{
-				{Name: "--path", Value: "PATH", Description: "path to status.yaml", Required: true},
-				{Name: "--json", Description: "print JSON output"},
-			},
-		},
-		{
-			Command: "state set",
-			Summary: "Write status fields to an agent-inbox status.yaml file.",
-			Usage:   []string{"tmact state set --path PATH --state STATE [--owner OWNER] [--stage STAGE] [--cycle N] [--blocker TEXT] [--json]"},
-			Flags: []helpFlag{
-				{Name: "--path", Value: "PATH", Description: "path to status.yaml", Required: true},
-				{Name: "--state", Value: "STATE", Description: "state to write", Required: true},
-				{Name: "--owner", Value: "OWNER", Description: "owner to write"},
-				{Name: "--stage", Value: "STAGE", Description: "stage to write"},
-				{Name: "--cycle", Value: "N", Description: "cycle number to write"},
-				{Name: "--blocker", Value: "TEXT", Description: "blocker text to write; may be repeated"},
-				{Name: "--json", Description: "print JSON output"},
-			},
-		},
-		{
-			Command: "state transition",
-			Summary: "Atomically transition status.yaml from one state to another.",
-			Usage:   []string{"tmact state transition --path PATH --from STATE --to STATE [--owner OWNER] [--stage STAGE] [--cycle N] [--json]"},
-			Flags: []helpFlag{
-				{Name: "--path", Value: "PATH", Description: "path to status.yaml", Required: true},
-				{Name: "--from", Value: "STATE", Description: "required current state", Required: true},
-				{Name: "--to", Value: "STATE", Description: "state to transition to", Required: true},
-				{Name: "--owner", Value: "OWNER", Description: "owner to write"},
-				{Name: "--stage", Value: "STAGE", Description: "stage to write"},
-				{Name: "--cycle", Value: "N", Description: "cycle number to write"},
-				{Name: "--json", Description: "print JSON output"},
-			},
-		},
-		{
-			Command: "state event",
-			Summary: "Append an event to an agent-inbox events.jsonl log.",
-			Usage:   []string{"tmact state event --path PATH --kind KIND [--stage STAGE] [--agent NAME] [--message TEXT] [--json]"},
-			Flags: []helpFlag{
-				{Name: "--path", Value: "PATH", Description: "path to status.yaml", Required: true},
-				{Name: "--kind", Value: "KIND", Description: "event kind", Required: true},
-				{Name: "--stage", Value: "STAGE", Description: "stage name"},
-				{Name: "--agent", Value: "NAME", Description: "agent name"},
-				{Name: "--message", Value: "TEXT", Description: "event message"},
-				{Name: "--json", Description: "print JSON output"},
-			},
-		},
-		{
 			Command:  "inbox",
 			Summary:  "List configured agent panes that need human intervention.",
 			Usage:    []string{"tmact inbox [--config examples/agents.yaml] [--agent NAME] [--role ROLE] [--json]"},
@@ -2314,25 +1945,6 @@ func commandHelpCatalog() []commandHelp {
 			Safety:   []string{"Watcher configs must keep allow_paths or allow_path_patterns checks in place."},
 		},
 		{
-			Command:     "workflow",
-			Summary:     "Run, inspect, or stop a staged multi-pane prompt workflow.",
-			Usage:       []string{"tmact workflow --config PATH [--dry-run] [--once] [--assume-idle-on-start] [--start-stage NAME]", "tmact workflow status [--run-dir .tmact/runs] [--json]", "tmact workflow stop (--id ID | --config PATH)"},
-			Subcommands: []string{"status", "stop"},
-			Flags: []helpFlag{
-				{Name: "--config", Value: "PATH", Description: "path to workflow YAML config", Required: true},
-				{Name: "--dry-run", Description: "print workflow actions without sending anything to tmux"},
-				{Name: "--once", Description: "run one workflow observe/action pass and exit"},
-				{Name: "--assume-idle-on-start", Description: "treat the pane as already idle when the workflow starts"},
-				{Name: "--start-stage", Value: "NAME", Description: "start from the named workflow stage"},
-				{Name: "--run-dir", Value: "PATH", Description: "directory for runtime metadata"},
-			},
-			Examples: []string{"tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start", "tmact workflow status --json"},
-			Safety:   []string{"Validate workflow transitions with --dry-run --once before running a long process."},
-			Notes:    []string{"Long-running workflow metadata is stored under .tmact/runs by default."},
-		},
-		runtimeStatusHelp("workflow"),
-		runtimeStopHelp("workflow"),
-		{
 			Command: "commands",
 			Summary: "Print the command catalog for humans or LLM/tooling consumers.",
 			Usage:   []string{"tmact commands [--json]"},
@@ -2399,10 +2011,6 @@ func runtimeStatusHelp(kind string) commandHelp {
 func runtimeStopHelp(kind string) commandHelp {
 	sampleID := kind + "-night-loop-123"
 	sampleConfig := "examples/night-loop.yaml"
-	if kind == "workflow" {
-		sampleID = "workflow-simple-improvement-workflow-123"
-		sampleConfig = "examples/simple-improvement-workflow.yaml"
-	}
 	return commandHelp{
 		Command: kind + " stop",
 		Summary: "Stop a registered " + kind + " by id or config path.",

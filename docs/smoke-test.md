@@ -271,17 +271,17 @@ tail -f .tmact/example-org-sample-project-loop.jsonl
 - [ ] Stop automatically when worktree is dirty for too long.
 - [ ] Detect permission prompts beyond the initial directory-access prompt.
 - [x] Add a first-class status command for running loops.
-- [x] Register long-running loop/workflow metadata under `.tmact/runs`.
+- [x] Register long-running loop metadata under `.tmact/runs`.
 
 ## Next Function Candidates
 
 ### Runtime Management
 
-`tmact loop status`, `tmact workflow status`, `tmact loop stop`, and
-`tmact workflow stop` use `.tmact/runs` metadata. Status shows the runtime id,
-process state, PID, target, config file, tmux pane when known, and the latest
-JSONL event. Stop accepts either `--id` or `--config`; it sends `C-c` to the
-registered tmux pane when available, otherwise it interrupts the recorded PID.
+`tmact loop status` and `tmact loop stop` use `.tmact/runs` metadata. Status
+shows the runtime id, process state, PID, target, config file, tmux pane when
+known, and the latest JSONL event. Stop accepts either `--id` or `--config`; it
+sends `C-c` to the registered tmux pane when available, otherwise it interrupts
+the recorded PID.
 
 ### Safer Policies
 

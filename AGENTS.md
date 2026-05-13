@@ -12,8 +12,6 @@ delegates to packages under `internal/`. Notable packages:
 - `internal/statusd` — long-running status daemon that publishes a JSON snapshot.
 - `internal/loop` — single-pane scheduled action loop.
 - `internal/watch` — narrow prompt watcher (allowlisted answerer).
-- `internal/workflow` — multi-stage prompt workflow with per-stage targets and repeat.
-- `internal/state` — agent-inbox `status.yaml` + JSONL event log.
 - `internal/agents` — `agents.yaml` config used by panels/broadcast/status/inbox/summarize.
 - `internal/runmeta` — `.tmact/runs/` metadata for inspect/stop of long-running processes.
 
@@ -29,7 +27,6 @@ Example YAML configs live in `examples/`, operational notes in `docs/` and
 - `go run ./cmd/tmact inspect --all --json` — classify runtime + idle state for every pane.
 - `go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once` — validate one loop pass without sending keys.
 - `go run ./cmd/tmact watch --config examples/accept-question-watch.yaml --dry-run --once` — validate one watcher pass.
-- `go run ./cmd/tmact workflow --config examples/simple-improvement-workflow.yaml --dry-run --once --assume-idle-on-start` — validate workflow stage transitions.
 
 Only external dependency is `gopkg.in/yaml.v3` (Go 1.26). No SQLite, cobra, or
 gocron despite earlier design notes — keep new dependencies minimal.
@@ -40,9 +37,9 @@ Use standard Go formatting: run `gofmt` on edited Go files before committing.
 Keep package names short and lowercase (`loop`, `watch`, `prompt`,
 `panestate`). Prefer table-driven or focused `TestXxx` tests. Config field
 names should match the YAML keys already used in `examples/` (`idle_after`,
-`post_delay`, `allow_path_patterns`, `clear_before_prompt`, `stage_every`,
-`complete_when`). Keep tmux side effects isolated behind `internal/tmux`
-helpers; the rest of the code should be testable without a live tmux session.
+`post_delay`, `allow_path_patterns`, `clear_before_prompt`). Keep tmux side
+effects isolated behind `internal/tmux` helpers; the rest of the code should be
+testable without a live tmux session.
 
 ## Testing Guidelines
 
