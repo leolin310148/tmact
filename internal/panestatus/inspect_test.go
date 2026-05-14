@@ -174,6 +174,73 @@ func TestInspectPaneUsesChildProcessRuntime(t *testing.T) {
 	}
 }
 
+func TestInspectPaneSkipsCaptureForUnmatchedRuntime(t *testing.T) {
+	panes := []tmux.Pane{{
+		Session:        "work",
+		WindowIndex:    0,
+		WindowName:     "shell",
+		PaneIndex:      0,
+		PaneID:         "%1",
+		CurrentCommand: "zsh",
+	}}
+	captures := 0
+	report, err := InspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeCodex}}, func(string, int) (string, error) {
+		captures++
+		return "project $\n", nil
+	}, func(time.Duration) {})
+	if err != nil {
+		t.Fatalf("InspectPanes returned error: %v", err)
+	}
+	if captures != 0 {
+		t.Fatalf("captures = %d", captures)
+	}
+	status := report.Panes[0]
+	if status.Runtime != RuntimeShell {
+		t.Fatalf("runtime = %q", status.Runtime)
+	}
+	if status.State != agents.StateUnknown {
+		t.Fatalf("state = %q", status.State)
+	}
+	if len(status.Signals) == 0 || status.Signals[len(status.Signals)-1] != "capture_skipped" {
+		t.Fatalf("signals = %#v", status.Signals)
+	}
+}
+
+func TestInspectPaneCapturesMatchedChildProcessRuntime(t *testing.T) {
+	panes := []tmux.Pane{{
+		Session:        "work",
+		WindowIndex:    0,
+		WindowName:     "shell",
+		PaneIndex:      0,
+		PaneID:         "%1",
+		PanePID:        14018,
+		CurrentCommand: "zsh",
+	}}
+	captures := 0
+	report, err := inspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeCodex}}, func(string, int) (string, error) {
+		captures++
+		return "›\n", nil
+	}, func(time.Duration) {}, func(pid int) RuntimeDetection {
+		if pid != 14018 {
+			t.Fatalf("pid = %d", pid)
+		}
+		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceHigh, Signals: []string{"child_process"}}
+	})
+	if err != nil {
+		t.Fatalf("inspectPanes returned error: %v", err)
+	}
+	if captures != 1 {
+		t.Fatalf("captures = %d", captures)
+	}
+	status := report.Panes[0]
+	if status.Runtime != RuntimeCodex {
+		t.Fatalf("runtime = %q", status.Runtime)
+	}
+	if status.State != agents.StateWaitingInput {
+		t.Fatalf("state = %q", status.State)
+	}
+}
+
 func TestInspectPaneDetectsTrustPrompt(t *testing.T) {
 	panes := []tmux.Pane{{
 		Session:        "work",

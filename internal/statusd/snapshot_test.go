@@ -220,7 +220,7 @@ func TestBuildSnapshotUsesInitialSamplesOnColdStart(t *testing.T) {
 		InitialSamples: 2,
 		Now:            func() time.Time { return now },
 		ListPanes: func() ([]tmux.Pane, error) {
-			return []tmux.Pane{{Session: "worker", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "long-job", Active: true}}, nil
+			return []tmux.Pane{{Session: "worker", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "codex", Active: true}}, nil
 		},
 		CapturePane: func(target string, lines int) (string, error) {
 			captures++
@@ -238,6 +238,59 @@ func TestBuildSnapshotUsesInitialSamplesOnColdStart(t *testing.T) {
 	pane := snapshot.Panes["worker:0.0"]
 	if pane.State != "idle" || !pane.Idle {
 		t.Fatalf("pane should be idle after stable cold-start samples: %#v", pane)
+	}
+}
+
+func TestBuildSnapshotSkipsCaptureForShellRuntime(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	captures := 0
+	cfg := Config{
+		Now: func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "shell", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "zsh", Active: true}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			captures++
+			return "project $\n", nil
+		},
+	}
+
+	snapshot, err := BuildSnapshot(context.Background(), cfg, NewMemory())
+	if err != nil {
+		t.Fatalf("BuildSnapshot returned error: %v", err)
+	}
+	if captures != 0 {
+		t.Fatalf("captures = %d", captures)
+	}
+	pane := snapshot.Panes["shell:0.0"]
+	if pane.Runtime != panestatus.RuntimeShell {
+		t.Fatalf("runtime = %q", pane.Runtime)
+	}
+	if pane.State != "unknown" {
+		t.Fatalf("state = %q", pane.State)
+	}
+}
+
+func TestBuildSnapshotDefaultsToFortyCaptureLines(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	var gotLines []int
+	cfg := Config{
+		InitialSamples: 1,
+		Now:            func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "agent", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "codex", Active: true}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			gotLines = append(gotLines, lines)
+			return "›\n", nil
+		},
+	}
+
+	if _, err := BuildSnapshot(context.Background(), cfg, NewMemory()); err != nil {
+		t.Fatalf("BuildSnapshot returned error: %v", err)
+	}
+	if !reflect.DeepEqual(gotLines, []int{40}) {
+		t.Fatalf("lines = %#v", gotLines)
 	}
 }
 

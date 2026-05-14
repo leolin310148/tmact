@@ -119,6 +119,12 @@ func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, erro
 		Lines:              cfg.CaptureLines,
 		Samples:            samples,
 		IdleIgnorePatterns: cfg.IdleIgnorePatterns,
+		CaptureRuntimes: []string{
+			panestatus.RuntimeClaude,
+			panestatus.RuntimeCodex,
+			panestatus.RuntimeCopilot,
+			panestatus.RuntimeGemini,
+		},
 	}, cfg.CapturePane, cfg.Sleep)
 	if err != nil {
 		snapshot.addError("inspect", "", err)

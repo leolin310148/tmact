@@ -10,7 +10,7 @@ const (
 	DefaultStatePath       = "/tmp/tmact-status.json"
 	DefaultInterval        = time.Second
 	DefaultStaleAfter      = 10 * time.Second
-	DefaultCaptureLines    = 120
+	DefaultCaptureLines    = 40
 	DefaultRunningDebounce = 5 * time.Second
 	DefaultInitialSamples  = 2
 )

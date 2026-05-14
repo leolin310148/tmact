@@ -43,6 +43,7 @@ type Options struct {
 	Samples            int
 	Interval           time.Duration
 	IdleIgnorePatterns []string
+	CaptureRuntimes    []string
 }
 
 type Report struct {
@@ -92,6 +93,7 @@ type inspector struct {
 	sleep          sleepFunc
 	processRuntime processRuntimeFunc
 	ignore         []*regexp.Regexp
+	captureRuntime map[string]bool
 }
 
 func Inspect(options Options) (Report, error) {
@@ -123,6 +125,10 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 		}
 		compiled = append(compiled, re)
 	}
+	captureRuntime := map[string]bool{}
+	for _, runtime := range options.CaptureRuntimes {
+		captureRuntime[runtime] = true
+	}
 
 	inspector := inspector{
 		options:        options,
@@ -130,6 +136,7 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 		sleep:          sleep,
 		processRuntime: processRuntime,
 		ignore:         compiled,
+		captureRuntime: captureRuntime,
 	}
 	report := Report{
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -176,6 +183,15 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		Confidence:     ConfidenceLow,
 	}
 
+	runtime := i.detectRuntime(pane, "")
+	status.Runtime = runtime.Runtime
+	status.Confidence = runtime.Confidence
+	status.Signals = append(status.Signals, runtime.Signals...)
+	if !i.shouldCapture(status.Runtime) {
+		status.Signals = appendSignal(status.Signals, "capture_skipped")
+		return status
+	}
+
 	raw, changed, normalizedHash, err := i.captureSamples(pane.PaneID)
 	if err != nil {
 		status.State = panestate.StateBlocked
@@ -184,10 +200,10 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	}
 	status.NormalizedHash = normalizedHash
 
-	runtime := i.detectRuntime(pane, raw)
+	runtime = i.detectRuntime(pane, raw)
 	status.Runtime = runtime.Runtime
 	status.Confidence = runtime.Confidence
-	status.Signals = append(status.Signals, runtime.Signals...)
+	status.Signals = append([]string{}, runtime.Signals...)
 	classified := panestate.Classify(raw)
 	status.LastLine = classified.LastLine
 
@@ -231,6 +247,13 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 
 func idleState(state string) bool {
 	return state == panestate.StateIdle || state == panestate.StateWaitingInput
+}
+
+func (i inspector) shouldCapture(runtime string) bool {
+	if len(i.captureRuntime) == 0 {
+		return true
+	}
+	return i.captureRuntime[runtime]
 }
 
 func (i inspector) detectRuntime(pane tmux.Pane, raw string) RuntimeDetection {
