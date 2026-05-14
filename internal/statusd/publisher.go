@@ -62,11 +62,15 @@ func ReadSnapshot(path string) (Snapshot, error) {
 }
 
 type TmuxOptionCache struct {
-	values map[string]map[string]string
+	values     map[string]map[string]string
+	sessionIDs map[string]string
 }
 
 func NewTmuxOptionCache() *TmuxOptionCache {
-	return &TmuxOptionCache{values: map[string]map[string]string{}}
+	return &TmuxOptionCache{
+		values:     map[string]map[string]string{},
+		sessionIDs: map[string]string{},
+	}
 }
 
 func PublishTmuxOptions(cfg Config, snapshot Snapshot, caches ...*TmuxOptionCache) error {
@@ -78,11 +82,17 @@ func PublishTmuxOptions(cfg Config, snapshot Snapshot, caches ...*TmuxOptionCach
 	if cache != nil && cache.values == nil {
 		cache.values = map[string]map[string]string{}
 	}
+	if cache != nil && cache.sessionIDs == nil {
+		cache.sessionIDs = map[string]string{}
+	}
 
 	var errs []error
 	seen := map[string]bool{}
 	for _, session := range snapshot.Sessions {
 		seen[session.Session] = true
+		if cache != nil {
+			cacheSessionID(cache, session)
+		}
 		if err := setChangedSessionOption(cfg, cache, session.Session, "@ai-tag", session.Tag); err != nil {
 			errs = append(errs, err)
 		}
@@ -100,6 +110,7 @@ func PublishTmuxOptions(cfg Config, snapshot Snapshot, caches ...*TmuxOptionCach
 		for session := range cache.values {
 			if !seen[session] {
 				delete(cache.values, session)
+				delete(cache.sessionIDs, session)
 			}
 		}
 	}
@@ -109,10 +120,23 @@ func PublishTmuxOptions(cfg Config, snapshot Snapshot, caches ...*TmuxOptionCach
 	return fmt.Errorf("publish tmux options: %v", errs)
 }
 
+func cacheSessionID(cache *TmuxOptionCache, session SessionStatus) {
+	if session.SessionID == "" {
+		return
+	}
+	if cache.sessionIDs[session.Session] != "" && cache.sessionIDs[session.Session] != session.SessionID {
+		delete(cache.values, session.Session)
+	}
+	cache.sessionIDs[session.Session] = session.SessionID
+}
+
 func setChangedSessionOption(cfg Config, cache *TmuxOptionCache, session string, key string, value string) error {
 	if cache != nil {
-		if cache.values[session] != nil && cache.values[session][key] == value {
-			return nil
+		if values := cache.values[session]; values != nil {
+			cached, ok := values[key]
+			if ok && cached == value {
+				return nil
+			}
 		}
 	}
 	if err := cfg.SetSessionOption(session, key, value); err != nil {

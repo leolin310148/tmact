@@ -54,6 +54,7 @@ type PaneStatus struct {
 	Target            string                  `json:"target"`
 	PaneID            string                  `json:"pane_id"`
 	Session           string                  `json:"session"`
+	SessionID         string                  `json:"session_id,omitempty"`
 	WindowIndex       int                     `json:"window_index"`
 	Window            string                  `json:"window"`
 	WindowActive      bool                    `json:"-"`
@@ -162,6 +163,7 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 		Target:         targetName(pane),
 		PaneID:         pane.PaneID,
 		Session:        pane.Session,
+		SessionID:      pane.SessionID,
 		WindowIndex:    pane.WindowIndex,
 		Window:         pane.WindowName,
 		WindowActive:   pane.WindowActive,

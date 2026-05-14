@@ -3,7 +3,7 @@ package tmux
 import "testing"
 
 func TestParsePanes(t *testing.T) {
-	raw := "z_sample-project|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/Users/example/workspace|1|0|1\n"
+	raw := "z_sample-project|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/Users/example/workspace|1|0|1\n"
 
 	panes, err := ParsePanes(raw)
 	if err != nil {
@@ -15,6 +15,9 @@ func TestParsePanes(t *testing.T) {
 	pane := panes[0]
 	if pane.Session != "z_sample-project" {
 		t.Fatalf("session = %q", pane.Session)
+	}
+	if pane.SessionID != "$1" {
+		t.Fatalf("session id = %q", pane.SessionID)
 	}
 	if pane.WindowIndex != 0 || pane.PaneIndex != 0 {
 		t.Fatalf("target indexes = %d.%d", pane.WindowIndex, pane.PaneIndex)
@@ -33,6 +36,21 @@ func TestParsePanes(t *testing.T) {
 	}
 	if pane.InMode {
 		t.Fatal("pane should not be in mode")
+	}
+}
+
+func TestParsePanesAcceptsLegacyFormat(t *testing.T) {
+	raw := "z_sample-project|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/Users/example/workspace|1|0|1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	if panes[0].SessionID != "" {
+		t.Fatalf("legacy session id = %q", panes[0].SessionID)
 	}
 }
 

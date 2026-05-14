@@ -37,6 +37,7 @@ type Summary struct {
 
 type SessionStatus struct {
 	Session      string    `json:"session"`
+	SessionID    string    `json:"session_id,omitempty"`
 	ActiveTarget string    `json:"active_target,omitempty"`
 	Tag          string    `json:"tag"`
 	Runtime      string    `json:"runtime"`
@@ -52,6 +53,7 @@ type PaneStatus struct {
 	Target         string         `json:"target"`
 	PaneID         string         `json:"pane_id,omitempty"`
 	Session        string         `json:"session"`
+	SessionID      string         `json:"session_id,omitempty"`
 	WindowIndex    int            `json:"window_index"`
 	Window         string         `json:"window,omitempty"`
 	WindowActive   bool           `json:"-"`
@@ -182,6 +184,7 @@ func buildPaneStatus(pane panestatus.PaneStatus, cfg Config, mem *Memory, now ti
 		Target:         pane.Target,
 		PaneID:         pane.PaneID,
 		Session:        pane.Session,
+		SessionID:      pane.SessionID,
 		WindowIndex:    pane.WindowIndex,
 		Window:         pane.Window,
 		WindowActive:   pane.WindowActive,
@@ -264,11 +267,12 @@ func buildSessions(panes map[string]PaneStatus, now time.Time) map[string]Sessio
 		active := activePane(group)
 		status := SessionStatus{
 			Session:      session,
+			SessionID:    active.SessionID,
 			ActiveTarget: active.Target,
 			Tag:          active.Tag,
 			Runtime:      active.Runtime,
 			State:        active.State,
-			Running:      active.Running,
+			Running:      anyRunning(group),
 			Asking:       anyAsking(group),
 			Stale:        false,
 			RowBucket:    rowBucket(idx, total),
@@ -294,6 +298,15 @@ func activePane(panes []PaneStatus) PaneStatus {
 		}
 	}
 	return panes[0]
+}
+
+func anyRunning(panes []PaneStatus) bool {
+	for _, pane := range panes {
+		if pane.Running {
+			return true
+		}
+	}
+	return false
 }
 
 func anyAsking(panes []PaneStatus) bool {

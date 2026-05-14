@@ -17,6 +17,7 @@ type Layout struct {
 
 type Pane struct {
 	Session        string
+	SessionID      string
 	WindowIndex    int
 	WindowName     string
 	WindowActive   bool
@@ -103,7 +104,7 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 	return runTmux(args...)
 }
 
-const paneListFormat = "#{session_name}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_pid}|#{pane_current_command}|#{pane_current_path}|#{pane_active}|#{pane_in_mode}|#{window_active}"
+const paneListFormat = "#{session_name}|#{session_id}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_pid}|#{pane_current_command}|#{pane_current_path}|#{pane_active}|#{pane_in_mode}|#{window_active}"
 
 func listPanes(args []string) ([]Pane, error) {
 	output, err := outputTmux(args...)
@@ -123,37 +124,44 @@ func ParsePanes(output string) ([]Pane, error) {
 		if len(parts) == 1 {
 			parts = strings.Split(line, "\t")
 		}
-		if len(parts) != 10 && len(parts) != 11 {
+		if len(parts) != 10 && len(parts) != 11 && len(parts) != 12 {
 			return nil, fmt.Errorf("invalid tmux pane row %q", line)
 		}
-		windowIndex, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return nil, fmt.Errorf("invalid window index %q: %w", parts[1], err)
+		sessionID := ""
+		offset := 0
+		if len(parts) == 12 {
+			sessionID = parts[1]
+			offset = 1
 		}
-		paneIndex, err := strconv.Atoi(parts[3])
+		windowIndex, err := strconv.Atoi(parts[1+offset])
 		if err != nil {
-			return nil, fmt.Errorf("invalid pane index %q: %w", parts[3], err)
+			return nil, fmt.Errorf("invalid window index %q: %w", parts[1+offset], err)
 		}
-		panePID, err := strconv.Atoi(parts[5])
+		paneIndex, err := strconv.Atoi(parts[3+offset])
 		if err != nil {
-			return nil, fmt.Errorf("invalid pane pid %q: %w", parts[5], err)
+			return nil, fmt.Errorf("invalid pane index %q: %w", parts[3+offset], err)
+		}
+		panePID, err := strconv.Atoi(parts[5+offset])
+		if err != nil {
+			return nil, fmt.Errorf("invalid pane pid %q: %w", parts[5+offset], err)
 		}
 		windowActive := true
-		if len(parts) == 11 {
-			windowActive = parts[10] == "1"
+		if len(parts) == 11 || len(parts) == 12 {
+			windowActive = parts[10+offset] == "1"
 		}
 		panes = append(panes, Pane{
 			Session:        parts[0],
+			SessionID:      sessionID,
 			WindowIndex:    windowIndex,
-			WindowName:     parts[2],
+			WindowName:     parts[2+offset],
 			WindowActive:   windowActive,
 			PaneIndex:      paneIndex,
-			PaneID:         parts[4],
+			PaneID:         parts[4+offset],
 			PanePID:        panePID,
-			CurrentCommand: parts[6],
-			CurrentPath:    parts[7],
-			Active:         parts[8] == "1",
-			InMode:         parts[9] == "1",
+			CurrentCommand: parts[6+offset],
+			CurrentPath:    parts[7+offset],
+			Active:         parts[8+offset] == "1",
+			InMode:         parts[9+offset] == "1",
 		})
 	}
 	return panes, nil

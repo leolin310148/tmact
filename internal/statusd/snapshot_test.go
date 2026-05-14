@@ -117,6 +117,47 @@ func TestBuildSnapshotUsesActivePaneFromActiveWindow(t *testing.T) {
 	}
 }
 
+func TestBuildSessionsMarksRunningWhenAnyPaneRuns(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	sessions := buildSessions(map[string]PaneStatus{
+		"work:0.0": {
+			Target:       "work:0.0",
+			Session:      "work",
+			WindowIndex:  0,
+			WindowActive: true,
+			PaneIndex:    0,
+			Active:       true,
+			Runtime:      panestatus.RuntimeCodex,
+			Tag:          "cx",
+			State:        "waiting_input",
+			Running:      false,
+		},
+		"work:1.0": {
+			Target:       "work:1.0",
+			Session:      "work",
+			WindowIndex:  1,
+			WindowActive: false,
+			PaneIndex:    0,
+			Active:       true,
+			Runtime:      panestatus.RuntimeClaude,
+			Tag:          "cc",
+			State:        "working",
+			Running:      true,
+		},
+	}, now)
+
+	session := sessions["work"]
+	if session.ActiveTarget != "work:0.0" {
+		t.Fatalf("active target = %q", session.ActiveTarget)
+	}
+	if !session.Running {
+		t.Fatalf("session should be running when any pane is running: %#v", session)
+	}
+	if session.Tag != "cx" || session.State != "waiting_input" {
+		t.Fatalf("session active-pane details changed: %#v", session)
+	}
+}
+
 func TestBuildSnapshotMarksAskingFromRecentApprovalText(t *testing.T) {
 	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
 	cfg := Config{
@@ -322,5 +363,50 @@ func TestPublishTmuxOptionsSkipsUnchangedWithCache(t *testing.T) {
 	want = append(want, "work @ai-running=")
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls after change = %#v, want %#v", calls, want)
+	}
+
+	if err := PublishTmuxOptions(cfg, changed, cache); err != nil {
+		t.Fatalf("repeated empty PublishTmuxOptions returned error: %v", err)
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls after repeated empty = %#v, want %#v", calls, want)
+	}
+}
+
+func TestPublishTmuxOptionsRewritesRecreatedSessionWithSameName(t *testing.T) {
+	var calls []string
+	cfg := Config{
+		SetSessionOption: func(session string, key string, value string) error {
+			calls = append(calls, session+" "+key+"="+value)
+			return nil
+		},
+	}
+	cache := NewTmuxOptionCache()
+	first := Snapshot{Sessions: map[string]SessionStatus{
+		"sample-session": {Session: "sample-session", SessionID: "$1", Tag: "$", Running: false, Asking: false, RowBucket: 1},
+	}}
+	second := Snapshot{Sessions: map[string]SessionStatus{
+		"sample-session": {Session: "sample-session", SessionID: "$2", Tag: "$", Running: false, Asking: false, RowBucket: 1},
+	}}
+
+	if err := PublishTmuxOptions(cfg, first, cache); err != nil {
+		t.Fatalf("first PublishTmuxOptions returned error: %v", err)
+	}
+	if err := PublishTmuxOptions(cfg, second, cache); err != nil {
+		t.Fatalf("second PublishTmuxOptions returned error: %v", err)
+	}
+
+	want := []string{
+		"sample-session @ai-tag=$",
+		"sample-session @ai-running=",
+		"sample-session @ai-asking=",
+		"sample-session @row-bucket=1",
+		"sample-session @ai-tag=$",
+		"sample-session @ai-running=",
+		"sample-session @ai-asking=",
+		"sample-session @row-bucket=1",
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %#v, want %#v", calls, want)
 	}
 }
