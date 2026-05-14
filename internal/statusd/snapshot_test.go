@@ -36,8 +36,9 @@ func TestBuildSnapshotAggregatesSessionsAndDebouncesRunning(t *testing.T) {
 	mem := NewMemory()
 	captures := []string{"ready\nproject $\n", "ready\nbeta $\n"}
 	cfg := Config{
-		InitialSamples: 1,
-		Now:            func() time.Time { return now },
+		InitialSamples:  1,
+		RunningDebounce: 5 * time.Second,
+		Now:             func() time.Time { return now },
 		ListPanes: func() ([]tmux.Pane, error) {
 			return []tmux.Pane{
 				{Session: "alpha", WindowIndex: 0, PaneIndex: 0, PaneID: "%1", CurrentCommand: "codex", Active: true},
