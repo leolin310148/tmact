@@ -157,7 +157,7 @@ Suggested flags:
 --tmux-options                  write @ai-* tmux options, default true
 --no-tmux-options               only write the state file
 --capture-lines int             lines per pane, default 120
---running-debounce duration     keep running indicator after changes, default 30s
+--running-debounce duration     keep running indicator after changes, default 5s
 --stale-after duration          mark daemon/file stale after this age, default 10s
 --idle-ignore regexp            extra line ignore pattern, repeatable
 --session glob                  include sessions matching glob, repeatable

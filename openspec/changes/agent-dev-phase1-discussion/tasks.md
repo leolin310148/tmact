@@ -60,7 +60,7 @@
 - [x] Add unit tests for canonical artifact hashing.
 - [x] Add unit tests for comment marker parsing.
 - [x] Add unit tests for agreement gate pass/fail cases.
-- [ ] Add unit tests for stale validation results.
+- [x] Add unit tests for stale validation results.
 - [x] Add CLI tests for workflow help and status output.
 - [x] Run `openspec validate agent-dev-phase1-discussion --strict`.
 - [x] Run `go test ./...`.

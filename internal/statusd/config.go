@@ -11,7 +11,7 @@ const (
 	DefaultInterval        = time.Second
 	DefaultStaleAfter      = 10 * time.Second
 	DefaultCaptureLines    = 40
-	DefaultRunningDebounce = 30 * time.Second
+	DefaultRunningDebounce = 5 * time.Second
 	DefaultInitialSamples  = 2
 )
 
