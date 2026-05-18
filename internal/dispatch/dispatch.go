@@ -22,6 +22,13 @@ const (
 	pollInterval        = time.Second
 	captureLines        = 200
 	clearDelay          = 2 * time.Second
+
+	// submitSettleDelay is how long to wait after pasting/Enter before
+	// checking whether the prompt actually left the input box.
+	submitSettleDelay = 750 * time.Millisecond
+	// submitRetries is how many extra Enter keystrokes to try when a cold
+	// start swallowed the trailing Enter.
+	submitRetries = 3
 )
 
 var supportedAgents = map[string]bool{
@@ -78,6 +85,7 @@ type Deps struct {
 	CapturePane      func(string, int) (string, error)
 	NewSession       func(session, window, cwd string, command []string) error
 	PasteText        func(target, text string, enter bool) error
+	SendKeys         func(target string, keys []string) error
 	ProcessRuntime   func(int) panestatus.RuntimeDetection
 	Sleep            func(time.Duration)
 	Now              func() time.Time
@@ -91,6 +99,7 @@ func DefaultDeps() Deps {
 		CapturePane:      tmux.CapturePane,
 		NewSession:       tmux.NewSession,
 		PasteText:        tmux.PasteText,
+		SendKeys:         tmux.SendKeys,
 		ProcessRuntime:   panestatus.DetectChildProcessRuntime,
 		Sleep:            time.Sleep,
 		Now:              time.Now,
@@ -189,7 +198,7 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	steps[1].Status = StatusOK
 
-	if err := deps.PasteText(target, opts.Prompt, true); err != nil {
+	if err := submitPrompt(opts, deps, target); err != nil {
 		steps[2].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
@@ -255,7 +264,7 @@ func dispatchReuse(opts Options, deps Deps, report Report, target string) (Repor
 	steps[0].Status = StatusOK
 	deps.Sleep(clearDelay)
 
-	if err := deps.PasteText(target, opts.Prompt, true); err != nil {
+	if err := submitPrompt(opts, deps, target); err != nil {
 		steps[1].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
@@ -290,7 +299,7 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	}
 	steps[1].Status = StatusOK
 
-	if err := deps.PasteText(target, opts.Prompt, true); err != nil {
+	if err := submitPrompt(opts, deps, target); err != nil {
 		steps[2].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
@@ -298,6 +307,50 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	steps[2].Status = StatusOK
 	report.Steps = steps
 	return report, nil
+}
+
+// submitPrompt pastes the prompt and confirms the agent actually started.
+// On a cold start a transient startup notification (e.g. an MCP warning) can
+// swallow the trailing Enter, leaving the prompt unsubmitted in the input box
+// while every step still reports ok. After pasting we poll the pane and
+// re-send Enter until it leaves the input-ready state.
+func submitPrompt(opts Options, deps Deps, target string) error {
+	if err := deps.PasteText(target, opts.Prompt, true); err != nil {
+		return err
+	}
+	for retry := 0; ; retry++ {
+		deps.Sleep(submitSettleDelay)
+		raw, err := deps.CapturePane(target, captureLines)
+		if err != nil {
+			return fmt.Errorf("confirm prompt submitted: %w", err)
+		}
+		if promptSubmitted(panestate.Classify(raw)) {
+			return nil
+		}
+		if retry >= submitRetries {
+			return fmt.Errorf("prompt was pasted but %s did not start working after %d enter attempts", opts.Agent, submitRetries+1)
+		}
+		if err := deps.SendKeys(target, []string{"Enter"}); err != nil {
+			return fmt.Errorf("re-send enter: %w", err)
+		}
+	}
+}
+
+// promptSubmitted reports whether a pasted prompt left the input box. A pane
+// that is working, blocked, or waiting on its own prompt has accepted the
+// submission; anything still input-ready means the trailing Enter was
+// swallowed. Re-sending Enter is never done while Asking, so an allowlisted
+// permission prompt is not auto-confirmed.
+func promptSubmitted(classified panestate.Result) bool {
+	if classified.Asking {
+		return true
+	}
+	switch classified.State {
+	case panestate.StateWorking, panestate.StateBlocked:
+		return true
+	default:
+		return false
+	}
 }
 
 func waitReady(opts Options, deps Deps, target string) error {

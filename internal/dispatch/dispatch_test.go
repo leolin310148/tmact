@@ -16,9 +16,26 @@ type paste struct {
 	enter  bool
 }
 
+type keyPress struct {
+	target string
+	keys   []string
+}
+
 type recorder struct {
 	pastes      []paste
+	keys        []keyPress
 	newSessions int
+}
+
+// enterCount returns how many bare Enter keystrokes the recorder captured.
+func enterCount(rec *recorder) int {
+	n := 0
+	for _, k := range rec.keys {
+		if len(k.keys) == 1 && k.keys[0] == "Enter" {
+			n++
+		}
+	}
+	return n
 }
 
 func baseDeps() (*recorder, dispatch.Deps) {
@@ -39,6 +56,10 @@ func baseDeps() (*recorder, dispatch.Deps) {
 		},
 		PasteText: func(target, text string, enter bool) error {
 			rec.pastes = append(rec.pastes, paste{target, text, enter})
+			return nil
+		},
+		SendKeys: func(target string, keys []string) error {
+			rec.keys = append(rec.keys, keyPress{target, keys})
 			return nil
 		},
 		ProcessRuntime: func(int) panestatus.RuntimeDetection {
@@ -126,7 +147,10 @@ func TestExecuteNewSession(t *testing.T) {
 		return []tmux.Pane{claudePane()}, nil
 	}
 	deps.CapturePane = func(string, int) (string, error) {
-		return "Claude Code\nready for input", nil
+		if len(rec.pastes) == 0 {
+			return "Claude Code\nready for input", nil
+		}
+		return "Claude Code\nWorking... esc to interrupt", nil
 	}
 
 	opts := baseOpts()
@@ -144,6 +168,9 @@ func TestExecuteNewSession(t *testing.T) {
 	if len(rec.pastes) != 1 || rec.pastes[0] != (paste{"%1", "do the thing", true}) {
 		t.Fatalf("pastes = %+v", rec.pastes)
 	}
+	if n := enterCount(rec); n != 0 {
+		t.Fatalf("a working pane should need no re-sent Enter, got %d", n)
+	}
 	for _, name := range []string{"create-session", "wait-ready", "send-prompt"} {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
@@ -160,6 +187,9 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 		return []tmux.Pane{claudePane()}, nil
 	}
 	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) >= 2 {
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
 		return "Claude Code\nidle", nil
 	}
 
@@ -244,13 +274,15 @@ func TestExistingSessionShellLaunch(t *testing.T) {
 		}
 		return []tmux.Pane{pane}, nil
 	}
-	captureCalls := 0
 	deps.CapturePane = func(string, int) (string, error) {
-		captureCalls++
-		if captureCalls == 1 {
+		switch {
+		case len(rec.pastes) == 0:
 			return "user@host project %", nil
+		case len(rec.pastes) >= 2:
+			return "Claude Code\nWorking... esc to interrupt", nil
+		default:
+			return "Claude Code\nready", nil
 		}
-		return "Claude Code\nready", nil
 	}
 
 	opts := baseOpts()
@@ -275,6 +307,72 @@ func TestExistingSessionShellLaunch(t *testing.T) {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
 		}
+	}
+}
+
+func TestExecuteNewSessionResendsEnterWhenPromptStuck(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	// A cold start swallows the first Enter: the pane stays input-ready
+	// until a second Enter is sent, then the agent starts working.
+	deps.CapturePane = func(string, int) (string, error) {
+		switch {
+		case len(rec.pastes) == 0:
+			return "Claude Code\nready", nil
+		case enterCount(rec) == 0:
+			return "Claude Code\n1 MCP server failed\nprompt still sitting in the input box", nil
+		default:
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusOK {
+		t.Fatalf("send-prompt status = %q, want ok", got)
+	}
+	if n := enterCount(rec); n != 1 {
+		t.Fatalf("expected exactly 1 re-sent Enter, got %d", n)
+	}
+	if len(rec.pastes) != 1 {
+		t.Fatalf("prompt should be pasted exactly once, pastes = %+v", rec.pastes)
+	}
+	if rec.keys[0].target != "%1" {
+		t.Fatalf("re-sent Enter target = %q, want %%1", rec.keys[0].target)
+	}
+}
+
+func TestExecuteNewSessionFailsWhenPromptNeverSubmits(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	// The pane is ready but never leaves the input box, no matter how many
+	// times Enter is re-sent.
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) == 0 {
+			return "Claude Code\nready", nil
+		}
+		return "Claude Code\nprompt stuck in the input box", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil {
+		t.Fatal("expected an error when the prompt never submits")
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusFailed {
+		t.Fatalf("send-prompt status = %q, want failed", got)
+	}
+	if n := enterCount(rec); n == 0 {
+		t.Fatal("expected dispatch to re-send Enter before giving up")
 	}
 }
 
