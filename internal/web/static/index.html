@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>tmact &mdash; sessions</title>
+<title>tmact</title>
 <style>
   :root {
     --bg: #0e1116;
@@ -27,86 +27,49 @@
     display: flex;
     flex-direction: column;
   }
-  header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 10px 16px;
+
+  /* tmux-style status line: one horizontal strip of every pane. */
+  .statusline {
+    flex: 0 0 auto;
+    display: flex; align-items: center;
+    padding: 0 8px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
+  }
+  .chips {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; gap: 4px;
+    overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 6px 0;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
     flex: 0 0 auto;
-  }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
-  header h1 span { color: var(--accent); }
-  .counts { display: flex; gap: 14px; color: var(--fg-dim); font-size: 12.5px; }
-  .counts b { color: var(--fg); font-weight: 600; }
-  .freshness { margin-left: auto; font-size: 12px; color: var(--fg-dim); }
-  .freshness.stale { color: var(--amber); }
-  .freshness.error { color: var(--red); }
-
-  main { flex: 1 1 auto; display: flex; min-height: 0; }
-  aside {
-    width: 320px;
-    flex: 0 0 auto;
-    background: var(--panel);
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-  }
-  .session { border-bottom: 1px solid var(--border); }
-  .session-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; font-weight: 600;
-  }
-  .tag {
-    font: 11px/1 var(--mono);
-    padding: 2px 6px;
-    border-radius: 4px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 9px;
+    border-radius: 5px;
     background: var(--panel-2);
-    color: var(--fg-dim);
     border: 1px solid var(--border);
+    cursor: pointer;
+    font: 12px/1 var(--mono);
+    white-space: nowrap;
   }
+  .chip:hover { border-color: var(--fg-dim); }
+  .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
   .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .dot.asking { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-
-  .pane {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 12px 6px 26px;
-    cursor: pointer;
-    border-left: 2px solid transparent;
-  }
-  .pane:hover { background: var(--panel-2); }
-  .pane.selected { background: var(--panel-2); border-left-color: var(--accent); }
-  .pane-main { min-width: 0; flex: 1 1 auto; }
-  .pane-title { font: 12.5px/1.4 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pane-sub { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .state {
-    font: 10.5px/1 var(--mono);
-    padding: 2px 5px; border-radius: 3px; flex: 0 0 auto;
-    text-transform: uppercase; letter-spacing: 0.4px;
-  }
-  .state.running { color: var(--green); background: rgba(63,185,80,0.12); }
-  .state.asking { color: var(--amber); background: rgba(210,153,34,0.14); }
-  .state.idle { color: var(--fg-dim); background: var(--panel-2); }
-
-  section { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
-  .viewer-head {
-    padding: 10px 16px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 12px;
+  /* Connection indicator: only visible after 10s+ without a fresh snapshot. */
+  .stale-dot {
     flex: 0 0 auto;
+    width: 11px; height: 11px;
+    margin-left: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+    display: none;
   }
-  #back-btn {
-    display: none; flex: 0 0 auto;
-    background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 6px;
-    padding: 6px 11px; font-size: 12.5px; cursor: pointer;
-  }
-  #back-btn:hover { border-color: var(--accent); }
-  #viewer-meta { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
-  .viewer-head .target { font: 13px/1 var(--mono); color: var(--accent); }
-  .viewer-head .meta { font-size: 12px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
   .content-wrap.direct::after {
@@ -179,57 +142,39 @@
   }
   #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* Mobile: single column, toggle between the session list and the pane. */
   @media (max-width: 760px) {
-    header { flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; }
-    .counts { gap: 10px; font-size: 12px; }
-    .freshness { font-size: 11.5px; }
-    aside { width: 100%; border-right: 0; }
-    .session-head { padding: 11px 14px; }
-    .pane { padding: 11px 14px 11px 30px; }
-    .viewer-head { padding: 8px 12px; }
     .key-bar { display: flex; }
-    #back-btn { display: inline-flex; }
-    body:not(.view-pane) section { display: none; }
-    body.view-pane aside { display: none; }
+    /* No horizontal scroll on phones — wrap chips onto a few short lines. */
+    .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
+    .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
+    .dot { width: 6px; height: 6px; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1><span>tmact</span> &middot; sessions</h1>
-  <div class="counts" id="counts"></div>
-  <div class="freshness" id="freshness">connecting&hellip;</div>
-</header>
-<main>
-  <aside id="sidebar"></aside>
-  <section>
-    <div class="viewer-head" id="viewer-head">
-      <button id="back-btn" type="button">&lsaquo; Sessions</button>
-      <div id="viewer-meta">
-        <span class="meta">Select a pane to view its output.</span>
-      </div>
-    </div>
-    <div class="content-wrap" id="content-wrap">
-      <pre id="content"><span class="empty">No pane selected.</span></pre>
-      <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-    </div>
-    <div class="input-bar">
-      <div class="key-bar" id="key-bar"></div>
-      <div class="mode-indicator" id="mode-indicator">
-        <span id="mode-text">Select a pane to enable input</span>
-        <span class="input-error" id="input-error"></span>
-      </div>
-      <div class="input-row">
-        <textarea id="draft" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
-        <button id="send-btn" disabled>Send</button>
-      </div>
-    </div>
-  </section>
-</main>
+<nav class="statusline">
+  <div class="chips" id="chips"></div>
+  <span class="stale-dot" id="stale-dot" title="no connection for 10s+"></span>
+</nav>
+<div class="content-wrap" id="content-wrap">
+  <pre id="content"><span class="empty">No pane selected.</span></pre>
+  <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+</div>
+<div class="input-bar">
+  <div class="key-bar" id="key-bar"></div>
+  <div class="mode-indicator" id="mode-indicator">
+    <span id="mode-text">Select a pane to enable input</span>
+    <span class="input-error" id="input-error"></span>
+  </div>
+  <div class="input-row">
+    <textarea id="draft" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+    <button id="send-btn" disabled>Send</button>
+  </div>
+</div>
 <script>
 const state = { selected: null, snapshot: null, drafts: {} };
 const POLL_MS = 1000;
+const STALE_MS = 10000;
 
 const $ = (id) => document.getElementById(id);
 const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
@@ -262,10 +207,6 @@ function basename(path) {
   const parts = path.replace(/\/+$/, "").split("/");
   return parts[parts.length - 1] || path;
 }
-function abbrevHome(path) {
-  if (!path) return "";
-  return path.replace(/^\/(Users|home)\/[^/]+/, "~");
-}
 function findPane(paneID) {
   const snap = state.snapshot;
   if (!snap || !paneID) return null;
@@ -277,88 +218,46 @@ function currentPaneName() {
   return p ? (basename(p.cwd) || p.session) : (state.selected || "?");
 }
 
-/* ---- rendering ---- */
+/* ---- status line ---- */
 
-function renderSidebar(snap) {
-  const sidebar = $("sidebar");
-  sidebar.textContent = "";
-
-  const bySession = {};
-  for (const target in snap.panes) {
-    const p = snap.panes[target];
-    (bySession[p.session] = bySession[p.session] || []).push(p);
-  }
-  const names = Object.keys(snap.sessions || {}).sort();
-  if (names.length === 0) {
-    sidebar.appendChild(h("div", { class: "empty", text: "No tmux sessions." }));
+function renderStatusline(snap) {
+  const chips = $("chips");
+  chips.textContent = "";
+  const panes = snap && snap.panes ? Object.values(snap.panes) : [];
+  if (panes.length === 0) {
+    chips.appendChild(h("span", { class: "empty", text: "No tmux panes." }));
     return;
   }
+  panes.sort((a, b) =>
+    a.session.localeCompare(b.session) ||
+    a.window_index - b.window_index ||
+    a.pane_index - b.pane_index);
 
-  for (const name of names) {
-    const sess = snap.sessions[name];
-    const panes = (bySession[name] || []).sort((a, b) =>
-      a.window_index - b.window_index || a.pane_index - b.pane_index);
+  const perSession = {};
+  for (const p of panes) perSession[p.session] = (perSession[p.session] || 0) + 1;
 
-    const dotCls = sess.asking ? "asking" : sess.running ? "running" : "";
-    const head = h("div", { class: "session-head" },
-      h("span", { class: "dot " + dotCls }),
-      h("span", { class: "name", text: name }),
-      h("span", { class: "tag", text: sess.tag || sess.runtime || "?" }));
-
-    const block = h("div", { class: "session" }, head);
-    for (const p of panes) {
-      const title = basename(p.cwd) || p.current_command || p.window || p.target;
-      const sub = abbrevHome(p.cwd) || p.current_command || "";
-      const row = h("div", {
-        class: "pane" + (p.pane_id === state.selected ? " selected" : ""),
-        title: p.cwd || "",
-      },
-        h("div", { class: "pane-main" },
-          h("div", { class: "pane-title", text: title }),
-          h("div", { class: "pane-sub", text: sub })),
-        h("span", { class: "state " + paneStateClass(p), text: paneStateLabel(p) }));
-      row.onclick = () => openPane(p.pane_id);
-      block.appendChild(row);
-    }
-    sidebar.appendChild(block);
+  for (const p of panes) {
+    const label = perSession[p.session] > 1
+      ? p.session + ":" + p.window_index
+      : p.session;
+    const chip = h("div", {
+      class: "chip" + (p.pane_id === state.selected ? " sel" : ""),
+      title: (p.cwd || p.session) + " — " + paneStateLabel(p),
+    },
+      h("span", { class: "dot " + paneStateClass(p) }),
+      h("span", { text: label }));
+    chip.onclick = () => selectPane(p.pane_id);
+    chips.appendChild(chip);
   }
 }
 
-function renderCounts(snap) {
-  const s = snap.summary || {};
-  $("counts").innerHTML =
-    `<span><b>${s.sessions||0}</b> sessions</span>` +
-    `<span><b>${s.panes||0}</b> panes</span>` +
-    `<span><b>${s.working||0}</b> working</span>` +
-    `<span><b>${s.asking||0}</b> asking</span>` +
-    (s.errors ? `<span style="color:var(--red)"><b>${s.errors}</b> errors</span>` : "");
-}
-
-function renderFreshness(snap) {
-  const el = $("freshness");
-  const ageMs = Date.now() - new Date(snap.ts).getTime();
-  const staleAfter = snap.stale_after_ms || 10000;
-  el.className = "freshness" + (ageMs > staleAfter ? " stale" : "");
-  el.textContent = "updated " + Math.max(0, Math.round(ageMs / 1000)) + "s ago";
-}
-
-function renderViewer() {
-  const head = $("viewer-meta");
-  head.textContent = "";
-  if (!state.selected) {
-    head.appendChild(h("span", { class: "meta", text: "Select a pane to view its output." }));
-    return;
-  }
-  const pane = findPane(state.selected);
-  if (pane) {
-    head.appendChild(h("span", { class: "target", text: basename(pane.cwd) || pane.session }));
-    head.appendChild(h("span", { class: "meta",
-      text: `${pane.session} · ${pane.runtime || "shell"} · ${paneStateLabel(pane)}` +
-            (pane.cwd ? " · " + abbrevHome(pane.cwd) : "") }));
-  } else {
-    head.appendChild(h("span", { class: "target", text: "—" }));
-    head.appendChild(h("span", { class: "meta", text: "pane no longer in snapshot" }));
-  }
+// checkStale lights the red dot when no fresh snapshot has landed for 10s+ —
+// the daemon stalled, or the browser lost its connection to it.
+function checkStale() {
+  const snap = state.snapshot;
+  const fresh = snap && snap.ts &&
+    (Date.now() - new Date(snap.ts).getTime() <= STALE_MS);
+  $("stale-dot").style.display = fresh ? "none" : "block";
 }
 
 function renderMode() {
@@ -412,21 +311,19 @@ async function refreshSnapshot() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     const snap = await res.json();
     state.snapshot = snap;
-    renderCounts(snap);
-    renderFreshness(snap);
-    renderSidebar(snap);
-    renderViewer();
+    renderStatusline(snap);
     renderMode();
   } catch (e) {
-    const el = $("freshness");
-    el.className = "freshness error";
-    el.textContent = "snapshot unavailable: " + e.message;
+    // Keep the last snapshot; the stale dot surfaces the lost connection.
   }
+  checkStale();
 }
 
 let snapshotTimer = null;
 function startPolling() {
-  if (snapshotTimer === null) snapshotTimer = setInterval(refreshSnapshot, POLL_MS);
+  if (snapshotTimer === null) {
+    snapshotTimer = setInterval(() => { refreshSnapshot(); checkStale(); }, POLL_MS);
+  }
 }
 function stopPolling() {
   clearInterval(snapshotTimer);
@@ -479,24 +376,11 @@ function selectPane(paneID) {
   draft.disabled = false;
   $("send-btn").disabled = false;
   setContent("Loading…");
-  renderSidebar(state.snapshot || { sessions: {}, panes: {} });
-  renderViewer();
+  renderStatusline(state.snapshot);
   renderMode();
+  const sel = $("chips").querySelector(".chip.sel");
+  if (sel) sel.scrollIntoView({ block: "nearest", inline: "nearest" });
   openWS(paneID);
-}
-
-/* On mobile, opening a pane swaps the single-column view from the session
-   list to the pane; on desktop the .view-pane class is inert (both show). */
-function openPane(paneID) {
-  if (paneID !== state.selected) selectPane(paneID);
-  document.body.classList.add("view-pane");
-}
-
-function showSessions() {
-  document.body.classList.remove("view-pane");
-  $("direct-input").blur();
-  $("draft").blur();
-  renderMode();
 }
 
 /* ---- mode 1: draft textarea ---- */
@@ -601,8 +485,6 @@ function wireInput() {
     }
   });
   $("send-btn").addEventListener("click", sendDraft);
-
-  $("back-btn").addEventListener("click", showSessions);
 
   buildKeyBar();
 
