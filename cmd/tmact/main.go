@@ -23,6 +23,7 @@ import (
 	"tmact/internal/prompt"
 	"tmact/internal/runmeta"
 	"tmact/internal/statusd"
+	"tmact/internal/stt"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
 	"tmact/internal/web"
@@ -167,6 +168,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runStatusd(args[1:])
+	case "stt-set":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runSTTSet(args[1:])
 	case "inbox":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -626,6 +632,57 @@ func runStatus(args []string) error {
 	}
 
 	printStatusReport(report)
+	return nil
+}
+
+func runSTTSet(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("stt-set")
+	}
+	fs := flag.NewFlagSet("stt-set", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	provider := fs.String("provider", stt.DefaultProvider, "speech-to-text provider")
+	apiKey := fs.String("api-key", "", "provider API key")
+	model := fs.String("model", stt.DefaultModel, "speech-to-text model")
+	endpoint := fs.String("endpoint", stt.DefaultEndpoint, "transcription API endpoint")
+	configPath := fs.String("config", "", "provider config path")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	cfg := stt.ProviderConfig{
+		Provider: *provider,
+		APIKey:   *apiKey,
+		Model:    *model,
+		Endpoint: *endpoint,
+	}
+	if err := cfg.NormalizeAndValidate(); err != nil {
+		return err
+	}
+	if err := stt.SaveProvider(*configPath, cfg); err != nil {
+		return err
+	}
+	path := *configPath
+	if path == "" {
+		var err error
+		path, err = stt.DefaultProviderPath()
+		if err != nil {
+			return err
+		}
+	}
+	if *jsonOutput {
+		return printJSON(map[string]string{
+			"path":     path,
+			"provider": cfg.Provider,
+			"model":    cfg.Model,
+			"endpoint": cfg.Endpoint,
+		})
+	}
+	fmt.Fprintf(os.Stdout, "wrote STT provider config to %s (provider %s, model %s)\n", path, cfg.Provider, cfg.Model)
 	return nil
 }
 
@@ -2240,6 +2297,7 @@ Usage:
   tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact statusd start|once|read|status [--state-path /tmp/tmact-status.json]
+  tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
   tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
@@ -2267,6 +2325,7 @@ Commands:
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
   statusd   maintain a cached tmux pane status snapshot
+  stt-set   configure statusd web UI voice transcription
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity
   broadcast safely send text to selected agent panes
@@ -2569,6 +2628,21 @@ func commandHelpCatalog() []commandHelp {
 				{Name: "--json", Description: "print JSON output"},
 			},
 			Examples: []string{"tmact statusd status"},
+		},
+		{
+			Command: "stt-set",
+			Summary: "Configure the statusd web UI speech-to-text provider.",
+			Usage:   []string{"tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe] [--endpoint URL]"},
+			Flags: []helpFlag{
+				{Name: "--provider", Value: "NAME", Description: "speech-to-text provider; currently openai"},
+				{Name: "--api-key", Value: "KEY", Description: "provider API key stored in ~/.tmact/stt_provider.json", Required: true},
+				{Name: "--model", Value: "MODEL", Description: "speech-to-text model"},
+				{Name: "--endpoint", Value: "URL", Description: "transcription API endpoint"},
+				{Name: "--config", Value: "PATH", Description: "provider config path"},
+				{Name: "--json", Description: "print JSON output without the API key"},
+			},
+			Examples: []string{"tmact stt-set --provider openai --api-key sk-...", "tmact stt-set --provider openai --api-key sk-... --model whisper-1"},
+			Notes:    []string{"The config file is written with 0600 permissions and the API key is not printed."},
 		},
 		{
 			Command:  "inbox",

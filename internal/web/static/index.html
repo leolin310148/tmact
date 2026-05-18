@@ -162,7 +162,16 @@
     background: var(--accent); color: #fff;
     border: 0; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
-  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #record-btn {
+    flex: 0 0 auto; padding: 0 12px;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    min-width: 76px;
+  }
+  #record-btn.recording { background: rgba(248,81,73,0.18); color: #fff; border-color: var(--red); }
+  #record-btn.busy { color: var(--fg-dim); }
+  #send-btn:disabled, #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   @media (max-width: 760px) {
     .key-area { display: flex; }
@@ -197,11 +206,13 @@
   </div>
   <div class="input-row">
     <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+    <button id="record-btn" type="button" disabled title="record voice">Mic</button>
     <button id="send-btn" disabled>Send</button>
   </div>
 </div>
 <script>
 const state = { selected: null, snapshot: null, drafts: {} };
+const voice = { recorder: null, stream: null, chunks: [], busy: false };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
 
@@ -329,7 +340,7 @@ function showInputError(msg) {
   $("input-error").textContent = msg;
   syncIndicator();
   if (errorTimer) clearTimeout(errorTimer);
-  errorTimer = setTimeout(() => { $("input-error").textContent = ""; syncIndicator(); }, 3500);
+  errorTimer = setTimeout(() => { $("input-error").textContent = ""; syncIndicator(); }, 6000);
 }
 
 /* ---- ANSI SGR colour rendering (tmux capture-pane -e output) ---- */
@@ -507,6 +518,7 @@ function selectPane(paneID) {
   draft.value = state.drafts[paneID] || "";
   draft.disabled = false;
   $("send-btn").disabled = false;
+  syncRecordButton();
   setContent("Loading…");
   renderStatusline(state.snapshot);
   renderMode();
@@ -527,6 +539,133 @@ function sendDraft() {
   }
   draft.value = "";
   delete state.drafts[state.selected];
+}
+
+/* ---- voice transcription: record locally, transcribe on the statusd server ---- */
+
+function voiceSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+}
+
+function preferredAudioType() {
+  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/wav"];
+  for (const t of types) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return "";
+}
+
+function syncRecordButton() {
+  const btn = $("record-btn");
+  const recording = voice.recorder && voice.recorder.state === "recording";
+  btn.classList.toggle("recording", recording);
+  btn.classList.toggle("busy", voice.busy);
+  btn.textContent = voice.busy ? "Wait" : recording ? "Stop" : "Mic";
+  btn.title = voice.busy ? "transcribing voice" : recording ? "stop recording" : "record voice";
+  btn.disabled = voice.busy || !state.selected || !voiceSupported();
+}
+
+function insertTranscript(text) {
+  const draft = $("draft");
+  const clean = text.trim();
+  if (!clean) {
+    showInputError("empty transcript");
+    return;
+  }
+  if (document.activeElement === draft &&
+      typeof draft.selectionStart === "number" &&
+      typeof draft.selectionEnd === "number") {
+    const start = draft.selectionStart, end = draft.selectionEnd;
+    draft.value = draft.value.slice(0, start) + clean + draft.value.slice(end);
+    const pos = start + clean.length;
+    draft.setSelectionRange(pos, pos);
+  } else if (!draft.value.trim()) {
+    draft.value = clean;
+  } else {
+    draft.value = draft.value.replace(/\s*$/, "") + "\n" + clean;
+  }
+  if (state.selected) state.drafts[state.selected] = draft.value;
+  draft.disabled = false;
+  draft.focus();
+}
+
+function recordingFilename(type) {
+  if (type.includes("mp4")) return "recording.m4a";
+  if (type.includes("wav")) return "recording.wav";
+  return "recording.webm";
+}
+
+async function uploadRecording(blob) {
+  if (!blob || blob.size === 0) {
+    showInputError("no audio recorded");
+    return;
+  }
+  voice.busy = true;
+  syncRecordButton();
+  try {
+    const form = new FormData();
+    form.append("audio", blob, recordingFilename(blob.type || "audio/webm"));
+    const res = await fetch("/api/transcribe", { method: "POST", body: form });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error(data.error || ("transcription failed: HTTP " + res.status));
+    insertTranscript(data.text || "");
+  } catch (e) {
+    showInputError(e.message || "transcription failed");
+  } finally {
+    voice.busy = false;
+    syncRecordButton();
+  }
+}
+
+async function startRecording() {
+  if (!state.selected) return;
+  if (!voiceSupported()) {
+    showInputError("microphone recording is not supported in this browser");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const type = preferredAudioType();
+    const opts = type ? { mimeType: type } : undefined;
+    const recorder = new MediaRecorder(stream, opts);
+    voice.stream = stream;
+    voice.recorder = recorder;
+    voice.chunks = [];
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) voice.chunks.push(ev.data);
+    };
+    recorder.onerror = () => showInputError("microphone recording failed");
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const blob = new Blob(voice.chunks, { type: recorder.mimeType || "audio/webm" });
+      voice.recorder = null;
+      voice.stream = null;
+      voice.chunks = [];
+      syncRecordButton();
+      uploadRecording(blob);
+    };
+    recorder.start();
+    syncRecordButton();
+  } catch (e) {
+    const denied = e && (e.name === "NotAllowedError" || e.name === "PermissionDeniedError");
+    showInputError(denied ? "microphone permission denied" : "microphone unavailable");
+    if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
+    voice.stream = null;
+    voice.recorder = null;
+    syncRecordButton();
+  }
+}
+
+function stopRecording() {
+  if (voice.recorder && voice.recorder.state === "recording") {
+    voice.recorder.stop();
+  }
+}
+
+function toggleRecording() {
+  if (voice.recorder && voice.recorder.state === "recording") stopRecording();
+  else startRecording();
 }
 
 /* ---- mode 2: direct keystroke passthrough ---- */
@@ -641,6 +780,8 @@ function wireInput() {
     }
   });
   $("send-btn").addEventListener("click", sendDraft);
+  $("record-btn").addEventListener("click", toggleRecording);
+  syncRecordButton();
 
   buildKeyBar();
 

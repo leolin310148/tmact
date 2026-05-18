@@ -1,7 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"tmact/internal/stt"
 )
 
 /* ---- HTTP endpoints ---- */
@@ -77,6 +83,25 @@ func TestIndexIncludesPWAInstallHooks(t *testing.T) {
 	}
 }
 
+func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`id="record-btn"`,
+		`MediaRecorder`,
+		`navigator.mediaDevices.getUserMedia`,
+		`fetch("/api/transcribe"`,
+		`insertTranscript`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+}
+
 func TestPWAAssetsContentTypes(t *testing.T) {
 	handler := (&Server{}).Handler()
 	tests := []struct {
@@ -119,6 +144,170 @@ func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("service worker missing %q", want)
 		}
+	}
+}
+
+func audioUploadRequest(t *testing.T, path string, bodyText string) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	part, err := mw.CreateFormFile("audio", "recording.webm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(part, bodyText); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+func TestTranscribeMissingProviderConfigReturns503(t *testing.T) {
+	handler := (&Server{STTProviderPath: filepath.Join(t.TempDir(), "missing.json")}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "tmact stt-set --provider openai --api-key") {
+		t.Fatalf("body = %q, want stt-set guidance", rec.Body.String())
+	}
+}
+
+func TestTranscribeForwardsAudioToAPI(t *testing.T) {
+	var sawRequest bool
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawRequest = true
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm: %v", err)
+		}
+		if got := r.FormValue("model"); got != "whisper-1" {
+			t.Errorf("model = %q, want whisper-1", got)
+		}
+		if got := r.FormValue("response_format"); got != "json" {
+			t.Errorf("response_format = %q, want json", got)
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("FormFile: %v", err)
+		}
+		defer file.Close()
+		if header.Filename != "recording.webm" {
+			t.Errorf("filename = %q, want recording.webm", header.Filename)
+		}
+		data, err := io.ReadAll(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != "audio bytes" {
+			t.Errorf("file body = %q, want audio bytes", string(data))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"text": "hello from voice"})
+	}))
+	defer api.Close()
+
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{
+				Provider: "openai",
+				APIKey:   "test-key",
+				Model:    "whisper-1",
+				Endpoint: api.URL,
+			}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
+
+	if !sawRequest {
+		t.Fatal("mock API was not called")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["text"] != "hello from voice" {
+		t.Fatalf("text = %q, want hello from voice", got["text"])
+	}
+}
+
+func TestTranscribeAPIFailureReturns502(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream failed", http.StatusBadGateway)
+	}))
+	defer api.Close()
+
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key", Endpoint: api.URL}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "transcription API returned HTTP 502") {
+		t.Fatalf("body = %q, want upstream error", rec.Body.String())
+	}
+}
+
+func TestTranscribeEmptyTranscriptReturns502(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"text": "   "})
+	}))
+	defer api.Close()
+
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key", Endpoint: api.URL}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "empty transcript") {
+		t.Fatalf("body = %q, want empty transcript error", rec.Body.String())
+	}
+}
+
+func TestTranscribeMissingAudioReturns400(t *testing.T) {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/transcribe", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key"}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
 

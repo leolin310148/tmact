@@ -4,21 +4,28 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"tmact/internal/stt"
 	"tmact/internal/tmux"
 )
 
@@ -33,6 +40,8 @@ const (
 	wsCaptureInterval = 200 * time.Millisecond
 	wsCaptureLines    = 400
 	wsReadLimit       = 1 << 20
+
+	maxAudioUploadBytes = 25 << 20
 )
 
 // Server is the daemon-side HTTP server for the web UI.
@@ -47,6 +56,14 @@ type Server struct {
 	SendText func(target, text string, enter bool) error
 	// SendKey sends one tmux key to a pane; defaults to tmux.SendKeys.
 	SendKey func(target, key string) error
+	// STTProviderPath is the local provider config path; defaults to
+	// ~/.tmact/stt_provider.json.
+	STTProviderPath string
+	// LoadSTTProvider loads speech-to-text provider config; defaults to reading
+	// STTProviderPath.
+	LoadSTTProvider func() (stt.ProviderConfig, error)
+	// HTTPClient is used for transcription API calls; defaults to a 60s client.
+	HTTPClient *http.Client
 }
 
 func (s *Server) capture() func(string, int) (string, error) {
@@ -70,6 +87,27 @@ func (s *Server) sendKey() func(string, string) error {
 	return func(target, key string) error { return tmux.SendKeys(target, []string{key}) }
 }
 
+func (s *Server) sttProvider() (stt.ProviderConfig, error) {
+	if s.LoadSTTProvider != nil {
+		cfg, err := s.LoadSTTProvider()
+		if err != nil {
+			return stt.ProviderConfig{}, err
+		}
+		if err := cfg.NormalizeAndValidate(); err != nil {
+			return stt.ProviderConfig{}, err
+		}
+		return cfg, nil
+	}
+	return stt.LoadProvider(s.STTProviderPath)
+}
+
+func (s *Server) httpClient() *http.Client {
+	if s.HTTPClient != nil {
+		return s.HTTPClient
+	}
+	return &http.Client{Timeout: 60 * time.Second}
+}
+
 // Handler builds the HTTP routes without binding a socket; useful for tests.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -80,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
+	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }
@@ -118,6 +157,119 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
+}
+
+func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	provider, err := s.sttProvider()
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "voice transcription is not configured: "+err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxAudioUploadBytes)
+	if err := r.ParseMultipartForm(maxAudioUploadBytes); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "request body too large") {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSONError(w, status, "invalid audio upload: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("audio")
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, `missing "audio" upload`)
+		return
+	}
+	defer file.Close()
+
+	filename := header.Filename
+	if filename == "" {
+		filename = "recording.webm"
+	}
+	transcript, err := s.transcribeAudio(r.Context(), provider, filename, header.Header.Get("Content-Type"), file)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	transcript = strings.TrimSpace(transcript)
+	if transcript == "" {
+		writeJSONError(w, http.StatusBadGateway, "transcription API returned an empty transcript")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]string{"text": transcript})
+}
+
+func (s *Server) transcribeAudio(ctx context.Context, provider stt.ProviderConfig, filename, contentType string, audio io.Reader) (string, error) {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("model", provider.Model); err != nil {
+		return "", fmt.Errorf("build transcription request: %w", err)
+	}
+	if err := mw.WriteField("response_format", "json"); err != nil {
+		return "", fmt.Errorf("build transcription request: %w", err)
+	}
+
+	part, err := createMultipartFile(mw, "file", filename, contentType)
+	if err != nil {
+		return "", fmt.Errorf("build transcription request: %w", err)
+	}
+	if _, err := io.Copy(part, audio); err != nil {
+		return "", fmt.Errorf("read audio upload: %w", err)
+	}
+	if err := mw.Close(); err != nil {
+		return "", fmt.Errorf("build transcription request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.Endpoint, &body)
+	if err != nil {
+		return "", fmt.Errorf("build transcription request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+provider.APIKey)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("transcription API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(data))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return "", fmt.Errorf("transcription API returned HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	var out struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode transcription response: %w", err)
+	}
+	return out.Text, nil
+}
+
+func createMultipartFile(mw *multipart.Writer, field, filename, contentType string) (io.Writer, error) {
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{
+		"name":     field,
+		"filename": filename,
+	}))
+	if contentType != "" {
+		h.Set("Content-Type", contentType)
+	}
+	return mw.CreatePart(h)
 }
 
 // inputMsg is a client-to-server WebSocket message.
