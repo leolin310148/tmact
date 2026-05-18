@@ -16,6 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"tmact/internal/stt"
 )
 
 /* ---- HTTP endpoints ---- */
@@ -164,17 +166,16 @@ func audioUploadRequest(t *testing.T, path string, bodyText string) *http.Reques
 	return req
 }
 
-func TestTranscribeMissingAPIKeyReturns503(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "")
-	handler := (&Server{}).Handler()
+func TestTranscribeMissingProviderConfigReturns503(t *testing.T) {
+	handler := (&Server{STTProviderPath: filepath.Join(t.TempDir(), "missing.json")}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "OPENAI_API_KEY") {
-		t.Fatalf("body = %q, want OPENAI_API_KEY error", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "tmact stt-set --provider openai --api-key") {
+		t.Fatalf("body = %q, want stt-set guidance", rec.Body.String())
 	}
 }
 
@@ -217,9 +218,14 @@ func TestTranscribeForwardsAudioToAPI(t *testing.T) {
 	defer api.Close()
 
 	handler := (&Server{
-		TranscribeAPIKey:   "test-key",
-		TranscribeModel:    "whisper-1",
-		TranscribeEndpoint: api.URL,
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{
+				Provider: "openai",
+				APIKey:   "test-key",
+				Model:    "whisper-1",
+				Endpoint: api.URL,
+			}, nil
+		},
 	}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
@@ -245,7 +251,11 @@ func TestTranscribeAPIFailureReturns502(t *testing.T) {
 	}))
 	defer api.Close()
 
-	handler := (&Server{TranscribeAPIKey: "test-key", TranscribeEndpoint: api.URL}).Handler()
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key", Endpoint: api.URL}, nil
+		},
+	}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
 
@@ -263,7 +273,11 @@ func TestTranscribeEmptyTranscriptReturns502(t *testing.T) {
 	}))
 	defer api.Close()
 
-	handler := (&Server{TranscribeAPIKey: "test-key", TranscribeEndpoint: api.URL}).Handler()
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key", Endpoint: api.URL}, nil
+		},
+	}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "audio bytes"))
 
@@ -284,7 +298,11 @@ func TestTranscribeMissingAudioReturns400(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/transcribe", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	handler := (&Server{TranscribeAPIKey: "test-key"}).Handler()
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key"}, nil
+		},
+	}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

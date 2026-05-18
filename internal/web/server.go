@@ -25,6 +25,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"tmact/internal/stt"
 	"tmact/internal/tmux"
 )
 
@@ -40,9 +41,7 @@ const (
 	wsCaptureLines    = 400
 	wsReadLimit       = 1 << 20
 
-	defaultTranscribeEndpoint = "https://api.openai.com/v1/audio/transcriptions"
-	defaultTranscribeModel    = "gpt-4o-transcribe"
-	maxAudioUploadBytes       = 25 << 20
+	maxAudioUploadBytes = 25 << 20
 )
 
 // Server is the daemon-side HTTP server for the web UI.
@@ -57,14 +56,12 @@ type Server struct {
 	SendText func(target, text string, enter bool) error
 	// SendKey sends one tmux key to a pane; defaults to tmux.SendKeys.
 	SendKey func(target, key string) error
-	// TranscribeAPIKey is the OpenAI API key; defaults to OPENAI_API_KEY.
-	TranscribeAPIKey string
-	// TranscribeModel is the OpenAI speech-to-text model; defaults to
-	// TMACT_STT_MODEL, then gpt-4o-transcribe.
-	TranscribeModel string
-	// TranscribeEndpoint is the transcription API URL; defaults to
-	// OPENAI_TRANSCRIPTION_URL, then OpenAI's /v1/audio/transcriptions endpoint.
-	TranscribeEndpoint string
+	// STTProviderPath is the local provider config path; defaults to
+	// ~/.tmact/stt_provider.json.
+	STTProviderPath string
+	// LoadSTTProvider loads speech-to-text provider config; defaults to reading
+	// STTProviderPath.
+	LoadSTTProvider func() (stt.ProviderConfig, error)
 	// HTTPClient is used for transcription API calls; defaults to a 60s client.
 	HTTPClient *http.Client
 }
@@ -90,31 +87,18 @@ func (s *Server) sendKey() func(string, string) error {
 	return func(target, key string) error { return tmux.SendKeys(target, []string{key}) }
 }
 
-func (s *Server) transcribeAPIKey() string {
-	if s.TranscribeAPIKey != "" {
-		return s.TranscribeAPIKey
+func (s *Server) sttProvider() (stt.ProviderConfig, error) {
+	if s.LoadSTTProvider != nil {
+		cfg, err := s.LoadSTTProvider()
+		if err != nil {
+			return stt.ProviderConfig{}, err
+		}
+		if err := cfg.NormalizeAndValidate(); err != nil {
+			return stt.ProviderConfig{}, err
+		}
+		return cfg, nil
 	}
-	return os.Getenv("OPENAI_API_KEY")
-}
-
-func (s *Server) transcribeModel() string {
-	if s.TranscribeModel != "" {
-		return s.TranscribeModel
-	}
-	if v := os.Getenv("TMACT_STT_MODEL"); v != "" {
-		return v
-	}
-	return defaultTranscribeModel
-}
-
-func (s *Server) transcribeEndpoint() string {
-	if s.TranscribeEndpoint != "" {
-		return s.TranscribeEndpoint
-	}
-	if v := os.Getenv("OPENAI_TRANSCRIPTION_URL"); v != "" {
-		return v
-	}
-	return defaultTranscribeEndpoint
+	return stt.LoadProvider(s.STTProviderPath)
 }
 
 func (s *Server) httpClient() *http.Client {
@@ -181,9 +165,9 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := s.transcribeAPIKey()
-	if apiKey == "" {
-		writeJSONError(w, http.StatusServiceUnavailable, "OPENAI_API_KEY is not set; voice transcription is unavailable")
+	provider, err := s.sttProvider()
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "voice transcription is not configured: "+err.Error())
 		return
 	}
 
@@ -208,7 +192,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	if filename == "" {
 		filename = "recording.webm"
 	}
-	transcript, err := s.transcribeAudio(r.Context(), apiKey, s.transcribeModel(), filename, header.Header.Get("Content-Type"), file)
+	transcript, err := s.transcribeAudio(r.Context(), provider, filename, header.Header.Get("Content-Type"), file)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, err.Error())
 		return
@@ -224,10 +208,10 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"text": transcript})
 }
 
-func (s *Server) transcribeAudio(ctx context.Context, apiKey, model, filename, contentType string, audio io.Reader) (string, error) {
+func (s *Server) transcribeAudio(ctx context.Context, provider stt.ProviderConfig, filename, contentType string, audio io.Reader) (string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
-	if err := mw.WriteField("model", model); err != nil {
+	if err := mw.WriteField("model", provider.Model); err != nil {
 		return "", fmt.Errorf("build transcription request: %w", err)
 	}
 	if err := mw.WriteField("response_format", "json"); err != nil {
@@ -245,11 +229,11 @@ func (s *Server) transcribeAudio(ctx context.Context, apiKey, model, filename, c
 		return "", fmt.Errorf("build transcription request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.transcribeEndpoint(), &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.Endpoint, &body)
 	if err != nil {
 		return "", fmt.Errorf("build transcription request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+provider.APIKey)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
 	resp, err := s.httpClient().Do(req)
