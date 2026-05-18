@@ -150,10 +150,10 @@
   .input-bar.direct .input-row { display: none; }
   #draft {
     flex: 1 1 auto; resize: vertical;
-    min-height: 36px; max-height: 200px;
+    min-height: 30px; max-height: 200px;
     background: var(--bg); color: var(--fg);
     border: 1px solid var(--border); border-radius: 5px;
-    padding: 6px 8px; font: 12px/1.4 var(--mono);
+    padding: 5px 8px; font: 12px/1.4 var(--mono);
   }
   #draft:focus { outline: none; border-color: var(--accent); }
   #draft:disabled { opacity: 0.5; }
@@ -196,7 +196,7 @@
     <span class="input-error" id="input-error"></span>
   </div>
   <div class="input-row">
-    <textarea id="draft" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+    <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
     <button id="send-btn" disabled>Send</button>
   </div>
 </div>
