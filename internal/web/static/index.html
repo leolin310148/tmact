@@ -157,21 +157,64 @@
   }
   #draft:focus { outline: none; border-color: var(--accent); }
   #draft:disabled { opacity: 0.5; }
-  #send-btn {
-    flex: 0 0 auto; padding: 0 14px;
-    background: var(--accent); color: #fff;
-    border: 0; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer;
+  /* Compact square icon buttons — the mic and send actions sit beside the
+     draft box and stretch to its height. */
+  .icon-btn {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; padding: 0;
+    border-radius: 5px; cursor: pointer;
   }
-  #record-btn {
-    flex: 0 0 auto; padding: 0 12px;
-    background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 5px;
-    font-size: 13px; font-weight: 600; cursor: pointer;
-    min-width: 76px;
-  }
-  #record-btn.recording { background: rgba(248,81,73,0.18); color: #fff; border-color: var(--red); }
+  .icon-btn svg { width: 20px; height: 20px; display: block; }
+  #send-btn { background: var(--accent); color: #fff; border: 0; }
+  #record-btn { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
   #record-btn.busy { color: var(--fg-dim); }
   #send-btn:disabled, #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Recording overlay — a full-screen modal while the mic is live, so it is
+     unmistakable that audio is being captured. */
+  .rec-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(8,10,14,0.82);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .rec-overlay[hidden] { display: none; }
+  .rec-card {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 26px 30px; min-width: 232px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .rec-dot {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--red);
+    animation: rec-pulse 1.4s ease-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(248,81,73,0.55); }
+    100% { box-shadow: 0 0 0 26px rgba(248,81,73,0); }
+  }
+  .rec-label { font-size: 15px; font-weight: 600; }
+  .rec-timer { font: 22px/1 var(--mono); color: var(--fg-dim); }
+  .rec-actions { display: flex; gap: 10px; margin-top: 2px; }
+  .rec-stop, .rec-cancel {
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 15px; border-radius: 7px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .rec-stop { background: var(--red); color: #fff; border: 0; }
+  .rec-stop svg { width: 17px; height: 17px; }
+  .rec-cancel { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
+  /* Transcribing phase: swap the pulse for a spinner, drop the timer + buttons. */
+  .rec-overlay.transcribing .rec-dot {
+    background: transparent;
+    border: 4px solid var(--border); border-top-color: var(--accent);
+    animation: rec-spin 0.8s linear infinite;
+  }
+  @keyframes rec-spin { to { transform: rotate(360deg); } }
+  .rec-overlay.transcribing .rec-timer,
+  .rec-overlay.transcribing .rec-actions { display: none; }
 
   @media (max-width: 760px) {
     .key-area { display: flex; }
@@ -206,13 +249,32 @@
   </div>
   <div class="input-row">
     <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
-    <button id="record-btn" type="button" disabled title="record voice">Mic</button>
-    <button id="send-btn" disabled>Send</button>
+    <button id="record-btn" class="icon-btn" type="button" disabled title="record voice" aria-label="record voice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+    </button>
+    <button id="send-btn" class="icon-btn" type="button" disabled title="send" aria-label="send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>
+    </button>
+  </div>
+</div>
+<div class="rec-overlay" id="rec-overlay" hidden>
+  <div class="rec-card">
+    <div class="rec-dot"></div>
+    <div class="rec-label" id="rec-label">Recording…</div>
+    <div class="rec-timer" id="rec-timer">0:00</div>
+    <div class="rec-actions">
+      <button class="rec-cancel" id="rec-cancel" type="button">Cancel</button>
+      <button class="rec-stop" id="rec-stop" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+        Stop &amp; transcribe
+      </button>
+    </div>
   </div>
 </div>
 <script>
 const state = { selected: null, snapshot: null, drafts: {} };
-const voice = { recorder: null, stream: null, chunks: [], busy: false };
+const voice = { recorder: null, stream: null, chunks: [], busy: false,
+                mimeType: "", canceled: false, timer: null, startedAt: 0 };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
 
@@ -555,14 +617,43 @@ function preferredAudioType() {
   return "";
 }
 
+// The record button only ever starts a recording — the live state and the
+// stop control live in the overlay — so it just reflects enabled/busy.
 function syncRecordButton() {
   const btn = $("record-btn");
-  const recording = voice.recorder && voice.recorder.state === "recording";
-  btn.classList.toggle("recording", recording);
   btn.classList.toggle("busy", voice.busy);
-  btn.textContent = voice.busy ? "Wait" : recording ? "Stop" : "Mic";
-  btn.title = voice.busy ? "transcribing voice" : recording ? "stop recording" : "record voice";
   btn.disabled = voice.busy || !state.selected || !voiceSupported();
+  btn.title = voice.busy ? "transcribing…" : "record voice";
+}
+
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function showRecOverlay() {
+  const ov = $("rec-overlay");
+  ov.classList.remove("transcribing");
+  $("rec-label").textContent = "Recording…";
+  $("rec-timer").textContent = "0:00";
+  ov.hidden = false;
+  voice.startedAt = Date.now();
+  if (voice.timer) clearInterval(voice.timer);
+  voice.timer = setInterval(() => {
+    $("rec-timer").textContent = fmtElapsed(Date.now() - voice.startedAt);
+  }, 250);
+}
+
+function recOverlayTranscribing() {
+  $("rec-overlay").classList.add("transcribing");
+  $("rec-label").textContent = "Transcribing…";
+  if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
+}
+
+function hideRecOverlay() {
+  $("rec-overlay").hidden = true;
+  $("rec-overlay").classList.remove("transcribing");
+  if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
 }
 
 function insertTranscript(text) {
@@ -589,22 +680,31 @@ function insertTranscript(text) {
   draft.focus();
 }
 
+// recordingFilename names the upload after its real container. The server
+// re-sniffs the bytes regardless, but a correct name is a useful fallback.
 function recordingFilename(type) {
-  if (type.includes("mp4")) return "recording.m4a";
-  if (type.includes("wav")) return "recording.wav";
-  return "recording.webm";
+  const t = (type || "").toLowerCase();
+  let ext = "webm";
+  if (t.includes("webm")) ext = "webm";
+  else if (t.includes("ogg") || t.includes("oga")) ext = "ogg";
+  else if (t.includes("mp4") || t.includes("m4a") || t.includes("aac")) ext = "m4a";
+  else if (t.includes("mpeg") || t.includes("mpga") || t.includes("mp3")) ext = "mp3";
+  else if (t.includes("wav")) ext = "wav";
+  return "recording." + ext;
 }
 
 async function uploadRecording(blob) {
   if (!blob || blob.size === 0) {
+    hideRecOverlay();
     showInputError("no audio recorded");
     return;
   }
   voice.busy = true;
   syncRecordButton();
+  recOverlayTranscribing();
   try {
     const form = new FormData();
-    form.append("audio", blob, recordingFilename(blob.type || "audio/webm"));
+    form.append("audio", blob, recordingFilename(voice.mimeType || blob.type));
     const res = await fetch("/api/transcribe", { method: "POST", body: form });
     let data = {};
     try { data = await res.json(); } catch (e) {}
@@ -614,12 +714,13 @@ async function uploadRecording(blob) {
     showInputError(e.message || "transcription failed");
   } finally {
     voice.busy = false;
+    hideRecOverlay();
     syncRecordButton();
   }
 }
 
 async function startRecording() {
-  if (!state.selected) return;
+  if (!state.selected || voice.busy || voice.recorder) return;
   if (!voiceSupported()) {
     showInputError("microphone recording is not supported in this browser");
     return;
@@ -632,20 +733,30 @@ async function startRecording() {
     voice.stream = stream;
     voice.recorder = recorder;
     voice.chunks = [];
+    voice.canceled = false;
+    // Trust the type we asked for: iOS Safari leaves recorder.mimeType empty,
+    // which would otherwise mislabel an MP4 recording as webm.
+    voice.mimeType = type || recorder.mimeType || "";
     recorder.ondataavailable = (ev) => {
       if (ev.data && ev.data.size > 0) voice.chunks.push(ev.data);
     };
-    recorder.onerror = () => showInputError("microphone recording failed");
+    recorder.onerror = () => {
+      hideRecOverlay();
+      showInputError("microphone recording failed");
+    };
     recorder.onstop = () => {
       stream.getTracks().forEach((track) => track.stop());
-      const blob = new Blob(voice.chunks, { type: recorder.mimeType || "audio/webm" });
+      const blob = new Blob(voice.chunks, { type: voice.mimeType || recorder.mimeType || "audio/mp4" });
+      const canceled = voice.canceled;
       voice.recorder = null;
       voice.stream = null;
       voice.chunks = [];
       syncRecordButton();
+      if (canceled) { hideRecOverlay(); return; }
       uploadRecording(blob);
     };
     recorder.start();
+    showRecOverlay();
     syncRecordButton();
   } catch (e) {
     const denied = e && (e.name === "NotAllowedError" || e.name === "PermissionDeniedError");
@@ -653,19 +764,25 @@ async function startRecording() {
     if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
     voice.stream = null;
     voice.recorder = null;
+    hideRecOverlay();
     syncRecordButton();
   }
 }
 
+// stopRecording ends the take and transcribes it; cancelRecording discards it.
 function stopRecording() {
   if (voice.recorder && voice.recorder.state === "recording") {
     voice.recorder.stop();
   }
 }
 
-function toggleRecording() {
-  if (voice.recorder && voice.recorder.state === "recording") stopRecording();
-  else startRecording();
+function cancelRecording() {
+  if (voice.recorder && voice.recorder.state === "recording") {
+    voice.canceled = true;
+    voice.recorder.stop();
+  } else {
+    hideRecOverlay();
+  }
 }
 
 /* ---- mode 2: direct keystroke passthrough ---- */
@@ -781,7 +898,9 @@ function wireInput() {
     }
   });
   $("send-btn").addEventListener("click", sendDraft);
-  $("record-btn").addEventListener("click", toggleRecording);
+  $("record-btn").addEventListener("click", startRecording);
+  $("rec-stop").addEventListener("click", stopRecording);
+  $("rec-cancel").addEventListener("click", cancelRecording);
   syncRecordButton();
 
   buildKeyBar();
