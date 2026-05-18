@@ -167,21 +167,29 @@ func ParsePanes(output string) ([]Pane, error) {
 	return panes, nil
 }
 
+// CapturePane returns the pane's text with escape sequences stripped — the
+// form classifiers and pattern matchers expect.
 func CapturePane(target string, lines int) (string, error) {
+	return capturePane(target, lines, false)
+}
+
+// CapturePaneANSI is CapturePane plus tmux's -e flag, keeping colour and
+// attribute escape sequences. Use it only where the consumer renders escapes
+// (the web UI); classifiers should stay on the plain CapturePane.
+func CapturePaneANSI(target string, lines int) (string, error) {
+	return capturePane(target, lines, true)
+}
+
+func capturePane(target string, lines int, escapes bool) (string, error) {
 	if lines <= 0 {
 		lines = 120
 	}
 
-	cmd := exec.Command(
-		"tmux",
-		"capture-pane",
-		"-t",
-		target,
-		"-p",
-		"-J",
-		"-S",
-		"-"+strconv.Itoa(lines),
-	)
+	args := []string{"capture-pane", "-t", target, "-p", "-J", "-S", "-" + strconv.Itoa(lines)}
+	if escapes {
+		args = append(args, "-e")
+	}
+	cmd := exec.Command("tmux", args...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

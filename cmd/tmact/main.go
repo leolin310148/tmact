@@ -691,7 +691,7 @@ func runStatusdStart(args []string) error {
 		return errors.New("--json is only valid with --once for statusd start")
 	}
 	if *webAddr != "" {
-		server := &web.Server{Addr: *webAddr, StatePath: cfg.StatePath, CapturePane: tmux.CapturePane}
+		server := &web.Server{Addr: *webAddr, StatePath: cfg.StatePath, CapturePane: tmux.CapturePaneANSI}
 		go func() {
 			if err := server.Serve(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "statusd web server (%s) stopped: %v\n", *webAddr, err)

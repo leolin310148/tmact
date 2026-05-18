@@ -28,13 +28,14 @@
     flex-direction: column;
   }
 
-  /* tmux-style status line: one horizontal strip of every pane. */
+  /* tmux-style status line: one strip of every pane, fixed at the bottom
+     alongside the helper keys and input. */
   .statusline {
     flex: 0 0 auto;
     display: flex; align-items: center;
     padding: 0 8px;
     background: var(--panel);
-    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
   }
   .chips {
     flex: 1 1 auto; min-width: 0;
@@ -78,8 +79,8 @@
   }
   pre#content {
     margin: 0; flex: 1 1 auto; overflow: auto;
-    padding: 12px 16px;
-    font: 12.5px/1.5 var(--mono);
+    padding: 10px 14px;
+    font: 10.5px/1.4 var(--mono);
     white-space: pre-wrap; word-break: break-word;
     background: var(--bg); cursor: text;
   }
@@ -126,6 +127,9 @@
   .mode-indicator.direct { color: var(--red); font-weight: 700; }
   .input-error { color: var(--amber); }
   .input-row { display: flex; gap: 8px; align-items: stretch; }
+  /* Direct mode types straight into the pane — the draft box would only get
+     in the way, so collapse it and leave just the helper keys + indicator. */
+  .input-bar.direct .input-row { display: none; }
   #draft {
     flex: 1 1 auto; resize: vertical;
     min-height: 48px; max-height: 200px;
@@ -148,19 +152,22 @@
     .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
     .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
     .dot { width: 6px; height: 6px; }
+    /* 16px stops iOS Safari from auto-zooming when an input takes focus —
+       a zoomed page hides the Send button behind the viewport edge. */
+    #draft, #direct-input { font-size: 16px; }
   }
 </style>
 </head>
 <body>
-<nav class="statusline">
-  <div class="chips" id="chips"></div>
-  <span class="stale-dot" id="stale-dot" title="no connection for 10s+"></span>
-</nav>
 <div class="content-wrap" id="content-wrap">
   <pre id="content"><span class="empty">No pane selected.</span></pre>
   <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 </div>
-<div class="input-bar">
+<nav class="statusline">
+  <div class="chips" id="chips"></div>
+  <span class="stale-dot" id="stale-dot" title="no connection for 10s+"></span>
+</nav>
+<div class="input-bar" id="input-bar">
   <div class="key-bar" id="key-bar"></div>
   <div class="mode-indicator" id="mode-indicator">
     <span id="mode-text">Select a pane to enable input</span>
@@ -276,6 +283,7 @@ function renderMode() {
     return;
   }
   const direct = document.activeElement === $("direct-input");
+  $("input-bar").classList.toggle("direct", direct);
   if (direct) {
     text.textContent = "● DIRECT — keystrokes go straight to " + currentPaneName();
     ind.classList.add("direct");
@@ -296,10 +304,106 @@ function showInputError(msg) {
   errorTimer = setTimeout(() => { $("input-error").textContent = ""; }, 3500);
 }
 
+/* ---- ANSI SGR colour rendering (tmux capture-pane -e output) ---- */
+
+// Tango palette — the 16 base colours, readable on the dark background.
+const ANSI16 = [
+  "#000000", "#cc0000", "#4e9a06", "#c4a000", "#3465a4", "#75507b", "#06989a", "#d3d7cf",
+  "#555753", "#ef2929", "#8ae234", "#fce94f", "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec",
+];
+
+function ansi256(n) {
+  if (n < 16) return ANSI16[n] || "";
+  if (n < 232) {
+    n -= 16;
+    const hex = (v) => (v === 0 ? 0 : 55 + v * 40).toString(16).padStart(2, "0");
+    return "#" + hex(Math.floor(n / 36) % 6) + hex(Math.floor(n / 6) % 6) + hex(n % 6);
+  }
+  const g = (8 + (n - 232) * 10).toString(16).padStart(2, "0");
+  return "#" + g + g + g;
+}
+
+function escapeHTML(s) {
+  return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
+}
+
+// ansiToHTML turns tmux -e output (plain text + \x1b[...m SGR sequences) into
+// HTML. Text is HTML-escaped; styles come only from a fixed palette and parsed
+// integers, never from raw pane text, so a coloured span cannot inject markup.
+function ansiToHTML(raw) {
+  const st = { fg: null, bg: null, bold: false, dim: false,
+               italic: false, underline: false, reverse: false };
+  const reset = () => {
+    st.fg = st.bg = null;
+    st.bold = st.dim = st.italic = st.underline = st.reverse = false;
+  };
+  const apply = (codes) => {
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i];
+      if (c === 0) reset();
+      else if (c === 1) st.bold = true;
+      else if (c === 2) st.dim = true;
+      else if (c === 3) st.italic = true;
+      else if (c === 4) st.underline = true;
+      else if (c === 7) st.reverse = true;
+      else if (c === 22) st.bold = st.dim = false;
+      else if (c === 23) st.italic = false;
+      else if (c === 24) st.underline = false;
+      else if (c === 27) st.reverse = false;
+      else if (c >= 30 && c <= 37) st.fg = ANSI16[c - 30];
+      else if (c === 39) st.fg = null;
+      else if (c >= 40 && c <= 47) st.bg = ANSI16[c - 40];
+      else if (c === 49) st.bg = null;
+      else if (c >= 90 && c <= 97) st.fg = ANSI16[c - 82];
+      else if (c >= 100 && c <= 107) st.bg = ANSI16[c - 92];
+      else if (c === 38 || c === 48) {
+        const key = c === 38 ? "fg" : "bg";
+        if (codes[i + 1] === 5) { st[key] = ansi256(codes[i + 2] | 0); i += 2; }
+        else if (codes[i + 1] === 2) {
+          const ch = (v) => Math.max(0, Math.min(255, v | 0));
+          st[key] = "rgb(" + ch(codes[i+2]) + "," + ch(codes[i+3]) + "," + ch(codes[i+4]) + ")";
+          i += 4;
+        }
+      }
+    }
+  };
+  const style = () => {
+    let f = st.fg, b = st.bg;
+    if (st.reverse) { f = st.bg || "var(--bg)"; b = st.fg || "var(--fg)"; }
+    const p = [];
+    if (f) p.push("color:" + f);
+    if (b) p.push("background:" + b);
+    if (st.bold) p.push("font-weight:700");
+    if (st.dim) p.push("opacity:.6");
+    if (st.italic) p.push("font-style:italic");
+    if (st.underline) p.push("text-decoration:underline");
+    return p.join(";");
+  };
+
+  let out = "", last = 0, m;
+  // First alternative is SGR (parsed); the rest are other CSI/OSC escapes (dropped).
+  const re = /\x1b\[([0-9;]*)m|\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+  const emit = (from, to) => {
+    if (to <= from) return;
+    const seg = escapeHTML(raw.slice(from, to));
+    const s = style();
+    out += s ? '<span style="' + s + '">' + seg + "</span>" : seg;
+  };
+  while ((m = re.exec(raw)) !== null) {
+    emit(last, m.index);
+    if (m[1] !== undefined) {
+      apply(m[1] === "" ? [0] : m[1].split(";").map((n) => parseInt(n, 10) || 0));
+    }
+    last = re.lastIndex;
+  }
+  emit(last, raw.length);
+  return out;
+}
+
 function setContent(text) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-  pre.textContent = text;
+  pre.innerHTML = ansiToHTML(text);
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
@@ -519,6 +623,29 @@ function wireInput() {
 
   document.addEventListener("focusin", renderMode);
   document.addEventListener("focusout", () => setTimeout(renderMode, 0));
+}
+
+/* ---- mobile: keep the app inside the visual viewport ---- */
+
+// The soft keyboard shrinks the visual viewport but not the layout, so the
+// input bar and the bottom of the pane end up hidden behind it. Pin the body
+// to the visual viewport; on a resize (keyboard open/close) also re-anchor the
+// output to its last line so the live tail stays in view.
+function fitViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  document.body.style.height = vv.height + "px";
+  window.scrollTo(0, 0);
+}
+function pinViewport() {
+  fitViewport();
+  const pre = $("content");
+  pre.scrollTop = pre.scrollHeight;
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", pinViewport);
+  window.visualViewport.addEventListener("scroll", fitViewport);
+  fitViewport();
 }
 
 /* ---- lifecycle ---- */
