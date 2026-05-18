@@ -59,6 +59,69 @@ func TestIndexPageServed(t *testing.T) {
 	}
 }
 
+func TestIndexIncludesPWAInstallHooks(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<meta name="theme-color" content="#0e1116" />`,
+		`<link rel="manifest" href="/manifest.json" />`,
+		`<link rel="apple-touch-icon" href="/icons/icon-180.png" />`,
+		`navigator.serviceWorker.register("/sw.js")`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+}
+
+func TestPWAAssetsContentTypes(t *testing.T) {
+	handler := (&Server{}).Handler()
+	tests := []struct {
+		path        string
+		contentType string
+	}{
+		{"/manifest.json", "application/json"},
+		{"/sw.js", "text/javascript"},
+		{"/icons/icon-180.png", "image/png"},
+		{"/icons/icon-192.png", "image/png"},
+		{"/icons/icon-512.png", "image/png"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, tt.contentType) {
+				t.Fatalf("Content-Type = %q, want prefix %q", got, tt.contentType)
+			}
+		})
+	}
+}
+
+func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sw.js", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`url.pathname.startsWith("/api/")`,
+		`url.pathname.startsWith("/ws/")`,
+		`APP_SHELL_PATHS.has(url.pathname)`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("service worker missing %q", want)
+		}
+	}
+}
+
 /* ---- input validation ---- */
 
 func TestKeyAllowed(t *testing.T) {
