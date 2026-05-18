@@ -131,7 +131,7 @@ func TestDryRunNewSessionPlan(t *testing.T) {
 	if report.SessionExisted {
 		t.Fatal("session should not be reported as existing")
 	}
-	for _, name := range []string{"create-session", "wait-ready", "send-prompt"} {
+	for _, name := range []string{"create-session", "launch-agent", "wait-ready", "send-prompt"} {
 		if got := stepStatus(t, report, name); got != dispatch.StatusPlanned {
 			t.Fatalf("step %q status = %q, want planned", name, got)
 		}
@@ -146,11 +146,15 @@ func TestExecuteNewSession(t *testing.T) {
 	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
 		return []tmux.Pane{claudePane()}, nil
 	}
+	// Pane 0: fresh shell. Pane 1: agent launched, input-ready. Pane 2:
+	// prompt submitted, agent working.
 	deps.CapturePane = func(string, int) (string, error) {
-		if len(rec.pastes) == 0 {
+		switch {
+		case len(rec.pastes) < 2:
 			return "Claude Code\nready for input", nil
+		default:
+			return "Claude Code\nWorking... esc to interrupt", nil
 		}
-		return "Claude Code\nWorking... esc to interrupt", nil
 	}
 
 	opts := baseOpts()
@@ -165,13 +169,19 @@ func TestExecuteNewSession(t *testing.T) {
 	if report.Target != "%1" {
 		t.Fatalf("target = %q, want %%1", report.Target)
 	}
-	if len(rec.pastes) != 1 || rec.pastes[0] != (paste{"%1", "do the thing", true}) {
-		t.Fatalf("pastes = %+v", rec.pastes)
+	want := []paste{{"%1", "claude", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	for i := range want {
+		if rec.pastes[i] != want[i] {
+			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
+		}
 	}
 	if n := enterCount(rec); n != 0 {
 		t.Fatalf("a working pane should need no re-sent Enter, got %d", n)
 	}
-	for _, name := range []string{"create-session", "wait-ready", "send-prompt"} {
+	for _, name := range []string{"create-session", "launch-agent", "wait-ready", "send-prompt"} {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
 		}
@@ -315,11 +325,12 @@ func TestExecuteNewSessionResendsEnterWhenPromptStuck(t *testing.T) {
 	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
 		return []tmux.Pane{claudePane()}, nil
 	}
-	// A cold start swallows the first Enter: the pane stays input-ready
-	// until a second Enter is sent, then the agent starts working.
+	// The first paste launches the agent; the second is the prompt. A cold
+	// start swallows the first Enter on the prompt: the pane stays
+	// input-ready until a second Enter is sent, then the agent starts working.
 	deps.CapturePane = func(string, int) (string, error) {
 		switch {
-		case len(rec.pastes) == 0:
+		case len(rec.pastes) < 2:
 			return "Claude Code\nready", nil
 		case enterCount(rec) == 0:
 			return "Claude Code\n1 MCP server failed\nprompt still sitting in the input box", nil
@@ -340,8 +351,9 @@ func TestExecuteNewSessionResendsEnterWhenPromptStuck(t *testing.T) {
 	if n := enterCount(rec); n != 1 {
 		t.Fatalf("expected exactly 1 re-sent Enter, got %d", n)
 	}
-	if len(rec.pastes) != 1 {
-		t.Fatalf("prompt should be pasted exactly once, pastes = %+v", rec.pastes)
+	want := []paste{{"%1", "claude", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
 	}
 	if rec.keys[0].target != "%1" {
 		t.Fatalf("re-sent Enter target = %q, want %%1", rec.keys[0].target)
@@ -353,10 +365,10 @@ func TestExecuteNewSessionFailsWhenPromptNeverSubmits(t *testing.T) {
 	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
 		return []tmux.Pane{claudePane()}, nil
 	}
-	// The pane is ready but never leaves the input box, no matter how many
-	// times Enter is re-sent.
+	// The agent launches and becomes ready, but the prompt never leaves the
+	// input box, no matter how many times Enter is re-sent.
 	deps.CapturePane = func(string, int) (string, error) {
-		if len(rec.pastes) == 0 {
+		if len(rec.pastes) < 2 {
 			return "Claude Code\nready", nil
 		}
 		return "Claude Code\nprompt stuck in the input box", nil

@@ -162,22 +162,28 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	return dispatchNew(opts, deps, report)
 }
 
+// dispatchNew creates the session running the user's default shell, then
+// launches the agent into that shell as a keystroke. Running the agent on top
+// of a shell (rather than as the session's own process) means quitting the
+// agent drops back to a live shell instead of tearing the session down, so a
+// human can take over and run git or other commands.
 func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	create := Step{
 		Name:   "create-session",
-		Detail: fmt.Sprintf("tmux new-session -d -s %s -c %s %s", opts.Session, opts.Dir, opts.Agent),
+		Detail: fmt.Sprintf("tmux new-session -d -s %s -c %s (default shell)", opts.Session, opts.Dir),
 		Status: StatusPlanned,
 	}
+	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", opts.Agent), Status: StatusPlanned}
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
-	steps := []Step{create, ready, send}
+	steps := []Step{create, launch, ready, send}
 
 	if !opts.Execute {
 		report.Steps = steps
 		return report, nil
 	}
 
-	if err := deps.NewSession(opts.Session, "", opts.Dir, []string{opts.Agent}); err != nil {
+	if err := deps.NewSession(opts.Session, "", opts.Dir, nil); err != nil {
 		steps[0].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("create session: %w", err)
@@ -191,19 +197,26 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	report.Target = target
 
-	if err := waitReady(opts, deps, target); err != nil {
+	if err := deps.PasteText(target, opts.Agent, true); err != nil {
 		steps[1].Status = StatusFailed
 		report.Steps = steps
-		return report, err
+		return report, fmt.Errorf("launch %s: %w", opts.Agent, err)
 	}
 	steps[1].Status = StatusOK
 
-	if err := submitPrompt(opts, deps, target); err != nil {
+	if err := waitReady(opts, deps, target); err != nil {
 		steps[2].Status = StatusFailed
+		report.Steps = steps
+		return report, err
+	}
+	steps[2].Status = StatusOK
+
+	if err := submitPrompt(opts, deps, target); err != nil {
+		steps[3].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
 	}
-	steps[2].Status = StatusOK
+	steps[3].Status = StatusOK
 	report.Steps = steps
 	return report, nil
 }

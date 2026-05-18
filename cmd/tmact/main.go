@@ -2469,6 +2469,7 @@ func commandHelpCatalog() []commandHelp {
 			},
 			Notes: []string{
 				"The session name is the first positional argument.",
+				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",
 			},
 		},
