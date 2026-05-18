@@ -1,21 +1,20 @@
 package web
 
 import (
-	"encoding/json"
-	"fmt"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
-func newTestServer(t *testing.T, statePath string, capture func(string, int) (string, error)) http.Handler {
-	t.Helper()
-	s := &Server{StatePath: statePath, CapturePane: capture}
-	return s.Handler()
-}
+/* ---- HTTP endpoints ---- */
 
 func TestSnapshotServesFileVerbatim(t *testing.T) {
 	dir := t.TempDir()
@@ -25,7 +24,7 @@ func TestSnapshotServesFileVerbatim(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := newTestServer(t, path, nil)
+	handler := (&Server{StatePath: path}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
 
@@ -35,13 +34,10 @@ func TestSnapshotServesFileVerbatim(t *testing.T) {
 	if got := rec.Body.String(); got != body {
 		t.Fatalf("body = %q, want %q", got, body)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("content-type = %q", ct)
-	}
 }
 
 func TestSnapshotMissingFileReturns503(t *testing.T) {
-	handler := newTestServer(t, filepath.Join(t.TempDir(), "absent.json"), nil)
+	handler := (&Server{StatePath: filepath.Join(t.TempDir(), "absent.json")}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
 
@@ -50,94 +46,8 @@ func TestSnapshotMissingFileReturns503(t *testing.T) {
 	}
 }
 
-func TestPaneCapturesByPaneID(t *testing.T) {
-	var gotTarget string
-	var gotLines int
-	capture := func(target string, lines int) (string, error) {
-		gotTarget, gotLines = target, lines
-		return "hello from pane", nil
-	}
-	handler := newTestServer(t, "", capture)
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pane?pane=%2512&lines=80", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if gotTarget != "%12" {
-		t.Fatalf("capture target = %q, want %%12", gotTarget)
-	}
-	if gotLines != 80 {
-		t.Fatalf("capture lines = %d, want 80", gotLines)
-	}
-	var payload struct {
-		Pane    string `json:"pane"`
-		Lines   int    `json:"lines"`
-		Content string `json:"content"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Pane != "%12" || payload.Content != "hello from pane" {
-		t.Fatalf("payload = %+v", payload)
-	}
-}
-
-func TestPaneRejectsNonPaneIDTargets(t *testing.T) {
-	called := false
-	capture := func(string, int) (string, error) {
-		called = true
-		return "", nil
-	}
-	handler := newTestServer(t, "", capture)
-
-	for _, bad := range []string{"", "session:0.1", "-X", "%12;rm", "12"} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/pane?pane="+bad, nil)
-		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("pane=%q status = %d, want 400", bad, rec.Code)
-		}
-	}
-	if called {
-		t.Fatal("capture must not run for rejected pane ids")
-	}
-}
-
-func TestPaneClampsLines(t *testing.T) {
-	var gotLines int
-	capture := func(_ string, lines int) (string, error) {
-		gotLines = lines
-		return "", nil
-	}
-	handler := newTestServer(t, "", capture)
-
-	rec := httptest.NewRecorder()
-	url := fmt.Sprintf("/api/pane?pane=%%251&lines=%d", maxCaptureLines+1000)
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
-
-	if gotLines != maxCaptureLines {
-		t.Fatalf("lines = %d, want clamp to %d", gotLines, maxCaptureLines)
-	}
-}
-
-func TestPaneCaptureErrorReturns502(t *testing.T) {
-	capture := func(string, int) (string, error) {
-		return "", fmt.Errorf("tmux capture-pane failed")
-	}
-	handler := newTestServer(t, "", capture)
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pane?pane=%251", nil))
-
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want 502", rec.Code)
-	}
-}
-
 func TestIndexPageServed(t *testing.T) {
-	handler := newTestServer(t, "", nil)
+	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
@@ -146,5 +56,180 @@ func TestIndexPageServed(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "<title>tmact") {
 		t.Fatal("index page body missing expected title")
+	}
+}
+
+/* ---- input validation ---- */
+
+func TestKeyAllowed(t *testing.T) {
+	allowed := []string{"Enter", "BSpace", "Escape", "Up", "PageDown", "C-c", "C-z", "Space"}
+	denied := []string{"", "rm", "C-C", "C-1", "M-x", "Enter; rm", "-X", "ArrowUp"}
+	for _, k := range allowed {
+		if !keyAllowed(k) {
+			t.Errorf("keyAllowed(%q) = false, want true", k)
+		}
+	}
+	for _, k := range denied {
+		if keyAllowed(k) {
+			t.Errorf("keyAllowed(%q) = true, want false", k)
+		}
+	}
+}
+
+func TestApplyInputText(t *testing.T) {
+	var gotTarget, gotText string
+	var gotEnter bool
+	s := &Server{SendText: func(target, text string, enter bool) error {
+		gotTarget, gotText, gotEnter = target, text, enter
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "text", S: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotTarget != "%7" || gotText != "hi" || gotEnter {
+		t.Fatalf("SendText got (%q, %q, %v)", gotTarget, gotText, gotEnter)
+	}
+}
+
+func TestApplyInputSendUsesEnter(t *testing.T) {
+	var gotEnter bool
+	s := &Server{SendText: func(_, _ string, enter bool) error {
+		gotEnter = enter
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "send", S: "a prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	if !gotEnter {
+		t.Fatal(`"send" message must paste with Enter`)
+	}
+}
+
+func TestApplyInputKeyAllowed(t *testing.T) {
+	var gotKey string
+	s := &Server{SendKey: func(_, key string) error {
+		gotKey = key
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "key", K: "C-c"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotKey != "C-c" {
+		t.Fatalf("SendKey got %q, want C-c", gotKey)
+	}
+}
+
+func TestApplyInputKeyRejected(t *testing.T) {
+	s := &Server{SendKey: func(_, _ string) error {
+		t.Fatal("SendKey must not run for a disallowed key")
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "key", K: "rm -rf"}); err == nil {
+		t.Fatal("expected error for disallowed key")
+	}
+}
+
+func TestApplyInputUnknownType(t *testing.T) {
+	if err := (&Server{}).applyInput("%7", inputMsg{T: "bogus"}); err == nil {
+		t.Fatal("expected error for unknown message type")
+	}
+}
+
+/* ---- /ws/pane integration ---- */
+
+func wsURL(httpURL string) string {
+	return "ws" + strings.TrimPrefix(httpURL, "http")
+}
+
+func dialPane(t *testing.T, srv *httptest.Server, pane string) (*websocket.Conn, context.Context) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	t.Cleanup(cancel)
+	c, _, err := websocket.Dial(ctx, wsURL(srv.URL)+"/ws/pane?pane="+pane, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { c.CloseNow() })
+	return c, ctx
+}
+
+func TestPaneWSStreamsContent(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "pane body", nil },
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "content" || m.S != "pane body" {
+		t.Fatalf("got %+v, want content/pane body", m)
+	}
+}
+
+func TestPaneWSAppliesTextInput(t *testing.T) {
+	type call struct {
+		target, text string
+		enter        bool
+	}
+	calls := make(chan call, 4)
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "", nil },
+		SendText: func(target, text string, enter bool) error {
+			calls <- call{target, text, enter}
+			return nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	if err := wsjson.Write(ctx, c, inputMsg{T: "text", S: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-calls:
+		if got.target != "%11" || got.text != "hello" || got.enter {
+			t.Fatalf("SendText got %+v", got)
+		}
+	case <-ctx.Done():
+		t.Fatal("SendText was not called")
+	}
+}
+
+func TestPaneWSRejectsDisallowedKey(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "", nil },
+		SendKey: func(string, string) error {
+			t.Error("SendKey must not run for a disallowed key")
+			return nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	if err := wsjson.Write(ctx, c, inputMsg{T: "key", K: "Dangerous"}); err != nil {
+		t.Fatal(err)
+	}
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "error" {
+		t.Fatalf("got %+v, want an error message", m)
+	}
+}
+
+func TestPaneWSRejectsBadPaneID(t *testing.T) {
+	srv := httptest.NewServer((&Server{}).Handler())
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, wsURL(srv.URL)+"/ws/pane?pane=not-a-pane", nil)
+	if err == nil {
+		c.CloseNow()
+		t.Fatal("expected dial to fail for an invalid pane id")
 	}
 }

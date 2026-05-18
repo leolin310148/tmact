@@ -36,12 +36,7 @@
     border-bottom: 1px solid var(--border);
     flex: 0 0 auto;
   }
-  header h1 {
-    font-size: 15px;
-    margin: 0;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
   header h1 span { color: var(--accent); }
   .counts { display: flex; gap: 14px; color: var(--fg-dim); font-size: 12.5px; }
   .counts b { color: var(--fg); font-weight: 600; }
@@ -57,15 +52,10 @@
     border-right: 1px solid var(--border);
     overflow-y: auto;
   }
-  .session {
-    border-bottom: 1px solid var(--border);
-  }
+  .session { border-bottom: 1px solid var(--border); }
   .session-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; font-weight: 600;
   }
   .tag {
     font: 11px/1 var(--mono);
@@ -78,12 +68,9 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
   .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .dot.asking { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-  .dot.error { background: var(--red); }
 
   .pane {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    display: flex; align-items: center; gap: 8px;
     padding: 6px 12px 6px 26px;
     cursor: pointer;
     border-left: 2px solid transparent;
@@ -95,11 +82,8 @@
   .pane-sub { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .state {
     font: 10.5px/1 var(--mono);
-    padding: 2px 5px;
-    border-radius: 3px;
-    flex: 0 0 auto;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+    padding: 2px 5px; border-radius: 3px; flex: 0 0 auto;
+    text-transform: uppercase; letter-spacing: 0.4px;
   }
   .state.running { color: var(--green); background: rgba(63,185,80,0.12); }
   .state.asking { color: var(--amber); background: rgba(210,153,34,0.14); }
@@ -110,29 +94,66 @@
     padding: 10px 16px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: baseline;
-    gap: 14px;
+    display: flex; align-items: baseline; gap: 14px;
     flex: 0 0 auto;
   }
   .viewer-head .target { font: 13px/1 var(--mono); color: var(--accent); }
   .viewer-head .meta { font-size: 12px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+  .content-wrap.direct::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 2px var(--red);
+  }
   pre#content {
-    margin: 0;
-    flex: 1 1 auto;
-    overflow: auto;
+    margin: 0; flex: 1 1 auto; overflow: auto;
     padding: 12px 16px;
     font: 12.5px/1.5 var(--mono);
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: var(--bg);
+    white-space: pre-wrap; word-break: break-word;
+    background: var(--bg); cursor: text;
   }
-  .empty {
-    margin: auto;
+  /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
+     mouse scroll/selection fall through to the <pre> behind it. */
+  #direct-input {
+    position: absolute; inset: 0;
+    margin: 0; border: 0; padding: 12px 16px;
+    font: 12.5px/1.5 var(--mono);
+    background: transparent; color: transparent; caret-color: transparent;
+    resize: none; outline: none; opacity: 0;
+    pointer-events: none; overflow: hidden;
+  }
+  .empty { margin: auto; color: var(--fg-dim); font-size: 13px; text-align: center; }
+
+  .input-bar {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 8px 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .mode-indicator {
+    font: 11px/1.4 var(--mono); letter-spacing: 0.3px;
     color: var(--fg-dim);
-    font-size: 13px;
-    text-align: center;
+    display: flex; gap: 12px; align-items: center;
   }
+  .mode-indicator.direct { color: var(--red); font-weight: 700; }
+  .input-error { color: var(--amber); }
+  .input-row { display: flex; gap: 8px; align-items: stretch; }
+  #draft {
+    flex: 1 1 auto; resize: vertical;
+    min-height: 48px; max-height: 200px;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font: 12.5px/1.5 var(--mono);
+  }
+  #draft:focus { outline: none; border-color: var(--accent); }
+  #draft:disabled { opacity: 0.5; }
+  #send-btn {
+    flex: 0 0 auto; padding: 0 18px;
+    background: var(--accent); color: #fff;
+    border: 0; border-radius: 6px; font-weight: 600; cursor: pointer;
+  }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -147,13 +168,27 @@
     <div class="viewer-head" id="viewer-head">
       <span class="meta">Select a pane to view its output.</span>
     </div>
-    <pre id="content"><span class="empty">No pane selected.</span></pre>
+    <div class="content-wrap" id="content-wrap">
+      <pre id="content"><span class="empty">No pane selected.</span></pre>
+      <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    </div>
+    <div class="input-bar">
+      <div class="mode-indicator" id="mode-indicator">
+        <span id="mode-text">Select a pane to enable input</span>
+        <span class="input-error" id="input-error"></span>
+      </div>
+      <div class="input-row">
+        <textarea id="draft" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+        <button id="send-btn" disabled>Send</button>
+      </div>
+    </div>
   </section>
 </main>
 <script>
-const state = { selected: null, snapshot: null, paneError: null };
-const CAPTURE_LINES = 300;
+const state = { selected: null, snapshot: null, drafts: {} };
 const POLL_MS = 1000;
+
+const $ = (id) => document.getElementById(id);
 
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -178,7 +213,6 @@ function paneStateLabel(p) {
   if (!p.state || p.state === "unknown") return "—";
   return p.state;
 }
-
 function basename(path) {
   if (!path) return "";
   const parts = path.replace(/\/+$/, "").split("/");
@@ -188,9 +222,21 @@ function abbrevHome(path) {
   if (!path) return "";
   return path.replace(/^\/(Users|home)\/[^/]+/, "~");
 }
+function findPane(paneID) {
+  const snap = state.snapshot;
+  if (!snap || !paneID) return null;
+  for (const t in snap.panes) if (snap.panes[t].pane_id === paneID) return snap.panes[t];
+  return null;
+}
+function currentPaneName() {
+  const p = findPane(state.selected);
+  return p ? (basename(p.cwd) || p.session) : (state.selected || "?");
+}
+
+/* ---- rendering ---- */
 
 function renderSidebar(snap) {
-  const sidebar = document.getElementById("sidebar");
+  const sidebar = $("sidebar");
   sidebar.textContent = "";
 
   const bySession = {};
@@ -217,7 +263,6 @@ function renderSidebar(snap) {
 
     const block = h("div", { class: "session" }, head);
     for (const p of panes) {
-      const cls = paneStateClass(p);
       const title = basename(p.cwd) || p.current_command || p.window || p.target;
       const sub = abbrevHome(p.cwd) || p.current_command || "";
       const row = h("div", {
@@ -227,7 +272,7 @@ function renderSidebar(snap) {
         h("div", { class: "pane-main" },
           h("div", { class: "pane-title", text: title }),
           h("div", { class: "pane-sub", text: sub })),
-        h("span", { class: "state " + cls, text: paneStateLabel(p) }));
+        h("span", { class: "state " + paneStateClass(p), text: paneStateLabel(p) }));
       row.onclick = () => selectPane(p.pane_id);
       block.appendChild(row);
     }
@@ -237,7 +282,7 @@ function renderSidebar(snap) {
 
 function renderCounts(snap) {
   const s = snap.summary || {};
-  document.getElementById("counts").innerHTML =
+  $("counts").innerHTML =
     `<span><b>${s.sessions||0}</b> sessions</span>` +
     `<span><b>${s.panes||0}</b> panes</span>` +
     `<span><b>${s.working||0}</b> working</span>` +
@@ -246,24 +291,21 @@ function renderCounts(snap) {
 }
 
 function renderFreshness(snap) {
-  const el = document.getElementById("freshness");
-  const ts = new Date(snap.ts).getTime();
-  const ageMs = Date.now() - ts;
+  const el = $("freshness");
+  const ageMs = Date.now() - new Date(snap.ts).getTime();
   const staleAfter = snap.stale_after_ms || 10000;
   el.className = "freshness" + (ageMs > staleAfter ? " stale" : "");
   el.textContent = "updated " + Math.max(0, Math.round(ageMs / 1000)) + "s ago";
 }
 
 function renderViewer() {
-  const head = document.getElementById("viewer-head");
-  const snap = state.snapshot;
+  const head = $("viewer-head");
   head.textContent = "";
   if (!state.selected) {
     head.appendChild(h("span", { class: "meta", text: "Select a pane to view its output." }));
     return;
   }
-  let pane = null;
-  if (snap) for (const t in snap.panes) if (snap.panes[t].pane_id === state.selected) pane = snap.panes[t];
+  const pane = findPane(state.selected);
   if (pane) {
     head.appendChild(h("span", { class: "target", text: basename(pane.cwd) || pane.session }));
     head.appendChild(h("span", { class: "meta",
@@ -275,6 +317,44 @@ function renderViewer() {
   }
 }
 
+function renderMode() {
+  const text = $("mode-text");
+  const wrap = $("content-wrap");
+  const ind = $("mode-indicator");
+  if (!state.selected) {
+    text.textContent = "Select a pane to enable input";
+    ind.classList.remove("direct");
+    wrap.classList.remove("direct");
+    return;
+  }
+  const direct = document.activeElement === $("direct-input");
+  if (direct) {
+    text.textContent = "● DIRECT — keystrokes go straight to " + currentPaneName();
+    ind.classList.add("direct");
+    wrap.classList.add("direct");
+  } else {
+    text.textContent = "DRAFT — ⌘/Ctrl+Enter sends to " + currentPaneName();
+    ind.classList.remove("direct");
+    wrap.classList.remove("direct");
+  }
+}
+
+let errorTimer = null;
+function showInputError(msg) {
+  $("input-error").textContent = msg;
+  if (errorTimer) clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => { $("input-error").textContent = ""; }, 3500);
+}
+
+function setContent(text) {
+  const pre = $("content");
+  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
+  pre.textContent = text;
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+
+/* ---- snapshot polling ---- */
+
 async function refreshSnapshot() {
   try {
     const res = await fetch("api/snapshot", { cache: "no-store" });
@@ -285,60 +365,163 @@ async function refreshSnapshot() {
     renderFreshness(snap);
     renderSidebar(snap);
     renderViewer();
+    renderMode();
   } catch (e) {
-    const el = document.getElementById("freshness");
+    const el = $("freshness");
     el.className = "freshness error";
     el.textContent = "snapshot unavailable: " + e.message;
   }
 }
 
-async function refreshPane() {
-  if (!state.selected) return;
-  const pre = document.getElementById("content");
-  try {
-    const res = await fetch("api/pane?pane=" + encodeURIComponent(state.selected) +
-      "&lines=" + CAPTURE_LINES, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 48;
-    pre.textContent = data.content || "(empty)";
-    if (atBottom) pre.scrollTop = pre.scrollHeight;
-  } catch (e) {
-    pre.textContent = "Failed to capture pane: " + e.message;
+let snapshotTimer = null;
+function startPolling() {
+  if (snapshotTimer === null) snapshotTimer = setInterval(refreshSnapshot, POLL_MS);
+}
+function stopPolling() {
+  clearInterval(snapshotTimer);
+  snapshotTimer = null;
+}
+
+/* ---- pane WebSocket (output stream + input relay) ---- */
+
+let ws = null, wsRetry = null;
+
+function closeWS() {
+  if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
+  if (ws) { const old = ws; ws = null; try { old.close(); } catch (e) {} }
+}
+
+function openWS(paneID) {
+  closeWS();
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const sock = new WebSocket(`${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}`);
+  ws = sock;
+  sock.onmessage = (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.t === "content") setContent(m.s);
+    else if (m.t === "error") showInputError(m.s);
+  };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    ws = null;
+    if (state.selected === paneID && !document.hidden) {
+      wsRetry = setTimeout(() => { if (state.selected === paneID) openWS(paneID); }, 1000);
+    }
+  };
+  sock.onerror = () => {};
+}
+
+function wsSend(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+    return true;
   }
+  return false;
 }
 
 function selectPane(paneID) {
-  if (!paneID) return;
+  if (!paneID || paneID === state.selected) return;
   state.selected = paneID;
-  const pre = document.getElementById("content");
-  pre.textContent = "Loading…";
+  const draft = $("draft");
+  draft.value = state.drafts[paneID] || "";
+  draft.disabled = false;
+  $("send-btn").disabled = false;
+  setContent("Loading…");
   renderSidebar(state.snapshot || { sessions: {}, panes: {} });
   renderViewer();
-  refreshPane();
+  renderMode();
+  openWS(paneID);
 }
 
-let snapshotTimer = null, paneTimer = null;
+/* ---- mode 1: draft textarea ---- */
 
-function startPolling() {
-  if (snapshotTimer === null) snapshotTimer = setInterval(refreshSnapshot, POLL_MS);
-  if (paneTimer === null) paneTimer = setInterval(refreshPane, POLL_MS);
+function sendDraft() {
+  if (!state.selected) return;
+  const draft = $("draft");
+  if (!draft.value.trim()) return;
+  if (!wsSend({ t: "send", s: draft.value })) {
+    showInputError("not connected — try again");
+    return;
+  }
+  draft.value = "";
+  delete state.drafts[state.selected];
 }
-function stopPolling() {
-  clearInterval(snapshotTimer); snapshotTimer = null;
-  clearInterval(paneTimer); paneTimer = null;
+
+/* ---- mode 2: direct keystroke passthrough ---- */
+
+const KEYMAP = {
+  Enter: "Enter", Backspace: "BSpace", Tab: "Tab", Escape: "Escape",
+  ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right",
+  Home: "Home", End: "End", PageUp: "PageUp", PageDown: "PageDown", Delete: "Delete",
+};
+
+function translateKey(e) {
+  if (e.metaKey) return null; // leave Cmd shortcuts to the browser
+  if (e.ctrlKey) {
+    const lk = e.key.toLowerCase();
+    if (lk.length === 1 && lk >= "a" && lk <= "z") return { t: "key", k: "C-" + lk };
+    if (KEYMAP[e.key]) return { t: "key", k: KEYMAP[e.key] };
+    return null;
+  }
+  if (KEYMAP[e.key]) return { t: "key", k: KEYMAP[e.key] };
+  if (e.key.length === 1) return { t: "text", s: e.key };
+  return null;
 }
+
+function wireInput() {
+  const draft = $("draft");
+  draft.addEventListener("input", () => {
+    if (state.selected) state.drafts[state.selected] = draft.value;
+  });
+  draft.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      sendDraft();
+    }
+  });
+  $("send-btn").addEventListener("click", sendDraft);
+
+  const direct = $("direct-input");
+  $("content").addEventListener("click", () => direct.focus());
+  direct.addEventListener("keydown", (e) => {
+    if (e.isComposing || e.keyCode === 229) return; // let the IME compose
+    const msg = translateKey(e);
+    if (!msg) return;
+    e.preventDefault();
+    if (!wsSend(msg)) showInputError("not connected — try again");
+  });
+  direct.addEventListener("compositionend", (e) => {
+    if (e.data) wsSend({ t: "text", s: e.data });
+    direct.value = "";
+  });
+  direct.addEventListener("paste", (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (t) wsSend({ t: "text", s: t });
+    e.preventDefault();
+  });
+  direct.addEventListener("input", (e) => {
+    if (!e.isComposing) direct.value = ""; // keep the overlay empty
+  });
+
+  document.addEventListener("focusin", renderMode);
+  document.addEventListener("focusout", () => setTimeout(renderMode, 0));
+}
+
+/* ---- lifecycle ---- */
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopPolling();
+    closeWS();
   } else {
     refreshSnapshot();
-    refreshPane();
     startPolling();
+    if (state.selected) openWS(state.selected);
   }
 });
 
+wireInput();
 refreshSnapshot();
 if (!document.hidden) startPolling();
 </script>

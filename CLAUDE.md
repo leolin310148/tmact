@@ -6,11 +6,12 @@ this file only covers what would otherwise trip you up.
 
 ## Mental Model
 
-`tmact` is a Go CLI (single binary, stdlib `flag` parsing, only dep is
-`gopkg.in/yaml.v3`). It exists to drive terminal AI-agent panes (Codex /
-Claude / Copilot / Gemini) via tmux — list panes, send text/keys, classify
-runtime + idle state, run config-driven loops, and run multi-stage workflows
-with allowlisted prompt answering.
+`tmact` is a Go CLI (single binary, stdlib `flag` parsing; third-party deps:
+`gopkg.in/yaml.v3` for config, `github.com/coder/websocket` for the statusd
+web UI). It exists to drive terminal AI-agent panes (Codex / Claude / Copilot
+/ Gemini) via tmux — list panes, send text/keys, classify runtime + idle
+state, run config-driven loops, and run multi-stage workflows with allowlisted
+prompt answering.
 
 The earlier README documented an aspirational stack (SQLite, gocron, cobra,
 HTTP API, n8n boundary). None of that exists in code — don't add it without
@@ -22,7 +23,7 @@ the user asking. State is plain files on disk.
   cases around line 138).
 - All real logic: `internal/<pkg>/` — each subcommand has its own package
   (`loop`, `watch`, `workflow`, `statusd`, `prompt`, `panestate`,
-  `panestatus`, `state`, `agents`, `runmeta`, `tmux`).
+  `panestatus`, `state`, `agents`, `runmeta`, `tmux`, `web`).
 - Configs: `examples/*.yaml` (agents, loops, watches, workflows).
 - Run metadata for long processes: `.tmact/runs/`.
 - Status daemon snapshot: `/tmp/tmact-status.json`.
@@ -65,6 +66,13 @@ tmact workflow stop --config <path>
 and the tmux integration plan are in `daemon-status.md`. If you change pane
 classification, run `go test ./internal/panestate/... ./internal/panestatus/...`
 and consider how the snapshot consumers will react.
+
+`statusd start --web-addr ADDR` also serves the `internal/web` browser UI
+(sessions list, plus per-pane output streaming and keyboard input over a
+WebSocket). Unlike the CLI `send` dry-run default, the web UI's `/ws/pane`
+input is an intentional live-send surface — a deliberate exception, not a bug
+to "fix". It still gates keys through a server-side allowlist and acts only on
+validated tmux pane ids.
 
 ## Tests Without tmux
 
