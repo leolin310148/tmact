@@ -62,7 +62,7 @@ func TestIndexPageServed(t *testing.T) {
 /* ---- input validation ---- */
 
 func TestKeyAllowed(t *testing.T) {
-	allowed := []string{"Enter", "BSpace", "Escape", "Up", "PageDown", "C-c", "C-z", "Space"}
+	allowed := []string{"Enter", "BSpace", "BTab", "Escape", "Up", "PageDown", "C-c", "C-z", "Space"}
 	denied := []string{"", "rm", "C-C", "C-1", "M-x", "Enter; rm", "-X", "ArrowUp"}
 	for _, k := range allowed {
 		if !keyAllowed(k) {

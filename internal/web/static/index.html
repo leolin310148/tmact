@@ -94,9 +94,17 @@
     padding: 10px 16px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
-    display: flex; align-items: baseline; gap: 14px;
+    display: flex; align-items: center; gap: 12px;
     flex: 0 0 auto;
   }
+  #back-btn {
+    display: none; flex: 0 0 auto;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 11px; font-size: 12.5px; cursor: pointer;
+  }
+  #back-btn:hover { border-color: var(--accent); }
+  #viewer-meta { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
   .viewer-head .target { font: 13px/1 var(--mono); color: var(--accent); }
   .viewer-head .meta { font-size: 12px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -131,6 +139,22 @@
     padding: 8px 12px;
     display: flex; flex-direction: column; gap: 6px;
   }
+  /* Termius-style helper key row — control keys a soft keyboard lacks. */
+  .key-bar {
+    display: none; gap: 6px;
+    overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .key-bar::-webkit-scrollbar { display: none; }
+  .key-bar button {
+    flex: 0 0 auto;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px; font: 12px/1 var(--mono);
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .key-bar button:active { background: var(--border); }
+  .key-bar button.armed { background: var(--accent); color: #fff; border-color: var(--accent); }
   .mode-indicator {
     font: 11px/1.4 var(--mono); letter-spacing: 0.3px;
     color: var(--fg-dim);
@@ -154,6 +178,21 @@
     border: 0; border-radius: 6px; font-weight: 600; cursor: pointer;
   }
   #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Mobile: single column, toggle between the session list and the pane. */
+  @media (max-width: 760px) {
+    header { flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; }
+    .counts { gap: 10px; font-size: 12px; }
+    .freshness { font-size: 11.5px; }
+    aside { width: 100%; border-right: 0; }
+    .session-head { padding: 11px 14px; }
+    .pane { padding: 11px 14px 11px 30px; }
+    .viewer-head { padding: 8px 12px; }
+    .key-bar { display: flex; }
+    #back-btn { display: inline-flex; }
+    body:not(.view-pane) section { display: none; }
+    body.view-pane aside { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -166,13 +205,17 @@
   <aside id="sidebar"></aside>
   <section>
     <div class="viewer-head" id="viewer-head">
-      <span class="meta">Select a pane to view its output.</span>
+      <button id="back-btn" type="button">&lsaquo; Sessions</button>
+      <div id="viewer-meta">
+        <span class="meta">Select a pane to view its output.</span>
+      </div>
     </div>
     <div class="content-wrap" id="content-wrap">
       <pre id="content"><span class="empty">No pane selected.</span></pre>
       <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
     </div>
     <div class="input-bar">
+      <div class="key-bar" id="key-bar"></div>
       <div class="mode-indicator" id="mode-indicator">
         <span id="mode-text">Select a pane to enable input</span>
         <span class="input-error" id="input-error"></span>
@@ -189,6 +232,7 @@ const state = { selected: null, snapshot: null, drafts: {} };
 const POLL_MS = 1000;
 
 const $ = (id) => document.getElementById(id);
+const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
 
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -273,7 +317,7 @@ function renderSidebar(snap) {
           h("div", { class: "pane-title", text: title }),
           h("div", { class: "pane-sub", text: sub })),
         h("span", { class: "state " + paneStateClass(p), text: paneStateLabel(p) }));
-      row.onclick = () => selectPane(p.pane_id);
+      row.onclick = () => openPane(p.pane_id);
       block.appendChild(row);
     }
     sidebar.appendChild(block);
@@ -299,7 +343,7 @@ function renderFreshness(snap) {
 }
 
 function renderViewer() {
-  const head = $("viewer-head");
+  const head = $("viewer-meta");
   head.textContent = "";
   if (!state.selected) {
     head.appendChild(h("span", { class: "meta", text: "Select a pane to view its output." }));
@@ -321,6 +365,11 @@ function renderMode() {
   const text = $("mode-text");
   const wrap = $("content-wrap");
   const ind = $("mode-indicator");
+  const mobile = isMobile();
+  // Mobile keyboards have no Ctrl/Cmd, so the only send path is the button.
+  $("draft").placeholder = mobile
+    ? "Type a prompt, then tap Send"
+    : "Type a prompt — ⌘/Ctrl+Enter to send";
   if (!state.selected) {
     text.textContent = "Select a pane to enable input";
     ind.classList.remove("direct");
@@ -333,7 +382,9 @@ function renderMode() {
     ind.classList.add("direct");
     wrap.classList.add("direct");
   } else {
-    text.textContent = "DRAFT — ⌘/Ctrl+Enter sends to " + currentPaneName();
+    text.textContent = mobile
+      ? "Tap Send to send to " + currentPaneName()
+      : "DRAFT — ⌘/Ctrl+Enter sends to " + currentPaneName();
     ind.classList.remove("direct");
     wrap.classList.remove("direct");
   }
@@ -434,6 +485,20 @@ function selectPane(paneID) {
   openWS(paneID);
 }
 
+/* On mobile, opening a pane swaps the single-column view from the session
+   list to the pane; on desktop the .view-pane class is inert (both show). */
+function openPane(paneID) {
+  if (paneID !== state.selected) selectPane(paneID);
+  document.body.classList.add("view-pane");
+}
+
+function showSessions() {
+  document.body.classList.remove("view-pane");
+  $("direct-input").blur();
+  $("draft").blur();
+  renderMode();
+}
+
 /* ---- mode 1: draft textarea ---- */
 
 function sendDraft() {
@@ -469,6 +534,61 @@ function translateKey(e) {
   return null;
 }
 
+/* ---- on-screen helper key bar (Termius-style, for mobile) ---- */
+
+const HELPER_KEYS = [
+  { label: "Esc", key: "Escape" },
+  { label: "^C", key: "C-c" },
+  { label: "Tab", key: "Tab" },
+  { label: "⇧Tab", key: "BTab" },
+  { label: "Ctrl", ctrl: true },
+  { label: "↑", key: "Up" },
+  { label: "↓", key: "Down" },
+  { label: "←", key: "Left" },
+  { label: "→", key: "Right" },
+  { label: "Home", key: "Home" },
+  { label: "End", key: "End" },
+  { label: "PgUp", key: "PageUp" },
+  { label: "PgDn", key: "PageDown" },
+];
+
+// Ctrl is a sticky modifier: arm it, then the next typed letter is sent as
+// C-<letter>. It auto-disarms after one keystroke.
+let ctrlArmed = false;
+function setCtrl(on) {
+  ctrlArmed = on;
+  const b = $("ctrl-key");
+  if (b) b.classList.toggle("armed", on);
+}
+
+function buildKeyBar() {
+  const bar = $("key-bar");
+  for (const k of HELPER_KEYS) {
+    const btn = h("button", { type: "button", text: k.label });
+    if (k.ctrl) btn.id = "ctrl-key";
+    // pointerdown preventDefault keeps the soft keyboard up and focus in place.
+    btn.addEventListener("pointerdown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (k.ctrl) { setCtrl(!ctrlArmed); return; }
+      if (!wsSend({ t: "key", k: k.key })) showInputError("not connected — try again");
+      if (ctrlArmed) setCtrl(false);
+    });
+    bar.appendChild(btn);
+  }
+}
+
+// sendDirect relays one direct-mode message, folding an armed Ctrl modifier
+// into a single typed letter (C-<letter>) before it goes out.
+function sendDirect(msg) {
+  let out = msg;
+  if (ctrlArmed && msg.t === "text" && msg.s.length === 1) {
+    const c = msg.s.toLowerCase();
+    if (c >= "a" && c <= "z") out = { t: "key", k: "C-" + c };
+  }
+  if (!wsSend(out)) showInputError("not connected — try again");
+  if (ctrlArmed) setCtrl(false);
+}
+
 function wireInput() {
   const draft = $("draft");
   draft.addEventListener("input", () => {
@@ -482,26 +602,37 @@ function wireInput() {
   });
   $("send-btn").addEventListener("click", sendDraft);
 
+  $("back-btn").addEventListener("click", showSessions);
+
+  buildKeyBar();
+
   const direct = $("direct-input");
+  // Tapping the output focuses the invisible overlay — direct keystroke
+  // passthrough on desktop, and on mobile this is what raises the keyboard.
   $("content").addEventListener("click", () => direct.focus());
   direct.addEventListener("keydown", (e) => {
     if (e.isComposing || e.keyCode === 229) return; // let the IME compose
     const msg = translateKey(e);
     if (!msg) return;
     e.preventDefault();
-    if (!wsSend(msg)) showInputError("not connected — try again");
+    sendDirect(msg);
   });
   direct.addEventListener("compositionend", (e) => {
-    if (e.data) wsSend({ t: "text", s: e.data });
+    if (e.data) sendDirect({ t: "text", s: e.data });
     direct.value = "";
   });
   direct.addEventListener("paste", (e) => {
     const t = (e.clipboardData || window.clipboardData).getData("text");
-    if (t) wsSend({ t: "text", s: t });
+    if (t) sendDirect({ t: "text", s: t });
     e.preventDefault();
   });
+  // Soft keyboards often insert text with no usable keydown — relay whatever
+  // landed in the overlay, then clear it so it stays invisible.
   direct.addEventListener("input", (e) => {
-    if (!e.isComposing) direct.value = ""; // keep the overlay empty
+    if (e.isComposing) return;
+    const v = direct.value;
+    direct.value = "";
+    if (v) sendDirect({ t: "text", s: v });
   });
 
   document.addEventListener("focusin", renderMode);

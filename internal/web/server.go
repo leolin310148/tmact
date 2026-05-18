@@ -228,7 +228,7 @@ func (s *Server) applyInput(target string, m inputMsg) error {
 }
 
 var allowedNamedKeys = map[string]bool{
-	"Enter": true, "BSpace": true, "Tab": true, "Escape": true,
+	"Enter": true, "BSpace": true, "Tab": true, "BTab": true, "Escape": true,
 	"Up": true, "Down": true, "Left": true, "Right": true,
 	"Home": true, "End": true, "PageUp": true, "PageDown": true,
 	"Delete": true, "Space": true,
