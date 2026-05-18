@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0e1116" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>tmact</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icons/icon-192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="/icons/icon-180.png" />
 <style>
   :root {
     --bg: #0e1116;
@@ -535,6 +542,11 @@ document.addEventListener("visibilitychange", () => {
 });
 
 wireInput();
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 refreshSnapshot();
 if (!document.hidden) startPolling();
 </script>
