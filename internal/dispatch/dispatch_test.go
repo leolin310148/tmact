@@ -333,7 +333,7 @@ func TestExecuteNewSessionResendsEnterWhenPromptStuck(t *testing.T) {
 		case len(rec.pastes) < 2:
 			return "Claude Code\nready", nil
 		case enterCount(rec) == 0:
-			return "Claude Code\n1 MCP server failed\nprompt still sitting in the input box", nil
+			return "Claude Code\n1 MCP server failed\n❯ do the thing", nil
 		default:
 			return "Claude Code\nWorking... esc to interrupt", nil
 		}
@@ -371,7 +371,7 @@ func TestExecuteNewSessionFailsWhenPromptNeverSubmits(t *testing.T) {
 		if len(rec.pastes) < 2 {
 			return "Claude Code\nready", nil
 		}
-		return "Claude Code\nprompt stuck in the input box", nil
+		return "Claude Code\n❯ do the thing", nil
 	}
 
 	opts := baseOpts()
@@ -385,6 +385,86 @@ func TestExecuteNewSessionFailsWhenPromptNeverSubmits(t *testing.T) {
 	}
 	if n := enterCount(rec); n == 0 {
 		t.Fatal("expected dispatch to re-send Enter before giving up")
+	}
+}
+
+// TestExecuteNewSessionRepastesWhenPasteLost covers a cold start where the
+// agent UI was still painting when the prompt was pasted and dropped the text
+// entirely: the input box stays empty until dispatch re-pastes.
+func TestExecuteNewSessionRepastesWhenPasteLost(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	// The first prompt paste lands on a UI that drops it (empty input box);
+	// only after a re-paste does the agent start working.
+	deps.CapturePane = func(string, int) (string, error) {
+		switch {
+		case len(rec.pastes) < 2:
+			return "Claude Code\nready", nil
+		case len(rec.pastes) < 3:
+			return "Claude Code\n❯ ", nil
+		default:
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusOK {
+		t.Fatalf("send-prompt status = %q, want ok", got)
+	}
+	if n := enterCount(rec); n != 0 {
+		t.Fatalf("a lost paste should be recovered by re-pasting, not bare Enter, got %d", n)
+	}
+	want := []paste{{"%1", "claude", true}, {"%1", "do the thing", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	for i := range want {
+		if rec.pastes[i] != want[i] {
+			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
+		}
+	}
+}
+
+// TestExecuteNewSessionSucceedsWhenAgentFinishesFast covers a prompt that the
+// agent accepts and completes between polls: "working" is never observed, but
+// the prompt has left the input box into the transcript, so the dispatch must
+// still report success rather than re-sending Enter forever.
+func TestExecuteNewSessionSucceedsWhenAgentFinishesFast(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) < 2 {
+			return "Claude Code\nready", nil
+		}
+		// The prompt was submitted (now in the transcript) and the fast
+		// task already finished; the live input box at the bottom is empty.
+		return "Claude Code\n❯ do the thing\n\n⏺ done\n\n────\n❯ \n────\nCost: $0.01", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusOK {
+		t.Fatalf("send-prompt status = %q, want ok", got)
+	}
+	if n := enterCount(rec); n != 0 {
+		t.Fatalf("a submitted prompt should need no re-sent Enter, got %d", n)
+	}
+	want := []paste{{"%1", "claude", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
 	}
 }
 
