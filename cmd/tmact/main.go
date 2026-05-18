@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -124,6 +125,10 @@ var (
 
 const targetCacheMaxAge = 30 * time.Minute
 
+// version is the tmact build version. It defaults to "dev" and can be
+// overridden at build time with -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func run(args []string) error {
 	globals, args, err := parseGlobalArgs(args)
 	if err != nil {
@@ -211,6 +216,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runHelp(args[1:])
+	case "version", "-v", "--version", "-version":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runVersion(args[1:])
 	case "-h", "--help":
 		return usage()
 	default:
@@ -2089,6 +2099,88 @@ machine-readable list of commands, flags, examples, and safety notes.
 	return nil
 }
 
+type versionInfo struct {
+	Version   string `json:"version"`
+	Revision  string `json:"revision,omitempty"`
+	Time      string `json:"time,omitempty"`
+	Modified  bool   `json:"modified,omitempty"`
+	GoVersion string `json:"go_version,omitempty"`
+}
+
+func buildVersionInfo() versionInfo {
+	info := versionInfo{Version: version}
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return info
+	}
+	info.GoVersion = bi.GoVersion
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			info.Revision = s.Value
+		case "vcs.time":
+			info.Time = s.Value
+		case "vcs.modified":
+			info.Modified = s.Value == "true"
+		}
+	}
+	return info
+}
+
+func (v versionInfo) String() string {
+	var b strings.Builder
+	b.WriteString("tmact ")
+	b.WriteString(v.Version)
+	if v.Revision != "" {
+		rev := v.Revision
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		b.WriteString(" (")
+		b.WriteString(rev)
+		if v.Modified {
+			b.WriteString("-dirty")
+		}
+		b.WriteString(")")
+	}
+	if v.Time != "" {
+		b.WriteString(" built ")
+		b.WriteString(v.Time)
+	}
+	if v.GoVersion != "" {
+		b.WriteString(" with ")
+		b.WriteString(v.GoVersion)
+	}
+	return b.String()
+}
+
+func runVersion(args []string) error {
+	jsonOutput := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+			jsonOutput = true
+		case "-h", "--help", "help":
+			fmt.Print(`Usage:
+  tmact version [--json]
+  tmact -v | --version
+
+Print the tmact build version. When the binary was built from a Git
+checkout, the VCS revision, commit time, and dirty flag are included.
+`)
+			return nil
+		default:
+			return fmt.Errorf("unknown version flag %q", arg)
+		}
+	}
+	info := buildVersionInfo()
+	if jsonOutput {
+		return printJSON(info)
+	}
+	fmt.Println(info.String())
+	return nil
+}
+
 func runHelp(args []string) error {
 	jsonOutput := false
 	filtered := make([]string, 0, len(args))
@@ -2152,6 +2244,7 @@ Usage:
   tmact dispatch-work SESSION --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
+  tmact version [--json]
 
 Commands:
   ls        list tmux panes and cache numbered targets for -t
@@ -2169,6 +2262,7 @@ Commands:
   watch     watch a pane and answer allowlisted prompts
   dispatch-work create or reuse a session, launch an agent, and send it a prompt
   commands  print a machine-readable command catalog for tools and LLMs
+  version   print the tmact build version
 
 Safety:
   send, broadcast, and panels ensure default to dry-run. For loop and watch,
@@ -2652,6 +2746,15 @@ func commandHelpCatalog() []commandHelp {
 				{Name: "--json", Description: "print machine-readable command metadata"},
 			},
 			Examples: []string{"tmact commands", "tmact commands --json", "tmact help loop --json"},
+		},
+		{
+			Command: "version",
+			Summary: "Print the tmact build version, including VCS revision when built from Git.",
+			Usage:   []string{"tmact version [--json]", "tmact -v | --version"},
+			Flags: []helpFlag{
+				{Name: "--json", Description: "print machine-readable version metadata"},
+			},
+			Examples: []string{"tmact version", "tmact --version", "tmact version --json"},
 		},
 	}
 }
