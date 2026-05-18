@@ -64,6 +64,9 @@ type Server struct {
 	LoadSTTProvider func() (stt.ProviderConfig, error)
 	// HTTPClient is used for transcription API calls; defaults to a 60s client.
 	HTTPClient *http.Client
+	// Logf logs server-side diagnostics; defaults to writing to stderr, which
+	// statusd routes to its log file.
+	Logf func(format string, args ...any)
 }
 
 func (s *Server) capture() func(string, int) (string, error) {
@@ -106,6 +109,14 @@ func (s *Server) httpClient() *http.Client {
 		return s.HTTPClient
 	}
 	return &http.Client{Timeout: 60 * time.Second}
+}
+
+func (s *Server) logf(format string, args ...any) {
+	if s.Logf != nil {
+		s.Logf(format, args...)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "statusd web: "+format+"\n", args...)
 }
 
 // Handler builds the HTTP routes without binding a socket; useful for tests.
@@ -188,12 +199,22 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// The browser's declared filename and content type are unreliable — iOS
+	// Safari records MP4 but labels the blob audio/webm — and the API rejects a
+	// file whose extension does not match its bytes. Sniff the container from
+	// the leading bytes and name the upload ourselves.
 	filename := header.Filename
-	if filename == "" {
+	contentType := header.Header.Get("Content-Type")
+	if ext := sniffAudioExtension(file); ext != "" {
+		filename = "recording." + ext
+		contentType = audioMIMEByExt[ext]
+	} else if filename == "" {
 		filename = "recording.webm"
 	}
-	transcript, err := s.transcribeAudio(r.Context(), provider, filename, header.Header.Get("Content-Type"), file)
+
+	transcript, err := s.transcribeAudio(r.Context(), provider, filename, contentType, file)
 	if err != nil {
+		s.logf("transcribe failed (file=%s): %v", filename, err)
 		writeJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -258,6 +279,47 @@ func (s *Server) transcribeAudio(ctx context.Context, provider stt.ProviderConfi
 		return "", fmt.Errorf("decode transcription response: %w", err)
 	}
 	return out.Text, nil
+}
+
+// audioMIMEByExt maps a sniffed container extension to the MIME type sent to
+// the transcription API.
+var audioMIMEByExt = map[string]string{
+	"webm": "audio/webm",
+	"ogg":  "audio/ogg",
+	"m4a":  "audio/mp4",
+	"mp3":  "audio/mpeg",
+	"wav":  "audio/wav",
+	"flac": "audio/flac",
+}
+
+// sniffAudioExtension reads the leading bytes of an upload and returns a
+// canonical container extension (no dot), or "" if it recognises nothing. It
+// rewinds the reader so the caller still sees the whole file.
+func sniffAudioExtension(rs io.ReadSeeker) string {
+	head := make([]byte, 16)
+	n, _ := io.ReadFull(rs, head)
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return ""
+	}
+	head = head[:n]
+	switch {
+	case len(head) >= 4 && head[0] == 0x1A && head[1] == 0x45 && head[2] == 0xDF && head[3] == 0xA3:
+		return "webm" // EBML — WebM / Matroska
+	case len(head) >= 4 && string(head[:4]) == "OggS":
+		return "ogg"
+	case len(head) >= 8 && string(head[4:8]) == "ftyp":
+		return "m4a" // ISO base media — MP4 / M4A
+	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WAVE":
+		return "wav"
+	case len(head) >= 4 && string(head[:4]) == "fLaC":
+		return "flac"
+	case len(head) >= 3 && string(head[:3]) == "ID3":
+		return "mp3"
+	case len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0:
+		return "mp3" // MPEG audio frame sync
+	default:
+		return ""
+	}
 }
 
 func createMultipartFile(mw *multipart.Writer, field, filename, contentType string) (io.Writer, error) {

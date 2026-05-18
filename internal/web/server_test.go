@@ -245,6 +245,65 @@ func TestTranscribeForwardsAudioToAPI(t *testing.T) {
 	}
 }
 
+func TestSniffAudioExtension(t *testing.T) {
+	cases := []struct {
+		name string
+		head []byte
+		want string
+	}{
+		{"webm", []byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}, "webm"},
+		{"ogg", []byte("OggS\x00\x00\x00\x00"), "ogg"},
+		{"mp4", []byte("\x00\x00\x00\x20ftypM4A "), "m4a"},
+		{"wav", []byte("RIFF\x00\x00\x00\x00WAVEfmt "), "wav"},
+		{"mp3-id3", []byte("ID3\x04\x00\x00\x00\x00"), "mp3"},
+		{"unknown", []byte("audio bytes here"), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := bytes.NewReader(tc.head)
+			if got := sniffAudioExtension(rs); got != tc.want {
+				t.Fatalf("sniffAudioExtension = %q, want %q", got, tc.want)
+			}
+			if pos, _ := rs.Seek(0, io.SeekCurrent); pos != 0 {
+				t.Fatalf("reader left at offset %d, want rewound to 0", pos)
+			}
+		})
+	}
+}
+
+// iOS Safari records MP4 but labels the upload .webm; the server must rename
+// it to match the sniffed container so the transcription API accepts it.
+func TestTranscribeRenamesUploadToSniffedContainer(t *testing.T) {
+	var gotFilename string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm: %v", err)
+		}
+		_, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("FormFile: %v", err)
+		}
+		gotFilename = header.Filename
+		_ = json.NewEncoder(w).Encode(map[string]string{"text": "ok"})
+	}))
+	defer api.Close()
+
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{Provider: "openai", APIKey: "test-key", Endpoint: api.URL}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, audioUploadRequest(t, "/api/transcribe", "\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if gotFilename != "recording.m4a" {
+		t.Fatalf("forwarded filename = %q, want recording.m4a (sniffed from MP4 bytes)", gotFilename)
+	}
+}
+
 func TestTranscribeAPIFailureReturns502(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upstream failed", http.StatusBadGateway)
