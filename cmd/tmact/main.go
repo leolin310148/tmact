@@ -25,6 +25,7 @@ import (
 	"tmact/internal/statusd"
 	"tmact/internal/tmux"
 	"tmact/internal/watch"
+	"tmact/internal/web"
 	"tmact/internal/workflow"
 )
 
@@ -661,6 +662,7 @@ func runStatusdStart(args []string) error {
 	fs.SetOutput(os.Stderr)
 	flags := statusdFlags(fs)
 	once := fs.Bool("once", false, "run one scan then exit")
+	webAddr := fs.String("web-addr", "", "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -674,6 +676,9 @@ func runStatusdStart(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if *once {
+		if *webAddr != "" {
+			return errors.New("--web-addr cannot be combined with --once")
+		}
 		snapshot, err := daemon.RunOnce(ctx)
 		if *flags.JSON {
 			if printErr := printJSON(snapshot); printErr != nil && err == nil {
@@ -684,6 +689,15 @@ func runStatusdStart(args []string) error {
 	}
 	if *flags.JSON {
 		return errors.New("--json is only valid with --once for statusd start")
+	}
+	if *webAddr != "" {
+		server := &web.Server{Addr: *webAddr, StatePath: cfg.StatePath, CapturePane: tmux.CapturePane}
+		go func() {
+			if err := server.Serve(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "statusd web server (%s) stopped: %v\n", *webAddr, err)
+			}
+		}()
+		fmt.Fprintf(os.Stderr, "statusd web UI listening on %s\n", *webAddr)
 	}
 	err := daemon.Start(ctx)
 	if errors.Is(err, context.Canceled) {
@@ -2525,9 +2539,9 @@ func commandHelpCatalog() []commandHelp {
 		{
 			Command:  "statusd start",
 			Summary:  "Run the pane status daemon until interrupted.",
-			Usage:    []string{"tmact statusd start [--interval 1s] [--state-path PATH] [--no-tmux-options]"},
+			Usage:    []string{"tmact statusd start [--interval 1s] [--state-path PATH] [--no-tmux-options] [--web-addr ADDR]"},
 			Flags:    statusdStartHelpFlags(),
-			Examples: []string{"tmact statusd start --interval 1s", "tmact statusd start --once --json"},
+			Examples: []string{"tmact statusd start --interval 1s", "tmact statusd start --once --json", "tmact statusd start --web-addr 0.0.0.0:7890"},
 		},
 		{
 			Command:  "statusd once",
@@ -2781,6 +2795,7 @@ func statusdHelpFlags() []helpFlag {
 func statusdStartHelpFlags() []helpFlag {
 	return append([]helpFlag{
 		{Name: "--once", Description: "run one scan then exit"},
+		{Name: "--web-addr", Value: "ADDR", Description: "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)"},
 	}, statusdHelpFlags()...)
 }
 
