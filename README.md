@@ -24,6 +24,7 @@ The CLI is a single Go binary (`cmd/tmact`) with these subcommands:
 | `loop` | Run a configurable polling loop on one pane: pastes prompts, presses keys, clears context, stops on known interactive approval prompts. Supports `--dry-run --once`. |
 | `workflow` | Run serialized OpenSpec review and implementation workflows across configured agent panes. |
 | `watch` | Narrow prompt watcher; currently accepts Codex directory-access prompts when every requested path is allowlisted. |
+| `dispatch-work` | Create or reuse a tmux session, launch an agent (claude/codex/gemini/copilot), and send it a prompt. Dry-run by default; `--execute` actually creates/launches/sends. |
 
 `loop` writes run metadata under `.tmact/runs/` so long-running processes can
 be inspected and stopped without remembering the tmux window:

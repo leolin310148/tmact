@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"tmact/internal/agents"
+	"tmact/internal/dispatch"
 	"tmact/internal/loop"
 	"tmact/internal/panestatus"
 	"tmact/internal/prompt"
@@ -195,6 +196,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runWatch(args[1:])
+	case "dispatch-work":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runDispatch(args[1:])
 	case "commands":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
@@ -1669,6 +1675,25 @@ func printSendReport(report sendReport) {
 	}
 }
 
+func printDispatchReport(report dispatch.Report) {
+	prefix := ""
+	if !report.Execute {
+		prefix = "dry-run: "
+	}
+	fmt.Printf("%sdispatch-work %s [agent=%s dir=%s]\n", prefix, report.Session, report.Agent, report.Dir)
+	if report.Target != "" {
+		fmt.Printf("  target: %s\n", report.Target)
+	}
+	fmt.Printf("  session existed: %t  agent already running: %t\n", report.SessionExisted, report.AgentWasRunning)
+	for _, step := range report.Steps {
+		line := fmt.Sprintf("  [%s] %s", step.Status, step.Name)
+		if step.Detail != "" {
+			line += " - " + step.Detail
+		}
+		fmt.Println(line)
+	}
+}
+
 func printStatusReport(report agents.Report) {
 	fmt.Printf("ts: %s\n", report.Timestamp)
 	for _, agent := range report.Agents {
@@ -1983,6 +2008,64 @@ func printPanelReport(report agents.PanelReport) {
 	}
 }
 
+func runDispatch(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("dispatch-work")
+	}
+
+	var session string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		session = args[0]
+		args = args[1:]
+	}
+
+	fs := flag.NewFlagSet("dispatch-work", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	dir := fs.String("dir", "", "working directory; sets cwd when the session is created")
+	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
+	promptText := fs.String("prompt", "", "prompt text to send to the agent")
+	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
+	execute := fs.Bool("execute", false, "actually create, launch, and send; default is dry-run")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if session == "" && fs.NArg() > 0 {
+		session = fs.Arg(0)
+	}
+	if session == "" {
+		return errors.New("dispatch-work requires a session name as the first argument")
+	}
+	if *dir == "" {
+		return errors.New("dispatch-work requires --dir")
+	}
+	if *agent == "" {
+		return errors.New("dispatch-work requires --agent")
+	}
+	if *promptText == "" {
+		return errors.New("dispatch-work requires --prompt")
+	}
+
+	report, err := dispatch.Run(dispatch.Options{
+		Session:      session,
+		Dir:          *dir,
+		Agent:        *agent,
+		Prompt:       *promptText,
+		Execute:      *execute,
+		ReadyTimeout: *readyTimeout,
+	})
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(report)
+	}
+	printDispatchReport(report)
+	return nil
+}
+
 func runCommands(args []string) error {
 	if wantsHelp(args) {
 		fmt.Print(`Usage:
@@ -2066,6 +2149,7 @@ Usage:
   tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
   tmact workflow stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
+  tmact dispatch-work SESSION --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
 
@@ -2083,6 +2167,7 @@ Commands:
   loop      run, inspect, or stop a configurable tmux automation loop
   workflow  run, inspect, or stop serialized OpenSpec review and implementation workflows
   watch     watch a pane and answer allowlisted prompts
+  dispatch-work create or reuse a session, launch an agent, and send it a prompt
   commands  print a machine-readable command catalog for tools and LLMs
 
 Safety:
@@ -2264,6 +2349,34 @@ func commandHelpCatalog() []commandHelp {
 				`tmact -t work:0.0 send --text "summarize progress" --enter --execute`,
 			},
 			Safety: []string{"Without --execute this prints the planned send and does not touch tmux."},
+		},
+		{
+			Command: "dispatch-work",
+			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
+			Usage: []string{
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--ready-timeout 30s] [--execute] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
+				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, gemini, or copilot", Required: true},
+				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
+				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
+				{Name: "--execute", Description: "actually create, launch, and send; default is dry-run"},
+				{Name: "--json", Description: "print JSON output"},
+			},
+			Examples: []string{
+				`tmact dispatch-work work --dir . --agent claude --prompt "review the diff"`,
+				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --execute`,
+			},
+			Safety: []string{
+				"Without --execute this prints the plan and does not touch tmux.",
+				"Fails if the session already runs a different agent or the agent is busy working.",
+				"Refuses to auto-confirm trust or permission prompts shown during agent startup.",
+			},
+			Notes: []string{
+				"The session name is the first positional argument.",
+				"Reusing a session that already runs the agent sends /clear before the prompt.",
+			},
 		},
 		{
 			Command: "detect",
