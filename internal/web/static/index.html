@@ -60,7 +60,13 @@
   .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
   .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .dot.asking { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  /* Asking panes need a question prompt resolved — the dot carries a "?". */
+  .dot.asking {
+    width: 12px; height: 12px;
+    background: var(--amber); box-shadow: 0 0 6px var(--amber);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 9px/1 var(--mono); color: #1a1100;
+  }
   /* Connection indicator: only visible after 10s+ without a fresh snapshot. */
   .stale-dot {
     flex: 0 0 auto;
@@ -100,25 +106,30 @@
     flex: 0 0 auto;
     border-top: 1px solid var(--border);
     background: var(--panel);
-    padding: 8px 12px;
-    display: flex; flex-direction: column; gap: 6px;
+    padding: 4px 10px;
+    display: flex; flex-direction: column; gap: 5px;
   }
-  /* Termius-style helper key row — control keys a soft keyboard lacks. */
+  /* Termius-style helper keys — control keys a soft keyboard lacks. The bar
+     clips to a single row; when the keys overflow, the toggle expands it to
+     every key (wrapped onto more rows) so the row never scrolls sideways. */
+  .key-area { display: none; align-items: flex-start; gap: 5px; }
   .key-bar {
-    display: none; gap: 6px;
-    overflow-x: auto; scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-wrap: wrap; gap: 5px;
+    overflow: hidden;
   }
-  .key-bar::-webkit-scrollbar { display: none; }
-  .key-bar button {
+  .key-bar button, .key-toggle {
     flex: 0 0 auto;
     background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 6px;
-    padding: 8px 12px; font: 12px/1 var(--mono);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px 9px; font: 11px/1 var(--mono);
     cursor: pointer; white-space: nowrap; user-select: none;
   }
-  .key-bar button:active { background: var(--border); }
+  .key-bar button:active, .key-toggle:active { background: var(--border); }
   .key-bar button.armed { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* Shown only when the keys overflow a single row (JS sets .overflowing). */
+  .key-toggle { display: none; padding: 5px 10px; }
+  .key-area.overflowing .key-toggle { display: inline-block; }
   .mode-indicator {
     font: 11px/1.4 var(--mono); letter-spacing: 0.3px;
     color: var(--fg-dim);
@@ -132,26 +143,27 @@
   .input-bar.direct .input-row { display: none; }
   #draft {
     flex: 1 1 auto; resize: vertical;
-    min-height: 48px; max-height: 200px;
+    min-height: 36px; max-height: 200px;
     background: var(--bg); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 6px;
-    padding: 8px 10px; font: 12.5px/1.5 var(--mono);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 8px; font: 12px/1.4 var(--mono);
   }
   #draft:focus { outline: none; border-color: var(--accent); }
   #draft:disabled { opacity: 0.5; }
   #send-btn {
-    flex: 0 0 auto; padding: 0 18px;
+    flex: 0 0 auto; padding: 0 14px;
     background: var(--accent); color: #fff;
-    border: 0; border-radius: 6px; font-weight: 600; cursor: pointer;
+    border: 0; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   @media (max-width: 760px) {
-    .key-bar { display: flex; }
+    .key-area { display: flex; }
     /* No horizontal scroll on phones — wrap chips onto a few short lines. */
     .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
     .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
     .dot { width: 6px; height: 6px; }
+    .dot.asking { width: 10px; height: 10px; font-size: 8px; }
     /* 16px stops iOS Safari from auto-zooming when an input takes focus —
        a zoomed page hides the Send button behind the viewport edge. */
     #draft, #direct-input { font-size: 16px; }
@@ -168,7 +180,10 @@
   <span class="stale-dot" id="stale-dot" title="no connection for 10s+"></span>
 </nav>
 <div class="input-bar" id="input-bar">
-  <div class="key-bar" id="key-bar"></div>
+  <div class="key-area" id="key-area">
+    <div class="key-bar" id="key-bar"></div>
+    <button class="key-toggle" id="key-toggle" type="button" title="show/hide all keys"></button>
+  </div>
   <div class="mode-indicator" id="mode-indicator">
     <span id="mode-text">Select a pane to enable input</span>
     <span class="input-error" id="input-error"></span>
@@ -247,11 +262,14 @@ function renderStatusline(snap) {
     const label = perSession[p.session] > 1
       ? p.session + ":" + p.window_index
       : p.session;
+    const dotCls = paneStateClass(p);
+    const dot = h("span", { class: "dot " + dotCls });
+    if (dotCls === "asking") dot.textContent = "?";
     const chip = h("div", {
       class: "chip" + (p.pane_id === state.selected ? " sel" : ""),
       title: (p.cwd || p.session) + " — " + paneStateLabel(p),
     },
-      h("span", { class: "dot " + paneStateClass(p) }),
+      dot,
       h("span", { text: label }));
     chip.onclick = () => selectPane(p.pane_id);
     chips.appendChild(chip);
@@ -267,6 +285,15 @@ function checkStale() {
   $("stale-dot").style.display = fresh ? "none" : "block";
 }
 
+// syncIndicator collapses the mode-indicator line whenever it has nothing to
+// say. In plain draft mode the textarea placeholder already carries the send
+// hint, so the row is just wasted height — it reappears only for a
+// no-selection / DIRECT / error state.
+function syncIndicator() {
+  const has = $("mode-text").textContent !== "" || $("input-error").textContent !== "";
+  $("mode-indicator").style.display = has ? "flex" : "none";
+}
+
 function renderMode() {
   const text = $("mode-text");
   const wrap = $("content-wrap");
@@ -276,32 +303,26 @@ function renderMode() {
   $("draft").placeholder = mobile
     ? "Type a prompt, then tap Send"
     : "Type a prompt — ⌘/Ctrl+Enter to send";
+  const direct = !!state.selected && document.activeElement === $("direct-input");
+  $("input-bar").classList.toggle("direct", direct);
+  ind.classList.toggle("direct", direct);
+  wrap.classList.toggle("direct", direct);
   if (!state.selected) {
     text.textContent = "Select a pane to enable input";
-    ind.classList.remove("direct");
-    wrap.classList.remove("direct");
-    return;
-  }
-  const direct = document.activeElement === $("direct-input");
-  $("input-bar").classList.toggle("direct", direct);
-  if (direct) {
+  } else if (direct) {
     text.textContent = "● DIRECT — keystrokes go straight to " + currentPaneName();
-    ind.classList.add("direct");
-    wrap.classList.add("direct");
   } else {
-    text.textContent = mobile
-      ? "Tap Send to send to " + currentPaneName()
-      : "DRAFT — ⌘/Ctrl+Enter sends to " + currentPaneName();
-    ind.classList.remove("direct");
-    wrap.classList.remove("direct");
+    text.textContent = "";
   }
+  syncIndicator();
 }
 
 let errorTimer = null;
 function showInputError(msg) {
   $("input-error").textContent = msg;
+  syncIndicator();
   if (errorTimer) clearTimeout(errorTimer);
-  errorTimer = setTimeout(() => { $("input-error").textContent = ""; }, 3500);
+  errorTimer = setTimeout(() => { $("input-error").textContent = ""; syncIndicator(); }, 3500);
 }
 
 /* ---- ANSI SGR colour rendering (tmux capture-pane -e output) ---- */
@@ -549,6 +570,22 @@ function setCtrl(on) {
   if (b) b.classList.toggle("armed", on);
 }
 
+// syncKeyBar clips the helper-key bar to a single row and reveals the expand
+// toggle only when the keys overflow that row. overflow:hidden keeps
+// scrollHeight reporting the full wrapped height even while the bar is clipped.
+function syncKeyBar() {
+  const area = $("key-area"), bar = $("key-bar"), toggle = $("key-toggle");
+  const firstBtn = bar.querySelector("button");
+  if (!firstBtn) return;
+  const rowH = firstBtn.offsetHeight;
+  const overflows = rowH > 0 && bar.scrollHeight > rowH + 2;
+  if (!overflows) area.classList.remove("expanded");
+  const expanded = area.classList.contains("expanded");
+  area.classList.toggle("overflowing", overflows);
+  toggle.textContent = expanded ? "⌃" : "⌄";
+  bar.style.maxHeight = overflows && !expanded ? rowH + "px" : "";
+}
+
 function buildKeyBar() {
   const bar = $("key-bar");
   for (const k of HELPER_KEYS) {
@@ -563,6 +600,14 @@ function buildKeyBar() {
     });
     bar.appendChild(btn);
   }
+  const toggle = $("key-toggle");
+  toggle.addEventListener("pointerdown", (e) => e.preventDefault());
+  toggle.addEventListener("click", () => {
+    $("key-area").classList.toggle("expanded");
+    syncKeyBar();
+  });
+  window.addEventListener("resize", syncKeyBar);
+  syncKeyBar();
 }
 
 // sendDirect relays one direct-mode message, folding an armed Ctrl modifier
