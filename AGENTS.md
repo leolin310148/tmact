@@ -21,7 +21,8 @@ Example YAML configs live in `examples/`, operational notes in `docs/` and
 ## Build, Test, and Development Commands
 
 - `go test ./...` — run all unit tests (config parsing, prompt detection, classifiers, runners).
-- `go build -o .cache/tmact ./cmd/tmact` — build the local binary used by smoke tests, the launchd `statusd`, and long-running loops.
+- `go build -o .cache/tmact ./cmd/tmact` — build the local binary used by smoke tests and long-running loops.
+- `scripts/install.sh` — build into `~/.local/bin/tmact` and refresh the `statusd` launchd agent so it runs the installed binary (`--bin-only` skips the agent).
 - `go run ./cmd/tmact ls` — list tmux panes and refresh the numbered-target cache.
 - `go run ./cmd/tmact detect --target session:0.0 --json` — capture a pane and detect a directory-access prompt.
 - `go run ./cmd/tmact inspect --all --json` — classify runtime + idle state for every pane.
