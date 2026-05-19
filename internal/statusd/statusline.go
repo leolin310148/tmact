@@ -1,6 +1,6 @@
 package statusd
 
-import "tmact/internal/panestatus"
+import "github.com/leolin310148/tmact/internal/panestatus"
 
 func RuntimeTag(runtime string) string {
 	switch runtime {

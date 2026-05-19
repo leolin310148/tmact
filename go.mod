@@ -1,4 +1,4 @@
-module tmact
+module github.com/leolin310148/tmact
 
 go 1.26
 

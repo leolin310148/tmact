@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 func TestEvaluateDirectoryAccessAllowsPathsUnderAllowlist(t *testing.T) {

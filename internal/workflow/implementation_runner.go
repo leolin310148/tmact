@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"tmact/internal/agents"
-	"tmact/internal/prompt"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 type ImplementationRunner struct {

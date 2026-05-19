@@ -26,9 +26,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"tmact/internal/prompt"
-	"tmact/internal/stt"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/stt"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 //go:embed static

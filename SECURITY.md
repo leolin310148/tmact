@@ -14,6 +14,7 @@ network service.
 
 ## Reporting
 
-For now, report issues directly to the repository owner or in the internal
-issue tracker. Include the command, config file, expected behavior, observed
-behavior, and whether a live tmux pane was modified.
+Report vulnerabilities with GitHub Security Advisories when available, or open
+a GitHub issue if the report does not need to stay private. Include the
+command, config file, expected behavior, observed behavior, and whether a live
+tmux pane was modified.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/agents"
 )
 
 func TestLoadImplementationConfigDefaultsAndRequiredRoles(t *testing.T) {

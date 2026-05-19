@@ -7,10 +7,10 @@ import (
 	"sort"
 	"time"
 
-	"tmact/internal/panestate"
-	"tmact/internal/panestatus"
-	"tmact/internal/prompt"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/panestate"
+	"github.com/leolin310148/tmact/internal/panestatus"
+	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 const maxSnapshotErrors = 32

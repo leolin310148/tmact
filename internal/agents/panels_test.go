@@ -3,7 +3,7 @@ package agents
 import (
 	"testing"
 
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 func TestBuildPanelReportPlansSessionAndWindows(t *testing.T) {

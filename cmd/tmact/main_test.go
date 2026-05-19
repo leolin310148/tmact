@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/runmeta"
-	"tmact/internal/stt"
-	"tmact/internal/tmux"
-	"tmact/internal/workflow"
+	"github.com/leolin310148/tmact/internal/runmeta"
+	"github.com/leolin310148/tmact/internal/stt"
+	"github.com/leolin310148/tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/workflow"
 )
 
 func TestListPrintsAndCachesNumberedTargets(t *testing.T) {

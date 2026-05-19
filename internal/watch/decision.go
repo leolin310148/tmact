@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 type decision struct {

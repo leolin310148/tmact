@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 type PermissionPromptError struct {

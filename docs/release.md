@@ -11,7 +11,7 @@
   details.
 - Confirm the license file matches the intended audience.
 
-## Internal Install
+## Clone Install
 
 ```sh
 git clone <repo-url>
@@ -50,22 +50,16 @@ Install the latest macOS release binary:
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
 
-For a private repository, use an authenticated GitHub CLI one-liner:
-
-```sh
-gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | sh
-```
-
 Install a specific tag:
 
 ```sh
-gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | env TMACT_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_VERSION=v0.1.0 sh
 ```
 
 Install the release binary plus the macOS LaunchAgent:
 
 ```sh
-gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | env TMACT_INSTALL_STATUSD=1 sh
+curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 sh
 ```
 
 Use `TMACT_WEB_ADDR=0.0.0.0:7890` with the release installer only on a trusted
@@ -73,7 +67,6 @@ network.
 
 ## Public Release Prep
 
-- Change `go.mod` from `module tmact` to the final repository module path.
 - Confirm `LICENSE` and release metadata still match the intended license.
 - Decide whether Homebrew or `go install` should be supported in addition to
   GitHub Release binaries.

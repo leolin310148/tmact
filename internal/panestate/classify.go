@@ -3,7 +3,7 @@ package panestate
 import (
 	"strings"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 const (

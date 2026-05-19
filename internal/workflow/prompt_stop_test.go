@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/agents"
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 func TestDiscussionObserveStopsOnGenericPrompt(t *testing.T) {

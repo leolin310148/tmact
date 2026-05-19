@@ -4,7 +4,6 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
-#   gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | sh
 #
 # Optional environment:
 #   TMACT_REPO=owner/repo           GitHub repository (default: leolin310148/tmact)

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 type PanelOptions struct {

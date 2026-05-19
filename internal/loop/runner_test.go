@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 func TestLoopStopsOnGenericPrompt(t *testing.T) {

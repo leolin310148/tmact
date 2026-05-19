@@ -3,7 +3,7 @@ package agents
 import (
 	"testing"
 
-	"tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 func TestInboxFromReportIncludesPermissionPrompt(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"tmact/internal/panestate"
-	"tmact/internal/prompt"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/panestate"
+	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 const (

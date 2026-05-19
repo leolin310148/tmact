@@ -56,12 +56,6 @@ Install the latest macOS release binary without cloning:
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
 
-For a private repository, use an authenticated GitHub CLI one-liner:
-
-```sh
-gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | sh
-```
-
 On macOS, omit `--bin-only` to also install the per-user `statusd`
 LaunchAgent:
 
@@ -80,12 +74,6 @@ For release binaries, install the LaunchAgent with:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 sh
-```
-
-Private repository variant:
-
-```sh
-gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | env TMACT_INSTALL_STATUSD=1 sh
 ```
 
 For local development without installing:
@@ -129,9 +117,7 @@ still need a real tmux pane with the configured target.
 - External dependencies: `gopkg.in/yaml.v3` for YAML config and
   `github.com/coder/websocket` for the statusd web UI.
 - All state lives on the local filesystem; there is no daemon DB.
-- The module path is currently local (`module tmact`), so install from a clone.
-  Change it to the final repository path before supporting
-  `go install github.com/<org>/<repo>/cmd/tmact@latest`.
+- Module path: `github.com/leolin310148/tmact`.
 
 ## Repo Layout
 
@@ -315,6 +301,6 @@ and inspection commands.
 
 - `AGENTS.md` — contributor guide (build, test, style, PR conventions).
 - `docs/smoke-test.md` — manual smoke-test notes.
-- `docs/release.md` — internal publish and release checklist.
+- `docs/release.md` — publish and release checklist.
 - `daemon-status.md` — `statusd` design and tmux integration plan.
 - `RUNNING_LOOPS.md` — local background-loop inventory template.

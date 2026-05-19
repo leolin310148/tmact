@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/panestatus"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/panestatus"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 func TestRuntimeTag(t *testing.T) {

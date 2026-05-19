@@ -3,7 +3,7 @@ package statusd
 import (
 	"time"
 
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 const (

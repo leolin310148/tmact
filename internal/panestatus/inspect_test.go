@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"tmact/internal/agents"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 func TestClassifyRuntimeDetectsCodexCommand(t *testing.T) {

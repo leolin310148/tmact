@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/agents"
 
 	"gopkg.in/yaml.v3"
 )

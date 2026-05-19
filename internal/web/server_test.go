@@ -17,7 +17,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"tmact/internal/stt"
+	"github.com/leolin310148/tmact/internal/stt"
 )
 
 /* ---- HTTP endpoints ---- */

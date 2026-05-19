@@ -9,9 +9,9 @@ import (
 	"time"
 	"unicode"
 
-	"tmact/internal/panestate"
-	"tmact/internal/panestatus"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/panestate"
+	"github.com/leolin310148/tmact/internal/panestatus"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 const (

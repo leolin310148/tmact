@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"tmact/internal/prompt"
-	"tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 type Options struct {
