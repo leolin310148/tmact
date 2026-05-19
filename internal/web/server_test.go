@@ -389,6 +389,104 @@ func TestTranscribeMissingAudioReturns400(t *testing.T) {
 	}
 }
 
+/* ---- image paste ---- */
+
+func imageUploadRequest(t *testing.T, body string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("image", "clipboard.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(part, body); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/paste-image", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+func TestPasteImageSavesFileAndReturnsPath(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{PasteImageDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	png := "\x89PNG\r\n\x1a\n" + "pretend image body"
+	handler.ServeHTTP(rec, imageUploadRequest(t, png))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	path := got["path"]
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("path = %q, want it saved under %q", path, dir)
+	}
+	if !strings.HasSuffix(path, ".png") {
+		t.Fatalf("path = %q, want a .png extension sniffed from the bytes", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("saved image not readable: %v", err)
+	}
+	if string(data) != png {
+		t.Fatalf("saved bytes = %q, want the uploaded image verbatim", string(data))
+	}
+}
+
+func TestPasteImageRejectsNonImage(t *testing.T) {
+	handler := (&Server{PasteImageDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, imageUploadRequest(t, "this is plain text, not an image"))
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", rec.Code)
+	}
+}
+
+func TestPasteImageRejectsNonPOST(t *testing.T) {
+	handler := (&Server{PasteImageDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/paste-image", nil))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestSniffImageExtension(t *testing.T) {
+	cases := []struct {
+		name string
+		head []byte
+		want string
+	}{
+		{"png", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\x00"), "png"},
+		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0}, "jpg"},
+		{"gif87", []byte("GIF87a\x00\x00\x00\x00\x00\x00"), "gif"},
+		{"gif89", []byte("GIF89a\x00\x00\x00\x00\x00\x00"), "gif"},
+		{"webp", []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), "webp"},
+		{"bmp", []byte("BM\x00\x00\x00\x00\x00\x00"), "bmp"},
+		{"unknown", []byte("plain text bytes"), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := bytes.NewReader(tc.head)
+			if got := sniffImageExtension(rs); got != tc.want {
+				t.Fatalf("sniffImageExtension = %q, want %q", got, tc.want)
+			}
+			if pos, _ := rs.Seek(0, io.SeekCurrent); pos != 0 {
+				t.Fatalf("reader left at offset %d, want rewound to 0", pos)
+			}
+		})
+	}
+}
+
 /* ---- STT settings ---- */
 
 func TestSTTSettingsGetUnconfigured(t *testing.T) {

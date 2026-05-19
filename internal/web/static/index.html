@@ -571,6 +571,15 @@ function showInputError(msg) {
   errorTimer = setTimeout(() => { $("input-error").textContent = ""; syncIndicator(); }, 6000);
 }
 
+// setInputStatus shows a transient note in the indicator's message slot (e.g.
+// "uploading image…"). It cancels any pending error-clear timer so the note is
+// not wiped early, and the caller clears it by passing "".
+function setInputStatus(msg) {
+  if (errorTimer) { clearTimeout(errorTimer); errorTimer = null; }
+  $("input-error").textContent = msg;
+  syncIndicator();
+}
+
 /* ---- ANSI SGR colour rendering (tmux capture-pane -e output) ---- */
 
 // Tango palette — the 16 base colours, readable on the dark background.
@@ -1039,6 +1048,72 @@ function cancelRecording() {
   }
 }
 
+/* ---- image paste: upload to the statusd server, relay the saved path ---- */
+
+// clipboardImage returns the first image File on a paste event's clipboard, or
+// null. A screenshot or copied picture arrives as a file item while plain text
+// does not, so this also tells an image paste apart from a text paste.
+function clipboardImage(e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+      const f = it.getAsFile();
+      if (f) return f;
+    }
+  }
+  return null;
+}
+
+let imgUploading = false;
+
+// pasteImage uploads a clipboard image to the server, which saves it to a file
+// and returns the path; place() then relays that path onward. A terminal pane
+// has no channel for raw image bytes, so the path is the handoff — every
+// supported agent reads an image when given its path.
+async function pasteImage(file, place) {
+  if (imgUploading) return; // one upload at a time — ignore a paste mid-flight
+  imgUploading = true;
+  setInputStatus("uploading image…");
+  try {
+    const form = new FormData();
+    form.append("image", file, file.name || "paste.png");
+    const res = await fetch("/api/paste-image", { method: "POST", body: form });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok || !data.path) {
+      throw new Error(data.error || ("image upload failed: HTTP " + res.status));
+    }
+    setInputStatus("");
+    place(data.path);
+  } catch (e) {
+    showInputError(e.message || "image upload failed");
+  } finally {
+    imgUploading = false;
+  }
+}
+
+// placeInDraft inserts text into the draft box at the cursor, or appends it
+// when the draft is unfocused — used to drop a pasted image's path in for
+// review before the prompt is sent.
+function placeInDraft(text) {
+  const draft = $("draft");
+  if (draft.disabled) return;
+  if (document.activeElement === draft &&
+      typeof draft.selectionStart === "number") {
+    const s = draft.selectionStart, end = draft.selectionEnd;
+    draft.value = draft.value.slice(0, s) + text + draft.value.slice(end);
+    const pos = s + text.length;
+    draft.setSelectionRange(pos, pos);
+  } else if (draft.value.trim() === "") {
+    draft.value = text;
+  } else {
+    draft.value = draft.value.replace(/\s*$/, "") + " " + text;
+  }
+  if (state.selected) state.drafts[state.selected] = draft.value;
+  syncDraft();
+  draft.focus();
+}
+
 /* ---- mode 2: direct keystroke passthrough ---- */
 
 const KEYMAP = {
@@ -1156,6 +1231,14 @@ function wireInput() {
       sendDraft();
     }
   });
+  // An image paste uploads the picture and drops its path into the draft; a
+  // plain text paste falls through to the browser's default textarea handling.
+  draft.addEventListener("paste", (e) => {
+    const img = clipboardImage(e);
+    if (!img) return;
+    e.preventDefault();
+    pasteImage(img, placeInDraft);
+  });
   // pointerdown preventDefault keeps the soft keyboard up and focus in place.
   const clearBtn = $("draft-clear");
   clearBtn.addEventListener("pointerdown", (e) => e.preventDefault());
@@ -1209,9 +1292,16 @@ function wireInput() {
     direct.value = "";
   });
   direct.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const img = clipboardImage(e);
+    if (img) {
+      // Send the saved path plus a trailing space so the agent's input box
+      // keeps it as one token, separate from whatever is typed next.
+      pasteImage(img, (path) => sendDirect({ t: "text", s: path + " " }));
+      return;
+    }
     const t = (e.clipboardData || window.clipboardData).getData("text");
     if (t) sendDirect({ t: "text", s: t });
-    e.preventDefault();
   });
   // Soft keyboards often insert text with no usable keydown — relay whatever
   // landed in the overlay, then clear it so it stays invisible.

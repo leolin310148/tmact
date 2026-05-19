@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ const (
 	wsReadLimit       = 1 << 20
 
 	maxAudioUploadBytes = 25 << 20
+	maxImageUploadBytes = 25 << 20
 )
 
 // Server is the daemon-side HTTP server for the web UI.
@@ -67,6 +69,9 @@ type Server struct {
 	SaveSTTProvider func(stt.ProviderConfig) error
 	// HTTPClient is used for transcription API calls; defaults to a 60s client.
 	HTTPClient *http.Client
+	// PasteImageDir is where pasted clipboard images are written; defaults to
+	// <os.TempDir()>/tmact-paste.
+	PasteImageDir string
 	// Logf logs server-side diagnostics; defaults to writing to stderr, which
 	// statusd routes to its log file.
 	Logf func(format string, args ...any)
@@ -116,6 +121,13 @@ func (s *Server) saveSTT() func(stt.ProviderConfig) error {
 	}
 }
 
+func (s *Server) pasteImageDir() string {
+	if s.PasteImageDir != "" {
+		return s.PasteImageDir
+	}
+	return filepath.Join(os.TempDir(), "tmact-paste")
+}
+
 func (s *Server) httpClient() *http.Client {
 	if s.HTTPClient != nil {
 		return s.HTTPClient
@@ -143,6 +155,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
+	mux.HandleFunc("/api/paste-image", s.handlePasteImage)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }
@@ -406,6 +419,96 @@ func createMultipartFile(mw *multipart.Writer, field, filename, contentType stri
 		h.Set("Content-Type", contentType)
 	}
 	return mw.CreatePart(h)
+}
+
+// handlePasteImage accepts a clipboard image upload, writes it to a server-side
+// file, and returns that file's absolute path. A terminal pane is a keystroke
+// stream with no channel for raw image bytes, so the browser relays the path as
+// text instead — every supported agent reads an image when given its path.
+func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxImageUploadBytes)
+	if err := r.ParseMultipartForm(maxImageUploadBytes); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "request body too large") {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSONError(w, status, "invalid image upload: "+err.Error())
+		return
+	}
+
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, `missing "image" upload`)
+		return
+	}
+	defer file.Close()
+
+	// Trust the bytes, not the browser's declared type: sniff the container so
+	// the saved file always carries a correct, agent-recognisable extension.
+	ext := sniffImageExtension(file)
+	if ext == "" {
+		writeJSONError(w, http.StatusUnsupportedMediaType,
+			"unsupported image format (expected PNG, JPEG, GIF, WebP, or BMP)")
+		return
+	}
+
+	dir := s.pasteImageDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		s.logf("paste-image: mkdir %s: %v", dir, err)
+		writeJSONError(w, http.StatusInternalServerError, "could not create the image directory")
+		return
+	}
+	out, err := os.CreateTemp(dir, "paste-"+time.Now().Format("20060102-150405")+"-*."+ext)
+	if err != nil {
+		s.logf("paste-image: create file in %s: %v", dir, err)
+		writeJSONError(w, http.StatusInternalServerError, "could not save the image")
+		return
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, file); err != nil {
+		_ = os.Remove(out.Name())
+		s.logf("paste-image: write %s: %v", out.Name(), err)
+		writeJSONError(w, http.StatusInternalServerError, "could not save the image")
+		return
+	}
+
+	path := out.Name()
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+}
+
+// sniffImageExtension reads an upload's leading bytes and returns a canonical
+// image extension (no dot), or "" for anything it does not recognise as an
+// image. It rewinds the reader so the caller still sees the whole file.
+func sniffImageExtension(rs io.ReadSeeker) string {
+	head := make([]byte, 16)
+	n, _ := io.ReadFull(rs, head)
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return ""
+	}
+	head = head[:n]
+	switch {
+	case len(head) >= 8 && string(head[:8]) == "\x89PNG\r\n\x1a\n":
+		return "png"
+	case len(head) >= 3 && head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF:
+		return "jpg"
+	case len(head) >= 6 && (string(head[:6]) == "GIF87a" || string(head[:6]) == "GIF89a"):
+		return "gif"
+	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
+		return "webp"
+	case len(head) >= 2 && head[0] == 'B' && head[1] == 'M':
+		return "bmp"
+	default:
+		return ""
+	}
 }
 
 // inputMsg is a client-to-server WebSocket message.
