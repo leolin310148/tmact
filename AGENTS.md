@@ -29,8 +29,9 @@ Example YAML configs live in `examples/`, operational notes in `docs/` and
 - `go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once` — validate one loop pass without sending keys.
 - `go run ./cmd/tmact watch --config examples/accept-question-watch.yaml --dry-run --once` — validate one watcher pass.
 
-Only external dependency is `gopkg.in/yaml.v3` (Go 1.26). No SQLite, cobra, or
-gocron despite earlier design notes — keep new dependencies minimal.
+External dependencies are `gopkg.in/yaml.v3` for YAML config and
+`github.com/coder/websocket` for the statusd web UI (Go 1.26). No SQLite,
+cobra, or gocron despite earlier design notes — keep new dependencies minimal.
 
 ## Coding Style & Naming Conventions
 
@@ -71,7 +72,10 @@ This tool presses keys in live tmux panes. While developing:
 - Loops should stop on permission prompts rather than auto-confirming.
 - Do not add actions that execute arbitrary shell commands or approve
   unbounded paths without clear local safety controls.
+- Keep the statusd web UI on `127.0.0.1` by default. Binding it to `0.0.0.0`
+  is a local operator decision for trusted networks because the UI can send
+  input to tmux panes.
 
 Long-running daemons belong in the detached `tmact-loops` tmux session — not
 the working `tmact` session, which would block development. See
-`RUNNING_LOOPS.md` for the live inventory.
+`RUNNING_LOOPS.md` for the local inventory template.

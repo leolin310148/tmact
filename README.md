@@ -36,29 +36,90 @@ tmact loop stop --id loop-night-loop-123
 
 ## Quick Start
 
+Prerequisites:
+
+- Go 1.26 or newer.
+- `tmux` on `PATH`.
+- Optional agent CLIs on `PATH` when you use panel launchers: `codex`,
+  `claude`, `copilot`, or `gemini`.
+
+Install for the current user:
+
+```sh
+scripts/install.sh --bin-only
+tmact ls
+```
+
+Install the latest macOS release binary without cloning:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
+```
+
+On macOS, omit `--bin-only` to also install the per-user `statusd`
+LaunchAgent:
+
+```sh
+scripts/install.sh
+```
+
+The LaunchAgent binds the web UI to `127.0.0.1:7890` by default. To expose it
+on all local interfaces for a trusted network, install with:
+
+```sh
+TMACT_WEB_ADDR=0.0.0.0:7890 scripts/install.sh
+```
+
+For release binaries, install the LaunchAgent with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 sh
+```
+
+For local development without installing:
+
 ```sh
 go build -o .cache/tmact ./cmd/tmact
 
-tmact ls
-tmact -t 0 send --text "summarize progress" --enter --execute
-tmact detect --target sample:0.0 --json
-tmact inspect --all --json
-tmact panels ensure --config examples/multi-agent-panels.yaml --execute
-tmact loop --config examples/night-loop.yaml --dry-run --once
-tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once
-tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
-tmact watch --config examples/accept-question-watch.yaml --dry-run --once
+.cache/tmact ls
+.cache/tmact -t 0 send --text "summarize progress" --enter --execute
+.cache/tmact detect --target sample:0.0 --json
+.cache/tmact inspect --all --json
+.cache/tmact panels plan --config examples/multi-agent-panels.yaml
+.cache/tmact loop --config examples/night-loop.yaml --dry-run --once
+.cache/tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once
+.cache/tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
+.cache/tmact watch --config examples/accept-question-watch.yaml --dry-run --once
 ```
 
 Sends are dry-run by default — add `--execute` to actually press keys or paste
 text. Targets accept the cache index (`-t 0`), a tmux pane id (`%42`), or
 `session:window.pane`.
 
+The sample loop and watch configs use placeholder targets such as
+`sample-agent:0.0`. Their loader tests keep the YAML valid, but live dry-runs
+still need a real tmux pane with the configured target.
+
+## First 10 Minutes
+
+1. Run `tmact ls` and confirm the panes you want to automate are visible.
+2. Copy `examples/agents.yaml` to `tmact.agents.yaml` and replace the sample
+   names, repos, roles, and targets with local values.
+3. Run `tmact status --config tmact.agents.yaml` to confirm the config resolves.
+4. Run `tmact panels plan --config tmact.agents.yaml` before any
+   `panels ensure --execute`.
+5. For loops and watchers, run `--dry-run --once` first and keep targets
+   explicit.
+
 ## Stack
 
 - Go 1.26, stdlib `flag` for CLI parsing.
-- Only external dependency: `gopkg.in/yaml.v3`.
+- External dependencies: `gopkg.in/yaml.v3` for YAML config and
+  `github.com/coder/websocket` for the statusd web UI.
 - All state lives on the local filesystem; there is no daemon DB.
+- The module path is currently local (`module tmact`), so install from a clone.
+  Change it to the final repository path before supporting
+  `go install github.com/<org>/<repo>/cmd/tmact@latest`.
 
 ## Repo Layout
 
@@ -198,6 +259,14 @@ status-line refresh path. On macOS, `scripts/install.sh` generates a per-user
 LaunchAgent from `launchd/com.tmact.statusd.plist.in`. Design notes in
 `daemon-status.md`.
 
+Useful macOS commands:
+
+```sh
+launchctl print "gui/$(id -u)/com.tmact.statusd"
+launchctl bootout "gui/$(id -u)/com.tmact.statusd"
+rm -f "$HOME/Library/LaunchAgents/com.tmact.statusd.plist"
+```
+
 ## State And Logs
 
 ```text
@@ -217,6 +286,9 @@ openspec/changes/*/phase*-comments.jsonl # workflow comment streams
 - Watcher decisions enforce allowlists; never widen them silently.
 - Loops and workflows stop on known interactive permission or approval prompts
   rather than auto-confirming.
+- The statusd web UI can send input to tmux panes. Keep the default
+  `127.0.0.1:7890` binding unless you intentionally trust the network where
+  `0.0.0.0:7890` is exposed.
 - Terminal output is treated as untrusted input; do not feed pane text to an
   LLM without wrapping it as observed terminal output.
 - Cooldowns, max-runs, and dedupe hashes are first-class in loop/watch configs.
@@ -224,12 +296,13 @@ openspec/changes/*/phase*-comments.jsonl # workflow comment streams
 ## Running Background Loops
 
 Long-running daemons go in the detached tmux session `tmact-loops`, not the
-working `tmact` session. See `RUNNING_LOOPS.md` for the live inventory and
-inspection commands.
+working `tmact` session. See `RUNNING_LOOPS.md` for a local inventory template
+and inspection commands.
 
 ## Further Reading
 
 - `AGENTS.md` — contributor guide (build, test, style, PR conventions).
 - `docs/smoke-test.md` — manual smoke-test notes.
+- `docs/release.md` — internal publish and release checklist.
 - `daemon-status.md` — `statusd` design and tmux integration plan.
-- `RUNNING_LOOPS.md` — currently-active background loops.
+- `RUNNING_LOOPS.md` — local background-loop inventory template.

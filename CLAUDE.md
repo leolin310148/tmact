@@ -47,8 +47,8 @@ agents. The safety design is intentional — do not weaken it:
 
 Background loop/workflow daemons run in the detached tmux session
 `tmact-loops` — never start one in the main `tmact` session (it blocks the
-working window). `RUNNING_LOOPS.md` is the live inventory; update it when you
-start or stop a long run.
+working window). `RUNNING_LOOPS.md` is the local inventory template; keep live
+machine-specific inventory in an untracked note or local operations docs.
 
 Use the runmeta commands to inspect/stop rather than killing tmux windows:
 
