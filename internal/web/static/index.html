@@ -284,7 +284,13 @@
   .settings-overlay {
     position: fixed; inset: 0; z-index: 60;
     display: flex; align-items: center; justify-content: center;
-    padding: 16px;
+    /* Pad past the notch / home indicator: the card maxes out at the padded
+       content box, so a full-height card on a phone never tucks its header
+       (and the close button) under the status bar. */
+    padding: calc(16px + env(safe-area-inset-top, 0px))
+             calc(16px + env(safe-area-inset-right, 0px))
+             calc(16px + env(safe-area-inset-bottom, 0px))
+             calc(16px + env(safe-area-inset-left, 0px));
     background: rgba(8,10,14,0.82);
     -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
   }
@@ -359,8 +365,105 @@
   }
   #stt-save:disabled { opacity: 0.5; cursor: not-allowed; }
 
+  /* Quick-input FAB — a configurable cluster of one-tap shortcuts pinned to
+     the pane's bottom-right corner. Phone-only, like the option bar: the dock
+     is revealed once a pane is selected, and tapping the bolt lifts a menu of
+     user-defined buttons over a dimmed pane. Each button types its text into
+     the pane and presses Enter. Buttons are grouped — a Common group shown
+     everywhere plus one matching the pane's detected runtime (claude / codex /
+     shell); the config lives in localStorage, edited from the settings panel. */
+  .qb-backdrop {
+    display: none;
+    position: absolute; inset: 0; z-index: 25;
+    background: rgba(8,10,14,0.55);
+    -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  }
+  .qb-dock {
+    display: none;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    flex-direction: column; align-items: flex-end; gap: 8px;
+  }
+  .qb-menu {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    max-height: 60vh; overflow-y: auto;
+  }
+  .qb-dock:not(.open) .qb-menu { display: none; }
+  .qb-menu button {
+    max-width: 78vw;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 18px;
+    padding: 9px 15px; font: 12px/1 var(--mono);
+    cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+  }
+  .qb-menu button:active { background: var(--border); }
+  .qb-empty {
+    max-width: 78vw; text-align: right;
+    background: var(--panel); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font: 11px/1.4 var(--mono);
+  }
+  .qb-fab {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; padding: 0;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--fg);
+    border: 1px solid var(--border);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    /* Faded at rest so it barely obstructs the pane; turns solid once it is
+       touched or while the menu is open. */
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+  }
+  .qb-fab svg { width: 16px; height: 16px; display: block; }
+  .qb-fab:active { opacity: 1; }
+  .qb-dock.open .qb-fab {
+    opacity: 1;
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .qb-dock:not(.open) .qb-ic-close { display: none; }
+  .qb-dock.open .qb-ic-open { display: none; }
+
+  /* Quick-button editor in the settings panel — one block per runtime group,
+     each a list of label/text rows with add + remove controls. */
+  .qb-group { margin-bottom: 14px; }
+  .qb-group:last-child { margin-bottom: 0; }
+  .qb-group-head {
+    font: 700 11px/1 var(--mono); color: var(--fg-dim); margin-bottom: 7px;
+  }
+  .qb-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .qb-row input {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 8px; font: 12px/1.3 var(--mono); min-width: 0;
+  }
+  .qb-row input:focus { outline: none; border-color: var(--accent); }
+  .qb-row .qb-label { flex: 0 0 84px; }
+  .qb-row .qb-text { flex: 1 1 auto; }
+  .qb-del {
+    flex: 0 0 auto;
+    width: 28px; height: 28px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+    font: 13px/1 var(--mono);
+  }
+  .qb-del:hover { color: var(--red); border-color: var(--red); }
+  .qb-add {
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px dashed var(--border); border-radius: 5px;
+    padding: 6px 10px; font: 11px/1 var(--mono); cursor: pointer;
+  }
+  .qb-add:active { background: var(--border); }
+
   @media (max-width: 760px) {
     .key-area { display: flex; }
+    /* The quick-input FAB is a phone-only convenience — reveal it here only. */
+    .qb-dock.ready { display: flex; }
+    .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */
     .option-bar:not(:empty) { display: flex; }
@@ -385,6 +488,14 @@
 <div class="content-wrap" id="content-wrap">
   <pre id="content"><span class="empty">No pane selected.</span></pre>
   <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+  <div class="qb-backdrop" id="qb-backdrop"></div>
+  <div class="qb-dock" id="qb-dock">
+    <div class="qb-menu" id="qb-menu"></div>
+    <button class="qb-fab" id="qb-fab" type="button" title="quick input" aria-label="quick input">
+      <svg class="qb-ic-open" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+      <svg class="qb-ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
 </div>
 <nav class="statusline">
   <div class="chips" id="chips"></div>
@@ -450,6 +561,10 @@
           <span class="font-val" id="font-val">13px</span>
         </div>
       </div>
+
+      <div class="settings-section">Quick buttons</div>
+      <div class="settings-note">Phone-only — tap the bolt at a pane's bottom-right corner. Each button types its text and presses Enter. The group matching the pane's runtime is shown alongside Common.</div>
+      <div id="qb-editor"></div>
 
       <div class="settings-section">Server · statusd host</div>
       <label class="settings-field" for="stt-model">
@@ -739,6 +854,7 @@ async function refreshSnapshot() {
     renderStatusline(snap);
     renderMode();
     restoreSelection();
+    syncQuickDock();
   } catch (e) {
     // Keep the last snapshot; the stale dot surfaces the lost connection.
   }
@@ -808,6 +924,8 @@ function selectPane(paneID) {
   setContent("Loading…");
   renderStatusline(state.snapshot);
   renderMode();
+  closeQuickMenu();
+  syncQuickDock();
   const sel = $("chips").querySelector(".chip.sel");
   if (sel) sel.scrollIntoView({ block: "nearest", inline: "nearest" });
   openWS(paneID);
@@ -1514,6 +1632,182 @@ function wireSettings() {
   $("stt-save").addEventListener("click", saveSTTSettings);
 }
 
+/* ---- quick-input buttons (phone-only FAB) ---- */
+
+const QUICK_KEY = "tmact.quickButtons";
+// Groups the FAB can show: "common" appears for every pane; the rest are
+// matched to the pane's detected runtime. Keep in step with QB_LABEL,
+// RUNTIME_GROUP, and QB_DEFAULT.
+const QB_GROUPS = ["common", "claude", "codex", "shell"];
+const QB_LABEL = {
+  common: "Common · every pane",
+  claude: "Claude panes",
+  codex: "Codex panes",
+  shell: "Shell panes",
+};
+// Snapshot runtime → quick-button group. A runtime with no group (gemini,
+// copilot, tmact, unknown) falls back to the Common group alone.
+const RUNTIME_GROUP = { claude: "claude", codex: "codex", shell: "shell" };
+// Seeded on first run; the user edits these from the settings panel.
+const QB_DEFAULT = {
+  common: [],
+  claude: [{ label: "/compact", text: "/compact" }, { label: "/clear", text: "/clear" }],
+  codex: [{ label: "/compact", text: "/compact" }, { label: "/clear", text: "/clear" }],
+  shell: [{ label: "cc", text: "cc" }, { label: "cx", text: "cx" }, { label: "gprb", text: "gprb" }],
+};
+
+let quickConfig = {};
+
+// loadQuickConfig reads the per-group button lists from localStorage, seeding
+// the defaults on first run. Every entry is normalised to {label, text} and
+// every group is present, so later code can index quickConfig freely.
+function loadQuickConfig() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(QUICK_KEY) || "null"); }
+  catch (e) {}
+  if (!saved || typeof saved !== "object") {
+    quickConfig = JSON.parse(JSON.stringify(QB_DEFAULT));
+    saveQuickConfig();
+    return;
+  }
+  quickConfig = {};
+  for (const g of QB_GROUPS) {
+    const list = Array.isArray(saved[g]) ? saved[g] : [];
+    quickConfig[g] = list.map((x) => ({
+      label: x && typeof x.label === "string" ? x.label : "",
+      text: x && typeof x.text === "string" ? x.text : "",
+    }));
+  }
+}
+
+function saveQuickConfig() {
+  try { localStorage.setItem(QUICK_KEY, JSON.stringify(quickConfig)); }
+  catch (e) {}
+}
+
+// applicableQuick returns the buttons to show for the selected pane: the
+// Common group plus the group matching the pane's runtime. Entries with no
+// text are dropped — they are half-finished editor rows.
+function applicableQuick() {
+  const out = [];
+  for (const it of quickConfig.common || []) if (it.text) out.push(it);
+  const pane = findPane(state.selected);
+  const g = pane && RUNTIME_GROUP[pane.runtime];
+  if (g) for (const it of quickConfig[g] || []) if (it.text) out.push(it);
+  return out;
+}
+
+// renderQuickMenu rebuilds the FAB menu from the current pane + config. Each
+// button types its text into the pane and presses Enter (a "send" message).
+function renderQuickMenu() {
+  const menu = $("qb-menu");
+  menu.textContent = "";
+  const items = applicableQuick();
+  if (items.length === 0) {
+    menu.appendChild(h("div", { class: "qb-empty",
+      text: "No quick buttons for this pane — add some in Settings." }));
+    return;
+  }
+  for (const it of items) {
+    const btn = h("button", { type: "button", title: it.text, text: it.label || it.text });
+    // pointerdown preventDefault keeps the soft keyboard up and focus in place.
+    btn.addEventListener("pointerdown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (!wsSend({ t: "send", s: it.text })) {
+        showInputError("not connected — try again");
+        return;
+      }
+      closeQuickMenu();
+    });
+    menu.appendChild(btn);
+  }
+}
+
+function openQuickMenu() {
+  if (!state.selected) return;
+  renderQuickMenu();
+  $("qb-dock").classList.add("open");
+  $("qb-backdrop").classList.add("open");
+}
+function closeQuickMenu() {
+  $("qb-dock").classList.remove("open");
+  $("qb-backdrop").classList.remove("open");
+}
+function toggleQuickMenu() {
+  if ($("qb-dock").classList.contains("open")) closeQuickMenu();
+  else openQuickMenu();
+}
+
+// syncQuickDock reveals the FAB once a pane is selected and hides it (closing
+// any open menu) when none is.
+function syncQuickDock() {
+  const dock = $("qb-dock");
+  if (state.selected) {
+    dock.classList.add("ready");
+  } else {
+    dock.classList.remove("ready");
+    closeQuickMenu();
+  }
+}
+
+// quickRow builds one editable button row, bound by object reference to its
+// config entry so edits land straight in quickConfig.
+function quickRow(group, item) {
+  const label = h("input", { class: "qb-label", type: "text", placeholder: "label",
+    spellcheck: "false", autocapitalize: "off", autocomplete: "off" });
+  label.value = item.label;
+  const text = h("input", { class: "qb-text", type: "text",
+    placeholder: "text sent to the pane (Enter is added)",
+    spellcheck: "false", autocapitalize: "off", autocomplete: "off" });
+  text.value = item.text;
+  label.addEventListener("input", () => {
+    item.label = label.value; saveQuickConfig(); renderQuickMenu();
+  });
+  text.addEventListener("input", () => {
+    item.text = text.value; saveQuickConfig(); renderQuickMenu();
+  });
+  const del = h("button", { class: "qb-del", type: "button",
+    title: "remove button", text: "✕" });
+  del.addEventListener("click", () => {
+    quickConfig[group] = quickConfig[group].filter((x) => x !== item);
+    saveQuickConfig();
+    renderQuickEditor();
+    renderQuickMenu();
+  });
+  return h("div", { class: "qb-row" }, label, text, del);
+}
+
+// renderQuickEditor rebuilds the settings-panel editor: one block per group,
+// each holding its rows and an "add" button.
+function renderQuickEditor() {
+  const root = $("qb-editor");
+  root.textContent = "";
+  for (const g of QB_GROUPS) {
+    const rows = h("div", { class: "qb-rows" });
+    for (const item of quickConfig[g]) rows.appendChild(quickRow(g, item));
+    const add = h("button", { class: "qb-add", type: "button", text: "+ Add button" });
+    add.addEventListener("click", () => {
+      quickConfig[g].push({ label: "", text: "" });
+      saveQuickConfig();
+      renderQuickEditor();
+    });
+    root.appendChild(h("div", { class: "qb-group" },
+      h("div", { class: "qb-group-head", text: QB_LABEL[g] }),
+      rows, add));
+  }
+}
+
+function wireQuick() {
+  // pointerdown preventDefault keeps the soft keyboard up and focus in place.
+  $("qb-fab").addEventListener("pointerdown", (e) => e.preventDefault());
+  $("qb-fab").addEventListener("click", toggleQuickMenu);
+  $("qb-backdrop").addEventListener("click", closeQuickMenu);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("qb-dock").classList.contains("open")) closeQuickMenu();
+  });
+  renderQuickEditor();
+}
+
 /* ---- lifecycle ---- */
 
 document.addEventListener("visibilitychange", () => {
@@ -1528,8 +1822,10 @@ document.addEventListener("visibilitychange", () => {
 });
 
 loadClientSettings();
+loadQuickConfig();
 wireInput();
 wireSettings();
+wireQuick();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
