@@ -214,6 +214,53 @@ func TestBuildSnapshotMarksProceedQuestionAsAsking(t *testing.T) {
 	}
 }
 
+func TestBuildSnapshotMarksTrailingChoicePromptAsAsking(t *testing.T) {
+	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
+	cfg := Config{
+		Now: func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{
+				Session:        "hc-api",
+				WindowIndex:    0,
+				WindowName:     "claude",
+				WindowActive:   true,
+				PaneIndex:      0,
+				PaneID:         "%1",
+				CurrentCommand: "2.1.144",
+				Active:         true,
+			}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			return `
+Skill 位置
+
+4 個 skill 要放哪?這影響是否進版控、team 是否看得到、以及是否馬上在 worktree 可用。
+
+❯ 1. 專案 .claude/skills/ (推薦)
+  2. 個人 ~/.claude/skills/
+  3. Type something.
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+`, nil
+		},
+	}
+
+	snapshot, err := BuildSnapshot(context.Background(), cfg, NewMemory())
+	if err != nil {
+		t.Fatalf("BuildSnapshot returned error: %v", err)
+	}
+	pane := snapshot.Panes["hc-api:0.0"]
+	if !pane.Asking {
+		t.Fatalf("pane should be asking: %#v", pane)
+	}
+	if !snapshot.Sessions["hc-api"].Asking {
+		t.Fatalf("session should be asking: %#v", snapshot.Sessions["hc-api"])
+	}
+	if pane.Prompt == nil || pane.Prompt.Type != "choice_prompt" {
+		t.Fatalf("prompt = %#v", pane.Prompt)
+	}
+}
+
 func TestBuildSnapshotUsesInitialSamplesOnColdStart(t *testing.T) {
 	now := time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC)
 	captures := 0

@@ -10,7 +10,8 @@
 #   TMACT_VERSION=v0.1.0            Release tag to install (default: latest)
 #   TMACT_BIN_DIR=$HOME/.local/bin  Install directory
 #   TMACT_INSTALL_STATUSD=1         Also install the macOS LaunchAgent
-#   TMACT_WEB_ADDR=127.0.0.1:7890   statusd web bind address
+#   TMACT_STATUSD_CONFIG=PATH       statusd config JSON (default: ~/.tmact/statusd.json)
+#   TMACT_WEB_ADDR=127.0.0.1:7890   statusd web bind address (overrides config)
 #   GH_TOKEN=...                    Token for private release downloads
 
 set -eu
@@ -18,7 +19,24 @@ set -eu
 repo="${TMACT_REPO:-leolin310148/tmact}"
 version="${TMACT_VERSION:-latest}"
 bin_dir="${TMACT_BIN_DIR:-$HOME/.local/bin}"
-web_addr="${TMACT_WEB_ADDR:-127.0.0.1:7890}"
+statusd_config="${TMACT_STATUSD_CONFIG:-$HOME/.tmact/statusd.json}"
+
+statusd_config_value() {
+  key="$1"
+  path="$2"
+  if [ ! -f "$path" ]; then
+    return 1
+  fi
+  sed -nE "s/^[[:space:]]*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p" "$path" | head -n 1
+}
+
+if [ -n "${TMACT_WEB_ADDR:-}" ]; then
+  web_addr="$TMACT_WEB_ADDR"
+elif web_addr="$(statusd_config_value web_addr "$statusd_config")" && [ -n "$web_addr" ]; then
+  :
+else
+  web_addr="127.0.0.1:7890"
+fi
 
 case "$(uname -s)" in
   Darwin) os="darwin" ;;
@@ -89,6 +107,7 @@ if [ "${TMACT_INSTALL_STATUSD:-0}" = "1" ]; then
   bin_path="$bin_dir/tmact"
 
   echo "==> Installing ${label} LaunchAgent"
+  echo "    statusd web addr: ${web_addr}"
   mkdir -p "$HOME/Library/LaunchAgents"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

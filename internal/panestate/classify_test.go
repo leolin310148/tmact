@@ -63,6 +63,30 @@ func TestClassifyDetectsTrustPrompt(t *testing.T) {
 	}
 }
 
+func TestClassifyDetectsTrailingChoicePrompt(t *testing.T) {
+	result := Classify(`
+Skill 位置
+
+4 個 skill 要放哪?這影響是否進版控、team 是否看得到、以及是否馬上在 worktree 可用。
+
+❯ 1. 專案 .claude/skills/ (推薦)
+  2. 個人 ~/.claude/skills/
+  3. Type something.
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+`)
+
+	if result.State != StateWaitingPermission {
+		t.Fatalf("state = %q", result.State)
+	}
+	if !result.Asking {
+		t.Fatal("result should be asking")
+	}
+	if result.InteractivePrompt == nil {
+		t.Fatal("expected interactive prompt")
+	}
+}
+
 func TestClassifyPrefersCurrentPromptOverStaleWorkingScrollback(t *testing.T) {
 	result := Classify(`
 I am working on the synthesis now.

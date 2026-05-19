@@ -58,6 +58,13 @@ Expose the web UI on a trusted LAN only when you mean to:
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 TMACT_WEB_ADDR=0.0.0.0:7890 sh
 ```
 
+To keep that bind address across future installs, save it locally:
+
+```sh
+mkdir -p ~/.tmact
+printf '{\n  "web_addr": "0.0.0.0:7890"\n}\n' > ~/.tmact/statusd.json
+```
+
 ## First Use
 
 Start with read-only commands:

@@ -17,6 +17,7 @@ type DirectoryAccess struct {
 }
 
 const (
+	TypeChoicePrompt        = "choice_prompt"
 	TypeCommandApproval     = "command_approval"
 	TypeDirectoryAccess     = "directory_access"
 	TypeGenericConfirmation = "generic_confirmation"
@@ -51,7 +52,10 @@ func Detect(raw string) *Prompt {
 	if detected := DetectDirectoryAccess(raw); detected != nil {
 		return PromptFromDirectoryAccess(detected)
 	}
-	return detectGenericPrompt(raw)
+	if detected := detectGenericPrompt(raw); detected != nil {
+		return detected
+	}
+	return detectTrailingChoicePrompt(raw)
 }
 
 func PromptFromDirectoryAccess(detected *DirectoryAccess) *Prompt {

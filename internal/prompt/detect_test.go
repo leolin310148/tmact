@@ -78,3 +78,34 @@ func TestDetectTrustFolderPrompt(t *testing.T) {
 		t.Fatalf("type = %q", detected.Type)
 	}
 }
+
+func TestDetectTrailingChoicePrompt(t *testing.T) {
+	raw := `
+Skill 位置
+
+4 個 skill 要放哪?這影響是否進版控、team 是否看得到、以及是否馬上在 worktree 可用。
+
+❯ 1. 專案 .claude/skills/ (推薦)
+  2. 個人 ~/.claude/skills/
+  3. Type something.
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeChoicePrompt {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.Question != "4 個 skill 要放哪?這影響是否進版控、team 是否看得到、以及是否馬上在 worktree 可用。" {
+		t.Fatalf("question = %q", detected.Question)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 1 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+	if len(detected.Options) != 3 {
+		t.Fatalf("options len = %d", len(detected.Options))
+	}
+}

@@ -28,6 +28,14 @@ launchctl print "gui/$(id -u)/com.tmact.statusd"
 ```
 
 Use `TMACT_WEB_ADDR=0.0.0.0:7890 scripts/install.sh` only on a trusted network.
+For machines that should keep a non-default bind address across future installs,
+save it in `~/.tmact/statusd.json`:
+
+```json
+{
+  "web_addr": "0.0.0.0:7890"
+}
+```
 
 ## Release Binary
 
@@ -63,7 +71,8 @@ curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/ins
 ```
 
 Use `TMACT_WEB_ADDR=0.0.0.0:7890` with the release installer only on a trusted
-network.
+network. If `TMACT_WEB_ADDR` is not set, both installers read
+`~/.tmact/statusd.json` before falling back to `127.0.0.1:7890`.
 
 ## Public Release Prep
 

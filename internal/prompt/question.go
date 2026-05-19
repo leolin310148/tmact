@@ -28,7 +28,7 @@ func DetectQuestion(raw string) *Question {
 			Choices: choicesFromOptions(detected.Options),
 		}
 	}
-	return detectTrailingMenu(raw)
+	return nil
 }
 
 func questionText(p *Prompt) string {
@@ -46,12 +46,12 @@ func choicesFromOptions(options []Option) []Choice {
 	return choices
 }
 
-// detectTrailingMenu finds a numbered selection menu sitting at the bottom of
+// detectTrailingChoicePrompt finds a numbered selection menu sitting at the bottom of
 // the pane. It requires the trailing options to be numbered 1..N in order and
 // at least one to carry the "❯" selection cursor — a marker an agent's prose
 // numbered list never has, which keeps bulleted output from registering as a
 // question.
-func detectTrailingMenu(raw string) *Question {
+func detectTrailingChoicePrompt(raw string) *Prompt {
 	recent := recentLines(cleanedLines(raw), 40)
 
 	type located struct {
@@ -93,11 +93,20 @@ func detectTrailingMenu(raw string) *Question {
 		return nil
 	}
 
-	choices := make([]Choice, 0, len(menu))
+	options := make([]Option, 0, len(menu))
 	for _, item := range menu {
-		choices = append(choices, Choice{Number: item.option.Number, Label: item.option.Label})
+		options = append(options, item.option)
 	}
-	return &Question{Prompt: menuPromptText(recent, menu[0].index), Choices: choices}
+	detected := &Prompt{
+		Type:       TypeChoicePrompt,
+		Question:   menuPromptText(recent, menu[0].index),
+		Options:    options,
+		Confidence: "medium",
+	}
+	if selected := selectedOption(detected.Options); selected != nil {
+		detected.SelectedOption = selected
+	}
+	return detected
 }
 
 // menuPromptText returns the line immediately above the first option — the
