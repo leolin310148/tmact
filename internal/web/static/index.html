@@ -70,6 +70,19 @@
   }
   .chip:hover { border-color: var(--fg-dim); }
   .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
+  /* Desktop pane-switch hotkey badge: shows which Option+key jumps to this
+     chip (Option+1…0, then Option+q…p). Hidden on phones — see media query. */
+  .chip-key {
+    flex: 0 0 auto;
+    font: 700 9px/1 var(--mono);
+    color: var(--fg-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 3px;
+    min-width: 8px; text-align: center;
+  }
+  .chip.sel .chip-key { color: #fff; border-color: var(--accent); }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
   .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
   /* Asking panes need a question prompt resolved — the dot carries a "?". */
@@ -475,6 +488,9 @@
     /* No horizontal scroll on phones — wrap chips onto a few short lines. */
     .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
     .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
+    /* The Option+key hotkeys are a hardware-keyboard feature — no badge on
+       phones, where panes are reached by tapping. */
+    .chip-key { display: none; }
     .dot { width: 6px; height: 6px; }
     .dot.asking { width: 10px; height: 10px; font-size: 8px; }
     /* The draft text stays small to fit more lines; `maximum-scale=1` in the
@@ -588,11 +604,29 @@
   </div>
 </div>
 <script>
-const state = { selected: null, snapshot: null, drafts: {} };
+const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [] };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
                 mimeType: "", canceled: false, timer: null, startedAt: 0 };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
+
+// Desktop pane-switch hotkeys: Option+<key> jumps to the Nth chip in the
+// statusline. The labels are what the chip badge shows; HOTKEY_CODE maps each
+// to its layout-independent KeyboardEvent.code (e.key is unusable here —
+// holding Option on macOS rewrites it to an accented character).
+const PANE_HOTKEYS = [
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+  "q", "w", "e", "r", "t", "y", "u", "i", "o", "p",
+];
+const HOTKEY_CODE = {
+  "1": "Digit1", "2": "Digit2", "3": "Digit3", "4": "Digit4", "5": "Digit5",
+  "6": "Digit6", "7": "Digit7", "8": "Digit8", "9": "Digit9", "0": "Digit0",
+  "q": "KeyQ", "w": "KeyW", "e": "KeyE", "r": "KeyR", "t": "KeyT",
+  "y": "KeyY", "u": "KeyU", "i": "KeyI", "o": "KeyO", "p": "KeyP",
+};
+// code → chip index, built once so the keydown handler is a single lookup.
+const HOTKEY_INDEX = {};
+PANE_HOTKEYS.forEach((label, i) => { HOTKEY_INDEX[HOTKEY_CODE[label]] = i; });
 
 const $ = (id) => document.getElementById(id);
 const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
@@ -645,22 +679,29 @@ function renderStatusline(snap) {
   const perSession = {};
   for (const p of panes) perSession[p.session] = (perSession[p.session] || 0) + 1;
 
-  for (const p of panes) {
+  // Freeze the rendered order so the Option+key hotkeys map to the same chips
+  // the user sees, in the same left-to-right sequence.
+  state.paneOrder = panes.map((p) => p.pane_id);
+
+  panes.forEach((p, i) => {
     const label = perSession[p.session] > 1
       ? p.session + ":" + p.window_index
       : p.session;
     const dotCls = paneStateClass(p);
     const dot = h("span", { class: "dot " + dotCls });
     if (dotCls === "asking") dot.textContent = "?";
+    const key = PANE_HOTKEYS[i];
     const chip = h("div", {
       class: "chip" + (p.pane_id === state.selected ? " sel" : ""),
-      title: (p.cwd || p.session) + " — " + paneStateLabel(p),
+      title: (p.cwd || p.session) + " — " + paneStateLabel(p)
+        + (key ? " — Option+" + key : ""),
     },
+      key ? h("span", { class: "chip-key", text: key }) : null,
       dot,
       h("span", { text: label }));
     chip.onclick = () => selectPane(p.pane_id);
     chips.appendChild(chip);
-  }
+  });
 }
 
 // checkStale lights the red dot when no fresh snapshot has landed for 10s+ —
@@ -1808,6 +1849,26 @@ function wireQuick() {
   renderQuickEditor();
 }
 
+/* ---- desktop pane-switch hotkeys ---- */
+
+// wireHotkeys binds Option+<key> to "select the Nth statusline chip". The
+// listener runs in the capture phase so it wins over the direct-mode relay —
+// in direct mode every keystroke is forwarded to the pane, and without
+// capturing first, Option+1 would be sent to the pane instead of switching.
+function wireHotkeys() {
+  document.addEventListener("keydown", (e) => {
+    // macOS-only chord: plain Option, no Ctrl/Cmd. Mobile has no Option key,
+    // and an open settings panel may legitimately want Option for text input.
+    if (!e.altKey || e.ctrlKey || e.metaKey || isMobile()) return;
+    if (!$("settings-overlay").hidden) return;
+    const idx = HOTKEY_INDEX[e.code];
+    if (idx === undefined || idx >= state.paneOrder.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectPane(state.paneOrder[idx]);
+  }, true);
+}
+
 /* ---- lifecycle ---- */
 
 document.addEventListener("visibilitychange", () => {
@@ -1826,6 +1887,7 @@ loadQuickConfig();
 wireInput();
 wireSettings();
 wireQuick();
+wireHotkeys();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
