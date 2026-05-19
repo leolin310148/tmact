@@ -43,6 +43,24 @@ func TestDetectQuestionFromTrailingMenu(t *testing.T) {
 	}
 }
 
+func TestDetectQuestionFromCodexCursorMenu(t *testing.T) {
+	// Codex marks the current row with "›" instead of Claude's "❯".
+	raw := `Do you trust the contents of this directory?
+› 1. Yes, continue
+  2. No, quit
+`
+	q := DetectQuestion(raw)
+	if q == nil {
+		t.Fatal("expected a question")
+	}
+	if len(q.Choices) != 2 {
+		t.Fatalf("choices = %d, want 2", len(q.Choices))
+	}
+	if q.Choices[0].Label != "Yes, continue" {
+		t.Fatalf("choice 1 label = %q", q.Choices[0].Label)
+	}
+}
+
 func TestDetectQuestionIgnoresProseNumberedList(t *testing.T) {
 	// A numbered list with no selection cursor is the agent talking, not a
 	// menu — it must not register as a question.

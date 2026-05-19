@@ -42,7 +42,10 @@ type Option struct {
 	Selected bool   `json:"selected"`
 }
 
-var optionPattern = regexp.MustCompile(`^(❯\s*)?([0-9]+)\.\s+(.+)$`)
+// optionPattern matches a numbered menu option, optionally led by a selection
+// cursor. Claude renders the cursor as "❯", Codex as "›" — both mean the row
+// is the current choice.
+var optionPattern = regexp.MustCompile(`^([❯›]\s*)?([0-9]+)\.\s+(.+)$`)
 
 func Detect(raw string) *Prompt {
 	if detected := DetectDirectoryAccess(raw); detected != nil {
@@ -239,10 +242,11 @@ func parseOption(text string) *Option {
 		return nil
 	}
 	label := strings.TrimSpace(trimBoxRight(matches[3]))
+	cursor := strings.TrimSpace(matches[1])
 	return &Option{
 		Number:   number,
 		Label:    label,
-		Selected: strings.TrimSpace(matches[1]) == "❯",
+		Selected: cursor == "❯" || cursor == "›",
 	}
 }
 
