@@ -106,7 +106,7 @@
   .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
   .content-wrap.direct::after {
     content: ""; position: absolute; inset: 0; pointer-events: none;
-    box-shadow: inset 0 0 0 1px var(--direct);
+    box-shadow: inset 0 0 0 3px var(--direct);
   }
   /* `overflow: hidden auto` + pre-wrap: pane text wraps and scrolls
      vertically only — it never scrolls sideways. */
@@ -606,7 +606,8 @@
 <script>
 const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [] };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
-                mimeType: "", canceled: false, timer: null, startedAt: 0 };
+                mimeType: "", canceled: false, timer: null, startedAt: 0,
+                hotkeyDown: false, hotkeyStopPending: false };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
 
@@ -1188,10 +1189,10 @@ async function uploadRecording(blob) {
 }
 
 async function startRecording() {
-  if (!state.selected || voice.busy || voice.recorder) return;
+  if (!state.selected || voice.busy || voice.recorder) return false;
   if (!voiceSupported()) {
     showInputError("microphone recording is not supported in this browser");
-    return;
+    return false;
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1219,6 +1220,8 @@ async function startRecording() {
       voice.recorder = null;
       voice.stream = null;
       voice.chunks = [];
+      voice.hotkeyDown = false;
+      voice.hotkeyStopPending = false;
       syncRecordButton();
       if (canceled) { hideRecOverlay(); return; }
       uploadRecording(blob);
@@ -1226,14 +1229,22 @@ async function startRecording() {
     recorder.start();
     showRecOverlay();
     syncRecordButton();
+    if (voice.hotkeyStopPending) {
+      voice.hotkeyStopPending = false;
+      stopRecording();
+    }
+    return true;
   } catch (e) {
     const denied = e && (e.name === "NotAllowedError" || e.name === "PermissionDeniedError");
     showInputError(denied ? "microphone permission denied" : "microphone unavailable");
     if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
     voice.stream = null;
     voice.recorder = null;
+    voice.hotkeyDown = false;
+    voice.hotkeyStopPending = false;
     hideRecOverlay();
     syncRecordButton();
+    return false;
   }
 }
 
@@ -1251,6 +1262,47 @@ function cancelRecording() {
   } else {
     hideRecOverlay();
   }
+}
+
+function isRecordHotkey(e) {
+  return e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyV";
+}
+
+function stopHotkeyRecording() {
+  if (!voice.hotkeyDown && !voice.hotkeyStopPending) return;
+  voice.hotkeyDown = false;
+  if (voice.recorder && voice.recorder.state === "recording") {
+    voice.hotkeyStopPending = false;
+    stopRecording();
+  } else {
+    voice.hotkeyStopPending = true;
+  }
+}
+
+function wireRecordHotkey() {
+  document.addEventListener("keydown", async (e) => {
+    if (isMobile() || $("settings-overlay").hidden === false) return;
+    if (!isRecordHotkey(e) || e.repeat || voice.hotkeyDown) return;
+    e.preventDefault();
+    e.stopPropagation();
+    voice.hotkeyDown = true;
+    voice.hotkeyStopPending = false;
+    const started = await startRecording();
+    if (!started) {
+      voice.hotkeyDown = false;
+      voice.hotkeyStopPending = false;
+    }
+  }, true);
+
+  document.addEventListener("keyup", (e) => {
+    if (!voice.hotkeyDown && !voice.hotkeyStopPending) return;
+    if (e.code !== "KeyV" && e.code !== "AltLeft" && e.code !== "AltRight") return;
+    e.preventDefault();
+    e.stopPropagation();
+    stopHotkeyRecording();
+  }, true);
+
+  window.addEventListener("blur", stopHotkeyRecording);
 }
 
 /* ---- image paste: upload to the statusd server, relay the saved path ---- */
@@ -1887,6 +1939,7 @@ loadQuickConfig();
 wireInput();
 wireSettings();
 wireQuick();
+wireRecordHotkey();
 wireHotkeys();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
