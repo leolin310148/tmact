@@ -740,6 +740,42 @@ func TestPaneWSStreamsContent(t *testing.T) {
 	}
 }
 
+func TestPaneWSContentCarriesDetectedQuestion(t *testing.T) {
+	menu := "Which approach?\n❯ 1. Use a library\n  2. Hand-roll it\n"
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return menu, nil },
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "content" || m.Q == nil {
+		t.Fatalf("got %+v, want a content message with a question", m)
+	}
+	if len(m.Q.Choices) != 2 {
+		t.Fatalf("question choices = %d, want 2", len(m.Q.Choices))
+	}
+}
+
+func TestPaneWSContentOmitsQuestionWhenNone(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "plain output, no menu", nil },
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "content" || m.Q != nil {
+		t.Fatalf("got %+v, want a content message with no question", m)
+	}
+}
+
 func TestPaneWSAppliesTextInput(t *testing.T) {
 	type call struct {
 		target, text string

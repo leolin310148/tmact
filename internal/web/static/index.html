@@ -146,6 +146,23 @@
   /* Shown only when the keys overflow a single row (JS sets .overflowing). */
   .key-toggle { display: none; padding: 5px 10px; }
   .key-area.overflowing .key-toggle { display: inline-block; }
+  /* Quick-answer buttons for a detected menu prompt — one per numbered
+     option. Hidden by default; the phone media query reveals it when it
+     holds buttons, so it is a mobile-only convenience. */
+  .option-bar { display: none; flex-wrap: wrap; gap: 5px; }
+  .option-bar button {
+    flex: 0 1 auto; min-width: 0; max-width: 100%;
+    display: flex; align-items: baseline; gap: 6px;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 5px;
+    padding: 6px 10px; font: 11px/1 var(--mono);
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .option-bar button:active { background: var(--border); }
+  .option-bar .opt-num { font-weight: 700; color: var(--accent); }
+  .option-bar .opt-label {
+    overflow: hidden; text-overflow: ellipsis;
+  }
   .mode-indicator {
     font: 11px/1.4 var(--mono); letter-spacing: 0.3px;
     color: var(--fg-dim);
@@ -344,6 +361,9 @@
 
   @media (max-width: 760px) {
     .key-area { display: flex; }
+    /* Quick-answer buttons exist for phones: shown only here, and only while
+       a question is actually up (the bar holds buttons). */
+    .option-bar:not(:empty) { display: flex; }
     /* On a phone, direct mode types straight into the pane and the helper-key
        bar already covers the control keys — the draft box would only get in
        the way, so collapse it. On desktop the draft box stays put so a prompt
@@ -382,6 +402,7 @@
     <span id="mode-text">Select a pane to enable input</span>
     <span class="input-error" id="input-error"></span>
   </div>
+  <div class="option-bar" id="option-bar"></div>
   <div class="input-row">
     <div class="draft-wrap" id="draft-wrap">
       <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
@@ -683,6 +704,30 @@ function setContent(text) {
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
+// renderOptions rebuilds the quick-answer bar from a detected menu prompt:
+// each numbered option becomes a button that relays its digit into the pane.
+// An absent or empty question clears the bar. The bar is CSS-hidden on
+// desktop, so this runs unconditionally and the media query gates visibility.
+function renderOptions(q) {
+  const bar = $("option-bar");
+  bar.textContent = "";
+  if (!q || !Array.isArray(q.choices)) return;
+  for (const c of q.choices) {
+    if (typeof c.number !== "number") continue;
+    const btn = h("button", { type: "button", title: c.label || ("Option " + c.number) },
+      h("span", { class: "opt-num", text: String(c.number) }),
+      c.label ? h("span", { class: "opt-label", text: c.label }) : null);
+    // pointerdown preventDefault keeps the soft keyboard up and focus in place.
+    btn.addEventListener("pointerdown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      if (!wsSend({ t: "text", s: String(c.number) })) {
+        showInputError("not connected — try again");
+      }
+    });
+    bar.appendChild(btn);
+  }
+}
+
 /* ---- snapshot polling ---- */
 
 async function refreshSnapshot() {
@@ -718,6 +763,7 @@ let ws = null, wsRetry = null;
 function closeWS() {
   if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
   if (ws) { const old = ws; ws = null; try { old.close(); } catch (e) {} }
+  renderOptions(null);
 }
 
 function openWS(paneID) {
@@ -728,7 +774,7 @@ function openWS(paneID) {
   sock.onmessage = (ev) => {
     let m;
     try { m = JSON.parse(ev.data); } catch (e) { return; }
-    if (m.t === "content") setContent(m.s);
+    if (m.t === "content") { setContent(m.s); renderOptions(m.q); }
     else if (m.t === "error") showInputError(m.s);
   };
   sock.onclose = () => {

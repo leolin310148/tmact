@@ -26,6 +26,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"tmact/internal/prompt"
 	"tmact/internal/stt"
 	"tmact/internal/tmux"
 )
@@ -522,6 +523,10 @@ type inputMsg struct {
 type outMsg struct {
 	T string `json:"t"` // "content" or "error"
 	S string `json:"s"`
+	// Q is the interactive menu the pane is waiting on, when one is detected.
+	// It rides along with each "content" message so the browser can offer
+	// quick-answer buttons; nil (omitted) means there is no question to answer.
+	Q *prompt.Question `json:"q,omitempty"`
 }
 
 func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
@@ -577,7 +582,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			return true
 		}
 		last = content
-		return write(outMsg{T: "content", S: content}) == nil
+		return write(outMsg{T: "content", S: content, Q: prompt.DetectQuestion(content)}) == nil
 	}
 
 	if !push() {
