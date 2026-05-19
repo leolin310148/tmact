@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0e1116" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -23,10 +23,12 @@
     --green: #3fb950;
     --amber: #d29922;
     --red: #f85149;
+    /* Direct-mode accent: a calm light blue, not an alarming red. */
+    --direct: #79c0ff;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; overflow-x: hidden; }
   body {
     background: var(--bg);
     color: var(--fg);
@@ -88,10 +90,12 @@
   .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
   .content-wrap.direct::after {
     content: ""; position: absolute; inset: 0; pointer-events: none;
-    box-shadow: inset 0 0 0 2px var(--red);
+    box-shadow: inset 0 0 0 1px var(--direct);
   }
+  /* `overflow: hidden auto` + pre-wrap: pane text wraps and scrolls
+     vertically only — it never scrolls sideways. */
   pre#content {
-    margin: 0; flex: 1 1 auto; overflow: auto;
+    margin: 0; flex: 1 1 auto; overflow: hidden auto;
     padding: 10px 14px;
     font: 10.5px/1.4 var(--mono);
     white-space: pre-wrap; word-break: break-word;
@@ -109,11 +113,13 @@
   }
   .empty { margin: auto; color: var(--fg-dim); font-size: 13px; text-align: center; }
 
+  /* Bottom padding lifts the input clear of the iOS home indicator on PWA —
+     a small fraction of the safe-area inset, kept tight on purpose. */
   .input-bar {
     flex: 0 0 auto;
     border-top: 1px solid var(--border);
     background: var(--panel);
-    padding: 4px 10px;
+    padding: 4px 10px calc(2px + env(safe-area-inset-bottom, 0px) * 0.2);
     display: flex; flex-direction: column; gap: 5px;
   }
   /* Termius-style helper keys — control keys a soft keyboard lacks. The bar
@@ -142,27 +148,42 @@
     color: var(--fg-dim);
     display: flex; gap: 12px; align-items: center;
   }
-  .mode-indicator.direct { color: var(--red); font-weight: 700; }
+  .mode-indicator.direct { color: var(--direct); font-weight: 700; }
   .input-error { color: var(--amber); }
-  .input-row { display: flex; gap: 8px; align-items: stretch; }
-  /* Direct mode types straight into the pane — the draft box would only get
-     in the way, so collapse it and leave just the helper keys + indicator. */
-  .input-bar.direct .input-row { display: none; }
+  /* flex-end keeps the mic/send buttons at the bottom as the draft auto-grows. */
+  .input-row { display: flex; gap: 8px; align-items: flex-end; }
+  /* The draft box and its clear button share a relative wrapper so the "×"
+     can float in the textarea's top-right corner. */
+  .draft-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+  /* Auto-grows in JS (autoGrowDraft); resize:none drops the manual handle. */
   #draft {
-    flex: 1 1 auto; resize: vertical;
-    min-height: 30px; max-height: 200px;
+    flex: 1 1 auto; min-width: 0; resize: none;
+    min-height: 32px; max-height: 200px;
     background: var(--bg); color: var(--fg);
     border: 1px solid var(--border); border-radius: 5px;
-    padding: 5px 8px; font: 12px/1.4 var(--mono);
+    padding: 5px 26px 5px 8px; font: 11px/1.4 var(--mono);
+    overflow-y: hidden;
   }
   #draft:focus { outline: none; border-color: var(--accent); }
   #draft:disabled { opacity: 0.5; }
+  /* Clear button — shown only while the draft holds text (JS sets .has-text). */
+  #draft-clear {
+    position: absolute; top: 5px; right: 5px;
+    display: none; align-items: center; justify-content: center;
+    width: 17px; height: 17px; padding: 0;
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 50%;
+    cursor: pointer;
+  }
+  #draft-clear:hover { color: var(--fg); border-color: var(--fg-dim); }
+  #draft-clear svg { width: 11px; height: 11px; display: block; }
+  .draft-wrap.has-text #draft-clear { display: flex; }
   /* Compact square icon buttons — the mic and send actions sit beside the
-     draft box and stretch to its height. */
+     draft box, bottom-aligned with it. */
   .icon-btn {
     flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center;
-    width: 36px; padding: 0;
+    width: 36px; min-height: 32px; padding: 0;
     border-radius: 5px; cursor: pointer;
   }
   .icon-btn svg { width: 20px; height: 20px; display: block; }
@@ -171,41 +192,51 @@
   #record-btn.busy { color: var(--fg-dim); }
   #send-btn:disabled, #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* Recording overlay — a full-screen modal while the mic is live, so it is
-     unmistakable that audio is being captured. */
+  /* Recording overlay — a dim backdrop while the mic is live. The info card
+     is pinned just above the input bar and the red Stop button lands exactly
+     over the mic button, so the finger that started the take never moves. */
   .rec-overlay {
     position: fixed; inset: 0; z-index: 50;
-    display: flex; align-items: center; justify-content: center;
     background: rgba(8,10,14,0.82);
     -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
   }
   .rec-overlay[hidden] { display: none; }
+  /* JS sets `bottom` to sit just above the input bar. */
   .rec-card {
-    display: flex; flex-direction: column; align-items: center; gap: 14px;
-    padding: 26px 30px; min-width: 232px;
+    position: fixed; left: 8px; right: 8px; bottom: 8px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 14px;
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
   }
   .rec-dot {
-    width: 52px; height: 52px; border-radius: 50%;
+    flex: 0 0 auto;
+    width: 34px; height: 34px; border-radius: 50%;
     background: var(--red);
     animation: rec-pulse 1.4s ease-out infinite;
   }
   @keyframes rec-pulse {
     0%   { box-shadow: 0 0 0 0 rgba(248,81,73,0.55); }
-    100% { box-shadow: 0 0 0 26px rgba(248,81,73,0); }
+    100% { box-shadow: 0 0 0 18px rgba(248,81,73,0); }
   }
-  .rec-label { font-size: 15px; font-weight: 600; }
-  .rec-timer { font: 22px/1 var(--mono); color: var(--fg-dim); }
-  .rec-actions { display: flex; gap: 10px; margin-top: 2px; }
-  .rec-stop, .rec-cancel {
-    display: flex; align-items: center; gap: 7px;
-    padding: 10px 15px; border-radius: 7px;
+  .rec-info { flex: 1 1 auto; min-width: 0; }
+  .rec-label { font-size: 14px; font-weight: 600; }
+  .rec-timer { font: 18px/1.3 var(--mono); color: var(--fg-dim); }
+  .rec-cancel {
+    flex: 0 0 auto;
+    padding: 9px 14px; border-radius: 7px;
     font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
   }
-  .rec-stop { background: var(--red); color: #fff; border: 0; }
-  .rec-stop svg { width: 17px; height: 17px; }
-  .rec-cancel { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
+  /* JS pins this directly over the mic button — same size, same spot. */
+  .rec-stop {
+    position: fixed;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; cursor: pointer;
+    background: var(--red); color: #fff; border: 0; border-radius: 5px;
+    box-shadow: 0 0 0 4px rgba(248,81,73,0.3), 0 0 18px rgba(248,81,73,0.55);
+  }
+  .rec-stop svg { width: 20px; height: 20px; display: block; }
   /* Transcribing phase: swap the pulse for a spinner, drop the timer + buttons. */
   .rec-overlay.transcribing .rec-dot {
     background: transparent;
@@ -214,18 +245,25 @@
   }
   @keyframes rec-spin { to { transform: rotate(360deg); } }
   .rec-overlay.transcribing .rec-timer,
-  .rec-overlay.transcribing .rec-actions { display: none; }
+  .rec-overlay.transcribing .rec-cancel,
+  .rec-overlay.transcribing .rec-stop { display: none; }
 
   @media (max-width: 760px) {
     .key-area { display: flex; }
+    /* On a phone, direct mode types straight into the pane and the helper-key
+       bar already covers the control keys — the draft box would only get in
+       the way, so collapse it. On desktop the draft box stays put so a prompt
+       can still be composed there even while direct mode is active. */
+    .input-bar.direct .input-row { display: none; }
     /* No horizontal scroll on phones — wrap chips onto a few short lines. */
     .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
     .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
     .dot { width: 6px; height: 6px; }
     .dot.asking { width: 10px; height: 10px; font-size: 8px; }
-    /* 16px stops iOS Safari from auto-zooming when an input takes focus —
-       a zoomed page hides the Send button behind the viewport edge. */
-    #draft, #direct-input { font-size: 16px; }
+    /* The draft text stays small to fit more lines; `maximum-scale=1` in the
+       viewport meta stops iOS Safari zooming the focused box (it would
+       otherwise zoom for any input font under 16px). */
+    #draft { font-size: 13px; }
   }
 </style>
 </head>
@@ -248,7 +286,12 @@
     <span class="input-error" id="input-error"></span>
   </div>
   <div class="input-row">
-    <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+    <div class="draft-wrap" id="draft-wrap">
+      <textarea id="draft" rows="1" placeholder="Type a prompt — ⌘/Ctrl+Enter to send" disabled></textarea>
+      <button id="draft-clear" type="button" tabindex="-1" title="clear input" aria-label="clear input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
     <button id="record-btn" class="icon-btn" type="button" disabled title="record voice" aria-label="record voice">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
     </button>
@@ -260,16 +303,15 @@
 <div class="rec-overlay" id="rec-overlay" hidden>
   <div class="rec-card">
     <div class="rec-dot"></div>
-    <div class="rec-label" id="rec-label">Recording…</div>
-    <div class="rec-timer" id="rec-timer">0:00</div>
-    <div class="rec-actions">
-      <button class="rec-cancel" id="rec-cancel" type="button">Cancel</button>
-      <button class="rec-stop" id="rec-stop" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-        Stop &amp; transcribe
-      </button>
+    <div class="rec-info">
+      <div class="rec-label" id="rec-label">Recording…</div>
+      <div class="rec-timer" id="rec-timer">0:00</div>
     </div>
+    <button class="rec-cancel" id="rec-cancel" type="button">Cancel</button>
   </div>
+  <button class="rec-stop" id="rec-stop" type="button" title="stop &amp; transcribe" aria-label="stop and transcribe">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+  </button>
 </div>
 <script>
 const state = { selected: null, snapshot: null, drafts: {} };
@@ -518,6 +560,7 @@ async function refreshSnapshot() {
     state.snapshot = snap;
     renderStatusline(snap);
     renderMode();
+    restoreSelection();
   } catch (e) {
     // Keep the last snapshot; the stale dot surfaces the lost connection.
   }
@@ -576,10 +619,12 @@ function wsSend(obj) {
 function selectPane(paneID) {
   if (!paneID || paneID === state.selected) return;
   state.selected = paneID;
+  rememberSelection(paneID);
   const draft = $("draft");
   draft.value = state.drafts[paneID] || "";
   draft.disabled = false;
   $("send-btn").disabled = false;
+  syncDraft();
   syncRecordButton();
   setContent("Loading…");
   renderStatusline(state.snapshot);
@@ -589,7 +634,67 @@ function selectPane(paneID) {
   openWS(paneID);
 }
 
+const SELECTED_KEY = "tmact.selectedPane";
+
+// rememberSelection persists the chosen pane so a full page refresh can
+// restore it. Pane ids are stable within a tmux server; the session name is
+// kept as a fallback for when tmux restarts and reassigns ids.
+function rememberSelection(paneID) {
+  const p = findPane(paneID);
+  try {
+    localStorage.setItem(SELECTED_KEY,
+      JSON.stringify({ pane: paneID, session: p ? p.session : "" }));
+  } catch (e) {}
+}
+
+let selectionRestored = false;
+// restoreSelection runs once, after the first snapshot lands, to re-select the
+// pane the user last chose — by exact pane id, then by session name.
+function restoreSelection() {
+  if (selectionRestored) return;
+  selectionRestored = true;
+  if (state.selected) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SELECTED_KEY) || "null"); }
+  catch (e) {}
+  if (!saved) return;
+  const panes = state.snapshot && state.snapshot.panes
+    ? Object.values(state.snapshot.panes) : [];
+  let target = panes.find((p) => p.pane_id === saved.pane);
+  if (!target && saved.session) target = panes.find((p) => p.session === saved.session);
+  if (target) selectPane(target.pane_id);
+}
+
 /* ---- mode 1: draft textarea ---- */
+
+// autoGrowDraft sizes the textarea to its content — one line by default,
+// taller as lines are added, up to the CSS max-height (then it scrolls).
+function autoGrowDraft() {
+  const draft = $("draft");
+  draft.style.height = "auto";
+  const cs = getComputedStyle(draft);
+  const max = parseFloat(cs.maxHeight) || 200;
+  const border = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  const full = draft.scrollHeight + border;
+  draft.style.height = Math.min(full, max) + "px";
+  draft.style.overflowY = full > max ? "auto" : "hidden";
+}
+
+// syncDraft keeps the "×" clear button and the textarea height in step with
+// the draft's current contents.
+function syncDraft() {
+  const draft = $("draft");
+  $("draft-wrap").classList.toggle("has-text", !draft.disabled && draft.value !== "");
+  autoGrowDraft();
+}
+
+function clearDraft() {
+  const draft = $("draft");
+  draft.value = "";
+  if (state.selected) delete state.drafts[state.selected];
+  syncDraft();
+  draft.focus();
+}
 
 function sendDraft() {
   if (!state.selected) return;
@@ -601,6 +706,7 @@ function sendDraft() {
   }
   draft.value = "";
   delete state.drafts[state.selected];
+  syncDraft();
 }
 
 /* ---- voice transcription: record locally, transcribe on the statusd server ---- */
@@ -631,12 +737,30 @@ function fmtElapsed(ms) {
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
 
+// positionRecOverlay pins the Stop button right over the mic button (same
+// size, same spot) and the info card just above the input bar, so the finger
+// that tapped Record only has to tap again to stop.
+function positionRecOverlay() {
+  const ov = $("rec-overlay");
+  if (ov.hidden) return;
+  const mic = $("record-btn").getBoundingClientRect();
+  const stop = $("rec-stop");
+  stop.style.left = mic.left + "px";
+  stop.style.top = mic.top + "px";
+  stop.style.width = mic.width + "px";
+  stop.style.height = mic.height + "px";
+  const bar = $("input-bar").getBoundingClientRect();
+  ov.querySelector(".rec-card").style.bottom =
+    Math.max(8, window.innerHeight - bar.top + 8) + "px";
+}
+
 function showRecOverlay() {
   const ov = $("rec-overlay");
   ov.classList.remove("transcribing");
   $("rec-label").textContent = "Recording…";
   $("rec-timer").textContent = "0:00";
   ov.hidden = false;
+  positionRecOverlay();
   voice.startedAt = Date.now();
   if (voice.timer) clearInterval(voice.timer);
   voice.timer = setInterval(() => {
@@ -677,6 +801,7 @@ function insertTranscript(text) {
   }
   if (state.selected) state.drafts[state.selected] = draft.value;
   draft.disabled = false;
+  syncDraft();
   draft.focus();
 }
 
@@ -801,6 +926,10 @@ function translateKey(e) {
     if (KEYMAP[e.key]) return { t: "key", k: KEYMAP[e.key] };
     return null;
   }
+  // Shift+Enter inserts a line break instead of submitting: a bare "\n" is
+  // pasted (bracketed paste), so the agent's input box takes it as a newline
+  // rather than the Return that a plain Enter sends.
+  if (e.key === "Enter" && e.shiftKey) return { t: "text", s: "\n" };
   if (KEYMAP[e.key]) return { t: "key", k: KEYMAP[e.key] };
   if (e.key.length === 1) return { t: "text", s: e.key };
   return null;
@@ -890,6 +1019,7 @@ function wireInput() {
   const draft = $("draft");
   draft.addEventListener("input", () => {
     if (state.selected) state.drafts[state.selected] = draft.value;
+    syncDraft();
   });
   draft.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -897,13 +1027,26 @@ function wireInput() {
       sendDraft();
     }
   });
+  // pointerdown preventDefault keeps the soft keyboard up and focus in place.
+  const clearBtn = $("draft-clear");
+  clearBtn.addEventListener("pointerdown", (e) => e.preventDefault());
+  clearBtn.addEventListener("click", clearDraft);
+  // pointerdown preventDefault keeps the draft focused (and the soft keyboard
+  // up) when Send/Record is tapped.
+  $("send-btn").addEventListener("pointerdown", (e) => e.preventDefault());
+  $("record-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("send-btn").addEventListener("click", sendDraft);
   $("record-btn").addEventListener("click", startRecording);
   $("rec-stop").addEventListener("click", stopRecording);
   $("rec-cancel").addEventListener("click", cancelRecording);
   syncRecordButton();
+  syncDraft();
 
   buildKeyBar();
+  window.addEventListener("resize", () => {
+    positionRecOverlay();
+    autoGrowDraft();
+  });
 
   const direct = $("direct-input");
   // Tapping the output focuses the invisible overlay — direct keystroke
@@ -949,6 +1092,7 @@ function fitViewport() {
   if (!vv) return;
   document.body.style.height = vv.height + "px";
   window.scrollTo(0, 0);
+  positionRecOverlay();
 }
 function pinViewport() {
   fitViewport();

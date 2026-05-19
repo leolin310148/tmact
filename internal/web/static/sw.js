@@ -1,4 +1,4 @@
-const CACHE_NAME = "tmact-app-shell-v5";
+const CACHE_NAME = "tmact-app-shell-v6";
 const APP_SHELL_URLS = [
   "/",
   "/index.html",
@@ -29,6 +29,10 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Network-first for the app shell: an online client always gets the freshly
+// built UI, with the cache refreshed behind it so the app still loads when
+// offline. The earlier cache-first handler pinned clients to a stale
+// index.html — a new build never showed up without bumping CACHE_NAME.
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
@@ -47,7 +51,14 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request)
-      .then((cached) => cached || fetch(request)),
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request)),
   );
 });
