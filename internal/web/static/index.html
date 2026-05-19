@@ -756,6 +756,11 @@ function selectPane(paneID) {
   const sel = $("chips").querySelector(".chip.sel");
   if (sel) sel.scrollIntoView({ block: "nearest", inline: "nearest" });
   openWS(paneID);
+  // On desktop, selecting a pane drops straight into direct mode — focus the
+  // overlay so keystrokes pass through without first clicking the output. On
+  // mobile this is skipped: it would raise the soft keyboard unprompted, and
+  // the draft box is the expected entry point there.
+  if (!isMobile()) $("direct-input").focus();
 }
 
 const SELECTED_KEY = "tmact.selectedPane";
