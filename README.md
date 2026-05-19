@@ -56,6 +56,12 @@ Install the latest macOS release binary without cloning:
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
 
+For a private repository, use an authenticated GitHub CLI one-liner:
+
+```sh
+gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | sh
+```
+
 On macOS, omit `--bin-only` to also install the per-user `statusd`
 LaunchAgent:
 
@@ -74,6 +80,12 @@ For release binaries, install the LaunchAgent with:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 sh
+```
+
+Private repository variant:
+
+```sh
+gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | env TMACT_INSTALL_STATUSD=1 sh
 ```
 
 For local development without installing:

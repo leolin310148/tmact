@@ -4,6 +4,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
+#   gh api repos/leolin310148/tmact/contents/scripts/install-release.sh --jq .content | base64 -D | sh
 #
 # Optional environment:
 #   TMACT_REPO=owner/repo           GitHub repository (default: leolin310148/tmact)
@@ -32,14 +33,6 @@ case "$(uname -m)" in
 esac
 
 asset="tmact_${os}_${arch}.tar.gz"
-if [ "$version" = "latest" ]; then
-  base_url="https://github.com/${repo}/releases/latest/download"
-else
-  base_url="https://github.com/${repo}/releases/download/${version}"
-fi
-url="${base_url}/${asset}"
-checksums_url="${base_url}/checksums.txt"
-
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 
@@ -54,15 +47,31 @@ download() {
 }
 
 echo "==> Downloading ${repo} ${version} (${os}/${arch})"
-download "$url" "$tmp_dir/$asset"
-if download "$checksums_url" "$tmp_dir/checksums.txt"; then
+
+if command -v gh >/dev/null 2>&1; then
+  if [ "$version" = "latest" ]; then
+    gh release download -R "$repo" -p "$asset" -p checksums.txt -D "$tmp_dir" --clobber 2>/dev/null || true
+  else
+    gh release download "$version" -R "$repo" -p "$asset" -p checksums.txt -D "$tmp_dir" --clobber 2>/dev/null || true
+  fi
+fi
+
+if [ ! -f "$tmp_dir/$asset" ]; then
+  if [ "$version" = "latest" ]; then
+    base_url="https://github.com/${repo}/releases/latest/download"
+  else
+    base_url="https://github.com/${repo}/releases/download/${version}"
+  fi
+  download "${base_url}/${asset}" "$tmp_dir/$asset"
+  download "${base_url}/checksums.txt" "$tmp_dir/checksums.txt" || true
+fi
+
+if [ -f "$tmp_dir/checksums.txt" ]; then
   if grep " ${asset}\$" "$tmp_dir/checksums.txt" > "$tmp_dir/checksum.txt"; then
     (cd "$tmp_dir" && shasum -a 256 -c checksum.txt)
-  else
-    echo "    WARNING: checksums.txt did not include ${asset}; skipping verification" >&2
   fi
 else
-  echo "    WARNING: could not download checksums.txt; skipping verification" >&2
+  echo "    WARNING: checksums.txt not available; skipping verification" >&2
 fi
 tar -xzf "$tmp_dir/$asset" -C "$tmp_dir"
 
