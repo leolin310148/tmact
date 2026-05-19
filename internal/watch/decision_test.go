@@ -41,9 +41,9 @@ func TestEvaluateDirectoryAccessBlocksPathsOutsideAllowlist(t *testing.T) {
 }
 
 func TestEvaluateDirectoryAccessAllowsPathPatterns(t *testing.T) {
-	detected := directoryAccessPrompt("/tmp/sample-project-rn-home.md", "/tmp/sample-project-rn-network.json")
+	detected := directoryAccessPrompt("/tmp/tmact-sample-home.md", "/tmp/tmact-sample-network.json")
 	rule := RuleConfig{
-		AllowPathPatterns: []string{"/tmp/sample-project-rn-*"},
+		AllowPathPatterns: []string{"/tmp/tmact-sample-*"},
 	}
 
 	decision := evaluateDirectoryAccess(rule, detected)
@@ -53,9 +53,9 @@ func TestEvaluateDirectoryAccessAllowsPathPatterns(t *testing.T) {
 }
 
 func TestEvaluateDirectoryAccessBlocksNonMatchingPathPatterns(t *testing.T) {
-	detected := directoryAccessPrompt("/tmp/sample-project-rn-home.md", "/tmp/other.json")
+	detected := directoryAccessPrompt("/tmp/tmact-sample-home.md", "/tmp/other.json")
 	rule := RuleConfig{
-		AllowPathPatterns: []string{"/tmp/sample-project-rn-*"},
+		AllowPathPatterns: []string{"/tmp/tmact-sample-*"},
 	}
 
 	decision := evaluateDirectoryAccess(rule, detected)

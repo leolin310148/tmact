@@ -1,19 +1,19 @@
 capture_lines: 160
 agents:
-  - name: z-sample-project
-    target: z_sample-project:0.0
-    repo: /Users/example/workspace
+  - name: sample-codex
+    target: sample-codex:0.0
+    repo: .
     type: codex
-    role: library-maintenance
+    role: maintenance
 
-  - name: z-sample-project
-    target: z_sample-project:0.0
-    repo: /Users/example/workspace
-    type: codex
-    role: product-maintenance
-
-  - name: example-org-sample-project
-    target: example-org_sample-project:0.0
-    repo: /Users/example/workspace
+  - name: sample-claude
+    target: sample-claude:0.0
+    repo: .
     type: claude
-    role: frontend-maintenance
+    role: review
+
+  - name: sample-shell
+    target: sample-shell:0.0
+    repo: .
+    type: shell
+    role: local-tools

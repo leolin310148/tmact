@@ -20,7 +20,7 @@ func TestClassifyProcessRuntimeDetectsClaude(t *testing.T) {
 
 func TestClassifyProcessRuntimeDetectsCommandPath(t *testing.T) {
 	detected := ClassifyProcessRuntime([]Process{
-		{PID: 123, PPID: 100, Command: "/Users/example/workspace", Args: "/Users/example/workspace"},
+		{PID: 123, PPID: 100, Command: "/tmp/tmact-fixture/bin/claude", Args: "/tmp/tmact-fixture/bin/claude"},
 	})
 
 	if detected.Runtime != RuntimeClaude {
@@ -30,7 +30,7 @@ func TestClassifyProcessRuntimeDetectsCommandPath(t *testing.T) {
 
 func TestClassifyProcessRuntimeDetectsGeminiNodeArgs(t *testing.T) {
 	detected := ClassifyProcessRuntime([]Process{
-		{PID: 123, PPID: 100, Command: "node", Args: "node /Users/example/workspace"},
+		{PID: 123, PPID: 100, Command: "node", Args: "node /tmp/tmact-fixture/bin/gemini"},
 	})
 
 	if detected.Runtime != RuntimeGemini {

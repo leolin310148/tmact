@@ -1,0 +1,54 @@
+# Generic maintenance loop for a single agent pane.
+#
+# Dry-run one pass:
+#   go run ./cmd/tmact loop --config examples/maintenance-loop.yaml --dry-run --once --assume-idle-on-start
+#
+# Start the real loop:
+#   go run ./cmd/tmact loop --config examples/maintenance-loop.yaml --assume-idle-on-start
+
+target: sample-agent:0.0
+capture_lines: 160
+idle_ignore_patterns:
+  - "Context .* used"
+  - "Cost:"
+poll_interval: 20s
+idle_after: 2m
+assume_idle_on_start: false
+max_runtime: 8h
+max_actions: 72
+log_path: .tmact/maintenance-loop.jsonl
+log_skipped_actions: false
+stop_on_permission_prompt: true
+
+flows:
+  - name: improvement-cycle
+    every: 20m
+    initial_delay: 20m
+    only_when_idle: true
+    max_runs: 24
+    steps:
+      - name: clear-input
+        type: send_keys
+        keys: ["C-u"]
+        post_delay: 500ms
+
+      - name: clear-context
+        type: clear
+        command: /clear
+        enter: true
+        post_delay: 5s
+
+      - name: scoped-improvement-prompt
+        type: send_text
+        enter: true
+        text: |
+          Find one small, useful improvement for this repository. Keep the change scoped.
+
+          Required workflow:
+          1. Inspect the current git status first and preserve unrelated user changes.
+          2. Make one focused code, test, docs, or refactoring improvement.
+          3. Run the relevant test or validation command. If it cannot run, explain why.
+          4. Review git diff/status.
+          5. Stop with a concise summary of what changed and what validation ran.
+
+          Do not push or run commands outside this local checkout.

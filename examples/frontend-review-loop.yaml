@@ -1,0 +1,54 @@
+# Generic frontend/UI review loop for a single agent pane.
+#
+# Dry-run one pass:
+#   go run ./cmd/tmact loop --config examples/frontend-review-loop.yaml --dry-run --once --assume-idle-on-start
+#
+# Start the real loop:
+#   go run ./cmd/tmact loop --config examples/frontend-review-loop.yaml --assume-idle-on-start
+
+target: sample-frontend:0.0
+capture_lines: 200
+idle_ignore_patterns:
+  - "Context .* used"
+  - "Cost:"
+poll_interval: 20s
+idle_after: 2m
+assume_idle_on_start: false
+max_runtime: 4h
+max_actions: 24
+log_path: .tmact/frontend-review-loop.jsonl
+log_skipped_actions: false
+stop_on_permission_prompt: true
+
+flows:
+  - name: frontend-review-cycle
+    every: 30m
+    initial_delay: 0s
+    only_when_idle: true
+    max_runs: 8
+    steps:
+      - name: clear-input
+        type: send_keys
+        keys: ["C-u"]
+        post_delay: 500ms
+
+      - name: clear-context
+        type: clear
+        command: /clear
+        enter: true
+        post_delay: 5s
+
+      - name: frontend-review-prompt
+        type: send_text
+        enter: true
+        text: |
+          Review the current frontend or terminal UI for one small usability improvement.
+
+          Required workflow:
+          1. Inspect git status first and preserve unrelated user changes.
+          2. Find one focused improvement to labels, empty states, navigation, accessibility, tests, or documentation.
+          3. Keep the change practical and easy to validate locally.
+          4. Run the relevant local test, typecheck, lint, or build command. If it cannot run, explain why.
+          5. Review git diff/status and summarize the result.
+
+          Do not push, SSH to another machine, or run external smoke tests.

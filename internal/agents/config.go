@@ -11,7 +11,6 @@ import (
 var DefaultConfigPaths = []string{
 	"tmact.agents.yaml",
 	"agents.yaml",
-	"examples/agents.yaml",
 }
 
 type Config struct {

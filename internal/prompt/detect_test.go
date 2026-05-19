@@ -10,7 +10,7 @@ func TestDetectDirectoryAccessPrompt(t *testing.T) {
 │ This action may read or write the following paths outside your allowed directory list.                                    │
 │                                                                                                                           │
 │ ╭───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ ../../sample-project/sample-project/packages/cli/src/cli.ts, /status                                                                      │ │
+│ │ ../../sample-project/packages/cli/src/cli.ts, /status                                                                  │ │
 │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
 │                                                                                                                           │
 │ Do you want to allow this?                                                                                                │
@@ -30,7 +30,7 @@ func TestDetectDirectoryAccessPrompt(t *testing.T) {
 	if detected.Title != "Allow directory access" {
 		t.Fatalf("title = %q", detected.Title)
 	}
-	if detected.Path != "../../sample-project/sample-project/packages/cli/src/cli.ts" {
+	if detected.Path != "../../sample-project/packages/cli/src/cli.ts" {
 		t.Fatalf("path = %q", detected.Path)
 	}
 	if len(detected.Paths) != 2 {

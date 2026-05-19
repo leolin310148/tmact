@@ -1,0 +1,17 @@
+target: sample-team:main.0
+capture_lines: 160
+poll_interval: 5s
+max_runtime: 8h
+log_path: .tmact/team-directory-watch.jsonl
+
+rules:
+  - name: accept-sample-team-directory-access
+    type: directory_access_prompt
+    allow_paths:
+      - .
+      - ../sample-project
+    allow_path_patterns:
+      - /tmp/tmact-sample-*
+    accept_option: selected
+    cooldown: 30s
+    max_runs: 10

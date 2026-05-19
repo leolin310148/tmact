@@ -6,7 +6,7 @@
 # Run the loop:
 #   go run ./cmd/tmact loop --config examples/night-loop.yaml
 
-target: z_sample-project_sample:0.0
+target: sample-agent:0.0
 capture_lines: 160
 poll_interval: 30s
 idle_after: 3m
@@ -20,7 +20,7 @@ log_path: .tmact/night-loop.jsonl
 stop_on_permission_prompt: true
 
 actions:
-  - name: midnight-test-prompt
+  - name: overnight-maintenance-prompt
     type: send_text
     every: 45m
     initial_delay: 0s

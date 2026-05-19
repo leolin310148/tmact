@@ -192,9 +192,9 @@ Human output can be compact:
 
 ```text
 ts: 2026-05-12T10:50:39+08:00 age: 1.2s
-ops:0.0       codex   working  tag:cx running:true asking:false
-example-org_sample-project:0.0  claude  working  tag:cc running:true asking:false
-hc-api:0.0    shell   idle     tag:$  running:false asking:false
+sample:0.0    codex   working  tag:cx running:true asking:false
+review:0.0    claude  idle     tag:cc running:false asking:false
+shell:0.0     shell   idle     tag:$  running:false asking:false
 ```
 
 ### `tmact statusd status`
@@ -232,7 +232,7 @@ Example:
   "stale_after_ms": 10000,
   "tmux": {
     "server_pid": 12345,
-    "socket": "/private/tmp/tmux-501/default"
+    "socket": "/tmp/tmux-UID/default"
   },
   "summary": {
     "sessions": 14,
@@ -242,9 +242,9 @@ Example:
     "errors": 0
   },
   "sessions": {
-    "ops": {
-      "session": "ops",
-      "active_target": "ops:0.0",
+    "sample": {
+      "session": "sample",
+      "active_target": "sample:0.0",
       "tag": "cx",
       "runtime": "codex",
       "state": "working",
@@ -256,14 +256,14 @@ Example:
     }
   },
   "panes": {
-    "ops:0.0": {
-      "target": "ops:0.0",
+    "sample:0.0": {
+      "target": "sample:0.0",
       "pane_id": "%10",
-      "session": "ops",
+      "session": "sample",
       "window_index": 0,
       "window": "codex-aarch64-a",
       "pane_index": 0,
-      "cwd": "/Users/example/workspace",
+      "cwd": "/path/to/sample-project",
       "current_command": "codex-aarch64-a",
       "pane_pid": 69606,
       "runtime": "codex",
@@ -278,7 +278,7 @@ Example:
         "pane_current_command",
         "changed_capture"
       ],
-      "last_line": "~/ops · 5h 92% · Context 34% used · 258K window",
+      "last_line": "~/work/sample-project · 5h 92% · Context 34% used · 258K window",
       "last_changed_at": "2026-05-12T10:50:38+08:00",
       "updated_at": "2026-05-12T10:50:39+08:00"
     }

@@ -9,9 +9,9 @@ import (
 func TestBuildPanelReportPlansSessionAndWindows(t *testing.T) {
 	cfg := Config{
 		Agents: []AgentConfig{
-			{Name: "main", Session: "IDLL", Window: "main", Type: "codex"},
-			{Name: "claude", Session: "IDLL", Window: "claude", Type: "claude"},
-			{Name: "copilot", Session: "IDLL", Window: "copilot", Type: "copilot", AllowAllTools: true},
+			{Name: "main", Session: "sample-team", Window: "main", Type: "codex"},
+			{Name: "claude", Session: "sample-team", Window: "claude", Type: "claude"},
+			{Name: "copilot", Session: "sample-team", Window: "copilot", Type: "copilot", AllowAllTools: true},
 		},
 	}
 

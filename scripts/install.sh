@@ -10,6 +10,7 @@
 #
 # Overridable via env:
 #   TMACT_BIN_DIR   install directory for the binary (default: ~/.local/bin)
+#   TMACT_WEB_ADDR  statusd web bind address (default: 127.0.0.1:7890)
 
 set -euo pipefail
 
@@ -18,8 +19,9 @@ BIN_DIR="${TMACT_BIN_DIR:-$HOME/.local/bin}"
 BIN_PATH="$BIN_DIR/tmact"
 
 PLIST_LABEL="com.tmact.statusd"
-PLIST_SRC="$REPO_DIR/launchd/$PLIST_LABEL.plist"
+PLIST_TEMPLATE="$REPO_DIR/launchd/$PLIST_LABEL.plist.in"
 PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
+STATUSD_WEB_ADDR="${TMACT_WEB_ADDR:-127.0.0.1:7890}"
 
 BIN_ONLY=0
 for arg in "$@"; do
@@ -42,10 +44,15 @@ case ":$PATH:" in
   *) echo "    WARNING: $BIN_DIR is not on your PATH — add it to your shell profile" ;;
 esac
 
-if [[ "$BIN_ONLY" -eq 0 && "$(uname)" == "Darwin" && -f "$PLIST_SRC" ]]; then
+if [[ "$BIN_ONLY" -eq 0 && "$(uname)" == "Darwin" && -f "$PLIST_TEMPLATE" ]]; then
   echo "==> Refreshing statusd launchd agent"
   mkdir -p "$HOME/Library/LaunchAgents"
-  cp "$PLIST_SRC" "$PLIST_DST"
+  sed \
+    -e "s#__TMACT_BIN__#$BIN_PATH#g" \
+    -e "s#__TMACT_WORKDIR__#$REPO_DIR#g" \
+    -e "s#__TMACT_PATH__#${PATH}#g" \
+    -e "s#127.0.0.1:7890#$STATUSD_WEB_ADDR#g" \
+    "$PLIST_TEMPLATE" > "$PLIST_DST"
   # Use the modern bootout/bootstrap API: the legacy load/unload calls fail
   # with "Input/output error" on recent macOS once the agent is loaded.
   domain="gui/$(id -u)"

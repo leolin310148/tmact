@@ -41,9 +41,9 @@ go build -o .cache/tmact ./cmd/tmact
 
 tmact ls
 tmact -t 0 send --text "summarize progress" --enter --execute
-tmact detect --target z_sample-project_sample:0.0 --json
+tmact detect --target sample:0.0 --json
 tmact inspect --all --json
-tmact panels ensure --config examples/idll-agents.yaml --execute
+tmact panels ensure --config examples/multi-agent-panels.yaml --execute
 tmact loop --config examples/night-loop.yaml --dry-run --once
 tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once
 tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
@@ -76,7 +76,7 @@ internal/workflow/             # OpenSpec review and implementation workflows
 internal/watch/                # prompt watcher (directory-access acceptor)
 examples/                      # YAML configs for loops, watches, and agents
 docs/                          # smoke test notes
-launchd/                       # macOS launchd plist for `statusd`
+launchd/                       # macOS launchd template for `statusd`
 ```
 
 ## Key Concepts
@@ -94,10 +94,12 @@ Pane ids are stable; `session:window.pane` is not — resolve early, store the i
 
 ### agents.yaml
 
-Most non-loop commands read an agents config (defaults to `examples/agents.yaml`)
-to define agent panes, their launcher (`codex` / `claude` / `copilot` /
-`gemini`), repo, role, and target. `panels`, `broadcast`, `status`, `inbox`,
-`summarize` all share this shape.
+Most non-loop commands read an agents config to define agent panes, their
+launcher (`codex` / `claude` / `copilot` / `gemini`), repo, role, and target.
+By default `tmact` looks for `tmact.agents.yaml` or `agents.yaml` in the current
+working directory. `examples/agents.yaml` is a sample only; pass it explicitly
+or copy it before using it for a real setup. `panels`, `broadcast`, `status`,
+`inbox`, `summarize` all share this shape.
 
 ### Loops
 
@@ -170,14 +172,14 @@ tmact workflow implement --config examples/openspec-full-workflow.yaml --dry-run
 listed rules. The first supported rule type is `directory_access_prompt`:
 
 ```yaml
-target: z_sample-project_sample:0.0
+target: sample-agent:0.0
 rules:
-  - name: accept-sample-project-directory-access
+  - name: accept-sample-directory-access
     type: directory_access_prompt
     allow_paths:
-      - /Users/example/workspace
+      - .
     allow_path_patterns:
-      - /tmp/sample-project-rn-*
+      - /tmp/tmact-sample-*
     accept_option: selected
     cooldown: 30s
     max_runs: 10
@@ -192,8 +194,9 @@ and does not press a key.
 `statusd` continuously classifies panes and writes a JSON snapshot plus
 optional tmux session options (`@ai-tag`, `@ai-running`, `@ai-asking`). The
 goal is to move expensive detection out of `#()` shell commands on the tmux
-status-line refresh path. Install via `launchd/com.tmact.statusd.plist`
-(macOS). Design notes in `daemon-status.md`.
+status-line refresh path. On macOS, `scripts/install.sh` generates a per-user
+LaunchAgent from `launchd/com.tmact.statusd.plist.in`. Design notes in
+`daemon-status.md`.
 
 ## State And Logs
 

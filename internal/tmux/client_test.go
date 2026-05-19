@@ -3,7 +3,7 @@ package tmux
 import "testing"
 
 func TestParsePanes(t *testing.T) {
-	raw := "z_sample-project|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/Users/example/workspace|1|0|1\n"
+	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
 
 	panes, err := ParsePanes(raw)
 	if err != nil {
@@ -13,7 +13,7 @@ func TestParsePanes(t *testing.T) {
 		t.Fatalf("panes len = %d", len(panes))
 	}
 	pane := panes[0]
-	if pane.Session != "z_sample-project" {
+	if pane.Session != "sample" {
 		t.Fatalf("session = %q", pane.Session)
 	}
 	if pane.SessionID != "$1" {
@@ -40,7 +40,7 @@ func TestParsePanes(t *testing.T) {
 }
 
 func TestParsePanesAcceptsLegacyFormat(t *testing.T) {
-	raw := "z_sample-project|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/Users/example/workspace|1|0|1\n"
+	raw := "sample|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
 
 	panes, err := ParsePanes(raw)
 	if err != nil {

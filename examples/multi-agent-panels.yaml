@@ -1,0 +1,34 @@
+capture_lines: 180
+agents:
+  - name: sample-main
+    session: sample-team
+    window: main
+    repo: .
+    type: codex
+    launcher: codex
+    role: implementation
+
+  - name: sample-reviewer
+    session: sample-team
+    window: reviewer
+    repo: .
+    type: claude
+    launcher: claude
+    role: review
+
+  - name: sample-copilot
+    session: sample-team
+    window: copilot
+    repo: .
+    type: copilot
+    launcher: copilot
+    allow_all_tools: true
+    role: assistance
+
+  - name: sample-gemini
+    session: sample-team
+    window: gemini
+    repo: .
+    type: gemini
+    launcher: gemini
+    role: research

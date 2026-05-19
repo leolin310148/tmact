@@ -437,10 +437,10 @@ func TestPublishTmuxOptionsRewritesRecreatedSessionWithSameName(t *testing.T) {
 	}
 	cache := NewTmuxOptionCache()
 	first := Snapshot{Sessions: map[string]SessionStatus{
-		"sample-session": {Session: "sample-session", SessionID: "$1", Tag: "$", Running: false, Asking: false, RowBucket: 1},
+		"sample": {Session: "sample", SessionID: "$1", Tag: "$", Running: false, Asking: false, RowBucket: 1},
 	}}
 	second := Snapshot{Sessions: map[string]SessionStatus{
-		"sample-session": {Session: "sample-session", SessionID: "$2", Tag: "$", Running: false, Asking: false, RowBucket: 1},
+		"sample": {Session: "sample", SessionID: "$2", Tag: "$", Running: false, Asking: false, RowBucket: 1},
 	}}
 
 	if err := PublishTmuxOptions(cfg, first, cache); err != nil {
@@ -451,14 +451,14 @@ func TestPublishTmuxOptionsRewritesRecreatedSessionWithSameName(t *testing.T) {
 	}
 
 	want := []string{
-		"sample-session @ai-tag=$",
-		"sample-session @ai-running=",
-		"sample-session @ai-asking=",
-		"sample-session @row-bucket=1",
-		"sample-session @ai-tag=$",
-		"sample-session @ai-running=",
-		"sample-session @ai-asking=",
-		"sample-session @row-bucket=1",
+		"sample @ai-tag=$",
+		"sample @ai-running=",
+		"sample @ai-asking=",
+		"sample @row-bucket=1",
+		"sample @ai-tag=$",
+		"sample @ai-running=",
+		"sample @ai-asking=",
+		"sample @row-bucket=1",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %#v, want %#v", calls, want)

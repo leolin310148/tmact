@@ -16,7 +16,7 @@ delegates to packages under `internal/`. Notable packages:
 - `internal/runmeta` — `.tmact/runs/` metadata for inspect/stop of long-running processes.
 
 Example YAML configs live in `examples/`, operational notes in `docs/` and
-`RUNNING_LOOPS.md`, and the macOS launchd plist for `statusd` in `launchd/`.
+`RUNNING_LOOPS.md`, and the macOS launchd template for `statusd` in `launchd/`.
 
 ## Build, Test, and Development Commands
 

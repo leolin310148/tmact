@@ -151,11 +151,8 @@ actions:
 func TestLoadExampleConfigs(t *testing.T) {
 	examples := []string{
 		"night-loop.yaml",
-		"example-org-sb-loop.yaml",
-		"example-org-sample-project-loop.yaml",
-		"sample-session-d2r-port-loop.yaml",
-		"z-sample-project-loop.yaml",
-		"z-sample-project-loop.yaml",
+		"maintenance-loop.yaml",
+		"frontend-review-loop.yaml",
 	}
 
 	for _, name := range examples {

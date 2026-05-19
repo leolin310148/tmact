@@ -56,14 +56,14 @@ target: sample:0.0
 rules:
   - type: directory_access_prompt
     allow_path_patterns:
-      - /tmp/sample-project-rn-*
+      - /tmp/tmact-sample-*
 `)
 
 	cfg, err := LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Rules[0].AllowPathPatterns[0] != "/tmp/sample-project-rn-*" {
+	if cfg.Rules[0].AllowPathPatterns[0] != "/tmp/tmact-sample-*" {
 		t.Fatalf("allow_path_patterns = %#v", cfg.Rules[0].AllowPathPatterns)
 	}
 }
@@ -74,7 +74,7 @@ target: sample:0.0
 rules:
   - type: directory_access_prompt
     allow_path_patterns:
-      - /tmp/sample-project-rn-[
+      - /tmp/tmact-sample-[
 `)
 
 	_, err := LoadConfig(path)
@@ -88,10 +88,7 @@ func TestLoadExampleConfigs(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
-		"idll-roadmap-data-watch-codex.yaml",
-		"idll-roadmap-data-watch-coordinator.yaml",
-		"idll-roadmap-data-watch-copilot.yaml",
-		"idll-roadmap-data-watch-gemini.yaml",
+		"team-directory-watch.yaml",
 	} {
 		if _, err := LoadConfig(filepath.Join("..", "..", "examples", name)); err != nil {
 			t.Fatalf("%s: %v", name, err)

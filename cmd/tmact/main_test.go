@@ -22,9 +22,9 @@ func TestListPrintsAndCachesNumberedTargets(t *testing.T) {
 
 	listAllTmuxPanes = func() ([]tmux.Pane, error) {
 		return []tmux.Pane{{
-			Session:        "IDLL",
+			Session:        "sample-team",
 			WindowIndex:    1,
-			WindowName:     "roadmap-codex",
+			WindowName:     "main-codex",
 			PaneIndex:      0,
 			PaneID:         "%42",
 			CurrentCommand: "codex",
@@ -38,7 +38,7 @@ func TestListPrintsAndCachesNumberedTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"#", "target", "0", "%42", "IDLL", "1:roadmap-codex", "codex", "/repo"} {
+	for _, want := range []string{"#", "target", "0", "%42", "sample-team", "1:main-codex", "codex", "/repo"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("ls output missing %q: %s", want, out)
 		}

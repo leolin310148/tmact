@@ -76,7 +76,7 @@ func TestClassifyPaneIgnoresClaudeWelcomeChrome(t *testing.T) {
 ╭─── Claude Code v2.1.133 ─────────────────────────────────────────────────────╮
 │                  Welcome back Leo!                 │ Run /init to create a … │
 │                                                    │ What's new              │
-│               ~/workspace/example                │ /release-notes for more │
+│              ~/work/sample-project                 │ /release-notes for more │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
 ❯ /clear

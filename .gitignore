@@ -1,3 +1,5 @@
 .cache/
 .tmact/
 .agent-inbox/
+tmact.agents.yaml
+agents.yaml

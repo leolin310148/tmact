@@ -502,7 +502,7 @@ func runDetect(args []string) error {
 	fs := flag.NewFlagSet("detect", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	target := fs.String("target", "z_sample-project_sample:0.0", "tmux target pane/window/session to capture")
+	target := fs.String("target", "sample:0.0", "tmux target pane/window/session to capture")
 	lines := fs.Int("lines", 120, "number of pane history lines to capture")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
@@ -2293,16 +2293,16 @@ Usage:
   tmact -t 0 send --text "summarize progress" [--enter] [--execute]
   tmact -t 0 send --key Enter [--execute]
   tmact -t 0 send --keys C-u,Enter [--execute]
-  tmact detect [--target z_sample-project_sample:0.0] [--lines 120] [--json]
-  tmact inspect [--target z_sample-project:0.0 | --session z_sample-project | --all] [--sample 2 --interval 1s] [--json]
-  tmact status [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
+  tmact detect [--target sample:0.0] [--lines 120] [--json]
+  tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
+  tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
   tmact statusd start|once|read|status [--state-path /tmp/tmact-status.json]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
-  tmact inbox [--config examples/agents.yaml] [--agent z-sample-project] [--role library-maintenance] [--json]
-  tmact summarize [--config examples/agents.yaml] [--agent z-sample-project] [--json]
-  tmact broadcast [--config examples/agents.yaml] --agent z-sample-project --text "summarize progress" [--enter] [--execute]
-  tmact panels plan [--config examples/agents.yaml] [--session IDLL] [--json]
-  tmact panels ensure [--config examples/agents.yaml] [--session IDLL] [--execute]
+  tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
+  tmact summarize [--config examples/agents.yaml] [--agent sample-codex] [--json]
+  tmact broadcast [--config examples/agents.yaml] --agent sample-codex --text "summarize progress" [--enter] [--execute]
+  tmact panels plan [--config examples/agents.yaml] [--session sample-team] [--json]
+  tmact panels ensure [--config examples/agents.yaml] [--session sample-team] [--execute]
   tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
   tmact loop status [--run-dir .tmact/runs] [--json]
   tmact loop stop (--id ID | --config path)
@@ -2585,7 +2585,7 @@ func commandHelpCatalog() []commandHelp {
 				{Name: "--role", Value: "ROLE", Description: "role to include"},
 				{Name: "--json", Description: "print JSON output"},
 			},
-			Examples: []string{"tmact status --config examples/agents.yaml", "tmact status --agent z-sample-project --json"},
+			Examples: []string{"tmact status --config examples/agents.yaml", "tmact status --agent sample-codex --json"},
 		},
 		{
 			Command:     "statusd",
@@ -2659,7 +2659,7 @@ func commandHelpCatalog() []commandHelp {
 				helpFlag{Name: "--lines", Value: "N", Description: "number of recent pane lines to include"},
 				helpFlag{Name: "--commits", Value: "N", Description: "number of recent git commits to include"},
 			),
-			Examples: []string{"tmact summarize --agent z-sample-project", "tmact summarize --json"},
+			Examples: []string{"tmact summarize --agent sample-codex", "tmact summarize --json"},
 		},
 		{
 			Command: "broadcast",
@@ -2672,7 +2672,7 @@ func commandHelpCatalog() []commandHelp {
 				helpFlag{Name: "--only-idle", Description: "skip agents that do not appear idle"},
 				helpFlag{Name: "--execute", Description: "actually send text to tmux; default is dry-run"},
 			),
-			Examples: []string{`tmact broadcast --agent z-sample-project --text "summarize progress"`, `tmact broadcast --all --text "status?" --enter --only-idle --execute`},
+			Examples: []string{`tmact broadcast --agent sample-codex --text "summarize progress"`, `tmact broadcast --all --text "status?" --enter --only-idle --execute`},
 			Safety:   []string{"Without --execute this prints the planned sends and does not touch tmux."},
 		},
 		{
@@ -2680,7 +2680,7 @@ func commandHelpCatalog() []commandHelp {
 			Summary:     "Plan or reconcile configured agent panes in tmux.",
 			Usage:       []string{"tmact panels plan [flags]", "tmact panels ensure [flags]"},
 			Subcommands: []string{"plan", "ensure"},
-			Examples:    []string{"tmact panels plan --config examples/agents.yaml", "tmact panels ensure --session IDLL --execute"},
+			Examples:    []string{"tmact panels plan --config examples/agents.yaml", "tmact panels ensure --session sample-team --execute"},
 			Safety:      []string{"panels plan never changes tmux. panels ensure requires --execute before it applies changes."},
 		},
 		{
@@ -2700,7 +2700,7 @@ func commandHelpCatalog() []commandHelp {
 				helpFlag{Name: "--session", Value: "SESSION", Description: "override target tmux session for selected agents"},
 				helpFlag{Name: "--execute", Description: "apply planned tmux panel changes"},
 			),
-			Examples: []string{"tmact panels ensure --session IDLL", "tmact panels ensure --session IDLL --execute"},
+			Examples: []string{"tmact panels ensure --session sample-team", "tmact panels ensure --session sample-team --execute"},
 			Safety:   []string{"Without --execute this prints the planned changes and does not touch tmux."},
 		},
 		{
