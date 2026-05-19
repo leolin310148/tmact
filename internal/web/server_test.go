@@ -102,6 +102,25 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	}
 }
 
+func TestIndexIncludesSettingsControls(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`id="gear-btn"`,
+		`id="settings-overlay"`,
+		`id="font-range"`,
+		`--pane-font`,
+		`fetch("/api/settings/stt"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+}
+
 func TestPWAAssetsContentTypes(t *testing.T) {
 	handler := (&Server{}).Handler()
 	tests := []struct {
@@ -367,6 +386,149 @@ func TestTranscribeMissingAudioReturns400(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+/* ---- STT settings ---- */
+
+func TestSTTSettingsGetUnconfigured(t *testing.T) {
+	handler := (&Server{STTProviderPath: filepath.Join(t.TempDir(), "missing.json")}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings/stt", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got sttSettings
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Configured {
+		t.Fatal("configured = true, want false for a missing config")
+	}
+	if got.Model != stt.DefaultModel || got.Endpoint != stt.DefaultEndpoint {
+		t.Fatalf("got %+v, want defaults", got)
+	}
+}
+
+func TestSTTSettingsGetMasksAPIKey(t *testing.T) {
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{
+				Provider: "openai", APIKey: "sk-secret",
+				Model: "whisper-1", Endpoint: "https://api.example/v1",
+			}, nil
+		},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings/stt", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "sk-secret") {
+		t.Fatalf("GET leaked the API key: %q", rec.Body.String())
+	}
+	var got sttSettings
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Configured || got.Model != "whisper-1" {
+		t.Fatalf("got %+v, want configured whisper-1", got)
+	}
+}
+
+// A PUT with a real key writes it to disk, but it must never come back out:
+// neither the PUT response nor a follow-up GET may echo the secret.
+func TestSTTSettingsPutPersistsAndKeepsKeySecret(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stt.json")
+	handler := (&Server{STTProviderPath: path}).Handler()
+
+	put := `{"model":"gpt-4o-transcribe","endpoint":"https://api.example/v1","api_key":"sk-secret"}`
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/settings/stt", strings.NewReader(put)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "sk-secret") {
+		t.Fatalf("PUT response leaked the API key: %q", rec.Body.String())
+	}
+
+	saved, err := stt.LoadProvider(path)
+	if err != nil {
+		t.Fatalf("LoadProvider: %v", err)
+	}
+	if saved.APIKey != "sk-secret" {
+		t.Fatalf("saved api key = %q, want sk-secret", saved.APIKey)
+	}
+
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/settings/stt", nil))
+	if strings.Contains(rec.Body.String(), "sk-secret") {
+		t.Fatalf("GET response leaked the API key: %q", rec.Body.String())
+	}
+	var got sttSettings
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Configured || got.Model != "gpt-4o-transcribe" || got.Endpoint != "https://api.example/v1" {
+		t.Fatalf("GET got %+v", got)
+	}
+}
+
+// A PUT with a blank api_key changes the model/endpoint while keeping the
+// stored key, so the secret never has to be re-typed.
+func TestSTTSettingsPutBlankKeyKeepsExistingKey(t *testing.T) {
+	var saved stt.ProviderConfig
+	handler := (&Server{
+		LoadSTTProvider: func() (stt.ProviderConfig, error) {
+			return stt.ProviderConfig{
+				Provider: "openai", APIKey: "old-key",
+				Model: "old-model", Endpoint: "https://old.example",
+			}, nil
+		},
+		SaveSTTProvider: func(cfg stt.ProviderConfig) error {
+			saved = cfg
+			return nil
+		},
+	}).Handler()
+
+	put := `{"model":"new-model","endpoint":"https://new.example","api_key":""}`
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/settings/stt", strings.NewReader(put)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if saved.APIKey != "old-key" {
+		t.Fatalf("saved api key = %q, want the existing old-key kept", saved.APIKey)
+	}
+	if saved.Model != "new-model" || saved.Endpoint != "https://new.example" {
+		t.Fatalf("saved %+v, want the new model/endpoint", saved)
+	}
+}
+
+func TestSTTSettingsPutMissingKeyRejected(t *testing.T) {
+	handler := (&Server{STTProviderPath: filepath.Join(t.TempDir(), "stt.json")}).Handler()
+	put := `{"model":"whisper-1","endpoint":"https://api.example","api_key":""}`
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/settings/stt", strings.NewReader(put)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "api_key") {
+		t.Fatalf("body = %q, want a missing-key error", rec.Body.String())
+	}
+}
+
+func TestSTTSettingsRejectsPost(t *testing.T) {
+	handler := (&Server{STTProviderPath: filepath.Join(t.TempDir(), "stt.json")}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/settings/stt", strings.NewReader("{}")))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }
 

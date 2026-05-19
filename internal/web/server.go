@@ -62,6 +62,9 @@ type Server struct {
 	// LoadSTTProvider loads speech-to-text provider config; defaults to reading
 	// STTProviderPath.
 	LoadSTTProvider func() (stt.ProviderConfig, error)
+	// SaveSTTProvider persists speech-to-text provider config; defaults to
+	// writing STTProviderPath.
+	SaveSTTProvider func(stt.ProviderConfig) error
 	// HTTPClient is used for transcription API calls; defaults to a 60s client.
 	HTTPClient *http.Client
 	// Logf logs server-side diagnostics; defaults to writing to stderr, which
@@ -104,6 +107,15 @@ func (s *Server) sttProvider() (stt.ProviderConfig, error) {
 	return stt.LoadProvider(s.STTProviderPath)
 }
 
+func (s *Server) saveSTT() func(stt.ProviderConfig) error {
+	if s.SaveSTTProvider != nil {
+		return s.SaveSTTProvider
+	}
+	return func(cfg stt.ProviderConfig) error {
+		return stt.SaveProvider(s.STTProviderPath, cfg)
+	}
+}
+
 func (s *Server) httpClient() *http.Client {
 	if s.HTTPClient != nil {
 		return s.HTTPClient
@@ -129,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
+	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
@@ -168,6 +181,67 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
+}
+
+// sttSettings is the masked STT provider config exposed to the browser. The
+// API key is write-only — never sent back, only whether one is configured.
+type sttSettings struct {
+	Model      string `json:"model"`
+	Endpoint   string `json:"endpoint"`
+	Configured bool   `json:"configured"`
+}
+
+// handleSTTSettings reads (GET) or updates (PUT) the server-side STT provider
+// config. A PUT with a blank api_key keeps the stored key, so the model or
+// endpoint can be changed without re-entering the secret.
+func (s *Server) handleSTTSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		out := sttSettings{Model: stt.DefaultModel, Endpoint: stt.DefaultEndpoint}
+		if cfg, err := s.sttProvider(); err == nil {
+			out.Model = cfg.Model
+			out.Endpoint = cfg.Endpoint
+			out.Configured = cfg.APIKey != ""
+		}
+		writeJSON(w, http.StatusOK, out)
+
+	case http.MethodPut:
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+		var body struct {
+			Model    string `json:"model"`
+			Endpoint string `json:"endpoint"`
+			APIKey   string `json:"api_key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			return
+		}
+		cfg := stt.ProviderConfig{
+			Provider: stt.DefaultProvider,
+			Model:    strings.TrimSpace(body.Model),
+			Endpoint: strings.TrimSpace(body.Endpoint),
+			APIKey:   strings.TrimSpace(body.APIKey),
+		}
+		// A blank api_key means "keep the current key" — load it back in.
+		if cfg.APIKey == "" {
+			if existing, err := s.sttProvider(); err == nil {
+				cfg.APIKey = existing.APIKey
+			}
+		}
+		if err := s.saveSTT()(cfg); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		_ = cfg.NormalizeAndValidate() // fill defaults for the response
+		writeJSON(w, http.StatusOK, sttSettings{
+			Model:      cfg.Model,
+			Endpoint:   cfg.Endpoint,
+			Configured: cfg.APIKey != "",
+		})
+
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
@@ -460,9 +534,13 @@ func keyAllowed(k string) bool {
 	return false
 }
 
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
 }
