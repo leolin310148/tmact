@@ -116,6 +116,17 @@
     white-space: pre-wrap; word-break: break-word;
     background: var(--bg); cursor: text;
   }
+  /* TUI horizontal-rule lines (rows of ─). Box-art borders from tools like
+     Claude Code are wider than a phone viewport, and pre-wrap would split
+     them across several visual rows. Clipping the inline-block to the pane
+     width keeps the rule visually a single line. */
+  .tui-rule {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    vertical-align: top;
+  }
   /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
      mouse scroll/selection fall through to the <pre> behind it. */
   #direct-input {
@@ -924,10 +935,31 @@ function ansiToHTML(raw) {
   return out;
 }
 
+// wrapRuleLines wraps box-art separator lines (rows of U+2500 ─) with private-
+// use markers that survive HTML escaping. setContent then converts the markers
+// to <span class="tui-rule">, which clips the line to the pane width so a
+// 120-col rule doesn't fold into several rows on a phone.
+const RULE_OPEN = "", RULE_CLOSE = "";
+const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+function wrapRuleLines(text) {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const visible = lines[i].replace(ANSI_STRIP_RE, "");
+    if (!/^[\s─]+$/.test(visible)) continue;
+    const dashes = visible.length - visible.replace(/─/g, "").length;
+    if (dashes < 8) continue;
+    lines[i] = RULE_OPEN + lines[i] + RULE_CLOSE;
+  }
+  return lines.join("\n");
+}
+
 function setContent(text) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-  pre.innerHTML = ansiToHTML(text);
+  const html = ansiToHTML(wrapRuleLines(text))
+    .replaceAll(RULE_OPEN, '<span class="tui-rule">')
+    .replaceAll(RULE_CLOSE, "</span>");
+  pre.innerHTML = html;
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
