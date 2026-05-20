@@ -51,12 +51,9 @@
   }
   .chips {
     flex: 1 1 auto; min-width: 0;
-    display: flex; gap: 4px;
-    overflow-x: auto; scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    display: flex; flex-wrap: wrap; gap: 4px;
     padding: 6px 0;
   }
-  .chips::-webkit-scrollbar { display: none; }
   .chip {
     flex: 0 0 auto;
     display: flex; align-items: center; gap: 6px;
