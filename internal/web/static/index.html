@@ -437,6 +437,63 @@
   .qb-dock:not(.open) .qb-ic-close { display: none; }
   .qb-dock.open .qb-ic-open { display: none; }
 
+  /* Help button — pinned just above the FAB spot in the bottom-right corner.
+     Always visible (the desktop Option+key hotkeys benefit from hints too).
+     Clicking lifts a coachmark overlay that points at the main controls. */
+  .help-btn {
+    position: absolute; right: 12px; bottom: 56px; z-index: 30;
+    width: 28px; height: 28px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--fg);
+    border: 1px solid var(--border);
+    font: 700 14px/1 var(--mono);
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  }
+  .help-btn:hover, .help-btn:active { opacity: 1; }
+  body.help-open .help-btn {
+    opacity: 1;
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  /* Coachmark overlay: dim backdrop + glow rings around target controls, each
+     paired with a label showing the relevant hotkey. JS positions the rings
+     and labels from each target's bounding rect. */
+  .help-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+  }
+  body.help-open .help-overlay { display: block; }
+  .help-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(8,10,14,0.62);
+  }
+  .help-ring {
+    position: fixed; pointer-events: none;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(68,147,248,0.35), 0 0 16px rgba(68,147,248,0.45);
+  }
+  .help-tip {
+    position: fixed; max-width: 240px;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    font-family: var(--mono);
+  }
+  .help-tip .help-key {
+    display: inline-block;
+    background: var(--bg); color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 4px;
+    padding: 2px 5px; font: 700 11px/1 var(--mono);
+    margin-right: 6px;
+  }
+  .help-tip .help-desc { font-size: 12px; line-height: 1.4; }
+
   /* Quick-button editor in the settings panel — one block per runtime group,
      each a list of label/text rows with add + remove controls. */
   .qb-group { margin-bottom: 14px; }
@@ -502,6 +559,7 @@
   <pre id="content"><span class="empty">No pane selected.</span></pre>
   <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
   <div class="qb-backdrop" id="qb-backdrop"></div>
+  <button class="help-btn" id="help-btn" type="button" title="hotkey hints" aria-label="hotkey hints">?</button>
   <div class="qb-dock" id="qb-dock">
     <div class="qb-menu" id="qb-menu"></div>
     <button class="qb-fab" id="qb-fab" type="button" title="quick input" aria-label="quick input">
@@ -554,6 +612,9 @@
   <button class="rec-stop" id="rec-stop" type="button" title="stop &amp; transcribe" aria-label="stop and transcribe">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
   </button>
+</div>
+<div class="help-overlay" id="help-overlay">
+  <div class="help-backdrop" id="help-backdrop"></div>
 </div>
 <div class="settings-overlay" id="settings-overlay" hidden>
   <div class="settings-card" role="dialog" aria-modal="true" aria-label="Settings">
@@ -1898,6 +1959,95 @@ function wireQuick() {
   renderQuickEditor();
 }
 
+/* ---- help / coachmark overlay ----
+   The `?` button stacked above the FAB lifts a dimmed overlay that points
+   at the main controls with their hotkey, so newcomers don't have to guess.
+   Tips with `skip` true (mobile-only feature on desktop, or vice-versa, or a
+   disabled control) are dropped before drawing. */
+
+function helpTips() {
+  return [
+    { target: () => $("chips"),
+      key: "Option+1…0, q…p",
+      desc: "Switch panes (hardware keyboard)",
+      skip: () => isMobile() || !$("chips").children.length },
+    { target: () => $("draft"),
+      key: "⌘ / Ctrl + Enter",
+      desc: "Send the typed prompt to the selected pane",
+      skip: () => $("draft").disabled },
+    { target: () => $("record-btn"),
+      key: "Alt + V (hold)",
+      desc: "Push-to-talk voice recording",
+      skip: () => $("record-btn").disabled || isMobile() },
+    { target: () => $("content"),
+      key: "Click pane",
+      desc: "Direct mode — your keystrokes go straight to tmux",
+      skip: () => isMobile() || !state.selected },
+    { target: () => $("qb-fab"),
+      key: "Tap ⚡",
+      desc: "Quick prompts — configurable in Settings" },
+  ];
+}
+
+function placeCoachmarks() {
+  const overlay = $("help-overlay");
+  for (const el of overlay.querySelectorAll(".help-ring, .help-tip")) el.remove();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  for (const tip of helpTips()) {
+    if (tip.skip && tip.skip()) continue;
+    const el = tip.target();
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    // Display:none and detached elements both produce a 0×0 rect.
+    if (r.width < 1 || r.height < 1) continue;
+    const ring = h("div", { class: "help-ring" });
+    ring.style.left = (r.left - 4) + "px";
+    ring.style.top = (r.top - 4) + "px";
+    ring.style.width = (r.width + 8) + "px";
+    ring.style.height = (r.height + 8) + "px";
+    overlay.appendChild(ring);
+    const card = h("div", { class: "help-tip" },
+      h("span", { class: "help-key", text: tip.key }),
+      h("span", { class: "help-desc", text: tip.desc }));
+    overlay.appendChild(card);
+    const cw = card.offsetWidth, ch = card.offsetHeight;
+    // Prefer the label below the target; flip above if it would overflow.
+    let top = r.bottom + 10;
+    if (top + ch > vh - 8) top = Math.max(8, r.top - ch - 10);
+    let left = r.left + r.width / 2 - cw / 2;
+    left = Math.max(8, Math.min(vw - cw - 8, left));
+    card.style.left = left + "px";
+    card.style.top = top + "px";
+  }
+}
+
+function openHelp() {
+  document.body.classList.add("help-open");
+  placeCoachmarks();
+}
+
+function closeHelp() {
+  document.body.classList.remove("help-open");
+  const overlay = $("help-overlay");
+  for (const el of overlay.querySelectorAll(".help-ring, .help-tip")) el.remove();
+}
+
+function toggleHelp() {
+  if (document.body.classList.contains("help-open")) closeHelp();
+  else openHelp();
+}
+
+function wireHelp() {
+  $("help-btn").addEventListener("click", (e) => { e.stopPropagation(); toggleHelp(); });
+  $("help-overlay").addEventListener("click", closeHelp);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("help-open")) closeHelp();
+  });
+  window.addEventListener("resize", () => {
+    if (document.body.classList.contains("help-open")) placeCoachmarks();
+  });
+}
+
 /* ---- desktop pane-switch hotkeys ---- */
 
 // wireHotkeys binds Option+<key> to "select the Nth statusline chip". The
@@ -1936,6 +2086,7 @@ loadQuickConfig();
 wireInput();
 wireSettings();
 wireQuick();
+wireHelp();
 wireRecordHotkey();
 wireHotkeys();
 if ("serviceWorker" in navigator) {
