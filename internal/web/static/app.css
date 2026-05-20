@@ -1,0 +1,596 @@
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a313c;
+    --fg: #c9d1d9;
+    --fg-dim: #8b949e;
+    --accent: #4493f8;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    /* Direct-mode accent: a calm light blue, not an alarming red. */
+    --direct: #79c0ff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    /* Pane output font size — the default; the settings panel overrides it
+       with an inline value on <html>, persisted in localStorage. */
+    --pane-font: 13px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow-x: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* tmux-style status line: one strip of every pane, fixed at the bottom
+     alongside the helper keys and input. */
+  .statusline {
+    flex: 0 0 auto;
+    display: flex; align-items: center;
+    padding: 0 8px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .chips {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 6px 0;
+  }
+  .chip {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 9px;
+    border-radius: 5px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font: 12px/1 var(--mono);
+    white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--fg-dim); }
+  .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
+  /* Desktop pane-switch hotkey badge: shows which Option+key jumps to this
+     chip (Option+1…0, then Option+q…p). Hidden on phones — see media query. */
+  .chip-key {
+    flex: 0 0 auto;
+    font: 700 9px/1 var(--mono);
+    color: var(--fg-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 3px;
+    min-width: 8px; text-align: center;
+  }
+  .chip.sel .chip-key { color: #fff; border-color: var(--accent); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
+  .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  /* Asking panes need a question prompt resolved — the dot carries a "?". */
+  .dot.asking {
+    width: 12px; height: 12px;
+    background: var(--amber); box-shadow: 0 0 6px var(--amber);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 9px/1 var(--mono); color: #1a1100;
+  }
+  /* Connection indicator: only visible after 10s+ without a fresh snapshot. */
+  .stale-dot {
+    flex: 0 0 auto;
+    width: 11px; height: 11px;
+    margin-left: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+    display: none;
+  }
+
+  .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+  .content-wrap.direct::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 0.5px rgba(121, 192, 255, 0.2);
+  }
+  /* `overflow: hidden auto` + pre-wrap: pane text wraps and scrolls
+     vertically only — it never scrolls sideways. Top padding folds in a
+     fraction of the safe-area inset so the first line clears the notch /
+     status bar when installed as a PWA. */
+  pre#content {
+    margin: 0; flex: 1 1 auto; overflow: hidden auto;
+    padding: calc(10px + env(safe-area-inset-top, 0px) * 0.5) 14px 10px;
+    font-family: var(--mono); font-size: var(--pane-font); line-height: 1.4;
+    white-space: pre-wrap; word-break: break-word;
+    background: var(--bg); cursor: text;
+  }
+  /* TUI horizontal-rule lines (rows of ─). Box-art borders from tools like
+     Claude Code are wider than a phone viewport, and pre-wrap would split
+     them across several visual rows. Clipping the inline-block to the pane
+     width keeps the rule visually a single line. */
+  .tui-rule {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
+     mouse scroll/selection fall through to the <pre> behind it. */
+  #direct-input {
+    position: absolute; inset: 0;
+    margin: 0; border: 0; padding: 12px 16px;
+    font: 12.5px/1.5 var(--mono);
+    background: transparent; color: transparent; caret-color: transparent;
+    resize: none; outline: none; opacity: 0;
+    pointer-events: none; overflow: hidden;
+  }
+  .empty { margin: auto; color: var(--fg-dim); font-size: 13px; text-align: center; }
+
+  /* Bottom padding lifts the input clear of the iOS home indicator on PWA —
+     a small fraction of the safe-area inset, kept tight on purpose. */
+  .input-bar {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 4px 10px calc(2px + env(safe-area-inset-bottom, 0px) * 0.2);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  /* Termius-style helper keys — control keys a soft keyboard lacks. The bar
+     clips to a single row; when the keys overflow, the toggle expands it to
+     every key (wrapped onto more rows) so the row never scrolls sideways. */
+  .key-area { display: none; align-items: flex-start; gap: 5px; }
+  .key-bar {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-wrap: wrap; gap: 5px;
+    overflow: hidden;
+  }
+  .key-bar button, .key-toggle {
+    flex: 0 0 auto;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px 9px; font: 11px/1 var(--mono);
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .key-bar button:active, .key-toggle:active { background: var(--border); }
+  .key-bar button.armed { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* Shown only when the keys overflow a single row (JS sets .overflowing). */
+  .key-toggle { display: none; padding: 5px 10px; }
+  .key-area.overflowing .key-toggle { display: inline-block; }
+  /* Quick-answer buttons for a detected menu prompt — one per numbered
+     option. Hidden by default; the phone media query reveals it when it
+     holds buttons, so it is a mobile-only convenience. */
+  .option-bar { display: none; flex-wrap: wrap; gap: 5px; }
+  .option-bar button {
+    flex: 0 1 auto; min-width: 0; max-width: 100%;
+    display: flex; align-items: baseline; gap: 6px;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 5px;
+    padding: 6px 10px; font: 11px/1 var(--mono);
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .option-bar button:active { background: var(--border); }
+  .option-bar .opt-num { font-weight: 700; color: var(--accent); }
+  .option-bar .opt-label {
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .mode-indicator {
+    font: 11px/1.4 var(--mono); letter-spacing: 0.3px;
+    color: var(--fg-dim);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .mode-indicator.direct { color: var(--direct); font-weight: 700; }
+  .input-error { color: var(--amber); }
+  /* flex-end keeps the mic/send buttons at the bottom as the draft auto-grows. */
+  .input-row { display: flex; gap: 8px; align-items: flex-end; }
+  /* The draft box and its clear button share a relative wrapper so the "×"
+     can float in the textarea's top-right corner. */
+  .draft-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+  /* Auto-grows in JS (autoGrowDraft); resize:none drops the manual handle. */
+  #draft {
+    flex: 1 1 auto; min-width: 0; resize: none;
+    min-height: 32px; max-height: 200px;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px 26px 5px 8px; font: 11px/1.4 var(--mono);
+    overflow-y: hidden;
+  }
+  #draft:focus { outline: none; border-color: var(--accent); }
+  #draft:disabled { opacity: 0.5; }
+  /* Clear button — shown only while the draft holds text (JS sets .has-text). */
+  #draft-clear {
+    position: absolute; top: 5px; right: 5px;
+    display: none; align-items: center; justify-content: center;
+    width: 17px; height: 17px; padding: 0;
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 50%;
+    cursor: pointer;
+  }
+  #draft-clear:hover { color: var(--fg); border-color: var(--fg-dim); }
+  #draft-clear svg { width: 11px; height: 11px; display: block; }
+  .draft-wrap.has-text #draft-clear { display: flex; }
+  /* Compact square icon buttons — the mic and send actions sit beside the
+     draft box, bottom-aligned with it. */
+  .icon-btn {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; min-height: 32px; padding: 0;
+    border-radius: 5px; cursor: pointer;
+  }
+  .icon-btn svg { width: 20px; height: 20px; display: block; }
+  #send-btn { background: var(--accent); color: #fff; border: 0; }
+  #record-btn { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
+  #record-btn.busy { color: var(--fg-dim); }
+  #send-btn:disabled, #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Recording overlay — a dim backdrop while the mic is live. The info card
+     is pinned just above the input bar and the red Stop button lands exactly
+     over the mic button, so the finger that started the take never moves. */
+  .rec-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(8,10,14,0.82);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .rec-overlay[hidden] { display: none; }
+  /* JS sets `bottom` to sit just above the input bar. */
+  .rec-card {
+    position: fixed; left: 8px; right: 8px; bottom: 8px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 14px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .rec-dot {
+    flex: 0 0 auto;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--red);
+    animation: rec-pulse 1.4s ease-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(248,81,73,0.55); }
+    100% { box-shadow: 0 0 0 18px rgba(248,81,73,0); }
+  }
+  .rec-info { flex: 1 1 auto; min-width: 0; }
+  .rec-label { font-size: 14px; font-weight: 600; }
+  .rec-timer { font: 18px/1.3 var(--mono); color: var(--fg-dim); }
+  .rec-cancel {
+    flex: 0 0 auto;
+    padding: 9px 14px; border-radius: 7px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
+  }
+  /* JS pins this directly over the mic button — same size, same spot. */
+  .rec-stop {
+    position: fixed;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; cursor: pointer;
+    background: var(--red); color: #fff; border: 0; border-radius: 5px;
+    box-shadow: 0 0 0 4px rgba(248,81,73,0.3), 0 0 18px rgba(248,81,73,0.55);
+  }
+  .rec-stop svg { width: 20px; height: 20px; display: block; }
+  /* Transcribing phase: swap the pulse for a spinner, drop the timer + buttons. */
+  .rec-overlay.transcribing .rec-dot {
+    background: transparent;
+    border: 4px solid var(--border); border-top-color: var(--accent);
+    animation: rec-spin 0.8s linear infinite;
+  }
+  @keyframes rec-spin { to { transform: rotate(360deg); } }
+  .rec-overlay.transcribing .rec-timer,
+  .rec-overlay.transcribing .rec-cancel,
+  .rec-overlay.transcribing .rec-stop { display: none; }
+
+  /* Settings — opened from the gear in the status line. */
+  .gear-btn {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; margin-left: 8px; padding: 0;
+    background: transparent; color: var(--fg-dim);
+    border: 0; border-radius: 5px; cursor: pointer;
+  }
+  .gear-btn:hover { color: var(--fg); background: var(--panel-2); }
+  .gear-btn svg { width: 16px; height: 16px; display: block; }
+
+  /* Settings modal — a panel over the whole app with two sections: Client
+     (this browser, localStorage) and Server (statusd host, /api/settings). */
+  .settings-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    /* Pad past the notch / home indicator: the card maxes out at the padded
+       content box, so a full-height card on a phone never tucks its header
+       (and the close button) under the status bar. */
+    padding: calc(16px + env(safe-area-inset-top, 0px))
+             calc(16px + env(safe-area-inset-right, 0px))
+             calc(16px + env(safe-area-inset-bottom, 0px))
+             calc(16px + env(safe-area-inset-left, 0px));
+    background: rgba(8,10,14,0.82);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .settings-overlay[hidden] { display: none; }
+  .settings-card {
+    width: 100%; max-width: 420px; max-height: 100%;
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .settings-head {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px; font-weight: 600;
+  }
+  .settings-close {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0;
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+  }
+  .settings-close:hover { color: var(--fg); }
+  .settings-close svg { width: 12px; height: 12px; display: block; }
+  .settings-body { flex: 1 1 auto; overflow-y: auto; padding: 14px; }
+  .settings-section {
+    font: 700 11px/1 var(--mono); letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--fg-dim);
+    margin: 0 0 10px;
+  }
+  /* The second section (Server) gets breathing room above it. */
+  .settings-section ~ .settings-section { margin-top: 22px; }
+  .settings-field { display: block; margin-bottom: 12px; }
+  .settings-field > span {
+    display: block; margin-bottom: 5px;
+    font-size: 12px; color: var(--fg-dim);
+  }
+  .settings-field input[type="text"],
+  .settings-field input[type="password"] {
+    width: 100%;
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 9px; font: 12px/1.4 var(--mono);
+  }
+  .settings-field input:focus { outline: none; border-color: var(--accent); }
+  /* Font row: A− / slider / A+ / live readout. */
+  .font-row { display: flex; align-items: center; gap: 8px; }
+  .font-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--accent); }
+  .font-row button {
+    flex: 0 0 auto;
+    width: 32px; height: 28px; padding: 0;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+    font: 12px/1 var(--mono);
+  }
+  .font-row button:active { background: var(--border); }
+  .font-val {
+    flex: 0 0 auto; min-width: 40px; text-align: right;
+    font: 12px/1 var(--mono); color: var(--fg-dim);
+  }
+  .settings-note { font-size: 11px; color: var(--fg-dim); margin: -4px 0 12px; }
+  .settings-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .settings-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--fg-dim); }
+  .settings-status.ok { color: var(--green); }
+  .settings-status.err { color: var(--red); }
+  #stt-save {
+    flex: 0 0 auto;
+    background: var(--accent); color: #fff; border: 0; border-radius: 5px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  #stt-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Quick-input FAB — a configurable cluster of one-tap shortcuts pinned to
+     the pane's bottom-right corner. Phone-only, like the option bar: the dock
+     is revealed once a pane is selected, and tapping the bolt lifts a menu of
+     user-defined buttons over a dimmed pane. Each button types its text into
+     the pane and presses Enter. Buttons are grouped — a Common group shown
+     everywhere plus one matching the pane's detected runtime (claude / codex /
+     shell); the config lives in localStorage, edited from the settings panel. */
+  .qb-backdrop {
+    display: none;
+    position: absolute; inset: 0; z-index: 25;
+    background: rgba(8,10,14,0.55);
+    -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  }
+  .qb-dock {
+    display: none;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    flex-direction: column; align-items: flex-end; gap: 8px;
+  }
+  .qb-menu {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    max-height: 60vh; overflow-y: auto;
+  }
+  .qb-dock:not(.open) .qb-menu { display: none; }
+  .qb-menu button {
+    max-width: 78vw;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 18px;
+    padding: 9px 15px; font: 12px/1 var(--mono);
+    cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+  }
+  .qb-menu button:active { background: var(--border); }
+  .qb-empty {
+    max-width: 78vw; text-align: right;
+    background: var(--panel); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font: 11px/1.4 var(--mono);
+  }
+  .qb-fab {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; padding: 0;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--fg);
+    border: 1px solid var(--border);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    /* Faded at rest so it barely obstructs the pane; turns solid once it is
+       touched or while the menu is open. */
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+  }
+  .qb-fab svg { width: 16px; height: 16px; display: block; }
+  .qb-fab:active { opacity: 1; }
+  .qb-dock.open .qb-fab {
+    opacity: 1;
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .qb-dock:not(.open) .qb-ic-close { display: none; }
+  .qb-dock.open .qb-ic-open { display: none; }
+
+  .upload-btn {
+    display: none;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    width: 34px; height: 34px; padding: 0;
+    align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--green);
+    border: 1px solid var(--green);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .upload-btn svg { width: 16px; height: 16px; display: block; }
+  .upload-btn:hover, .upload-btn:active { opacity: 1; }
+  .upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .upload-btn.ready { display: flex; }
+
+  /* Help button — always visible (the desktop Option+key hotkeys benefit from
+     hints too). On phones it sits above Upload and the lightning FAB. */
+  .help-btn {
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    width: 34px; height: 34px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--amber);
+    border: 1px solid var(--amber);
+    font: 700 16px/1 var(--mono);
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  }
+  .help-btn:hover, .help-btn:active { opacity: 1; }
+  body.help-open .help-btn {
+    opacity: 1;
+    background: var(--amber); color: #1a1100; border-color: var(--amber);
+  }
+  .content-wrap.upload-ready .help-btn { bottom: 60px; }
+
+  /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
+     each paired with a label showing the relevant hotkey. The amber/dashed
+     style is deliberately *not* the accent-blue solid border used by direct
+     mode — so a ring around the pane reads as a hint, not as activation. */
+  .help-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+  }
+  body.help-open .help-overlay { display: block; }
+  .help-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.2);
+  }
+  .help-banner {
+    position: fixed;
+    left: 50%;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    transform: translateX(-50%);
+    max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
+    background: var(--amber); color: #1a1100;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font: 700 11px/1.2 var(--mono);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    text-align: center;
+  }
+  .help-ring {
+    position: fixed; pointer-events: none;
+    border: 2px dashed var(--amber);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.55);
+  }
+  .help-tip {
+    position: fixed; max-width: 300px;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--amber); border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    font-family: var(--mono);
+  }
+  .help-tip .help-key {
+    display: inline-block;
+    background: var(--bg); color: var(--amber);
+    border: 1px solid var(--amber); border-radius: 4px;
+    padding: 2px 5px; font: 700 11px/1 var(--mono);
+    margin-right: 6px;
+  }
+  .help-tip .help-desc { font-size: 12px; line-height: 1.4; }
+
+  /* Quick-button editor in the settings panel — one block per runtime group,
+     each a list of label/text rows with add + remove controls. */
+  .qb-group { margin-bottom: 14px; }
+  .qb-group:last-child { margin-bottom: 0; }
+  .qb-group-head {
+    font: 700 11px/1 var(--mono); color: var(--fg-dim); margin-bottom: 7px;
+  }
+  .qb-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .qb-row input {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 8px; font: 12px/1.3 var(--mono); min-width: 0;
+  }
+  .qb-row input:focus { outline: none; border-color: var(--accent); }
+  .qb-row .qb-label { flex: 0 0 84px; }
+  .qb-row .qb-text { flex: 1 1 auto; }
+  .qb-del {
+    flex: 0 0 auto;
+    width: 28px; height: 28px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+    font: 13px/1 var(--mono);
+  }
+  .qb-del:hover { color: var(--red); border-color: var(--red); }
+  .qb-add {
+    background: var(--panel-2); color: var(--fg-dim);
+    border: 1px dashed var(--border); border-radius: 5px;
+    padding: 6px 10px; font: 11px/1 var(--mono); cursor: pointer;
+  }
+  .qb-add:active { background: var(--border); }
+
+  @media (max-width: 760px) {
+    .key-area { display: flex; }
+    /* The quick-input FAB is a phone-only convenience — reveal it here only. */
+    .qb-dock.ready { display: flex; }
+    .upload-btn { bottom: 60px; }
+    .help-btn { bottom: 108px; }
+    .content-wrap.upload-ready .help-btn { bottom: 108px; }
+    .qb-backdrop.open { display: block; }
+    /* Quick-answer buttons exist for phones: shown only here, and only while
+       a question is actually up (the bar holds buttons). */
+    .option-bar:not(:empty) { display: flex; }
+    /* On a phone, direct mode types straight into the pane and the helper-key
+       bar already covers the control keys — the draft box would only get in
+       the way, so collapse it. On desktop the draft box stays put so a prompt
+       can still be composed there even while direct mode is active. */
+    .input-bar.direct .input-row { display: none; }
+    /* No horizontal scroll on phones — wrap chips onto a few short lines. */
+    .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
+    .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
+    /* The Option+key hotkeys are a hardware-keyboard feature — no badge on
+       phones, where panes are reached by tapping. */
+    .chip-key { display: none; }
+    .dot { width: 6px; height: 6px; }
+    .dot.asking { width: 10px; height: 10px; font-size: 8px; }
+    /* The draft text stays small to fit more lines; `maximum-scale=1` in the
+       viewport meta stops iOS Safari zooming the focused box (it would
+       otherwise zoom for any input font under 16px). */
+    #draft { font-size: 13px; }
+    .help-tip {
+      width: 260px;
+      max-width: calc(100vw - 96px);
+    }
+  }

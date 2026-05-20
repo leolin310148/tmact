@@ -1,7 +1,9 @@
-const CACHE_NAME = "tmact-app-shell-v6";
+const CACHE_NAME = "tmact-app-shell-v7";
 const APP_SHELL_URLS = [
   "/",
   "/index.html",
+  "/app.css",
+  "/app.js",
   "/manifest.json",
   "/icons/icon-180.png",
   "/icons/icon-192.png",

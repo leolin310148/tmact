@@ -67,76 +67,93 @@ func TestIndexPageServed(t *testing.T) {
 
 func TestIndexIncludesPWAInstallHooks(t *testing.T) {
 	handler := (&Server{}).Handler()
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := servedBody(t, handler, "/")
+	app := servedBody(t, handler, "/app.js")
 
-	body := rec.Body.String()
 	for _, want := range []string{
 		`<meta name="theme-color" content="#0e1116" />`,
 		`<link rel="manifest" href="/manifest.json" />`,
 		`<link rel="apple-touch-icon" href="/icons/icon-180.png" />`,
-		`navigator.serviceWorker.register("/sw.js")`,
+		`<link rel="stylesheet" href="/app.css" />`,
+		`<script src="/app.js"></script>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
 		}
 	}
+	if !strings.Contains(app, `navigator.serviceWorker.register("/sw.js")`) {
+		t.Fatal("app script missing service worker registration")
+	}
 }
 
 func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	handler := (&Server{}).Handler()
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := servedBody(t, handler, "/")
+	app := servedBody(t, handler, "/app.js")
 
-	body := rec.Body.String()
 	for _, want := range []string{
 		`id="record-btn"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+	for _, want := range []string{
 		`MediaRecorder`,
 		`navigator.mediaDevices.getUserMedia`,
 		`fetch("/api/transcribe"`,
 		`insertTranscript`,
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing %q", want)
 		}
 	}
 }
 
 func TestIndexIncludesMobileUploadControls(t *testing.T) {
 	handler := (&Server{}).Handler()
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := servedBody(t, handler, "/")
+	app := servedBody(t, handler, "/app.js")
 
-	body := rec.Body.String()
 	for _, want := range []string{
 		`id="upload-btn"`,
 		`id="file-upload"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+	for _, want := range []string{
 		`/api/upload-file`,
 		`openFileUploadPicker`,
 		`upload-btn").addEventListener("click"`,
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing %q", want)
 		}
 	}
 }
 
 func TestIndexIncludesSettingsControls(t *testing.T) {
 	handler := (&Server{}).Handler()
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := servedBody(t, handler, "/")
+	style := servedBody(t, handler, "/app.css")
+	app := servedBody(t, handler, "/app.js")
 
-	body := rec.Body.String()
 	for _, want := range []string{
 		`id="gear-btn"`,
 		`id="settings-overlay"`,
 		`id="font-range"`,
-		`--pane-font`,
-		`fetch("/api/settings/stt"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
 		}
+	}
+	if !strings.Contains(style, `--pane-font`) {
+		t.Fatal("app stylesheet missing pane font variable")
+	}
+	if !strings.Contains(app, `fetch("/api/settings/stt"`) {
+		t.Fatal("app script missing settings API call")
 	}
 }
 
@@ -147,6 +164,8 @@ func TestPWAAssetsContentTypes(t *testing.T) {
 		contentType string
 	}{
 		{"/manifest.json", "application/json"},
+		{"/app.css", "text/css"},
+		{"/app.js", "text/javascript"},
 		{"/sw.js", "text/javascript"},
 		{"/icons/icon-180.png", "image/png"},
 		{"/icons/icon-192.png", "image/png"},
@@ -166,6 +185,16 @@ func TestPWAAssetsContentTypes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func servedBody(t *testing.T, handler http.Handler, path string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status = %d, want 200", path, rec.Code)
+	}
+	return rec.Body.String()
 }
 
 func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
