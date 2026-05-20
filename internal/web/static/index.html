@@ -106,10 +106,12 @@
     box-shadow: inset 0 0 0 0.5px rgba(121, 192, 255, 0.2);
   }
   /* `overflow: hidden auto` + pre-wrap: pane text wraps and scrolls
-     vertically only — it never scrolls sideways. */
+     vertically only — it never scrolls sideways. Top padding folds in a
+     fraction of the safe-area inset so the first line clears the notch /
+     status bar when installed as a PWA. */
   pre#content {
     margin: 0; flex: 1 1 auto; overflow: hidden auto;
-    padding: 10px 14px;
+    padding: calc(10px + env(safe-area-inset-top, 0px) * 0.5) 14px 10px;
     font-family: var(--mono); font-size: var(--pane-font); line-height: 1.4;
     white-space: pre-wrap; word-break: break-word;
     background: var(--bg); cursor: text;
