@@ -1,4 +1,4 @@
-const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [] };
+const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [], selectionMode: false };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
                 mimeType: "", canceled: false, timer: null, startedAt: 0,
                 hotkeyDown: false, hotkeyStopPending: false,
@@ -151,13 +151,31 @@ function renderMode() {
   $("draft").placeholder = mobile
     ? "Type a prompt, then tap Send"
     : "Type a prompt — ⌘/Ctrl+Enter to send";
-  const direct = !!state.selected && document.activeElement === $("direct-input");
+  const direct = !!state.selected && !state.selectionMode && document.activeElement === $("direct-input");
   $("input-bar").classList.toggle("direct", direct);
   ind.classList.toggle("direct", direct);
   wrap.classList.toggle("direct", direct);
+  wrap.classList.toggle("selection-mode", state.selectionMode);
   // Direct mode is signalled by the light-blue panel border alone — no text.
   text.textContent = state.selected ? "" : "Select a pane to enable input";
   syncIndicator();
+}
+
+function syncSelectionButton() {
+  const btn = $("selection-btn");
+  btn.classList.toggle("ready", !!state.selected);
+  btn.classList.toggle("active", state.selectionMode);
+  btn.disabled = !state.selected;
+  btn.setAttribute("aria-pressed", state.selectionMode ? "true" : "false");
+  btn.title = state.selectionMode ? "selection mode on" : "selection mode";
+}
+
+function toggleSelectionMode() {
+  if (!state.selected) return;
+  state.selectionMode = !state.selectionMode;
+  if (state.selectionMode) $("direct-input").blur();
+  syncSelectionButton();
+  renderMode();
 }
 
 let errorTimer = null;
@@ -404,6 +422,7 @@ function selectPane(paneID) {
   $("upload-btn").disabled = false;
   syncDraft();
   syncRecordButton();
+  syncSelectionButton();
   setContent("Loading…");
   renderStatusline(state.snapshot);
   renderMode();
@@ -416,7 +435,7 @@ function selectPane(paneID) {
   // overlay so keystrokes pass through without first clicking the output. On
   // mobile this is skipped: it would raise the soft keyboard unprompted, and
   // the draft box is the expected entry point there.
-  if (!isMobile()) $("direct-input").focus();
+  if (!isMobile() && !state.selectionMode) $("direct-input").focus();
 }
 
 const SELECTED_KEY = "tmact.selectedPane";
@@ -1053,8 +1072,10 @@ function wireInput() {
   // up) when Send/Record is tapped.
   $("send-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("record-btn").addEventListener("pointerdown", (e) => e.preventDefault());
+  $("selection-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("send-btn").addEventListener("click", sendDraft);
   $("upload-btn").addEventListener("click", openFileUploadPicker);
+  $("selection-btn").addEventListener("click", toggleSelectionMode);
   $("file-upload").addEventListener("change", (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -1085,6 +1106,11 @@ function wireInput() {
   let pressX = 0, pressY = 0;
   content.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
   content.addEventListener("mouseup", (e) => {
+    if (state.selectionMode) {
+      direct.blur();
+      renderMode();
+      return;
+    }
     const moved = Math.abs(e.clientX - pressX) > 4 || Math.abs(e.clientY - pressY) > 4;
     const sel = window.getSelection();
     if (moved || (sel && !sel.isCollapsed && sel.toString() !== "")) {
@@ -1094,6 +1120,11 @@ function wireInput() {
     direct.focus();
   });
   direct.addEventListener("keydown", (e) => {
+    if (state.selectionMode) {
+      direct.blur();
+      renderMode();
+      return;
+    }
     if (e.isComposing || e.keyCode === 229) return; // let the IME compose
     const msg = translateKey(e);
     if (!msg) return;
@@ -1392,19 +1423,25 @@ function toggleQuickMenu() {
 function syncQuickDock() {
   const dock = $("qb-dock");
   const uploadBtn = $("upload-btn");
+  const selectionBtn = $("selection-btn");
   const wrap = $("content-wrap");
   if (state.selected) {
     dock.classList.add("ready");
     uploadBtn.classList.add("ready");
+    selectionBtn.classList.add("ready");
     wrap.classList.add("upload-ready");
     uploadBtn.disabled = upload.busy;
+    selectionBtn.disabled = false;
   } else {
     dock.classList.remove("ready");
     uploadBtn.classList.remove("ready");
+    selectionBtn.classList.remove("ready");
     wrap.classList.remove("upload-ready");
     uploadBtn.disabled = true;
+    selectionBtn.disabled = true;
     closeQuickMenu();
   }
+  syncSelectionButton();
 }
 
 // quickRow builds one editable button row, bound by object reference to its
@@ -1476,39 +1513,53 @@ function helpTips() {
     { target: () => $("chips"),
       key: "Option+1…0, q…p",
       desc: "Switch panes (hardware keyboard)",
+      tone: "pane",
       place: "above-left",
       skip: () => isMobile() || !$("chips").children.length },
     { target: () => $("draft"),
       key: "⌘ / Ctrl + Enter",
       desc: "Send the typed prompt to the selected pane",
+      tone: "send",
       place: "above-left",
       skip: () => isMobile() },
     { target: () => $("send-btn"),
       key: "Tap Send",
       desc: "Send the typed prompt to the selected pane",
+      tone: "send",
       skip: () => !isMobile() || !state.selected },
     { target: () => $("record-btn"),
       key: "Alt + V, then V/C",
       desc: "Record voice, then send or cancel",
+      tone: "voice",
       place: "above-right",
       skip: () => isMobile() },
     { target: () => $("content"),
       key: "Click pane",
       desc: "Direct mode — your keystrokes go straight to tmux",
+      tone: "direct",
       place: "inside-top-left",
       skip: () => isMobile() },
     { target: () => $("qb-fab"),
       key: "Tap ⚡",
-      desc: "Quick prompts — configurable in Settings" },
+      desc: "Quick prompts — configurable in Settings",
+      tone: "quick" },
     { target: () => $("upload-btn"),
       key: "Tap upload",
       desc: "Upload a file and paste its server path",
-      place: "above-right",
+      tone: "upload",
+      place: "left",
+      skip: () => !state.selected },
+    { target: () => $("selection-btn"),
+      key: "Tap select",
+      desc: "Toggle pane selection mode",
+      tone: "selection",
+      place: "left",
       skip: () => !state.selected },
     { target: () => $("gear-btn"),
       key: "Gear",
       desc: "Settings — quick buttons, voice model, font size",
-      place: "above-right" },
+      tone: "settings",
+      place: "left" },
   ];
 }
 
@@ -1673,7 +1724,8 @@ function placeCoachmarks() {
   items.sort((a, b) => a.rect.top - b.rect.top);
   for (const item of items) {
     const r = item.rect;
-    const ring = h("div", { class: "help-ring" });
+    const tone = item.tip.tone ? " tone-" + item.tip.tone : "";
+    const ring = h("div", { class: "help-ring" + tone });
     ring.style.left = (r.left - 4) + "px";
     ring.style.top = (r.top - 4) + "px";
     ring.style.width = (r.width + 8) + "px";
@@ -1685,7 +1737,8 @@ function placeCoachmarks() {
   for (const item of items) {
     const r = item.rect;
     const tip = item.tip;
-    const card = h("div", { class: "help-tip" },
+    const tone = tip.tone ? " tone-" + tip.tone : "";
+    const card = h("div", { class: "help-tip" + tone },
       h("span", { class: "help-key", text: tip.key }),
       h("span", { class: "help-desc", text: tip.desc }));
     overlay.appendChild(card);

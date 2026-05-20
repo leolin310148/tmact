@@ -116,10 +116,12 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 func TestIndexIncludesMobileUploadControls(t *testing.T) {
 	handler := (&Server{}).Handler()
 	body := servedBody(t, handler, "/")
+	style := servedBody(t, handler, "/app.css")
 	app := servedBody(t, handler, "/app.js")
 
 	for _, want := range []string{
 		`id="upload-btn"`,
+		`id="selection-btn"`,
 		`id="file-upload"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -130,9 +132,27 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`/api/upload-file`,
 		`openFileUploadPicker`,
 		`upload-btn").addEventListener("click"`,
+		`selection-btn").addEventListener("click", toggleSelectionMode)`,
+		`if (state.selectionMode)`,
+		`!state.selectionMode && document.activeElement === $("direct-input")`,
+		`tone: "upload"`,
+		`tone: "selection"`,
+		`tone: "settings"`,
 	} {
 		if !strings.Contains(app, want) {
 			t.Fatalf("app script missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`.selection-btn`,
+		`.selection-btn.active`,
+		`.content-wrap.selection-mode::after`,
+		`.help-ring.tone-upload`,
+		`.help-tip.tone-settings`,
+		`bottom: 60px;`,
+	} {
+		if !strings.Contains(style, want) {
+			t.Fatalf("style sheet missing %q", want)
 		}
 	}
 }

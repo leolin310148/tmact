@@ -504,7 +504,7 @@
   .qb-dock:not(.open) .qb-ic-close { display: none; }
   .qb-dock.open .qb-ic-open { display: none; }
 
-  .upload-btn {
+  .upload-btn, .selection-btn {
     display: none;
     position: absolute; right: 12px; bottom: 12px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
@@ -521,10 +521,26 @@
     user-select: none;
     touch-action: manipulation;
   }
-  .upload-btn svg { width: 16px; height: 16px; display: block; }
-  .upload-btn:hover, .upload-btn:active { opacity: 1; }
-  .upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .upload-btn.ready { display: flex; }
+  .upload-btn svg, .selection-btn svg { width: 16px; height: 16px; display: block; }
+  .upload-btn:hover, .upload-btn:active,
+  .selection-btn:hover, .selection-btn:active { opacity: 1; }
+  .upload-btn:disabled, .selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .upload-btn.ready, .selection-btn.ready { display: flex; }
+  .selection-btn {
+    bottom: 60px;
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+  .selection-btn.active {
+    opacity: 1;
+    background: var(--amber);
+    color: #1a1100;
+    border-color: var(--amber);
+  }
+  .content-wrap.selection-mode::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 0.5px rgba(240, 173, 78, 0.26);
+  }
 
   /* Help button — always visible (the desktop Option+key hotkeys benefit from
      hints too). On phones it sits above Upload and the lightning FAB. */
@@ -546,7 +562,7 @@
     opacity: 1;
     background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
-  .content-wrap.upload-ready .help-btn { bottom: 60px; }
+  .content-wrap.upload-ready .help-btn { bottom: 108px; }
 
   /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
      each paired with a label showing the relevant hotkey. The amber/dashed
@@ -576,25 +592,35 @@
   }
   .help-ring {
     position: fixed; pointer-events: none;
-    border: 2px dashed var(--amber);
+    --help-color: var(--amber);
+    border: 2px dashed var(--help-color);
     border-radius: 8px;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.55);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.55), 0 0 10px color-mix(in srgb, var(--help-color) 42%, transparent);
   }
   .help-tip {
     position: fixed; max-width: 300px;
+    --help-color: var(--amber);
     background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--amber); border-radius: 8px;
+    border: 1px solid var(--help-color); border-radius: 8px;
     padding: 8px 10px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.5);
     font-family: var(--mono);
   }
   .help-tip .help-key {
     display: inline-block;
-    background: var(--bg); color: var(--amber);
-    border: 1px solid var(--amber); border-radius: 4px;
+    background: var(--bg); color: var(--help-color);
+    border: 1px solid var(--help-color); border-radius: 4px;
     padding: 2px 5px; font: 700 11px/1 var(--mono);
     margin-right: 6px;
   }
+  .help-ring.tone-pane, .help-tip.tone-pane { --help-color: var(--accent); }
+  .help-ring.tone-direct, .help-tip.tone-direct { --help-color: var(--direct); }
+  .help-ring.tone-send, .help-tip.tone-send { --help-color: var(--accent); }
+  .help-ring.tone-voice, .help-tip.tone-voice { --help-color: var(--red); }
+  .help-ring.tone-quick, .help-tip.tone-quick { --help-color: var(--accent); }
+  .help-ring.tone-upload, .help-tip.tone-upload { --help-color: var(--green); }
+  .help-ring.tone-selection, .help-tip.tone-selection { --help-color: var(--amber); }
+  .help-ring.tone-settings, .help-tip.tone-settings { --help-color: var(--fg-dim); }
   .help-tip .help-desc { font-size: 12px; line-height: 1.4; }
 
   /* Quick-button editor in the settings panel — one block per runtime group,
@@ -634,8 +660,9 @@
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
     .upload-btn { bottom: 60px; }
-    .help-btn { bottom: 108px; }
-    .content-wrap.upload-ready .help-btn { bottom: 108px; }
+    .selection-btn { bottom: 108px; }
+    .help-btn { bottom: 156px; }
+    .content-wrap.upload-ready .help-btn { bottom: 156px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */
