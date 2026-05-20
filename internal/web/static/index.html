@@ -450,10 +450,29 @@
   .qb-dock:not(.open) .qb-ic-close { display: none; }
   .qb-dock.open .qb-ic-open { display: none; }
 
-  /* Help button — pinned just above the FAB spot in the bottom-right corner.
-     Always visible (the desktop Option+key hotkeys benefit from hints too).
-     Amber tint distinguishes it from the accent-blue lightning FAB so a tap
-     never reads as "I activated the lightning panel". */
+  .upload-btn {
+    display: none;
+    position: absolute; right: 12px; bottom: 60px; z-index: 30;
+    width: 34px; height: 34px; padding: 0;
+    align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--green);
+    border: 1px solid var(--green);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .upload-btn svg { width: 16px; height: 16px; display: block; }
+  .upload-btn:hover, .upload-btn:active { opacity: 1; }
+  .upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Help button — always visible (the desktop Option+key hotkeys benefit from
+     hints too). On phones it sits above Upload and the lightning FAB. */
   .help-btn {
     position: absolute; right: 12px; bottom: 60px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
@@ -553,6 +572,8 @@
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
+    .upload-btn.ready { display: flex; }
+    .help-btn { bottom: 108px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */
@@ -583,6 +604,9 @@
   <textarea id="direct-input" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
   <div class="qb-backdrop" id="qb-backdrop"></div>
   <button class="help-btn" id="help-btn" type="button" title="hotkey hints" aria-label="hotkey hints">?</button>
+  <button class="upload-btn" id="upload-btn" type="button" title="upload file" aria-label="upload file" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8 12 3 7 8"/><path d="M12 3v12"/></svg>
+  </button>
   <div class="qb-dock" id="qb-dock">
     <div class="qb-menu" id="qb-menu"></div>
     <button class="qb-fab" id="qb-fab" type="button" title="quick input" aria-label="quick input">
@@ -623,6 +647,7 @@
     </button>
   </div>
 </div>
+<input id="file-upload" type="file" hidden />
 <div class="rec-overlay" id="rec-overlay" hidden>
   <div class="rec-card">
     <div class="rec-dot"></div>
@@ -689,6 +714,7 @@ const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [] };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
                 mimeType: "", canceled: false, timer: null, startedAt: 0,
                 hotkeyDown: false, hotkeyStopPending: false };
+const upload = { busy: false };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
 
@@ -1063,6 +1089,7 @@ function selectPane(paneID) {
   draft.value = state.drafts[paneID] || "";
   draft.disabled = false;
   $("send-btn").disabled = false;
+  $("upload-btn").disabled = false;
   syncDraft();
   syncRecordButton();
   setContent("Loading…");
@@ -1451,6 +1478,49 @@ async function pasteImage(file, place) {
   }
 }
 
+async function uploadFileToPane(file) {
+  if (upload.busy || !file) return;
+  if (!state.selected) {
+    showInputError("select a pane first");
+    return;
+  }
+
+  upload.busy = true;
+  $("upload-btn").disabled = true;
+  setInputStatus("uploading file…");
+  try {
+    const form = new FormData();
+    form.append("file", file, file.name || "upload");
+    const res = await fetch("/api/upload-file", { method: "POST", body: form });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok || !data.path) {
+      throw new Error(data.error || ("file upload failed: HTTP " + res.status));
+    }
+    setInputStatus("");
+    if (!wsSend({ t: "text", s: data.path + " " })) {
+      showInputError("uploaded, but pane is not connected");
+    }
+  } catch (e) {
+    showInputError(e.message || "file upload failed");
+  } finally {
+    upload.busy = false;
+    $("upload-btn").disabled = !state.selected;
+  }
+}
+
+function openFileUploadPicker() {
+  const input = $("file-upload");
+  input.value = "";
+  try {
+    if (input.showPicker) input.showPicker();
+    else input.click();
+  } catch (e) {
+    try { input.click(); }
+    catch (err) { showInputError(err.message || "file picker blocked"); }
+  }
+}
+
 // placeInDraft inserts text into the draft box at the cursor, or appends it
 // when the draft is unfocused — used to drop a pasted image's path in for
 // review before the prompt is sent.
@@ -1607,6 +1677,12 @@ function wireInput() {
   $("send-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("record-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("send-btn").addEventListener("click", sendDraft);
+  $("upload-btn").addEventListener("click", openFileUploadPicker);
+  $("file-upload").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    uploadFileToPane(file);
+  });
   $("record-btn").addEventListener("click", startRecording);
   $("rec-stop").addEventListener("click", stopRecording);
   $("rec-cancel").addEventListener("click", cancelRecording);
@@ -1937,10 +2013,15 @@ function toggleQuickMenu() {
 // any open menu) when none is.
 function syncQuickDock() {
   const dock = $("qb-dock");
+  const uploadBtn = $("upload-btn");
   if (state.selected) {
     dock.classList.add("ready");
+    uploadBtn.classList.add("ready");
+    uploadBtn.disabled = upload.busy;
   } else {
     dock.classList.remove("ready");
+    uploadBtn.classList.remove("ready");
+    uploadBtn.disabled = true;
     closeQuickMenu();
   }
 }
@@ -2029,6 +2110,10 @@ function helpTips() {
     { target: () => $("qb-fab"),
       key: "Tap ⚡",
       desc: "Quick prompts — configurable in Settings" },
+    { target: () => $("upload-btn"),
+      key: "Tap upload",
+      desc: "Upload a file and paste its server path",
+      skip: () => !isMobile() || !state.selected },
     { target: () => $("gear-btn"),
       key: "Gear",
       desc: "Settings — quick buttons, voice model, font size" },

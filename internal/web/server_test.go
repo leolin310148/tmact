@@ -102,6 +102,25 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	}
 }
 
+func TestIndexIncludesMobileUploadControls(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`id="upload-btn"`,
+		`id="file-upload"`,
+		`/api/upload-file`,
+		`openFileUploadPicker`,
+		`upload-btn").addEventListener("click"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index page missing %q", want)
+		}
+	}
+}
+
 func TestIndexIncludesSettingsControls(t *testing.T) {
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
@@ -482,6 +501,95 @@ func TestSniffImageExtension(t *testing.T) {
 			}
 			if pos, _ := rs.Seek(0, io.SeekCurrent); pos != 0 {
 				t.Fatalf("reader left at offset %d, want rewound to 0", pos)
+			}
+		})
+	}
+}
+
+/* ---- file upload ---- */
+
+func fileUploadRequest(t *testing.T, field, filename, bodyText string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile(field, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(part, bodyText); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/upload-file", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+func TestUploadFileSavesFileAndReturnsPath(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{UploadDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, fileUploadRequest(t, "file", "../notes?.txt", "hello upload"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	path := got["path"]
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("path = %q, want it saved under %q", path, dir)
+	}
+	if !strings.HasSuffix(path, "notes.txt") {
+		t.Fatalf("path = %q, want sanitized filename suffix notes.txt", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("saved upload not readable: %v", err)
+	}
+	if string(data) != "hello upload" {
+		t.Fatalf("saved bytes = %q, want uploaded file verbatim", string(data))
+	}
+}
+
+func TestUploadFileRejectsMissingFile(t *testing.T) {
+	handler := (&Server{UploadDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, fileUploadRequest(t, "other", "notes.txt", "hello"))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestUploadFileRejectsNonPOST(t *testing.T) {
+	handler := (&Server{UploadDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/upload-file", nil))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestSanitizeUploadFilename(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"../notes?.txt", "notes.txt"},
+		{"  .hidden  ", "hidden"},
+		{"", "file"},
+		{"résumé 2026.pdf", "r-sum-2026.pdf"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := sanitizeUploadFilename(tc.in); got != tc.want {
+				t.Fatalf("sanitizeUploadFilename(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

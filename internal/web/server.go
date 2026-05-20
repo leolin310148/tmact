@@ -45,6 +45,7 @@ const (
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
+	maxFileUploadBytes  = 100 << 20
 )
 
 // Server is the daemon-side HTTP server for the web UI.
@@ -73,6 +74,9 @@ type Server struct {
 	// PasteImageDir is where pasted clipboard images are written; defaults to
 	// <os.TempDir()>/tmact-paste.
 	PasteImageDir string
+	// UploadDir is where explicit browser file uploads are written; defaults to
+	// <os.TempDir()>/tmact-upload.
+	UploadDir string
 	// Logf logs server-side diagnostics; defaults to writing to stderr, which
 	// statusd routes to its log file.
 	Logf func(format string, args ...any)
@@ -129,6 +133,13 @@ func (s *Server) pasteImageDir() string {
 	return filepath.Join(os.TempDir(), "tmact-paste")
 }
 
+func (s *Server) uploadDir() string {
+	if s.UploadDir != "" {
+		return s.UploadDir
+	}
+	return filepath.Join(os.TempDir(), "tmact-upload")
+}
+
 func (s *Server) httpClient() *http.Client {
 	if s.HTTPClient != nil {
 		return s.HTTPClient
@@ -157,6 +168,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/paste-image", s.handlePasteImage)
+	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }
@@ -484,6 +496,111 @@ func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
 		path = abs
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+}
+
+// handleUploadFile accepts an explicit browser file upload, writes it to a
+// server-side file, and returns that file's absolute path. The browser then
+// pastes the path into the selected pane because tmux input is text-only.
+func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxFileUploadBytes)
+	if err := r.ParseMultipartForm(maxFileUploadBytes); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "request body too large") {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSONError(w, status, "invalid file upload: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, `missing "file" upload`)
+		return
+	}
+	defer file.Close()
+
+	dir := s.uploadDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		s.logf("upload-file: mkdir %s: %v", dir, err)
+		writeJSONError(w, http.StatusInternalServerError, "could not create the upload directory")
+		return
+	}
+
+	name := "file"
+	if header != nil {
+		name = sanitizeUploadFilename(header.Filename)
+	}
+	out, err := os.CreateTemp(dir, "upload-"+time.Now().Format("20060102-150405")+"-*-"+name)
+	if err != nil {
+		s.logf("upload-file: create file in %s: %v", dir, err)
+		writeJSONError(w, http.StatusInternalServerError, "could not save the upload")
+		return
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, file); err != nil {
+		_ = os.Remove(out.Name())
+		s.logf("upload-file: write %s: %v", out.Name(), err)
+		writeJSONError(w, http.StatusInternalServerError, "could not save the upload")
+		return
+	}
+
+	path := out.Name()
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+}
+
+func sanitizeUploadFilename(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == string(filepath.Separator) {
+		name = ""
+	}
+
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+		if ok || r == '.' || r == '-' || r == '_' {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+
+	clean := strings.Trim(b.String(), ".-_")
+	clean = strings.ReplaceAll(clean, "-.", ".")
+	if clean == "" {
+		return "file"
+	}
+	if len(clean) <= 120 {
+		return clean
+	}
+	ext := filepath.Ext(clean)
+	if len(ext) > 20 {
+		ext = ""
+	}
+	base := strings.TrimSuffix(clean, ext)
+	maxBase := 120 - len(ext)
+	if maxBase < 1 {
+		maxBase = 120
+		ext = ""
+	}
+	base = strings.TrimRight(base[:maxBase], ".-_")
+	if base == "" {
+		return "file" + ext
+	}
+	return base + ext
 }
 
 // sniffImageExtension reads an upload's leading bytes and returns a canonical
