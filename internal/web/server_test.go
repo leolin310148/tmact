@@ -93,6 +93,7 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 
 	for _, want := range []string{
 		`id="record-btn"`,
+		`id="rec-send"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -103,6 +104,8 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 		`navigator.mediaDevices.getUserMedia`,
 		`fetch("/api/transcribe"`,
 		`insertTranscript`,
+		`finishRecordingConfirm`,
+		`suppressRecordTextInput`,
 	} {
 		if !strings.Contains(app, want) {
 			t.Fatalf("app script missing %q", want)
@@ -154,6 +157,36 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	}
 	if !strings.Contains(app, `fetch("/api/settings/stt"`) {
 		t.Fatal("app script missing settings API call")
+	}
+}
+
+func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
+	handler := (&Server{}).Handler()
+	app := servedBody(t, handler, "/app.js")
+	style := servedBody(t, handler, "/app.css")
+
+	for _, want := range []string{
+		`const RUNTIME_ICON = { claude: "cc", codex: "cx", copilot: "cp", gemini: "g" }`,
+		`function paneIndicator(p)`,
+		`class: cls.join(" ")`,
+		`if (!p.asking) return null;`,
+		`/^[─-]+$/`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`.agent-icon.runtime-claude`,
+		`.agent-icon.runtime-codex`,
+		`.agent-icon.runtime-copilot`,
+		`.agent-icon.runtime-gemini`,
+		`@keyframes agent-shine`,
+		`display: block;`,
+	} {
+		if !strings.Contains(style, want) {
+			t.Fatalf("app style missing %q", want)
+		}
 	}
 }
 

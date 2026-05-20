@@ -1,7 +1,9 @@
 const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [] };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
                 mimeType: "", canceled: false, timer: null, startedAt: 0,
-                hotkeyDown: false, hotkeyStopPending: false };
+                hotkeyDown: false, hotkeyStopPending: false,
+                pendingBlob: null, suppressInputUntil: 0,
+                suppressedDraftValue: null };
 const upload = { busy: false };
 const POLL_MS = 1000;
 const STALE_MS = 10000;
@@ -50,6 +52,30 @@ function paneStateLabel(p) {
   if (!p.state || p.state === "unknown") return "—";
   return p.state;
 }
+const RUNTIME_ICON = { claude: "cc", codex: "cx", copilot: "cp", gemini: "g" };
+function paneRuntime(p) {
+  return (p.runtime || "").toLowerCase();
+}
+function paneIndicator(p) {
+  const runtime = paneRuntime(p);
+  const icon = RUNTIME_ICON[runtime];
+  if (icon) {
+    const cls = ["agent-icon", "runtime-" + runtime];
+    if (p.running) cls.push("running");
+    if (p.asking) cls.push("asking");
+    return h("span", {
+      class: cls.join(" "),
+      title: runtime + " — " + paneStateLabel(p),
+      text: icon,
+    });
+  }
+
+  if (!p.asking) return null;
+  const dotCls = paneStateClass(p);
+  const dot = h("span", { class: "dot " + dotCls });
+  dot.textContent = "?";
+  return dot;
+}
 function findPane(paneID) {
   const snap = state.snapshot;
   if (!snap || !paneID) return null;
@@ -83,9 +109,7 @@ function renderStatusline(snap) {
     const label = perSession[p.session] > 1
       ? p.session + ":" + p.window_index
       : p.session;
-    const dotCls = paneStateClass(p);
-    const dot = h("span", { class: "dot " + dotCls });
-    if (dotCls === "asking") dot.textContent = "?";
+    const indicator = paneIndicator(p);
     const key = PANE_HOTKEYS[i];
     const chip = h("div", {
       class: "chip" + (p.pane_id === state.selected ? " sel" : ""),
@@ -93,7 +117,7 @@ function renderStatusline(snap) {
         + (key ? " — Option+" + key : ""),
     },
       key ? h("span", { class: "chip-key", text: key }) : null,
-      dot,
+      indicator,
       h("span", { text: label }));
     chip.onclick = () => selectPane(p.pane_id);
     chips.appendChild(chip);
@@ -249,19 +273,19 @@ function ansiToHTML(raw) {
   return out;
 }
 
-// wrapRuleLines wraps box-art separator lines (rows of U+2500 ─) with private-
-// use markers that survive HTML escaping. setContent then converts the markers
-// to <span class="tui-rule">, which clips the line to the pane width so a
-// 120-col rule doesn't fold into several rows on a phone.
+// wrapRuleLines wraps separator lines (rows of U+2500 ─ or ASCII hyphens) with
+// private-use markers that survive HTML escaping. setContent then converts the
+// markers to <span class="tui-rule">, which clips the line to the pane width so
+// a 120-col rule doesn't fold into several rows on a phone.
 const RULE_OPEN = "", RULE_CLOSE = "";
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 function wrapRuleLines(text) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const visible = lines[i].replace(ANSI_STRIP_RE, "");
-    if (!/^[\s─]+$/.test(visible)) continue;
-    const dashes = visible.length - visible.replace(/─/g, "").length;
-    if (dashes < 8) continue;
+    const ruleChars = visible.replace(/\s/g, "");
+    if (!/^[─-]+$/.test(ruleChars)) continue;
+    if (ruleChars.length < 8) continue;
     lines[i] = RULE_OPEN + lines[i] + RULE_CLOSE;
   }
   return lines.join("\n");
@@ -489,8 +513,8 @@ function preferredAudioType() {
 function syncRecordButton() {
   const btn = $("record-btn");
   btn.classList.toggle("busy", voice.busy);
-  btn.disabled = voice.busy || !state.selected || !voiceSupported();
-  btn.title = voice.busy ? "transcribing…" : "record voice";
+  btn.disabled = voice.busy || !!voice.pendingBlob || !state.selected || !voiceSupported();
+  btn.title = voice.busy ? "transcribing…" : voice.pendingBlob ? "confirm recording" : "record voice";
 }
 
 function fmtElapsed(ms) {
@@ -531,14 +555,38 @@ function showRecOverlay() {
 
 function recOverlayTranscribing() {
   $("rec-overlay").classList.add("transcribing");
+  $("rec-overlay").classList.remove("confirming");
   $("rec-label").textContent = "Transcribing…";
   if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
 }
 
 function hideRecOverlay() {
   $("rec-overlay").hidden = true;
-  $("rec-overlay").classList.remove("transcribing");
+  $("rec-overlay").classList.remove("transcribing", "confirming");
   if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
+}
+
+function showRecordingConfirm(blob) {
+  voice.pendingBlob = blob;
+  const ov = $("rec-overlay");
+  ov.classList.remove("transcribing");
+  ov.classList.add("confirming");
+  $("rec-label").textContent = "Send recording?";
+  $("rec-timer").textContent = "V send · C cancel";
+  ov.hidden = false;
+  if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
+  syncRecordButton();
+}
+
+function finishRecordingConfirm(send) {
+  const blob = voice.pendingBlob;
+  voice.pendingBlob = null;
+  syncRecordButton();
+  if (send && blob) {
+    uploadRecording(blob);
+    return;
+  }
+  hideRecOverlay();
 }
 
 function insertTranscript(text) {
@@ -606,7 +654,7 @@ async function uploadRecording(blob) {
 }
 
 async function startRecording() {
-  if (!state.selected || voice.busy || voice.recorder) return false;
+  if (!state.selected || voice.busy || voice.recorder || voice.pendingBlob) return false;
   if (!voiceSupported()) {
     showInputError("microphone recording is not supported in this browser");
     return false;
@@ -641,7 +689,7 @@ async function startRecording() {
       voice.hotkeyStopPending = false;
       syncRecordButton();
       if (canceled) { hideRecOverlay(); return; }
-      uploadRecording(blob);
+      showRecordingConfirm(blob);
     };
     recorder.start();
     showRecOverlay();
@@ -665,7 +713,8 @@ async function startRecording() {
   }
 }
 
-// stopRecording ends the take and transcribes it; cancelRecording discards it.
+// stopRecording ends the take and asks for confirmation; cancelRecording
+// discards either the live recording or a stopped take waiting for confirmation.
 function stopRecording() {
   if (voice.recorder && voice.recorder.state === "recording") {
     voice.recorder.stop();
@@ -673,6 +722,10 @@ function stopRecording() {
 }
 
 function cancelRecording() {
+  if (voice.pendingBlob) {
+    finishRecordingConfirm(false);
+    return;
+  }
   if (voice.recorder && voice.recorder.state === "recording") {
     voice.canceled = true;
     voice.recorder.stop();
@@ -685,9 +738,22 @@ function isRecordHotkey(e) {
   return e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyV";
 }
 
+function suppressRecordTextInput(e) {
+  voice.suppressInputUntil = Date.now() + 700;
+  const draft = $("draft");
+  if (document.activeElement === draft) voice.suppressedDraftValue = draft.value;
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function isTextInputTarget(el) {
+  return el === $("draft") || el === $("direct-input");
+}
+
 function stopHotkeyRecording() {
   if (!voice.hotkeyDown && !voice.hotkeyStopPending) return;
   voice.hotkeyDown = false;
+  voice.suppressInputUntil = Date.now() + 700;
   if (voice.recorder && voice.recorder.state === "recording") {
     voice.hotkeyStopPending = false;
     stopRecording();
@@ -699,9 +765,14 @@ function stopHotkeyRecording() {
 function wireRecordHotkey() {
   document.addEventListener("keydown", async (e) => {
     if (isMobile() || $("settings-overlay").hidden === false) return;
+    if (voice.pendingBlob && (e.code === "KeyV" || e.code === "KeyC" || e.key === "Escape")) {
+      e.preventDefault();
+      e.stopPropagation();
+      finishRecordingConfirm(e.code === "KeyV");
+      return;
+    }
     if (!isRecordHotkey(e) || e.repeat || voice.hotkeyDown) return;
-    e.preventDefault();
-    e.stopPropagation();
+    suppressRecordTextInput(e);
     voice.hotkeyDown = true;
     voice.hotkeyStopPending = false;
     const started = await startRecording();
@@ -714,9 +785,27 @@ function wireRecordHotkey() {
   document.addEventListener("keyup", (e) => {
     if (!voice.hotkeyDown && !voice.hotkeyStopPending) return;
     if (e.code !== "KeyV" && e.code !== "AltLeft" && e.code !== "AltRight") return;
+    suppressRecordTextInput(e);
+    stopHotkeyRecording();
+  }, true);
+
+  document.addEventListener("beforeinput", (e) => {
+    if (Date.now() > voice.suppressInputUntil || !isTextInputTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
-    stopHotkeyRecording();
+  }, true);
+
+  document.addEventListener("input", (e) => {
+    if (Date.now() > voice.suppressInputUntil || !isTextInputTarget(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.target === $("draft")) {
+      e.target.value = voice.suppressedDraftValue || "";
+      if (state.selected) state.drafts[state.selected] = e.target.value;
+      syncDraft();
+    } else {
+      e.target.value = "";
+    }
   }, true);
 
   window.addEventListener("blur", stopHotkeyRecording);
@@ -973,6 +1062,7 @@ function wireInput() {
   });
   $("record-btn").addEventListener("click", startRecording);
   $("rec-stop").addEventListener("click", stopRecording);
+  $("rec-send").addEventListener("click", () => finishRecordingConfirm(true));
   $("rec-cancel").addEventListener("click", cancelRecording);
   syncRecordButton();
   syncDraft();
@@ -1398,8 +1488,8 @@ function helpTips() {
       desc: "Send the typed prompt to the selected pane",
       skip: () => !isMobile() || !state.selected },
     { target: () => $("record-btn"),
-      key: "Alt + V (hold)",
-      desc: "Push-to-talk voice recording",
+      key: "Alt + V, then V/C",
+      desc: "Record voice, then send or cancel",
       place: "above-right",
       skip: () => isMobile() },
     { target: () => $("content"),
