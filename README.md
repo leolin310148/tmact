@@ -52,17 +52,16 @@ Check the LaunchAgent:
 launchctl print "gui/$(id -u)/com.tmact.statusd"
 ```
 
-Expose the web UI on a trusted LAN only when you mean to:
+`statusd` reads `~/.tmact/statusd.json` itself and seeds defaults on first
+start. Recognised keys: `web_addr`, `interval`, `state_path`, `log_path`,
+`tmux_options`. CLI flags still win over the file.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 TMACT_WEB_ADDR=0.0.0.0:7890 sh
-```
-
-To keep that bind address across future installs, save it locally:
+Expose the web UI on a trusted LAN only when you mean to. Edit the bind:
 
 ```sh
 mkdir -p ~/.tmact
 printf '{\n  "web_addr": "0.0.0.0:7890"\n}\n' > ~/.tmact/statusd.json
+launchctl kickstart -k "gui/$(id -u)/com.tmact.statusd"
 ```
 
 ## First Use

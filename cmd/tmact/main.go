@@ -720,11 +720,30 @@ func runStatusdStart(args []string) error {
 	flags := statusdFlags(fs)
 	once := fs.Bool("once", false, "run one scan then exit")
 	webAddr := fs.String("web-addr", "", "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)")
+	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file (JSON); auto-created with defaults if missing")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
+	var fileCfg statusd.FileConfig
+	if !*once && *configPath != "" {
+		loaded, created, err := statusd.LoadOrCreateFileConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "statusd: ignoring config %s: %v\n", *configPath, err)
+		} else {
+			fileCfg = loaded
+			if created {
+				fmt.Fprintf(os.Stderr, "statusd: seeded default config at %s\n", *configPath)
+			}
+		}
+	}
+
 	cfg := flags.config()
+	applyFileConfig(&cfg, webAddr, fileCfg, set)
 	if err := validateStatusdConfig(cfg); err != nil {
 		return err
 	}
@@ -761,6 +780,28 @@ func runStatusdStart(args []string) error {
 		return nil
 	}
 	return err
+}
+
+// applyFileConfig overlays values from the on-disk config onto cfg for any
+// flag the user did not pass explicitly. Precedence: CLI flag > file > default.
+func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConfig, set map[string]bool) {
+	if !set["web-addr"] && file.WebAddr != "" {
+		*webAddr = file.WebAddr
+	}
+	if !set["interval"] {
+		if d := file.IntervalDuration(); d > 0 {
+			cfg.Interval = d
+		}
+	}
+	if !set["state-path"] && file.StatePath != "" {
+		cfg.StatePath = file.StatePath
+	}
+	if !set["log-path"] && file.LogPath != "" {
+		cfg.LogPath = file.LogPath
+	}
+	if !set["tmux-options"] && !set["no-tmux-options"] && file.TmuxOptions != nil {
+		cfg.TmuxOptions = *file.TmuxOptions
+	}
 }
 
 func runStatusdOnce(args []string) error {

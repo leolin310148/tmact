@@ -10,8 +10,10 @@
 #
 # Overridable via env:
 #   TMACT_BIN_DIR   install directory for the binary (default: ~/.local/bin)
-#   TMACT_STATUSD_CONFIG  statusd config JSON (default: ~/.tmact/statusd.json)
-#   TMACT_WEB_ADDR        statusd web bind address (overrides config)
+#
+# statusd reads ~/.tmact/statusd.json itself and seeds defaults on first run.
+# To change the web bind address, edit that file and reload:
+#   launchctl kickstart -k gui/$(id -u)/com.tmact.statusd
 
 set -euo pipefail
 
@@ -22,24 +24,6 @@ BIN_PATH="$BIN_DIR/tmact"
 PLIST_LABEL="com.tmact.statusd"
 PLIST_TEMPLATE="$REPO_DIR/launchd/$PLIST_LABEL.plist.in"
 PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
-STATUSD_CONFIG_PATH="${TMACT_STATUSD_CONFIG:-$HOME/.tmact/statusd.json}"
-
-statusd_config_value() {
-  local key="$1"
-  local path="$2"
-  if [[ ! -f "$path" ]]; then
-    return 1
-  fi
-  sed -nE "s/^[[:space:]]*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p" "$path" | head -n 1
-}
-
-if [[ -n "${TMACT_WEB_ADDR:-}" ]]; then
-  STATUSD_WEB_ADDR="$TMACT_WEB_ADDR"
-elif STATUSD_WEB_ADDR="$(statusd_config_value web_addr "$STATUSD_CONFIG_PATH")" && [[ -n "$STATUSD_WEB_ADDR" ]]; then
-  :
-else
-  STATUSD_WEB_ADDR="127.0.0.1:7890"
-fi
 
 BIN_ONLY=0
 for arg in "$@"; do
@@ -69,9 +53,8 @@ if [[ "$BIN_ONLY" -eq 0 && "$(uname)" == "Darwin" && -f "$PLIST_TEMPLATE" ]]; th
     -e "s#__TMACT_BIN__#$BIN_PATH#g" \
     -e "s#__TMACT_WORKDIR__#$REPO_DIR#g" \
     -e "s#__TMACT_PATH__#${PATH}#g" \
-    -e "s#127.0.0.1:7890#$STATUSD_WEB_ADDR#g" \
     "$PLIST_TEMPLATE" > "$PLIST_DST"
-  echo "    statusd web addr: $STATUSD_WEB_ADDR"
+  echo "    statusd reads $HOME/.tmact/statusd.json (auto-seeded on first run)"
   # Use the modern bootout/bootstrap API: the legacy load/unload calls fail
   # with "Input/output error" on recent macOS once the agent is loaded.
   domain="gui/$(id -u)"
