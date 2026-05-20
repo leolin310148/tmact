@@ -452,7 +452,7 @@
 
   .upload-btn {
     display: none;
-    position: absolute; right: 12px; bottom: 60px; z-index: 30;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
     align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
@@ -470,11 +470,12 @@
   .upload-btn svg { width: 16px; height: 16px; display: block; }
   .upload-btn:hover, .upload-btn:active { opacity: 1; }
   .upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .upload-btn.ready { display: flex; }
 
   /* Help button — always visible (the desktop Option+key hotkeys benefit from
      hints too). On phones it sits above Upload and the lightning FAB. */
   .help-btn {
-    position: absolute; right: 12px; bottom: 60px; z-index: 30;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
@@ -491,6 +492,7 @@
     opacity: 1;
     background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
+  .content-wrap.upload-ready .help-btn { bottom: 60px; }
 
   /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
      each paired with a label showing the relevant hotkey. The amber/dashed
@@ -503,15 +505,20 @@
   body.help-open .help-overlay { display: block; }
   .help-backdrop {
     position: absolute; inset: 0;
-    background: rgba(0,0,0,0.78);
+    background: rgba(0,0,0,0.2);
   }
   .help-banner {
-    position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+    position: fixed;
+    left: 50%;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    transform: translateX(-50%);
+    max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 24px);
     background: var(--amber); color: #1a1100;
     border-radius: 6px;
     padding: 5px 12px;
     font: 700 11px/1.2 var(--mono);
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    text-align: center;
   }
   .help-ring {
     position: fixed; pointer-events: none;
@@ -520,7 +527,7 @@
     box-shadow: 0 0 0 1px rgba(0,0,0,0.55);
   }
   .help-tip {
-    position: fixed; max-width: 240px;
+    position: fixed; max-width: 300px;
     background: var(--panel-2); color: var(--fg);
     border: 1px solid var(--amber); border-radius: 8px;
     padding: 8px 10px;
@@ -572,8 +579,9 @@
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
-    .upload-btn.ready { display: flex; }
+    .upload-btn { bottom: 60px; }
     .help-btn { bottom: 108px; }
+    .content-wrap.upload-ready .help-btn { bottom: 108px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */
@@ -595,6 +603,10 @@
        viewport meta stops iOS Safari zooming the focused box (it would
        otherwise zoom for any input font under 16px). */
     #draft { font-size: 13px; }
+    .help-tip {
+      width: 260px;
+      max-width: calc(100vw - 96px);
+    }
   }
 </style>
 </head>
@@ -2014,13 +2026,16 @@ function toggleQuickMenu() {
 function syncQuickDock() {
   const dock = $("qb-dock");
   const uploadBtn = $("upload-btn");
+  const wrap = $("content-wrap");
   if (state.selected) {
     dock.classList.add("ready");
     uploadBtn.classList.add("ready");
+    wrap.classList.add("upload-ready");
     uploadBtn.disabled = upload.busy;
   } else {
     dock.classList.remove("ready");
     uploadBtn.classList.remove("ready");
+    wrap.classList.remove("upload-ready");
     uploadBtn.disabled = true;
     closeQuickMenu();
   }
@@ -2095,17 +2110,26 @@ function helpTips() {
     { target: () => $("chips"),
       key: "Option+1…0, q…p",
       desc: "Switch panes (hardware keyboard)",
+      place: "above-left",
       skip: () => isMobile() || !$("chips").children.length },
     { target: () => $("draft"),
       key: "⌘ / Ctrl + Enter",
-      desc: "Send the typed prompt to the selected pane" },
+      desc: "Send the typed prompt to the selected pane",
+      place: "above-left",
+      skip: () => isMobile() },
+    { target: () => $("send-btn"),
+      key: "Tap Send",
+      desc: "Send the typed prompt to the selected pane",
+      skip: () => !isMobile() || !state.selected },
     { target: () => $("record-btn"),
       key: "Alt + V (hold)",
       desc: "Push-to-talk voice recording",
+      place: "above-right",
       skip: () => isMobile() },
     { target: () => $("content"),
       key: "Click pane",
       desc: "Direct mode — your keystrokes go straight to tmux",
+      place: "inside-top-left",
       skip: () => isMobile() },
     { target: () => $("qb-fab"),
       key: "Tap ⚡",
@@ -2113,11 +2137,153 @@ function helpTips() {
     { target: () => $("upload-btn"),
       key: "Tap upload",
       desc: "Upload a file and paste its server path",
-      skip: () => !isMobile() || !state.selected },
+      place: "above-right",
+      skip: () => !state.selected },
     { target: () => $("gear-btn"),
       key: "Gear",
-      desc: "Settings — quick buttons, voice model, font size" },
+      desc: "Settings — quick buttons, voice model, font size",
+      place: "above-right" },
   ];
+}
+
+function overlapArea(a, b) {
+  const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+function rectAt(left, top, width, height) {
+  return { left, top, right: left + width, bottom: top + height, width, height };
+}
+
+function clamp(n, min, max) {
+  if (max < min) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function coachmarkViewport() {
+  const vv = window.visualViewport;
+  const left = vv ? vv.offsetLeft : 0;
+  const top = vv ? vv.offsetTop : 0;
+  const width = vv ? vv.width : window.innerWidth;
+  const height = vv ? vv.height : window.innerHeight;
+  return {
+    left: left + 8,
+    top: top + 8,
+    right: left + width - 8,
+    bottom: top + height - 8,
+    width,
+    height,
+  };
+}
+
+function scoreCoachmark(rect, preferred, placed, rings, vp) {
+  let score = Math.abs(rect.top - preferred.top) + Math.abs(rect.left - preferred.left) * 0.35;
+  for (const p of placed) score += overlapArea(rect, p) * 120;
+  const largeRingArea = vp.width * vp.height * 0.16;
+  for (const r of rings) {
+    if (r.width * r.height > largeRingArea) continue;
+    score += overlapArea(rect, r) * 18;
+  }
+  return score;
+}
+
+function preferredCoachmarkPosition(place, targetRect, cw, ch, vp) {
+  const gap = 10;
+  const sideGap = 12;
+  const centeredLeft = targetRect.left + targetRect.width / 2 - cw / 2;
+  switch (place) {
+    case "inside-top-left":
+      return {
+        left: targetRect.left + sideGap,
+        top: targetRect.top + sideGap,
+      };
+    case "above-left":
+      return {
+        left: targetRect.left,
+        top: targetRect.top - ch - gap,
+      };
+    case "above-right":
+      return {
+        left: targetRect.right - cw,
+        top: targetRect.top - ch - gap,
+      };
+    case "left":
+      return {
+        left: targetRect.left - cw - sideGap,
+        top: targetRect.top + targetRect.height / 2 - ch / 2,
+      };
+    case "right":
+      return {
+        left: targetRect.right + sideGap,
+        top: targetRect.top + targetRect.height / 2 - ch / 2,
+      };
+    default: {
+      const nearBottom = targetRect.bottom > vp.top + vp.height * 0.58;
+      return {
+        left: centeredLeft,
+        top: nearBottom ? targetRect.top - ch - gap : targetRect.bottom + gap,
+      };
+    }
+  }
+}
+
+function placeCoachmarkCard(card, tip, targetRect, placed, rings, vp) {
+  const cw = card.offsetWidth;
+  const ch = card.offsetHeight;
+  const gap = 10;
+  const sideGap = 12;
+  const centeredLeft = targetRect.left + targetRect.width / 2 - cw / 2;
+  const rightSideTarget = isMobile() && targetRect.left > vp.left + vp.width * 0.55;
+  const defaultPlace = rightSideTarget ? "left" : "";
+  const preferredPos = preferredCoachmarkPosition(tip.place || defaultPlace, targetRect, cw, ch, vp);
+  const preferredTop = preferredPos.top;
+  const preferredLeft = preferredPos.left;
+  const xCandidates = [
+    preferredLeft,
+    targetRect.left - cw - sideGap,
+    targetRect.right + sideGap,
+    centeredLeft,
+    targetRect.left,
+    targetRect.right - cw,
+  ];
+  const ySeeds = [
+    preferredTop,
+    targetRect.bottom + gap,
+    targetRect.top - ch - gap,
+    targetRect.top + sideGap,
+    targetRect.top + targetRect.height / 2 - ch / 2,
+  ];
+  const candidates = [];
+  const add = (left, top) => {
+    const clampedLeft = clamp(left, vp.left, vp.right - cw);
+    const clampedTop = clamp(top, vp.top, vp.bottom - ch);
+    candidates.push(rectAt(clampedLeft, clampedTop, cw, ch));
+  };
+
+  for (const x of xCandidates) {
+    for (const y of ySeeds) add(x, y);
+    for (let y = vp.top; y <= vp.bottom - ch; y += 12) add(x, y);
+  }
+
+  const preferred = rectAt(
+    clamp(preferredLeft, vp.left, vp.right - cw),
+    clamp(preferredTop, vp.top, vp.bottom - ch),
+    cw,
+    ch,
+  );
+  let best = preferred;
+  let bestScore = scoreCoachmark(preferred, preferred, placed, rings, vp);
+  for (const c of candidates) {
+    const score = scoreCoachmark(c, preferred, placed, rings, vp);
+    if (score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  }
+  card.style.left = best.left + "px";
+  card.style.top = best.top + "px";
+  placed.push(best);
 }
 
 function placeCoachmarks() {
@@ -2125,7 +2291,10 @@ function placeCoachmarks() {
   for (const el of overlay.querySelectorAll(".help-ring, .help-tip, .help-banner")) el.remove();
   overlay.appendChild(h("div", { class: "help-banner",
     text: "Hotkey hints · tap anywhere or press Esc to close" }));
-  const vw = window.innerWidth, vh = window.innerHeight;
+  const banner = overlay.querySelector(".help-banner");
+  const placed = [banner.getBoundingClientRect()];
+  const rings = [];
+  const items = [];
   for (const tip of helpTips()) {
     if (tip.skip && tip.skip()) continue;
     const el = tip.target();
@@ -2133,24 +2302,28 @@ function placeCoachmarks() {
     const r = el.getBoundingClientRect();
     // Display:none and detached elements both produce a 0×0 rect.
     if (r.width < 1 || r.height < 1) continue;
+    items.push({ tip, rect: r });
+  }
+  items.sort((a, b) => a.rect.top - b.rect.top);
+  for (const item of items) {
+    const r = item.rect;
     const ring = h("div", { class: "help-ring" });
     ring.style.left = (r.left - 4) + "px";
     ring.style.top = (r.top - 4) + "px";
     ring.style.width = (r.width + 8) + "px";
     ring.style.height = (r.height + 8) + "px";
     overlay.appendChild(ring);
+    rings.push(rectAt(r.left - 4, r.top - 4, r.width + 8, r.height + 8));
+  }
+  const vp = coachmarkViewport();
+  for (const item of items) {
+    const r = item.rect;
+    const tip = item.tip;
     const card = h("div", { class: "help-tip" },
       h("span", { class: "help-key", text: tip.key }),
       h("span", { class: "help-desc", text: tip.desc }));
     overlay.appendChild(card);
-    const cw = card.offsetWidth, ch = card.offsetHeight;
-    // Prefer the label below the target; flip above if it would overflow.
-    let top = r.bottom + 10;
-    if (top + ch > vh - 8) top = Math.max(8, r.top - ch - 10);
-    let left = r.left + r.width / 2 - cw / 2;
-    left = Math.max(8, Math.min(vw - cw - 8, left));
-    card.style.left = left + "px";
-    card.style.top = top + "px";
+    placeCoachmarkCard(card, tip, r, placed, rings, vp);
   }
 }
 
