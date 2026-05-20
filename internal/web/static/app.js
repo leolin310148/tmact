@@ -1188,6 +1188,20 @@ if (window.visualViewport) {
 
 const SETTINGS_KEY = "tmact.settings";
 const FONT_MIN = 9, FONT_MAX = 22, FONT_DEFAULT = 13;
+const RUNNING_EFFECT_DEFAULT = "shine";
+const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
+
+function readClientSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; }
+  catch (e) { return {}; }
+}
+
+function saveClientSettings(patch) {
+  try {
+    localStorage.setItem(SETTINGS_KEY,
+      JSON.stringify(Object.assign(readClientSettings(), patch)));
+  } catch (e) {}
+}
 
 function clampFont(px) {
   px = parseInt(px, 10);
@@ -1203,19 +1217,27 @@ function applyPaneFont(px) {
   document.documentElement.style.setProperty("--pane-font", px + "px");
   $("font-range").value = px;
   $("font-val").textContent = px + "px";
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ paneFont: px }));
-  } catch (e) {}
+  saveClientSettings({ paneFont: px });
+}
+
+function normalizeRunningEffect(effect) {
+  return RUNNING_EFFECTS.includes(effect) ? effect : RUNNING_EFFECT_DEFAULT;
+}
+
+function applyRunningEffect(effect) {
+  effect = normalizeRunningEffect(effect);
+  document.documentElement.dataset.runningEffect = effect;
+  $("running-effect").value = effect;
+  saveClientSettings({ runningEffect: effect });
 }
 
 // loadClientSettings applies the browser-local settings at startup. It runs
-// synchronously before first paint, so the panel never flashes the default
-// size before the saved one.
+// synchronously before first paint, so saved visual choices take effect before
+// the first snapshot render.
 function loadClientSettings() {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; }
-  catch (e) {}
+  const saved = readClientSettings();
   applyPaneFont(saved.paneFont);
+  applyRunningEffect(saved.runningEffect);
 }
 
 function currentPaneFont() {
@@ -1309,6 +1331,7 @@ function wireSettings() {
   $("font-range").addEventListener("input", (e) => applyPaneFont(e.target.value));
   $("font-dec").addEventListener("click", () => applyPaneFont(currentPaneFont() - 1));
   $("font-inc").addEventListener("click", () => applyPaneFont(currentPaneFont() + 1));
+  $("running-effect").addEventListener("change", (e) => applyRunningEffect(e.target.value));
   $("stt-save").addEventListener("click", saveSTTSettings);
 }
 

@@ -167,6 +167,7 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 		`id="gear-btn"`,
 		`id="settings-overlay"`,
 		`id="font-range"`,
+		`id="running-effect"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -177,6 +178,9 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	}
 	if !strings.Contains(app, `fetch("/api/settings/stt"`) {
 		t.Fatal("app script missing settings API call")
+	}
+	if !strings.Contains(app, `applyRunningEffect`) {
+		t.Fatal("app script missing running effect setting")
 	}
 }
 
@@ -202,6 +206,7 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`.agent-icon.runtime-copilot`,
 		`.agent-icon.runtime-gemini`,
 		`@keyframes agent-shine`,
+		`@keyframes agent-rainbow`,
 		`display: block;`,
 	} {
 		if !strings.Contains(style, want) {
