@@ -439,16 +439,17 @@
 
   /* Help button — pinned just above the FAB spot in the bottom-right corner.
      Always visible (the desktop Option+key hotkeys benefit from hints too).
-     Clicking lifts a coachmark overlay that points at the main controls. */
+     Amber tint distinguishes it from the accent-blue lightning FAB so a tap
+     never reads as "I activated the lightning panel". */
   .help-btn {
     position: absolute; right: 12px; bottom: 56px; z-index: 30;
     width: 28px; height: 28px; padding: 0;
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
-    background: rgba(28,35,48,0.82); color: var(--fg);
-    border: 1px solid var(--border);
+    background: rgba(28,35,48,0.82); color: var(--amber);
+    border: 1px solid var(--amber);
     font: 700 14px/1 var(--mono);
-    opacity: 0.35;
+    opacity: 0.45;
     transition: opacity 0.15s ease;
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
     box-shadow: 0 3px 10px rgba(0,0,0,0.5);
@@ -456,12 +457,13 @@
   .help-btn:hover, .help-btn:active { opacity: 1; }
   body.help-open .help-btn {
     opacity: 1;
-    background: var(--accent); color: #fff; border-color: var(--accent);
+    background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
 
-  /* Coachmark overlay: dim backdrop + glow rings around target controls, each
-     paired with a label showing the relevant hotkey. JS positions the rings
-     and labels from each target's bounding rect. */
+  /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
+     each paired with a label showing the relevant hotkey. The amber/dashed
+     style is deliberately *not* the accent-blue solid border used by direct
+     mode — so a ring around the pane reads as a hint, not as activation. */
   .help-overlay {
     display: none;
     position: fixed; inset: 0; z-index: 100;
@@ -469,26 +471,34 @@
   body.help-open .help-overlay { display: block; }
   .help-backdrop {
     position: absolute; inset: 0;
-    background: rgba(8,10,14,0.62);
+    background: rgba(0,0,0,0.78);
+  }
+  .help-banner {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+    background: var(--amber); color: #1a1100;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font: 700 11px/1.2 var(--mono);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
   }
   .help-ring {
     position: fixed; pointer-events: none;
-    border: 2px solid var(--accent);
+    border: 2px dashed var(--amber);
     border-radius: 8px;
-    box-shadow: 0 0 0 1px rgba(68,147,248,0.35), 0 0 16px rgba(68,147,248,0.45);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.55);
   }
   .help-tip {
     position: fixed; max-width: 240px;
     background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--accent); border-radius: 8px;
+    border: 1px solid var(--amber); border-radius: 8px;
     padding: 8px 10px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.5);
     font-family: var(--mono);
   }
   .help-tip .help-key {
     display: inline-block;
-    background: var(--bg); color: var(--accent);
-    border: 1px solid var(--accent); border-radius: 4px;
+    background: var(--bg); color: var(--amber);
+    border: 1px solid var(--amber); border-radius: 4px;
     padding: 2px 5px; font: 700 11px/1 var(--mono);
     margin-right: 6px;
   }
@@ -1973,25 +1983,29 @@ function helpTips() {
       skip: () => isMobile() || !$("chips").children.length },
     { target: () => $("draft"),
       key: "⌘ / Ctrl + Enter",
-      desc: "Send the typed prompt to the selected pane",
-      skip: () => $("draft").disabled },
+      desc: "Send the typed prompt to the selected pane" },
     { target: () => $("record-btn"),
       key: "Alt + V (hold)",
       desc: "Push-to-talk voice recording",
-      skip: () => $("record-btn").disabled || isMobile() },
+      skip: () => isMobile() },
     { target: () => $("content"),
       key: "Click pane",
       desc: "Direct mode — your keystrokes go straight to tmux",
-      skip: () => isMobile() || !state.selected },
+      skip: () => isMobile() },
     { target: () => $("qb-fab"),
       key: "Tap ⚡",
       desc: "Quick prompts — configurable in Settings" },
+    { target: () => $("gear-btn"),
+      key: "Gear",
+      desc: "Settings — quick buttons, voice model, font size" },
   ];
 }
 
 function placeCoachmarks() {
   const overlay = $("help-overlay");
-  for (const el of overlay.querySelectorAll(".help-ring, .help-tip")) el.remove();
+  for (const el of overlay.querySelectorAll(".help-ring, .help-tip, .help-banner")) el.remove();
+  overlay.appendChild(h("div", { class: "help-banner",
+    text: "Hotkey hints · tap anywhere or press Esc to close" }));
   const vw = window.innerWidth, vh = window.innerHeight;
   for (const tip of helpTips()) {
     if (tip.skip && tip.skip()) continue;
@@ -2029,7 +2043,7 @@ function openHelp() {
 function closeHelp() {
   document.body.classList.remove("help-open");
   const overlay = $("help-overlay");
-  for (const el of overlay.querySelectorAll(".help-ring, .help-tip")) el.remove();
+  for (const el of overlay.querySelectorAll(".help-ring, .help-tip, .help-banner")) el.remove();
 }
 
 function toggleHelp() {
