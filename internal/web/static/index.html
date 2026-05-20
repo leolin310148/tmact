@@ -2052,7 +2052,14 @@ function toggleHelp() {
 }
 
 function wireHelp() {
+  // Mirror the qb-fab pattern: pointerdown preventDefault keeps the focused
+  // input focused. iOS Safari rearranges its chrome (URL bar, safe-area)
+  // whenever focus moves, and fitViewport() then pins body to the new
+  // visualViewport.height — the visible safe-area padding under the input
+  // bar disappears after a toggle cycle if we let the focus shift.
+  $("help-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("help-btn").addEventListener("click", (e) => { e.stopPropagation(); toggleHelp(); });
+  $("help-overlay").addEventListener("pointerdown", (e) => e.preventDefault());
   $("help-overlay").addEventListener("click", closeHelp);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && document.body.classList.contains("help-open")) closeHelp();
