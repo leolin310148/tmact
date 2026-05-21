@@ -364,21 +364,49 @@
   .rec-overlay.transcribing .rec-send,
   .rec-overlay.transcribing .rec-cancel,
   .rec-overlay.transcribing .rec-stop { display: none; }
-  .rec-overlay.confirming {
+  .rec-overlay.confirming,
+  .rec-overlay.hotkey-recording {
     display: flex; align-items: center; justify-content: center;
   }
-  .rec-overlay.confirming .rec-card {
+  .rec-overlay.confirming .rec-card,
+  .rec-overlay.hotkey-recording .rec-card {
     position: static;
-    width: min(320px, calc(100vw - 32px));
+    display: grid;
+    width: min(440px, calc(100vw - 32px));
     left: auto; right: auto; bottom: auto;
+    gap: 12px;
+  }
+  .rec-overlay.confirming .rec-card {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .rec-overlay.hotkey-recording .rec-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .rec-overlay.confirming .rec-dot,
+  .rec-overlay.hotkey-recording .rec-dot {
+    width: 28px; height: 28px;
+    box-shadow: 0 0 0 4px rgba(68,147,248,0.18);
   }
   .rec-overlay.confirming .rec-dot {
     background: var(--accent);
     animation: none;
-    box-shadow: 0 0 0 4px rgba(68,147,248,0.18);
+  }
+  .rec-overlay.confirming .rec-label,
+  .rec-overlay.hotkey-recording .rec-label {
+    font-size: 15px;
+  }
+  .rec-overlay.confirming .rec-timer,
+  .rec-overlay.hotkey-recording .rec-timer {
+    margin-top: 2px;
+    font: 13px/1.25 var(--font);
+    color: var(--fg-dim);
+    white-space: nowrap;
   }
   .rec-overlay.confirming .rec-send { display: block; }
-  .rec-overlay.confirming .rec-stop { display: none; }
+  .rec-overlay.confirming .rec-stop,
+  .rec-overlay.hotkey-recording .rec-send,
+  .rec-overlay.hotkey-recording .rec-cancel,
+  .rec-overlay.hotkey-recording .rec-stop { display: none; }
 
   /* Settings — opened from the gear in the status line. */
   .gear-btn {

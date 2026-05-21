@@ -561,7 +561,7 @@ function positionRecOverlay() {
 
 function showRecOverlay() {
   const ov = $("rec-overlay");
-  ov.classList.remove("transcribing");
+  ov.classList.remove("transcribing", "confirming", "hotkey-recording");
   $("rec-label").textContent = "Recording…";
   $("rec-timer").textContent = "0:00";
   ov.hidden = false;
@@ -573,23 +573,37 @@ function showRecOverlay() {
   }, 250);
 }
 
+function showHotkeyRecordingOverlay() {
+  const ov = $("rec-overlay");
+  ov.classList.remove("transcribing", "confirming");
+  ov.classList.add("hotkey-recording");
+  $("rec-label").textContent = "Recording…";
+  $("rec-timer").textContent = "0:00";
+  ov.hidden = false;
+  voice.startedAt = Date.now();
+  if (voice.timer) clearInterval(voice.timer);
+  voice.timer = setInterval(() => {
+    $("rec-timer").textContent = fmtElapsed(Date.now() - voice.startedAt);
+  }, 250);
+}
+
 function recOverlayTranscribing() {
   $("rec-overlay").classList.add("transcribing");
-  $("rec-overlay").classList.remove("confirming");
+  $("rec-overlay").classList.remove("confirming", "hotkey-recording");
   $("rec-label").textContent = "Transcribing…";
   if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
 }
 
 function hideRecOverlay() {
   $("rec-overlay").hidden = true;
-  $("rec-overlay").classList.remove("transcribing", "confirming");
+  $("rec-overlay").classList.remove("transcribing", "confirming", "hotkey-recording");
   if (voice.timer) { clearInterval(voice.timer); voice.timer = null; }
 }
 
 function showRecordingConfirm(blob) {
   voice.pendingBlob = blob;
   const ov = $("rec-overlay");
-  ov.classList.remove("transcribing");
+  ov.classList.remove("transcribing", "hotkey-recording");
   ov.classList.add("confirming");
   $("rec-label").textContent = "Send recording?";
   $("rec-timer").textContent = "V send · C cancel";
@@ -673,7 +687,7 @@ async function uploadRecording(blob) {
   }
 }
 
-async function startRecording(opts) {
+async function startRecording(recordOpts) {
   if (!state.selected || voice.busy || voice.recorder || voice.pendingBlob) return false;
   if (!voiceSupported()) {
     showInputError("microphone recording is not supported in this browser");
@@ -682,13 +696,13 @@ async function startRecording(opts) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const type = preferredAudioType();
-    const opts = type ? { mimeType: type } : undefined;
-    const recorder = new MediaRecorder(stream, opts);
+    const mediaOpts = type ? { mimeType: type } : undefined;
+    const recorder = new MediaRecorder(stream, mediaOpts);
     voice.stream = stream;
     voice.recorder = recorder;
     voice.chunks = [];
     voice.canceled = false;
-    voice.confirmOnStop = !!(opts && opts.confirmOnStop === true);
+    voice.confirmOnStop = !!(recordOpts && recordOpts.confirmOnStop === true);
     // Trust the type we asked for: iOS Safari leaves recorder.mimeType empty,
     // which would otherwise mislabel an MP4 recording as webm.
     voice.mimeType = type || recorder.mimeType || "";
@@ -716,7 +730,8 @@ async function startRecording(opts) {
       else uploadRecording(blob);
     };
     recorder.start();
-    showRecOverlay();
+    if (voice.confirmOnStop) showHotkeyRecordingOverlay();
+    else showRecOverlay();
     syncRecordButton();
     if (voice.hotkeyStopPending) {
       voice.hotkeyStopPending = false;
@@ -798,7 +813,11 @@ function wireRecordHotkey() {
       finishRecordingConfirm(e.code === "KeyV");
       return;
     }
-    if (!isRecordHotkey(e) || e.repeat || voice.hotkeyDown) return;
+    if (!isRecordHotkey(e)) return;
+    if (e.repeat || voice.hotkeyDown) {
+      suppressRecordTextInput(e);
+      return;
+    }
     suppressRecordTextInput(e);
     voice.hotkeyDown = true;
     voice.hotkeyStopPending = false;
