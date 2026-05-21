@@ -1,6 +1,7 @@
 const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [], selectionMode: false };
 const voice = { recorder: null, stream: null, chunks: [], busy: false,
                 mimeType: "", canceled: false, timer: null, startedAt: 0,
+                confirmOnStop: false,
                 hotkeyDown: false, hotkeyStopPending: false,
                 pendingBlob: null, suppressInputUntil: 0,
                 suppressedDraftValue: null };
@@ -672,7 +673,7 @@ async function uploadRecording(blob) {
   }
 }
 
-async function startRecording() {
+async function startRecording(opts) {
   if (!state.selected || voice.busy || voice.recorder || voice.pendingBlob) return false;
   if (!voiceSupported()) {
     showInputError("microphone recording is not supported in this browser");
@@ -687,6 +688,7 @@ async function startRecording() {
     voice.recorder = recorder;
     voice.chunks = [];
     voice.canceled = false;
+    voice.confirmOnStop = !!(opts && opts.confirmOnStop === true);
     // Trust the type we asked for: iOS Safari leaves recorder.mimeType empty,
     // which would otherwise mislabel an MP4 recording as webm.
     voice.mimeType = type || recorder.mimeType || "";
@@ -704,11 +706,14 @@ async function startRecording() {
       voice.recorder = null;
       voice.stream = null;
       voice.chunks = [];
+      const confirmOnStop = voice.confirmOnStop;
+      voice.confirmOnStop = false;
       voice.hotkeyDown = false;
       voice.hotkeyStopPending = false;
       syncRecordButton();
       if (canceled) { hideRecOverlay(); return; }
-      showRecordingConfirm(blob);
+      if (confirmOnStop) showRecordingConfirm(blob);
+      else uploadRecording(blob);
     };
     recorder.start();
     showRecOverlay();
@@ -724,6 +729,7 @@ async function startRecording() {
     if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
     voice.stream = null;
     voice.recorder = null;
+    voice.confirmOnStop = false;
     voice.hotkeyDown = false;
     voice.hotkeyStopPending = false;
     hideRecOverlay();
@@ -732,8 +738,9 @@ async function startRecording() {
   }
 }
 
-// stopRecording ends the take and asks for confirmation; cancelRecording
-// discards either the live recording or a stopped take waiting for confirmation.
+// Button recordings stop straight into transcription. Hotkey recordings use a
+// confirmation step after key release, so an accidental Option+V hold can still
+// be canceled before uploading.
 function stopRecording() {
   if (voice.recorder && voice.recorder.state === "recording") {
     voice.recorder.stop();
@@ -749,6 +756,7 @@ function cancelRecording() {
     voice.canceled = true;
     voice.recorder.stop();
   } else {
+    voice.confirmOnStop = false;
     hideRecOverlay();
   }
 }
@@ -794,7 +802,7 @@ function wireRecordHotkey() {
     suppressRecordTextInput(e);
     voice.hotkeyDown = true;
     voice.hotkeyStopPending = false;
-    const started = await startRecording();
+    const started = await startRecording({ confirmOnStop: true });
     if (!started) {
       voice.hotkeyDown = false;
       voice.hotkeyStopPending = false;
@@ -1081,7 +1089,7 @@ function wireInput() {
     e.target.value = "";
     uploadFileToPane(file);
   });
-  $("record-btn").addEventListener("click", startRecording);
+  $("record-btn").addEventListener("click", () => startRecording({ confirmOnStop: false }));
   $("rec-stop").addEventListener("click", stopRecording);
   $("rec-send").addEventListener("click", () => finishRecordingConfirm(true));
   $("rec-cancel").addEventListener("click", cancelRecording);
@@ -1551,7 +1559,7 @@ function helpTips() {
       tone: "send",
       skip: () => !isMobile() || !state.selected },
     { target: () => $("record-btn"),
-      key: "Alt + V, then V/C",
+      key: "Option+V, then V/C",
       desc: "Record voice, then send or cancel",
       tone: "voice",
       place: "above-right",

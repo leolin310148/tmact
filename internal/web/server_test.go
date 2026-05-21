@@ -105,6 +105,8 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 		`fetch("/api/transcribe"`,
 		`insertTranscript`,
 		`finishRecordingConfirm`,
+		`startRecording({ confirmOnStop: true })`,
+		`startRecording({ confirmOnStop: false })`,
 		`suppressRecordTextInput`,
 	} {
 		if !strings.Contains(app, want) {
@@ -168,6 +170,7 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 		`id="settings-overlay"`,
 		`id="font-range"`,
 		`id="running-effect"`,
+		`id="running-effect-preview"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -175,6 +178,9 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	}
 	if !strings.Contains(style, `--pane-font`) {
 		t.Fatal("app stylesheet missing pane font variable")
+	}
+	if !strings.Contains(style, `.effect-preview`) {
+		t.Fatal("app stylesheet missing running effect preview")
 	}
 	if !strings.Contains(app, `fetch("/api/settings/stt"`) {
 		t.Fatal("app script missing settings API call")
