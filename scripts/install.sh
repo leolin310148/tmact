@@ -10,6 +10,7 @@
 #
 # Overridable via env:
 #   TMACT_BIN_DIR   install directory for the binary (default: ~/.local/bin)
+#   TMACT_PATH      PATH written into the LaunchAgent
 #
 # statusd reads ~/.tmact/statusd.json itself and seeds defaults on first run.
 # To change the web bind address, edit that file and reload:
@@ -20,6 +21,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="${TMACT_BIN_DIR:-$HOME/.local/bin}"
 BIN_PATH="$BIN_DIR/tmact"
+LAUNCHD_PATH="${TMACT_PATH:-$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 
 PLIST_LABEL="com.tmact.statusd"
 PLIST_TEMPLATE="$REPO_DIR/launchd/$PLIST_LABEL.plist.in"
@@ -52,7 +54,7 @@ if [[ "$BIN_ONLY" -eq 0 && "$(uname)" == "Darwin" && -f "$PLIST_TEMPLATE" ]]; th
   sed \
     -e "s#__TMACT_BIN__#$BIN_PATH#g" \
     -e "s#__TMACT_WORKDIR__#$REPO_DIR#g" \
-    -e "s#__TMACT_PATH__#${PATH}#g" \
+    -e "s#__TMACT_PATH__#${LAUNCHD_PATH}#g" \
     "$PLIST_TEMPLATE" > "$PLIST_DST"
   echo "    statusd reads $HOME/.tmact/statusd.json (auto-seeded on first run)"
   # Use the modern bootout/bootstrap API: the legacy load/unload calls fail

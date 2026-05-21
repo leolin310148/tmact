@@ -184,13 +184,13 @@
   }
   /* TUI horizontal-rule lines (rows of ─). Box-art borders from tools like
      Claude Code are wider than a phone viewport, and pre-wrap would split
-     them across several visual rows. Clipping the block to the pane
-     width keeps the rule visually a single line. */
+     them across several visual rows. The script replaces those character runs
+     with this CSS-drawn rule. */
   .tui-rule {
     display: block;
-    max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
+    height: 0;
+    margin: 0.65em 0;
+    border-top: 1px solid var(--border);
     vertical-align: top;
   }
   /* Invisible overlay textarea: holds focus for direct mode and IME, but lets

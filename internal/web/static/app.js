@@ -292,10 +292,10 @@ function ansiToHTML(raw) {
   return out;
 }
 
-// wrapRuleLines wraps separator lines (rows of U+2500 ─ or ASCII hyphens) with
-// private-use markers that survive HTML escaping. setContent then converts the
-// markers to <span class="tui-rule">, which clips the line to the pane width so
-// a 120-col rule doesn't fold into several rows on a phone.
+// wrapRuleLines replaces separator lines (rows of U+2500 ─ or ASCII hyphens)
+// with private-use markers that survive HTML escaping. setContent then converts
+// the markers to a CSS-drawn rule, so the original terminal-width run of rule
+// characters never wraps or leaks into the rendered pane.
 const RULE_OPEN = "", RULE_CLOSE = "";
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 function wrapRuleLines(text) {
@@ -305,7 +305,7 @@ function wrapRuleLines(text) {
     const ruleChars = visible.replace(/\s/g, "");
     if (!/^[─-]+$/.test(ruleChars)) continue;
     if (ruleChars.length < 8) continue;
-    lines[i] = RULE_OPEN + lines[i] + RULE_CLOSE;
+    lines[i] = RULE_OPEN + RULE_CLOSE;
   }
   return lines.join("\n");
 }
@@ -314,7 +314,7 @@ function setContent(text) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
   const html = ansiToHTML(wrapRuleLines(text))
-    .replaceAll(RULE_OPEN, '<span class="tui-rule">')
+    .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
     .replaceAll(RULE_CLOSE, "</span>");
   pre.innerHTML = html;
   if (atBottom) pre.scrollTop = pre.scrollHeight;

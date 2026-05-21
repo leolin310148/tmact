@@ -201,6 +201,8 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`class: cls.join(" ")`,
 		`if (!p.asking) return null;`,
 		`/^[─-]+$/`,
+		`lines[i] = RULE_OPEN + RULE_CLOSE;`,
+		`role="separator"`,
 	} {
 		if !strings.Contains(app, want) {
 			t.Fatalf("app script missing %q", want)
@@ -214,6 +216,7 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`@keyframes agent-shine`,
 		`@keyframes agent-rainbow`,
 		`display: block;`,
+		`border-top: 1px solid var(--border);`,
 	} {
 		if !strings.Contains(style, want) {
 			t.Fatalf("app style missing %q", want)
