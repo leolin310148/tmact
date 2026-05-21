@@ -2148,6 +2148,7 @@ func runDispatch(args []string) error {
 	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
+	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
 	execute := fs.Bool("execute", false, "actually create, launch, and send; default is dry-run")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
@@ -2177,6 +2178,7 @@ func runDispatch(args []string) error {
 		Prompt:       *promptText,
 		Execute:      *execute,
 		ReadyTimeout: *readyTimeout,
+		ReadySettle:  *readySettle,
 	})
 	if err != nil {
 		return err
@@ -2354,7 +2356,7 @@ Usage:
   tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
   tmact workflow stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--execute]
+  tmact dispatch-work SESSION --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
   tmact version [--json]
@@ -2562,13 +2564,14 @@ func commandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--ready-timeout 30s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, gemini, or copilot", Required: true},
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
+				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
 				{Name: "--execute", Description: "actually create, launch, and send; default is dry-run"},
 				{Name: "--json", Description: "print JSON output"},
 			},

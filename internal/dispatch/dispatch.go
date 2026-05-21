@@ -23,6 +23,9 @@ const (
 	pollInterval        = time.Second
 	captureLines        = 200
 	clearDelay          = 2 * time.Second
+	// DefaultReadySettleDelay gives cold-starting terminal UIs, especially
+	// Codex, a short stable idle window before the first prompt is pasted.
+	DefaultReadySettleDelay = 1500 * time.Millisecond
 
 	// submitSettleDelay is how long to wait after pasting/Enter before
 	// checking whether the prompt actually left the input box.
@@ -58,6 +61,7 @@ type Options struct {
 	Prompt       string
 	Execute      bool
 	ReadyTimeout time.Duration
+	ReadySettle  time.Duration
 }
 
 // Step is one planned or executed operation in a dispatch.
@@ -150,6 +154,9 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	report.Dir = dir
 	if opts.ReadyTimeout <= 0 {
 		opts.ReadyTimeout = defaultReadyTimeout
+	}
+	if opts.ReadySettle < 0 {
+		return report, fmt.Errorf("ready settle cannot be negative")
 	}
 
 	layout, err := deps.ListLayout()
@@ -426,6 +433,7 @@ func promptSubmitted(classified panestate.Result) bool {
 
 func waitReady(opts Options, deps Deps, target string) error {
 	deadline := deps.Now().Add(opts.ReadyTimeout)
+	var readySince time.Time
 	for {
 		panes, err := deps.ListSessionPanes(opts.Session)
 		if err != nil {
@@ -445,12 +453,30 @@ func waitReady(opts Options, deps Deps, target string) error {
 		}
 		runtime := detectRuntime(deps, pane, raw)
 		if runtime == opts.Agent && classified.State != panestate.StateWorking {
-			return nil
+			now := deps.Now()
+			if opts.ReadySettle <= 0 {
+				return nil
+			}
+			if readySince.IsZero() {
+				readySince = now
+			}
+			if now.Sub(readySince) >= opts.ReadySettle {
+				return nil
+			}
+		} else {
+			readySince = time.Time{}
 		}
 		if !deps.Now().Before(deadline) {
 			return fmt.Errorf("%s did not become ready within %s (runtime=%s state=%s)", opts.Agent, opts.ReadyTimeout, runtime, classified.State)
 		}
-		deps.Sleep(pollInterval)
+		sleep := pollInterval
+		if !readySince.IsZero() {
+			remaining := opts.ReadySettle - deps.Now().Sub(readySince)
+			if remaining > 0 && remaining < sleep {
+				sleep = remaining
+			}
+		}
+		deps.Sleep(sleep)
 	}
 }
 
@@ -530,5 +556,8 @@ func promptDetail(prompt string) string {
 }
 
 func readyDetail(opts Options) string {
+	if opts.ReadySettle > 0 {
+		return fmt.Sprintf("wait up to %s for %s to be ready, then stable for %s", opts.ReadyTimeout, opts.Agent, opts.ReadySettle)
+	}
 	return fmt.Sprintf("wait up to %s for %s to be ready", opts.ReadyTimeout, opts.Agent)
 }

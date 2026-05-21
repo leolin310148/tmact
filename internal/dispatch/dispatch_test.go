@@ -24,6 +24,7 @@ type keyPress struct {
 type recorder struct {
 	pastes      []paste
 	keys        []keyPress
+	sleeps      []time.Duration
 	newSessions int
 }
 
@@ -65,8 +66,10 @@ func baseDeps() (*recorder, dispatch.Deps) {
 		ProcessRuntime: func(int) panestatus.RuntimeDetection {
 			return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeUnknown}
 		},
-		Sleep: func(time.Duration) {},
-		Now:   func() time.Time { return time.Unix(0, 0) },
+		Sleep: func(d time.Duration) {
+			rec.sleeps = append(rec.sleeps, d)
+		},
+		Now: func() time.Time { return time.Unix(0, 0) },
 	}
 	return rec, deps
 }
@@ -91,6 +94,13 @@ func claudePane() tmux.Pane {
 		Active:         true,
 		WindowActive:   true,
 	}
+}
+
+func codexPane() tmux.Pane {
+	pane := claudePane()
+	pane.CurrentCommand = "codex"
+	pane.WindowName = "codex"
+	return pane
 }
 
 func stepStatus(t *testing.T, report dispatch.Report, name string) string {
@@ -184,6 +194,62 @@ func TestExecuteNewSession(t *testing.T) {
 	for _, name := range []string{"create-session", "launch-agent", "wait-ready", "send-prompt"} {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
+		}
+	}
+}
+
+func TestExecuteNewSessionDebouncesCodexReadyBeforePrompt(t *testing.T) {
+	rec, deps := baseDeps()
+	now := time.Unix(0, 0)
+	var promptPastedAt time.Time
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) {
+		rec.sleeps = append(rec.sleeps, d)
+		now = now.Add(d)
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{codexPane()}, nil
+	}
+	deps.PasteText = func(target, text string, enter bool) error {
+		rec.pastes = append(rec.pastes, paste{target, text, enter})
+		if text == "do the thing" && promptPastedAt.IsZero() {
+			promptPastedAt = now
+		}
+		return nil
+	}
+	waitCaptures := 0
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) < 2 {
+			waitCaptures++
+			return "OpenAI Codex\n› ", nil
+		}
+		return "OpenAI Codex\nWorking... esc to interrupt", nil
+	}
+
+	opts := baseOpts()
+	opts.Agent = "codex"
+	opts.Execute = true
+	opts.ReadySettle = 2 * time.Second
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusOK {
+		t.Fatalf("send-prompt status = %q, want ok", got)
+	}
+	if waitCaptures < 3 {
+		t.Fatalf("wait-ready captures = %d, want at least 3", waitCaptures)
+	}
+	if got := promptPastedAt.Sub(time.Unix(0, 0)); got < 2*time.Second {
+		t.Fatalf("prompt pasted after %s, want at least 2s", got)
+	}
+	want := []paste{{"%1", "codex", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	for i := range want {
+		if rec.pastes[i] != want[i] {
+			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
 		}
 	}
 }
