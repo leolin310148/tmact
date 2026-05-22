@@ -179,6 +179,8 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 		`id="font-range"`,
 		`id="running-effect"`,
 		`id="running-effect-preview"`,
+		`id="build-time"`,
+		`Build Time`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -193,8 +195,14 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	if !strings.Contains(api, `"/api/settings/stt"`) {
 		t.Fatal("api module missing settings API call")
 	}
+	if !strings.Contains(api, `"/api/version"`) {
+		t.Fatal("api module missing version API call")
+	}
 	if !strings.Contains(app, `applyRunningEffect`) {
 		t.Fatal("app script missing running effect setting")
+	}
+	if !strings.Contains(app, `loadVersionInfo`) {
+		t.Fatal("app script missing version info loader")
 	}
 }
 
@@ -908,6 +916,38 @@ func TestSTTSettingsRejectsPost(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestVersionReturnsBuildTime(t *testing.T) {
+	handler := (&Server{BuildTime: "2026-05-22T06:01:39Z"}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/version", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got struct {
+		BuildTime string `json:"build_time"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.BuildTime != "2026-05-22T06:01:39Z" {
+		t.Fatalf("build_time = %q", got.BuildTime)
+	}
+}
+
+func TestVersionRejectsPost(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/version", nil))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+	if rec.Header().Get("Allow") != http.MethodGet {
+		t.Fatalf("Allow = %q, want GET", rec.Header().Get("Allow"))
 	}
 }
 

@@ -1,6 +1,7 @@
 import {
   fetchSnapshot,
   loadSTTConfig,
+  loadVersion,
   saveSTTConfig,
   transcribeAudio,
   uploadClipboardImage,
@@ -1151,6 +1152,18 @@ async function loadSTTSettings() {
   }
 }
 
+async function loadVersionInfo() {
+  const el = $("build-time");
+  el.textContent = "loading…";
+  try {
+    const { res, data } = await loadVersion();
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    el.textContent = data.build_time || "unavailable";
+  } catch (e) {
+    el.textContent = "unavailable";
+  }
+}
+
 async function saveSTTSettings() {
   const btn = $("stt-save");
   btn.disabled = true;
@@ -1177,6 +1190,7 @@ async function saveSTTSettings() {
 function openSettings() {
   $("settings-overlay").hidden = false;
   loadSTTSettings();
+  loadVersionInfo();
 }
 function closeSettings() {
   $("settings-overlay").hidden = true;

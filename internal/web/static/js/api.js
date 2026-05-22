@@ -27,6 +27,10 @@ export function loadSTTConfig() {
   return jsonResponse("/api/settings/stt", { cache: "no-store" });
 }
 
+export function loadVersion() {
+  return jsonResponse("/api/version", { cache: "no-store" });
+}
+
 export function saveSTTConfig(payload) {
   return jsonResponse("/api/settings/stt", {
     method: "PUT",

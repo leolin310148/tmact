@@ -512,6 +512,23 @@
   .settings-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--fg-dim); }
   .settings-status.ok { color: var(--green); }
   .settings-status.err { color: var(--red); }
+  .settings-version {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 22px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    color: var(--fg-dim);
+    font-size: 11px;
+  }
+  .settings-version span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+    font-family: var(--mono);
+  }
   #stt-save {
     flex: 0 0 auto;
     background: var(--accent); color: #fff; border: 0; border-radius: 5px;

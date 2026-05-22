@@ -80,6 +80,8 @@ type Server struct {
 	// Logf logs server-side diagnostics; defaults to writing to stderr, which
 	// statusd routes to its log file.
 	Logf func(format string, args ...any)
+	// BuildTime is the VCS timestamp shown in the settings panel.
+	BuildTime string
 }
 
 func (s *Server) capture() func(string, int) (string, error) {
@@ -165,12 +167,26 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
+	mux.HandleFunc("/api/version", s.handleVersion)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/paste-image", s.handlePasteImage)
 	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(struct {
+		BuildTime string `json:"build_time"`
+	}{BuildTime: s.BuildTime})
 }
 
 // Serve runs the HTTP server until ctx is cancelled, then shuts down gracefully.
