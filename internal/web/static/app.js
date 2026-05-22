@@ -1,11 +1,14 @@
-const state = { selected: null, snapshot: null, drafts: {}, paneOrder: [], selectionMode: false };
-const voice = { recorder: null, stream: null, chunks: [], busy: false,
-                mimeType: "", canceled: false, timer: null, startedAt: 0,
-                confirmOnStop: false,
-                hotkeyDown: false, hotkeyStopPending: false,
-                pendingBlob: null, suppressInputUntil: 0,
-                suppressedDraftValue: null };
-const upload = { busy: false };
+import {
+  fetchSnapshot,
+  loadSTTConfig,
+  saveSTTConfig,
+  transcribeAudio,
+  uploadClipboardImage,
+  uploadPaneFiles,
+} from "./js/api.js";
+import { $, clamp, escapeHTML, h, isMobile } from "./js/dom.js";
+import { state, upload, voice } from "./js/state.js";
+
 const POLL_MS = 1000;
 const STALE_MS = 10000;
 
@@ -26,20 +29,6 @@ const HOTKEY_CODE = {
 // code → chip index, built once so the keydown handler is a single lookup.
 const HOTKEY_INDEX = {};
 PANE_HOTKEYS.forEach((label, i) => { HOTKEY_INDEX[HOTKEY_CODE[label]] = i; });
-
-const $ = (id) => document.getElementById(id);
-const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
-
-function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const k in (attrs || {})) {
-    if (k === "class") el.className = attrs[k];
-    else if (k === "text") el.textContent = attrs[k];
-    else el.setAttribute(k, attrs[k]);
-  }
-  for (const kid of kids) if (kid) el.appendChild(kid);
-  return el;
-}
 
 function paneStateClass(p) {
   if (p.asking) return "asking";
@@ -215,10 +204,6 @@ function ansi256(n) {
   return "#" + g + g + g;
 }
 
-function escapeHTML(s) {
-  return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
-}
-
 // ansiToHTML turns tmux -e output (plain text + \x1b[...m SGR sequences) into
 // HTML. Text is HTML-escaped; styles come only from a fixed palette and parsed
 // integers, never from raw pane text, so a coloured span cannot inject markup.
@@ -348,9 +333,7 @@ function renderOptions(q) {
 
 async function refreshSnapshot() {
   try {
-    const res = await fetch("api/snapshot", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const snap = await res.json();
+    const snap = await fetchSnapshot();
     state.snapshot = snap;
     renderStatusline(snap);
     renderMode();
@@ -673,9 +656,7 @@ async function uploadRecording(blob) {
   try {
     const form = new FormData();
     form.append("audio", blob, recordingFilename(voice.mimeType || blob.type));
-    const res = await fetch("/api/transcribe", { method: "POST", body: form });
-    let data = {};
-    try { data = await res.json(); } catch (e) {}
+    const { res, data } = await transcribeAudio(form);
     if (!res.ok) throw new Error(data.error || ("transcription failed: HTTP " + res.status));
     insertTranscript(data.text || "");
   } catch (e) {
@@ -886,9 +867,7 @@ async function pasteImage(file, place) {
   try {
     const form = new FormData();
     form.append("image", file, file.name || "paste.png");
-    const res = await fetch("/api/paste-image", { method: "POST", body: form });
-    let data = {};
-    try { data = await res.json(); } catch (e) {}
+    const { res, data } = await uploadClipboardImage(form);
     if (!res.ok || !data.path) {
       throw new Error(data.error || ("image upload failed: HTTP " + res.status));
     }
@@ -915,9 +894,7 @@ async function uploadFilesToPane(files) {
   try {
     const form = new FormData();
     files.forEach((file, i) => form.append("file", file, file.name || ("upload-" + (i + 1))));
-    const res = await fetch("/api/upload-file", { method: "POST", body: form });
-    let data = {};
-    try { data = await res.json(); } catch (e) {}
+    const { res, data } = await uploadPaneFiles(form);
     const paths = Array.isArray(data.paths) ? data.paths : (data.path ? [data.path] : []);
     if (!res.ok || paths.length === 0) {
       throw new Error(data.error || ("file upload failed: HTTP " + res.status));
@@ -1299,8 +1276,7 @@ async function loadSTTSettings() {
   $("stt-key").value = "";
   setSTTStatus("loading…", "");
   try {
-    const res = await fetch("/api/settings/stt", { cache: "no-store" });
-    const data = await res.json();
+    const { res, data } = await loadSTTConfig();
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
     $("stt-model").value = data.model || "";
     $("stt-endpoint").value = data.endpoint || "";
@@ -1316,16 +1292,11 @@ async function saveSTTSettings() {
   btn.disabled = true;
   setSTTStatus("saving…", "");
   try {
-    const res = await fetch("/api/settings/stt", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: $("stt-model").value,
-        endpoint: $("stt-endpoint").value,
-        api_key: $("stt-key").value,
-      }),
+    const { res, data } = await saveSTTConfig({
+      model: $("stt-model").value,
+      endpoint: $("stt-endpoint").value,
+      api_key: $("stt-key").value,
     });
-    const data = await res.json();
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
     $("stt-model").value = data.model || "";
     $("stt-endpoint").value = data.endpoint || "";
@@ -1623,11 +1594,6 @@ function overlapArea(a, b) {
 
 function rectAt(left, top, width, height) {
   return { left, top, right: left + width, bottom: top + height, width, height };
-}
-
-function clamp(n, min, max) {
-  if (max < min) return min;
-  return Math.max(min, Math.min(max, n));
 }
 
 function coachmarkViewport() {

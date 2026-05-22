@@ -75,7 +75,7 @@ func TestIndexIncludesPWAInstallHooks(t *testing.T) {
 		`<link rel="manifest" href="/manifest.json" />`,
 		`<link rel="apple-touch-icon" href="/icons/icon-180.png" />`,
 		`<link rel="stylesheet" href="/app.css" />`,
-		`<script src="/app.js"></script>`,
+		`<script type="module" src="/app.js"></script>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -90,6 +90,7 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	handler := (&Server{}).Handler()
 	body := servedBody(t, handler, "/")
 	app := servedBody(t, handler, "/app.js")
+	api := servedBody(t, handler, "/js/api.js")
 
 	for _, want := range []string{
 		`id="record-btn"`,
@@ -102,7 +103,6 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	for _, want := range []string{
 		`MediaRecorder`,
 		`navigator.mediaDevices.getUserMedia`,
-		`fetch("/api/transcribe"`,
 		`insertTranscript`,
 		`finishRecordingConfirm`,
 		`startRecording({ confirmOnStop: true })`,
@@ -113,6 +113,9 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 			t.Fatalf("app script missing %q", want)
 		}
 	}
+	if !strings.Contains(api, `"/api/transcribe"`) {
+		t.Fatal("api module missing transcribe endpoint")
+	}
 }
 
 func TestIndexIncludesMobileUploadControls(t *testing.T) {
@@ -120,6 +123,7 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 	body := servedBody(t, handler, "/")
 	style := servedBody(t, handler, "/app.css")
 	app := servedBody(t, handler, "/app.js")
+	api := servedBody(t, handler, "/js/api.js")
 
 	for _, want := range []string{
 		`id="upload-btn"`,
@@ -132,7 +136,6 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`/api/upload-file`,
 		`openFileUploadPicker`,
 		`upload-btn").addEventListener("click"`,
 		`selection-btn").addEventListener("click", toggleSelectionMode)`,
@@ -145,6 +148,9 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		if !strings.Contains(app, want) {
 			t.Fatalf("app script missing %q", want)
 		}
+	}
+	if !strings.Contains(api, `"/api/upload-file"`) {
+		t.Fatal("api module missing upload endpoint")
 	}
 	for _, want := range []string{
 		`.selection-btn`,
@@ -165,6 +171,7 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	body := servedBody(t, handler, "/")
 	style := servedBody(t, handler, "/app.css")
 	app := servedBody(t, handler, "/app.js")
+	api := servedBody(t, handler, "/js/api.js")
 
 	for _, want := range []string{
 		`id="gear-btn"`,
@@ -183,8 +190,8 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	if !strings.Contains(style, `.effect-preview`) {
 		t.Fatal("app stylesheet missing running effect preview")
 	}
-	if !strings.Contains(app, `fetch("/api/settings/stt"`) {
-		t.Fatal("app script missing settings API call")
+	if !strings.Contains(api, `"/api/settings/stt"`) {
+		t.Fatal("api module missing settings API call")
 	}
 	if !strings.Contains(app, `applyRunningEffect`) {
 		t.Fatal("app script missing running effect setting")
