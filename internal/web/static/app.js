@@ -6,8 +6,9 @@ import {
   uploadClipboardImage,
   uploadPaneFiles,
 } from "./js/api.js";
-import { $, clamp, escapeHTML, h, isMobile } from "./js/dom.js";
+import { $, clamp, h, isMobile } from "./js/dom.js";
 import { state, upload, voice } from "./js/state.js";
+import { setContent } from "./js/terminal.js";
 
 const POLL_MS = 1000;
 const STALE_MS = 10000;
@@ -183,126 +184,6 @@ function setInputStatus(msg) {
   if (errorTimer) { clearTimeout(errorTimer); errorTimer = null; }
   $("input-error").textContent = msg;
   syncIndicator();
-}
-
-/* ---- ANSI SGR colour rendering (tmux capture-pane -e output) ---- */
-
-// Tango palette — the 16 base colours, readable on the dark background.
-const ANSI16 = [
-  "#000000", "#cc0000", "#4e9a06", "#c4a000", "#3465a4", "#75507b", "#06989a", "#d3d7cf",
-  "#555753", "#ef2929", "#8ae234", "#fce94f", "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec",
-];
-
-function ansi256(n) {
-  if (n < 16) return ANSI16[n] || "";
-  if (n < 232) {
-    n -= 16;
-    const hex = (v) => (v === 0 ? 0 : 55 + v * 40).toString(16).padStart(2, "0");
-    return "#" + hex(Math.floor(n / 36) % 6) + hex(Math.floor(n / 6) % 6) + hex(n % 6);
-  }
-  const g = (8 + (n - 232) * 10).toString(16).padStart(2, "0");
-  return "#" + g + g + g;
-}
-
-// ansiToHTML turns tmux -e output (plain text + \x1b[...m SGR sequences) into
-// HTML. Text is HTML-escaped; styles come only from a fixed palette and parsed
-// integers, never from raw pane text, so a coloured span cannot inject markup.
-function ansiToHTML(raw) {
-  const st = { fg: null, bg: null, bold: false, dim: false,
-               italic: false, underline: false, reverse: false };
-  const reset = () => {
-    st.fg = st.bg = null;
-    st.bold = st.dim = st.italic = st.underline = st.reverse = false;
-  };
-  const apply = (codes) => {
-    for (let i = 0; i < codes.length; i++) {
-      const c = codes[i];
-      if (c === 0) reset();
-      else if (c === 1) st.bold = true;
-      else if (c === 2) st.dim = true;
-      else if (c === 3) st.italic = true;
-      else if (c === 4) st.underline = true;
-      else if (c === 7) st.reverse = true;
-      else if (c === 22) st.bold = st.dim = false;
-      else if (c === 23) st.italic = false;
-      else if (c === 24) st.underline = false;
-      else if (c === 27) st.reverse = false;
-      else if (c >= 30 && c <= 37) st.fg = ANSI16[c - 30];
-      else if (c === 39) st.fg = null;
-      else if (c >= 40 && c <= 47) st.bg = ANSI16[c - 40];
-      else if (c === 49) st.bg = null;
-      else if (c >= 90 && c <= 97) st.fg = ANSI16[c - 82];
-      else if (c >= 100 && c <= 107) st.bg = ANSI16[c - 92];
-      else if (c === 38 || c === 48) {
-        const key = c === 38 ? "fg" : "bg";
-        if (codes[i + 1] === 5) { st[key] = ansi256(codes[i + 2] | 0); i += 2; }
-        else if (codes[i + 1] === 2) {
-          const ch = (v) => Math.max(0, Math.min(255, v | 0));
-          st[key] = "rgb(" + ch(codes[i+2]) + "," + ch(codes[i+3]) + "," + ch(codes[i+4]) + ")";
-          i += 4;
-        }
-      }
-    }
-  };
-  const style = () => {
-    let f = st.fg, b = st.bg;
-    if (st.reverse) { f = st.bg || "var(--bg)"; b = st.fg || "var(--fg)"; }
-    const p = [];
-    if (f) p.push("color:" + f);
-    if (b) p.push("background:" + b);
-    if (st.bold) p.push("font-weight:700");
-    if (st.dim) p.push("opacity:.6");
-    if (st.italic) p.push("font-style:italic");
-    if (st.underline) p.push("text-decoration:underline");
-    return p.join(";");
-  };
-
-  let out = "", last = 0, m;
-  // First alternative is SGR (parsed); the rest are other CSI/OSC escapes (dropped).
-  const re = /\x1b\[([0-9;]*)m|\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-  const emit = (from, to) => {
-    if (to <= from) return;
-    const seg = escapeHTML(raw.slice(from, to));
-    const s = style();
-    out += s ? '<span style="' + s + '">' + seg + "</span>" : seg;
-  };
-  while ((m = re.exec(raw)) !== null) {
-    emit(last, m.index);
-    if (m[1] !== undefined) {
-      apply(m[1] === "" ? [0] : m[1].split(";").map((n) => parseInt(n, 10) || 0));
-    }
-    last = re.lastIndex;
-  }
-  emit(last, raw.length);
-  return out;
-}
-
-// wrapRuleLines replaces separator lines (rows of U+2500 ─ or ASCII hyphens)
-// with private-use markers that survive HTML escaping. setContent then converts
-// the markers to a CSS-drawn rule, so the original terminal-width run of rule
-// characters never wraps or leaks into the rendered pane.
-const RULE_OPEN = "", RULE_CLOSE = "";
-const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-function wrapRuleLines(text) {
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const visible = lines[i].replace(ANSI_STRIP_RE, "");
-    const ruleChars = visible.replace(/\s/g, "");
-    if (!/^[─-]+$/.test(ruleChars)) continue;
-    if (ruleChars.length < 8) continue;
-    lines[i] = RULE_OPEN + RULE_CLOSE;
-  }
-  return lines.join("\n");
-}
-
-function setContent(text) {
-  const pre = $("content");
-  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-  const html = ansiToHTML(wrapRuleLines(text))
-    .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
-    .replaceAll(RULE_CLOSE, "</span>");
-  pre.innerHTML = html;
-  if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
 // renderOptions rebuilds the quick-answer bar from a detected menu prompt:

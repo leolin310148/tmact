@@ -201,6 +201,7 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 	handler := (&Server{}).Handler()
 	app := servedBody(t, handler, "/app.js")
+	terminal := servedBody(t, handler, "/js/terminal.js")
 	style := servedBody(t, handler, "/app.css")
 
 	for _, want := range []string{
@@ -208,12 +209,18 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`function paneIndicator(p)`,
 		`class: cls.join(" ")`,
 		`if (!p.asking) return null;`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing %q", want)
+		}
+	}
+	for _, want := range []string{
 		`/^[─-]+$/`,
 		`lines[i] = RULE_OPEN + RULE_CLOSE;`,
 		`role="separator"`,
 	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing %q", want)
+		if !strings.Contains(terminal, want) {
+			t.Fatalf("terminal module missing %q", want)
 		}
 	}
 	for _, want := range []string{
