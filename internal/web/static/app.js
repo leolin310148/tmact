@@ -8,6 +8,7 @@ import {
 } from "./js/api.js";
 import { $, clamp, h, isMobile } from "./js/dom.js";
 import { state, upload, voice } from "./js/state.js";
+import { createPaneStream } from "./js/stream.js";
 import { setContent } from "./js/terminal.js";
 
 const POLL_MS = 1000;
@@ -239,41 +240,23 @@ function stopPolling() {
 
 /* ---- pane WebSocket (output stream + input relay) ---- */
 
-let ws = null, wsRetry = null;
+const paneStream = createPaneStream({
+  getSelectedPane: () => state.selected,
+  onContent: (text, question) => { setContent(text); renderOptions(question); },
+  onQuestion: renderOptions,
+  onError: showInputError,
+});
 
 function closeWS() {
-  if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
-  if (ws) { const old = ws; ws = null; try { old.close(); } catch (e) {} }
-  renderOptions(null);
+  paneStream.close();
 }
 
 function openWS(paneID) {
-  closeWS();
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const sock = new WebSocket(`${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}`);
-  ws = sock;
-  sock.onmessage = (ev) => {
-    let m;
-    try { m = JSON.parse(ev.data); } catch (e) { return; }
-    if (m.t === "content") { setContent(m.s); renderOptions(m.q); }
-    else if (m.t === "error") showInputError(m.s);
-  };
-  sock.onclose = () => {
-    if (ws !== sock) return;
-    ws = null;
-    if (state.selected === paneID && !document.hidden) {
-      wsRetry = setTimeout(() => { if (state.selected === paneID) openWS(paneID); }, 1000);
-    }
-  };
-  sock.onerror = () => {};
+  paneStream.open(paneID);
 }
 
 function wsSend(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(obj));
-    return true;
-  }
-  return false;
+  return paneStream.send(obj);
 }
 
 function selectPane(paneID) {
