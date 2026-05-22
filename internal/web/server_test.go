@@ -139,6 +139,7 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`openFileUploadPicker`,
 		`upload-btn").addEventListener("click"`,
 		`selection-btn").addEventListener("click", toggleSelectionMode)`,
+		`const files = Array.from(e.target.files || [])`,
 		`e.key === "Tab" && e.shiftKey`,
 		`return { t: "key", k: "BTab" }`,
 		`if (state.selectionMode)`,

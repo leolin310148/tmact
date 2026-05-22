@@ -949,7 +949,7 @@ function wireInput() {
   $("upload-btn").addEventListener("click", openFileUploadPicker);
   $("selection-btn").addEventListener("click", toggleSelectionMode);
   $("file-upload").addEventListener("change", (e) => {
-    const files = e.target.files;
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
     uploadFilesToPane(files);
   });
