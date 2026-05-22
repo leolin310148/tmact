@@ -967,26 +967,14 @@ function wireInput() {
   });
 
   const direct = $("direct-input");
-  // A plain click/tap on the output focuses the invisible overlay — direct
-  // keystroke passthrough on desktop, and on mobile this is what raises the
-  // keyboard. But a click-drag is a text selection: focusing the overlay
-  // there would collapse the selection and make ⌘/Ctrl+C copy the empty
-  // overlay instead of the pane. So only a click that neither moved nor left
-  // a selection focuses the overlay; a drag instead blurs it, leaving the
-  // selection on the <pre> for the copy.
+  // A plain click/tap on the output focuses the invisible overlay for direct
+  // keystroke passthrough. Text selection is intentionally reserved for
+  // selection mode so direct mode does not need focus/selection heuristics.
   const content = $("content");
-  let pressX = 0, pressY = 0;
-  content.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
-  content.addEventListener("mouseup", (e) => {
+  content.addEventListener("mouseup", () => {
     if (state.selectionMode) {
       direct.blur();
       renderMode();
-      return;
-    }
-    const moved = Math.abs(e.clientX - pressX) > 4 || Math.abs(e.clientY - pressY) > 4;
-    const sel = window.getSelection();
-    if (moved || (sel && !sel.isCollapsed && sel.toString() !== "")) {
-      direct.blur();
       return;
     }
     direct.focus();
