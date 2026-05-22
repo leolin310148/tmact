@@ -498,9 +498,9 @@ func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"path": path})
 }
 
-// handleUploadFile accepts an explicit browser file upload, writes it to a
-// server-side file, and returns that file's absolute path. The browser then
-// pastes the path into the selected pane because tmux input is text-only.
+// handleUploadFile accepts explicit browser file uploads, writes them to
+// server-side files, and returns their absolute paths. The browser then pastes
+// the paths into the selected pane because tmux input is text-only.
 func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -517,12 +517,10 @@ func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
+	if r.MultipartForm == nil || len(r.MultipartForm.File["file"]) == 0 {
 		writeJSONError(w, http.StatusBadRequest, `missing "file" upload`)
 		return
 	}
-	defer file.Close()
 
 	dir := s.uploadDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -531,30 +529,54 @@ func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := "file"
-	if header != nil {
-		name = sanitizeUploadFilename(header.Filename)
+	var paths []string
+	for _, header := range r.MultipartForm.File["file"] {
+		path, err := saveUploadedFile(dir, header)
+		if err != nil {
+			for _, saved := range paths {
+				_ = os.Remove(saved)
+			}
+			s.logf("upload-file: save file in %s: %v", dir, err)
+			writeJSONError(w, http.StatusInternalServerError, "could not save the upload")
+			return
+		}
+		paths = append(paths, path)
 	}
+
+	resp := map[string]any{"paths": paths}
+	if len(paths) > 0 {
+		resp["path"] = paths[0]
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func saveUploadedFile(dir string, header *multipart.FileHeader) (string, error) {
+	if header == nil {
+		return "", errors.New("missing file header")
+	}
+	file, err := header.Open()
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	name := sanitizeUploadFilename(header.Filename)
 	out, err := os.CreateTemp(dir, "upload-"+time.Now().Format("20060102-150405")+"-*-"+name)
 	if err != nil {
-		s.logf("upload-file: create file in %s: %v", dir, err)
-		writeJSONError(w, http.StatusInternalServerError, "could not save the upload")
-		return
+		return "", err
 	}
 	defer out.Close()
 
 	if _, err := io.Copy(out, file); err != nil {
 		_ = os.Remove(out.Name())
-		s.logf("upload-file: write %s: %v", out.Name(), err)
-		writeJSONError(w, http.StatusInternalServerError, "could not save the upload")
-		return
+		return "", err
 	}
 
 	path := out.Name()
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	return path, nil
 }
 
 func sanitizeUploadFilename(name string) string {

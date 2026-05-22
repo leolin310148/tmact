@@ -125,6 +125,7 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`id="upload-btn"`,
 		`id="selection-btn"`,
 		`id="file-upload"`,
+		`id="file-upload" type="file" multiple hidden`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index page missing %q", want)
@@ -606,14 +607,26 @@ func TestSniffImageExtension(t *testing.T) {
 
 func fileUploadRequest(t *testing.T, field, filename, bodyText string) *http.Request {
 	t.Helper()
+	return filesUploadRequest(t, field, []uploadPart{{filename: filename, bodyText: bodyText}})
+}
+
+type uploadPart struct {
+	filename string
+	bodyText string
+}
+
+func filesUploadRequest(t *testing.T, field string, parts []uploadPart) *http.Request {
+	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile(field, filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.WriteString(part, bodyText); err != nil {
-		t.Fatal(err)
+	for _, upload := range parts {
+		part, err := mw.CreateFormFile(field, upload.filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(part, upload.bodyText); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := mw.Close(); err != nil {
 		t.Fatal(err)
@@ -632,13 +645,19 @@ func TestUploadFileSavesFileAndReturnsPath(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
 	}
-	var got map[string]string
+	var got struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	path := got["path"]
+	path := got.Path
 	if !strings.HasPrefix(path, dir) {
 		t.Fatalf("path = %q, want it saved under %q", path, dir)
+	}
+	if len(got.Paths) != 1 || got.Paths[0] != path {
+		t.Fatalf("paths = %#v, want single path %q", got.Paths, path)
 	}
 	if !strings.HasSuffix(path, "notes.txt") {
 		t.Fatalf("path = %q, want sanitized filename suffix notes.txt", path)
@@ -649,6 +668,50 @@ func TestUploadFileSavesFileAndReturnsPath(t *testing.T) {
 	}
 	if string(data) != "hello upload" {
 		t.Fatalf("saved bytes = %q, want uploaded file verbatim", string(data))
+	}
+}
+
+func TestUploadFileSavesMultipleFilesAndReturnsPaths(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{UploadDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, filesUploadRequest(t, "file", []uploadPart{
+		{filename: "one.txt", bodyText: "first"},
+		{filename: "../two?.md", bodyText: "second"},
+	}))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Paths) != 2 {
+		t.Fatalf("paths = %#v, want two saved files", got.Paths)
+	}
+	if got.Path != got.Paths[0] {
+		t.Fatalf("path = %q, want first path %q", got.Path, got.Paths[0])
+	}
+
+	for i, wantBody := range []string{"first", "second"} {
+		path := got.Paths[i]
+		if !strings.HasPrefix(path, dir) {
+			t.Fatalf("path %d = %q, want it saved under %q", i, path, dir)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("saved upload %d not readable: %v", i, err)
+		}
+		if string(data) != wantBody {
+			t.Fatalf("saved bytes %d = %q, want %q", i, string(data), wantBody)
+		}
+	}
+	if !strings.HasSuffix(got.Paths[1], "two.md") {
+		t.Fatalf("second path = %q, want sanitized filename suffix two.md", got.Paths[1])
 	}
 }
 

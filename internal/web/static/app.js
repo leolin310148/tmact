@@ -901,8 +901,9 @@ async function pasteImage(file, place) {
   }
 }
 
-async function uploadFileToPane(file) {
-  if (upload.busy || !file) return;
+async function uploadFilesToPane(files) {
+  files = Array.from(files || []).filter(Boolean);
+  if (upload.busy || files.length === 0) return;
   if (!state.selected) {
     showInputError("select a pane first");
     return;
@@ -910,18 +911,19 @@ async function uploadFileToPane(file) {
 
   upload.busy = true;
   $("upload-btn").disabled = true;
-  setInputStatus("uploading file…");
+  setInputStatus(files.length === 1 ? "uploading file…" : "uploading " + files.length + " files…");
   try {
     const form = new FormData();
-    form.append("file", file, file.name || "upload");
+    files.forEach((file, i) => form.append("file", file, file.name || ("upload-" + (i + 1))));
     const res = await fetch("/api/upload-file", { method: "POST", body: form });
     let data = {};
     try { data = await res.json(); } catch (e) {}
-    if (!res.ok || !data.path) {
+    const paths = Array.isArray(data.paths) ? data.paths : (data.path ? [data.path] : []);
+    if (!res.ok || paths.length === 0) {
       throw new Error(data.error || ("file upload failed: HTTP " + res.status));
     }
     setInputStatus("");
-    if (!wsSend({ t: "text", s: data.path + " " })) {
+    if (!wsSend({ t: "text", s: paths.join(" ") + " " })) {
       showInputError("uploaded, but pane is not connected");
     }
   } catch (e) {
@@ -1104,9 +1106,9 @@ function wireInput() {
   $("upload-btn").addEventListener("click", openFileUploadPicker);
   $("selection-btn").addEventListener("click", toggleSelectionMode);
   $("file-upload").addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
+    const files = e.target.files;
     e.target.value = "";
-    uploadFileToPane(file);
+    uploadFilesToPane(files);
   });
   $("record-btn").addEventListener("click", () => startRecording({ confirmOnStop: false }));
   $("rec-stop").addEventListener("click", stopRecording);
