@@ -233,7 +233,7 @@ func PasteText(target string, text string, enter bool) error {
 		_ = runTmux("delete-buffer", "-b", bufferName)
 	}()
 
-	if err := runTmux("paste-buffer", "-t", target, "-b", bufferName); err != nil {
+	if err := runTmux(pasteBufferArgs(target, bufferName)...); err != nil {
 		return err
 	}
 	if enter {
@@ -241,6 +241,10 @@ func PasteText(target string, text string, enter bool) error {
 		return SendKeys(target, []string{"Enter"})
 	}
 	return nil
+}
+
+func pasteBufferArgs(target string, bufferName string) []string {
+	return []string{"paste-buffer", "-p", "-t", target, "-b", bufferName}
 }
 
 func SendLiteral(target string, text string) error {

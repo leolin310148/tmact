@@ -69,3 +69,16 @@ func TestSetSessionOptionValidatesInput(t *testing.T) {
 		t.Fatal("expected empty key error")
 	}
 }
+
+func TestPasteBufferArgsUseBracketedPaste(t *testing.T) {
+	got := pasteBufferArgs("%7", "tmact-paste-test")
+	want := []string{"paste-buffer", "-p", "-t", "%7", "-b", "tmact-paste-test"}
+	if len(got) != len(want) {
+		t.Fatalf("args len = %d, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg[%d] = %q, want %q; all args: %v", i, got[i], want[i], got)
+		}
+	}
+}
