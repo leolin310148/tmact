@@ -749,6 +749,10 @@
   }
   .qb-add:active { background: var(--border); }
 
+  @media (any-pointer: coarse) {
+    .key-area { display: flex; }
+  }
+
   @media (max-width: 760px) {
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */

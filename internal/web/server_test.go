@@ -155,6 +155,8 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		t.Fatal("api module missing upload endpoint")
 	}
 	for _, want := range []string{
+		`@media (any-pointer: coarse)`,
+		`.key-area { display: flex; }`,
 		`.selection-btn`,
 		`.selection-btn.active`,
 		`.content-wrap.selection-mode::after`,
