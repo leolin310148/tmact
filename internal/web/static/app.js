@@ -830,6 +830,7 @@ function translateKey(e) {
   // pasted (bracketed paste), so the agent's input box takes it as a newline
   // rather than the Return that a plain Enter sends.
   if (e.key === "Enter" && e.shiftKey) return { t: "text", s: "\n" };
+  if (e.key === "Tab" && e.shiftKey) return { t: "key", k: "BTab" };
   if (KEYMAP[e.key]) return { t: "key", k: KEYMAP[e.key] };
   if (e.key.length === 1) return { t: "text", s: e.key };
   return null;
