@@ -90,7 +90,9 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 	handler := (&Server{}).Handler()
 	body := servedBody(t, handler, "/")
 	app := servedBody(t, handler, "/app.js")
+	voice := servedBody(t, handler, "/js/voice.js")
 	api := servedBody(t, handler, "/js/api.js")
+	scripts := app + "\n" + voice
 
 	for _, want := range []string{
 		`id="record-btn"`,
@@ -109,8 +111,8 @@ func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
 		`startRecording({ confirmOnStop: false })`,
 		`suppressRecordTextInput`,
 	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing %q", want)
+		if !strings.Contains(scripts, want) {
+			t.Fatalf("voice scripts missing %q", want)
 		}
 	}
 	if !strings.Contains(api, `"/api/transcribe"`) {
@@ -123,7 +125,9 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 	body := servedBody(t, handler, "/")
 	style := servedBody(t, handler, "/app.css")
 	app := servedBody(t, handler, "/app.js")
+	help := servedBody(t, handler, "/js/help.js")
 	api := servedBody(t, handler, "/js/api.js")
+	scripts := app + "\n" + help
 
 	for _, want := range []string{
 		`id="upload-btn"`,
@@ -149,8 +153,8 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`tone: "selection"`,
 		`tone: "settings"`,
 	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing %q", want)
+		if !strings.Contains(scripts, want) {
+			t.Fatalf("app/help scripts missing %q", want)
 		}
 	}
 	if !strings.Contains(api, `"/api/upload-file"`) {
@@ -179,7 +183,6 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	handler := (&Server{}).Handler()
 	body := servedBody(t, handler, "/")
 	style := servedBody(t, handler, "/app.css")
-	app := servedBody(t, handler, "/app.js")
 	api := servedBody(t, handler, "/js/api.js")
 
 	for _, want := range []string{
@@ -207,11 +210,12 @@ func TestIndexIncludesSettingsControls(t *testing.T) {
 	if !strings.Contains(api, `"/api/version"`) {
 		t.Fatal("api module missing version API call")
 	}
-	if !strings.Contains(app, `applyRunningEffect`) {
-		t.Fatal("app script missing running effect setting")
+	settings := servedBody(t, handler, "/js/settings.js")
+	if !strings.Contains(settings, `applyRunningEffect`) {
+		t.Fatal("settings script missing running effect setting")
 	}
-	if !strings.Contains(app, `loadVersionInfo`) {
-		t.Fatal("app script missing version info loader")
+	if !strings.Contains(settings, `loadVersionInfo`) {
+		t.Fatal("settings script missing version info loader")
 	}
 }
 
