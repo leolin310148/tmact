@@ -657,6 +657,27 @@ func TestImageEndpointServesAnyReadableImagePath(t *testing.T) {
 	}
 }
 
+func TestImageEndpointServesFileURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.png")
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape("file://"+path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != png {
+		t.Fatalf("body = %q, want image bytes", rec.Body.String())
+	}
+}
+
 func TestImageEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "img"), 0o755); err != nil {
@@ -679,6 +700,42 @@ func TestImageEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "image/gif") {
 		t.Fatalf("Content-Type = %q, want image/gif", got)
+	}
+}
+
+func TestImageEndpointRejectsRemoteURL(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "https:", "example.test"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "https:", "example.test", "sample.png")
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/image?path="+url.QueryEscape("https://example.test/sample.png")+"&cwd="+url.QueryEscape(dir), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestImageEndpointRejectsHomeRelativePath(t *testing.T) {
+	dir := t.TempDir()
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/image?path="+url.QueryEscape("~/sample.png")+"&cwd="+url.QueryEscape(dir), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
 

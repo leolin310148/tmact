@@ -97,6 +97,13 @@ function ansiToHTML(raw) {
 const RULE_OPEN = "", RULE_CLOSE = "";
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
+const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
+
+function previewableImagePath(path) {
+  if (path.startsWith("~/")) return false;
+  const scheme = URL_SCHEME_RE.exec(path);
+  return !scheme || scheme[0].toLowerCase() === "file://";
+}
 
 function wrapRuleLines(text) {
   const lines = text.split("\n");
@@ -121,6 +128,7 @@ function markImagePaths(root, cwd) {
     let m, last = 0;
     const frag = document.createDocumentFragment();
     while ((m = IMAGE_PATH_RE.exec(text)) !== null) {
+      if (!previewableImagePath(m[0])) continue;
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const span = document.createElement("span");
       span.className = "image-path";

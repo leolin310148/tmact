@@ -653,16 +653,19 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, `missing "path" parameter`)
 		return
 	}
-	if strings.HasPrefix(path, "file://") {
-		path = strings.TrimPrefix(path, "file://")
-	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "could not resolve home directory")
+	if scheme, ok := localImagePathScheme(path); ok {
+		if !strings.EqualFold(scheme, "file") {
+			writeJSONError(w, http.StatusBadRequest, "unsupported image path scheme")
 			return
 		}
-		path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		path = path[len(scheme)+len("://"):]
+		if strings.HasPrefix(path, "localhost/") {
+			path = strings.TrimPrefix(path, "localhost")
+		}
+	}
+	if strings.HasPrefix(path, "~/") {
+		writeJSONError(w, http.StatusBadRequest, "home-relative image paths are not supported")
+		return
 	}
 	if !filepath.IsAbs(path) {
 		cwd := strings.TrimSpace(r.URL.Query().Get("cwd"))
@@ -702,6 +705,28 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Cache-Control", "no-store")
 	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+}
+
+func localImagePathScheme(path string) (string, bool) {
+	i := strings.Index(path, "://")
+	if i <= 0 {
+		return "", false
+	}
+	scheme := path[:i]
+	for j, r := range scheme {
+		if j == 0 {
+			if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
+				return "", false
+			}
+			continue
+		}
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') ||
+			(r >= '0' && r <= '9') || r == '+' || r == '-' || r == '.' {
+			continue
+		}
+		return "", false
+	}
+	return scheme, true
 }
 
 // sniffImageExtension reads an upload's leading bytes and returns a canonical
