@@ -195,6 +195,13 @@
     border-top: 1px solid var(--border);
     vertical-align: top;
   }
+  .image-path {
+    color: var(--direct);
+    text-decoration: underline dotted rgba(121,192,255,0.55);
+    text-underline-offset: 2px;
+    cursor: zoom-in;
+    -webkit-touch-callout: none;
+  }
   /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
      mouse scroll/selection fall through to the <pre> behind it. */
   #direct-input {
@@ -409,6 +416,48 @@
   .rec-overlay.hotkey-recording .rec-send,
   .rec-overlay.hotkey-recording .rec-cancel,
   .rec-overlay.hotkey-recording .rec-stop { display: none; }
+
+  .image-preview {
+    position: fixed; inset: 0; z-index: 70;
+    display: flex; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top, 0px))
+             calc(16px + env(safe-area-inset-right, 0px))
+             calc(16px + env(safe-area-inset-bottom, 0px))
+             calc(16px + env(safe-area-inset-left, 0px));
+    background: rgba(8,10,14,0.86);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .image-preview[hidden] { display: none; }
+  .image-preview-card {
+    position: relative;
+    max-width: 96vw; max-height: 92vh;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+  }
+  .image-preview img {
+    display: block;
+    max-width: calc(96vw - 20px);
+    max-height: calc(92vh - 54px);
+    object-fit: contain;
+    background: var(--bg);
+  }
+  .image-preview-path {
+    max-width: calc(96vw - 20px);
+    color: var(--fg-dim);
+    font: 11px/1.35 var(--mono);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .image-preview-close {
+    position: absolute; top: -10px; right: -10px;
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+  }
+  .image-preview-close svg { width: 13px; height: 13px; display: block; }
 
   /* Settings — opened from the gear in the status line. */
   .gear-btn {

@@ -206,7 +206,7 @@ func capturePane(target string, lines int, escapes bool) (string, error) {
 
 func PasteText(target string, text string, enter bool) error {
 	trimmed := strings.TrimRight(text, "\n")
-	if trimmed != "" && !strings.Contains(trimmed, "\n") {
+	if trimmed != "" && !strings.Contains(trimmed, "\n") && canSendLiteral(trimmed) {
 		if err := SendLiteral(target, trimmed); err != nil {
 			return err
 		}
@@ -241,6 +241,12 @@ func PasteText(target string, text string, enter bool) error {
 		return SendKeys(target, []string{"Enter"})
 	}
 	return nil
+}
+
+func canSendLiteral(text string) bool {
+	// tmux parses a standalone semicolon argument as a command separator, even
+	// when argv came from exec.Command. Use paste-buffer for that literal.
+	return text != ";"
 }
 
 func pasteBufferArgs(target string, bufferName string) []string {

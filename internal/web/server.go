@@ -172,6 +172,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/paste-image", s.handlePasteImage)
 	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
+	mux.HandleFunc("/api/image", s.handleImage)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }
@@ -641,6 +642,68 @@ func sanitizeUploadFilename(name string) string {
 	return base + ext
 }
 
+func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		writeJSONError(w, http.StatusBadRequest, `missing "path" parameter`)
+		return
+	}
+	if strings.HasPrefix(path, "file://") {
+		path = strings.TrimPrefix(path, "file://")
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "could not resolve home directory")
+			return
+		}
+		path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+	}
+	if !filepath.IsAbs(path) {
+		cwd := strings.TrimSpace(r.URL.Query().Get("cwd"))
+		if cwd == "" || !filepath.IsAbs(cwd) {
+			writeJSONError(w, http.StatusBadRequest, `relative image paths require an absolute "cwd" parameter`)
+			return
+		}
+		path = filepath.Join(cwd, path)
+	}
+	path = filepath.Clean(path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "image not readable")
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "image not readable")
+		return
+	}
+	if info.IsDir() {
+		writeJSONError(w, http.StatusBadRequest, "path is a directory")
+		return
+	}
+
+	ext := sniffImageExtension(file)
+	mimeType := imageMIMEByExt[ext]
+	if mimeType == "" {
+		writeJSONError(w, http.StatusUnsupportedMediaType,
+			"unsupported image format (expected PNG, JPEG, GIF, WebP, or BMP)")
+		return
+	}
+
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+}
+
 // sniffImageExtension reads an upload's leading bytes and returns a canonical
 // image extension (no dot), or "" for anything it does not recognise as an
 // image. It rewinds the reader so the caller still sees the whole file.
@@ -665,6 +728,14 @@ func sniffImageExtension(rs io.ReadSeeker) string {
 	default:
 		return ""
 	}
+}
+
+var imageMIMEByExt = map[string]string{
+	"png":  "image/png",
+	"jpg":  "image/jpeg",
+	"gif":  "image/gif",
+	"webp": "image/webp",
+	"bmp":  "image/bmp",
 }
 
 // inputMsg is a client-to-server WebSocket message.

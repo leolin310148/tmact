@@ -96,6 +96,8 @@ function ansiToHTML(raw) {
 // characters never wraps or leaks into the rendered pane.
 const RULE_OPEN = "", RULE_CLOSE = "";
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
+
 function wrapRuleLines(text) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -108,12 +110,40 @@ function wrapRuleLines(text) {
   return lines.join("\n");
 }
 
-export function setContent(text) {
+function markImagePaths(root, cwd) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    IMAGE_PATH_RE.lastIndex = 0;
+    let m, last = 0;
+    const frag = document.createDocumentFragment();
+    while ((m = IMAGE_PATH_RE.exec(text)) !== null) {
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const span = document.createElement("span");
+      span.className = "image-path";
+      span.textContent = m[0];
+      span.dataset.path = m[0];
+      if (cwd) span.dataset.cwd = cwd;
+      span.title = "Command-click to preview image";
+      frag.appendChild(span);
+      last = IMAGE_PATH_RE.lastIndex;
+    }
+    if (last === 0) continue;
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+export function setContent(text, opts) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
   const html = ansiToHTML(wrapRuleLines(text))
     .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
     .replaceAll(RULE_CLOSE, "</span>");
   pre.innerHTML = html;
+  markImagePaths(pre, opts && opts.cwd);
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }

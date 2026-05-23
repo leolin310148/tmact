@@ -240,7 +240,11 @@ function stopPolling() {
 
 const paneStream = createPaneStream({
   getSelectedPane: () => state.selected,
-  onContent: (text, question) => { setContent(text); renderOptions(question); },
+  onContent: (text, question) => {
+    const p = findPane(state.selected);
+    setContent(text, { cwd: p && p.cwd });
+    renderOptions(question);
+  },
   onQuestion: renderOptions,
   onError: showInputError,
 });
@@ -384,6 +388,64 @@ const {
   placeInDraft,
 } = _upload;
 
+/* ---- image path preview ---- */
+
+let imagePreview = null;
+function ensureImagePreview() {
+  if (imagePreview) return imagePreview;
+
+  const overlay = h("div", { class: "image-preview", hidden: "" },
+    h("div", { class: "image-preview-card" },
+      h("button", { class: "image-preview-close", type: "button", title: "close", "aria-label": "close image preview" },
+        h("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "aria-hidden": "true" },
+          h("path", { d: "M18 6 6 18" }),
+          h("path", { d: "m6 6 12 12" }))),
+      h("img", { alt: "preview" }),
+      h("div", { class: "image-preview-path" })));
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.hidden = true;
+    overlay.querySelector("img").removeAttribute("src");
+  };
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  overlay.querySelector(".image-preview-close").addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.hidden) close();
+  });
+
+  imagePreview = { overlay, close };
+  return imagePreview;
+}
+
+function previewImagePath(path, cwd) {
+  const ui = ensureImagePreview();
+  const qs = new URLSearchParams({ path });
+  if (cwd) qs.set("cwd", cwd);
+  ui.overlay.querySelector("img").src = "/api/image?" + qs.toString();
+  ui.overlay.querySelector(".image-preview-path").textContent = path;
+  ui.overlay.hidden = false;
+}
+
+const IMAGE_LONG_PRESS_MS = 550;
+const IMAGE_LONG_PRESS_MOVE = 10;
+let imagePress = null;
+
+function clearImagePress() {
+  if (imagePress && imagePress.timer) clearTimeout(imagePress.timer);
+  imagePress = null;
+}
+
+function imageTarget(e) {
+  return e.target && e.target.closest ? e.target.closest(".image-path") : null;
+}
+
+function openImageTarget(target) {
+  previewImagePath(target.dataset.path || target.textContent, target.dataset.cwd || "");
+}
+
 /* ---- mode 2: direct keystroke passthrough ---- */
 
 const KEYMAP = {
@@ -500,6 +562,15 @@ function wireInput() {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       sendDraft();
+      return;
+    }
+    if (!e.isComposing && e.key === "Enter" && !e.shiftKey && state.selected && !draft.value.trim()) {
+      e.preventDefault();
+      state.selectionMode = false;
+      syncSelectionButton();
+      $("direct-input").focus();
+      renderMode();
+      sendDirect({ t: "key", k: "Enter" });
     }
   });
   // An image paste uploads the picture and drops its path into the draft; a
@@ -553,6 +624,46 @@ function wireInput() {
     }
     direct.focus();
   });
+  content.addEventListener("click", (e) => {
+    if (imagePress && imagePress.opened) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearImagePress();
+      return;
+    }
+    const target = imageTarget(e);
+    if (!target || !e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openImageTarget(target);
+  });
+  content.addEventListener("pointerdown", (e) => {
+    const target = imageTarget(e);
+    if (!target || e.pointerType === "mouse") return;
+    clearImagePress();
+    imagePress = {
+      target,
+      x: e.clientX,
+      y: e.clientY,
+      opened: false,
+      timer: setTimeout(() => {
+        if (!imagePress || imagePress.target !== target) return;
+        imagePress.opened = true;
+        openImageTarget(target);
+      }, IMAGE_LONG_PRESS_MS),
+    };
+  });
+  content.addEventListener("pointermove", (e) => {
+    if (!imagePress) return;
+    const dx = Math.abs(e.clientX - imagePress.x);
+    const dy = Math.abs(e.clientY - imagePress.y);
+    if (dx > IMAGE_LONG_PRESS_MOVE || dy > IMAGE_LONG_PRESS_MOVE) clearImagePress();
+  });
+  content.addEventListener("pointerup", () => {
+    if (!imagePress || imagePress.opened) return;
+    clearImagePress();
+  });
+  content.addEventListener("pointercancel", clearImagePress);
   direct.addEventListener("keydown", (e) => {
     if (state.selectionMode) {
       direct.blur();

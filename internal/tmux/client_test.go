@@ -82,3 +82,12 @@ func TestPasteBufferArgsUseBracketedPaste(t *testing.T) {
 		}
 	}
 }
+
+func TestCanSendLiteralRejectsStandaloneSemicolon(t *testing.T) {
+	if canSendLiteral(";") {
+		t.Fatal("standalone semicolon must use paste-buffer, not send-keys -l")
+	}
+	if !canSendLiteral("a;b") {
+		t.Fatal("embedded semicolon should remain eligible for literal send")
+	}
+}

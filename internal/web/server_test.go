@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,6 +148,8 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`e.key === "Tab" && e.shiftKey`,
 		`return { t: "key", k: "BTab" }`,
 		`if (state.selectionMode)`,
+		`!draft.value.trim()`,
+		`sendDirect({ t: "key", k: "Enter" })`,
 		`selection mode so direct mode does not need focus/selection heuristics`,
 		`!state.selectionMode && document.activeElement === $("direct-input")`,
 		`tone: "upload"`,
@@ -239,9 +242,25 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`/^[─-]+$/`,
 		`lines[i] = RULE_OPEN + RULE_CLOSE;`,
 		`role="separator"`,
+		`IMAGE_PATH_RE`,
+		`span.className = "image-path"`,
+		`span.dataset.path`,
 	} {
 		if !strings.Contains(terminal, want) {
 			t.Fatalf("terminal module missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`previewImagePath`,
+		`new URLSearchParams({ path })`,
+		`e.target.closest(".image-path")`,
+		`!e.metaKey`,
+		`IMAGE_LONG_PRESS_MS`,
+		`pointerdown`,
+		`pointercancel`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing %q", want)
 		}
 	}
 	for _, want := range []string{
@@ -249,6 +268,9 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`.agent-icon.runtime-codex`,
 		`.agent-icon.runtime-copilot`,
 		`.agent-icon.runtime-gemini`,
+		`.image-path`,
+		`.image-preview`,
+		`.image-preview img`,
 		`@keyframes agent-shine`,
 		`@keyframes agent-rainbow`,
 		`display: block;`,
@@ -608,6 +630,72 @@ func TestPasteImageRejectsNonPOST(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestImageEndpointServesAnyReadableImagePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.png")
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "image/png") {
+		t.Fatalf("Content-Type = %q, want image/png", got)
+	}
+	if rec.Body.String() != png {
+		t.Fatalf("body = %q, want image bytes", rec.Body.String())
+	}
+}
+
+func TestImageEndpointResolvesRelativePathFromCWD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "img"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "img", "sample.gif")
+	gif := "GIF89a" + "preview bytes"
+	if err := os.WriteFile(path, []byte(gif), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/image?path="+url.QueryEscape("img/sample.gif")+"&cwd="+url.QueryEscape(dir), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "image/gif") {
+		t.Fatalf("Content-Type = %q, want image/gif", got)
+	}
+}
+
+func TestImageEndpointRejectsNonImage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "not-image.png")
+	if err := os.WriteFile(path, []byte("plain text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", rec.Code)
 	}
 }
 
