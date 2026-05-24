@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	DefaultStatePath       = "/tmp/tmact-status.json"
+	DefaultSocketPath      = "/tmp/tmact-statusd.sock"
 	DefaultInterval        = time.Second
 	DefaultStaleAfter      = 10 * time.Second
 	DefaultCaptureLines    = 40
@@ -17,7 +17,7 @@ const (
 
 type Config struct {
 	Interval           time.Duration
-	StatePath          string
+	SocketPath         string
 	LogPath            string
 	TmuxOptions        bool
 	CaptureLines       int
@@ -39,8 +39,8 @@ func (c Config) withDefaults() Config {
 	if c.Interval <= 0 {
 		c.Interval = DefaultInterval
 	}
-	if c.StatePath == "" {
-		c.StatePath = DefaultStatePath
+	if c.SocketPath == "" {
+		c.SocketPath = DefaultSocketPath
 	}
 	if c.CaptureLines <= 0 {
 		c.CaptureLines = DefaultCaptureLines

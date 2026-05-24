@@ -4,35 +4,45 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 /* ---- HTTP endpoints ---- */
 
-func TestSnapshotServesFileVerbatim(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "status.json")
-	body := `{"version":1,"summary":{"sessions":2}}`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestSnapshotReturnsLatestFromStore(t *testing.T) {
+	store := statusd.NewStore()
+	store.Publish(statusd.Snapshot{Version: 1, Summary: statusd.Summary{Sessions: 2}})
 
-	handler := (&Server{StatePath: path}).Handler()
+	handler := (&Server{Store: store}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if got := rec.Body.String(); got != body {
-		t.Fatalf("body = %q, want %q", got, body)
+	var got statusd.Snapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Summary.Sessions != 2 {
+		t.Fatalf("sessions = %d, want 2", got.Summary.Sessions)
 	}
 }
 
-func TestSnapshotMissingFileReturns503(t *testing.T) {
-	handler := (&Server{StatePath: filepath.Join(t.TempDir(), "absent.json")}).Handler()
+func TestSnapshotReturns503WhenStoreEmpty(t *testing.T) {
+	handler := (&Server{Store: statusd.NewStore()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+}
+
+func TestSnapshotReturns503WhenStoreNil(t *testing.T) {
+	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
 

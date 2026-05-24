@@ -10,12 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
@@ -37,10 +39,17 @@ const (
 
 // Server is the daemon-side HTTP server for the web UI.
 type Server struct {
-	// Addr is the listen address, e.g. "0.0.0.0:7890".
+	// Addr is the TCP listen address, e.g. "0.0.0.0:7890". May be empty when
+	// the server is only being served over a unix socket.
 	Addr string
-	// StatePath is the statusd snapshot file served verbatim at /api/snapshot.
-	StatePath string
+	// SocketPath is a unix-domain socket path the server also listens on,
+	// e.g. "/tmp/tmact-statusd.sock". Used as a cheap local-only IPC for the
+	// CLI. Either Addr, SocketPath, or both may be set.
+	SocketPath string
+	// Store is the in-memory snapshot store the daemon publishes to. Required
+	// for /api/snapshot and /api/snapshot/stream; absent only in narrow tests
+	// that exercise other endpoints.
+	Store *statusd.Store
 	// CapturePane captures pane output; defaults to tmux.CapturePane.
 	CapturePane func(target string, lines int) (string, error)
 	// SendText inserts literal text into a pane; defaults to tmux.PasteText.
@@ -187,26 +196,52 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	}{BuildTime: s.BuildTime})
 }
 
-// Serve runs the HTTP server until ctx is cancelled, then shuts down gracefully.
+// Serve runs the HTTP server until ctx is cancelled, then shuts down
+// gracefully. It serves the same handler on the TCP Addr (if set) and on the
+// unix SocketPath (if set); at least one must be configured.
 func (s *Server) Serve(ctx context.Context) error {
+	if s.Addr == "" && s.SocketPath == "" {
+		return errors.New("web.Server: Addr or SocketPath must be set")
+	}
+
 	srv := &http.Server{
-		Addr:              s.Addr,
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go s.runUploadsGC(ctx)
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- srv.ListenAndServe() }()
+	listeners, err := s.listeners()
+	if err != nil {
+		return err
+	}
+
+	errCh := make(chan error, len(listeners))
+	var wg sync.WaitGroup
+	for _, ln := range listeners {
+		wg.Add(1)
+		go func(ln net.Listener) {
+			defer wg.Done()
+			errCh <- srv.Serve(ln)
+		}(ln)
+	}
 
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
+		wg.Wait()
+		if s.SocketPath != "" {
+			_ = os.Remove(s.SocketPath)
+		}
 		return nil
 	case err := <-errCh:
+		_ = srv.Shutdown(context.Background())
+		wg.Wait()
+		if s.SocketPath != "" {
+			_ = os.Remove(s.SocketPath)
+		}
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
@@ -214,48 +249,54 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
+// listeners opens the configured TCP and/or unix-socket listeners. A stale
+// unix socket from a crashed prior run is removed first; the socket is created
+// with 0600 perms so other local users cannot send keys.
+func (s *Server) listeners() ([]net.Listener, error) {
+	var out []net.Listener
+	if s.Addr != "" {
+		ln, err := net.Listen("tcp", s.Addr)
+		if err != nil {
+			return nil, fmt.Errorf("listen tcp %s: %w", s.Addr, err)
+		}
+		out = append(out, ln)
+	}
+	if s.SocketPath != "" {
+		// Best-effort remove of a stale socket from a previous run. Ignore
+		// failure here so we surface a clearer error from Listen below.
+		_ = os.Remove(s.SocketPath)
+		ln, err := net.Listen("unix", s.SocketPath)
+		if err != nil {
+			for _, prev := range out {
+				_ = prev.Close()
+			}
+			return nil, fmt.Errorf("listen unix %s: %w", s.SocketPath, err)
+		}
+		if err := os.Chmod(s.SocketPath, 0o600); err != nil {
+			_ = ln.Close()
+			for _, prev := range out {
+				_ = prev.Close()
+			}
+			return nil, fmt.Errorf("chmod %s: %w", s.SocketPath, err)
+		}
+		out = append(out, ln)
+	}
+	return out, nil
+}
+
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
-	info, err := os.Stat(s.StatePath)
-	if err != nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "snapshot not available: "+err.Error())
+	if s.Store == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "snapshot store not configured")
 		return
 	}
-	etag := snapshotETag(info)
+	snap, ok := s.Store.Latest()
+	if !ok {
+		writeJSONError(w, http.StatusServiceUnavailable, "snapshot not yet available")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("ETag", etag)
-	if match := r.Header.Get("If-None-Match"); match != "" && etagMatches(match, etag) {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	data, err := os.ReadFile(s.StatePath)
-	if err != nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "snapshot not available: "+err.Error())
-		return
-	}
-	_, _ = w.Write(data)
-}
-
-// snapshotETag derives a weak ETag from the snapshot file's mtime+size — the
-// daemon rewrites the file in full each tick, so identical mtime+size means
-// identical bytes for any practical purpose.
-func snapshotETag(info os.FileInfo) string {
-	return fmt.Sprintf(`W/"%d-%d"`, info.ModTime().UnixNano(), info.Size())
-}
-
-// etagMatches handles the common If-None-Match shapes: a single ETag, a
-// comma-separated list, or "*".
-func etagMatches(header, etag string) bool {
-	header = strings.TrimSpace(header)
-	if header == "*" {
-		return true
-	}
-	for _, part := range strings.Split(header, ",") {
-		if strings.TrimSpace(part) == etag {
-			return true
-		}
-	}
-	return false
+	_ = json.NewEncoder(w).Encode(snap)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

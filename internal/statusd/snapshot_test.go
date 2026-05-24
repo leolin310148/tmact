@@ -3,8 +3,6 @@ package statusd
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -342,50 +340,46 @@ func TestBuildSnapshotDefaultsToFortyCaptureLines(t *testing.T) {
 	}
 }
 
-func TestRunOnceDoesNotOverwriteSnapshotOnScanFailure(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "status.json")
+func TestRunOnceDoesNotPublishSnapshotOnScanFailure(t *testing.T) {
 	good := newSnapshot(Config{}, time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC))
 	good.Summary.Panes = 7
-	if err := WriteSnapshot(path, good); err != nil {
-		t.Fatalf("WriteSnapshot returned error: %v", err)
-	}
 
 	daemon := NewDaemon(Config{
-		StatePath: path,
 		ListPanes: func() ([]tmux.Pane, error) {
 			return nil, errors.New("tmux unavailable")
 		},
 	})
+	daemon.Store().Publish(good)
 	if _, err := daemon.RunOnce(context.Background()); err == nil {
 		t.Fatal("expected scan error")
 	}
 
-	read, err := ReadSnapshot(path)
-	if err != nil {
-		t.Fatalf("ReadSnapshot returned error: %v", err)
+	got, ok := daemon.Store().Latest()
+	if !ok {
+		t.Fatal("store should still hold the prior snapshot")
 	}
-	if read.Summary.Panes != 7 {
-		t.Fatalf("snapshot was overwritten: %#v", read.Summary)
+	if got.Summary.Panes != 7 {
+		t.Fatalf("snapshot was overwritten: %#v", got.Summary)
 	}
 }
 
-func TestWriteAndReadSnapshot(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "status.json")
-	snapshot := newSnapshot(Config{}, time.Date(2026, 5, 12, 2, 0, 0, 0, time.UTC))
-	snapshot.Summary.Panes = 3
-
-	if err := WriteSnapshot(path, snapshot); err != nil {
-		t.Fatalf("WriteSnapshot returned error: %v", err)
+func TestRunOncePublishesSnapshot(t *testing.T) {
+	daemon := NewDaemon(Config{
+		InitialSamples: 1,
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "alpha", PaneID: "%1", Active: true}}, nil
+		},
+		CapturePane: func(string, int) (string, error) { return "ready\n", nil },
+	})
+	if _, err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
 	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatal(err)
+	got, ok := daemon.Store().Latest()
+	if !ok {
+		t.Fatal("Store should hold a snapshot after RunOnce")
 	}
-	read, err := ReadSnapshot(path)
-	if err != nil {
-		t.Fatalf("ReadSnapshot returned error: %v", err)
-	}
-	if read.Summary.Panes != 3 {
-		t.Fatalf("panes = %d", read.Summary.Panes)
+	if got.Summary.Panes != 1 {
+		t.Fatalf("panes = %d, want 1", got.Summary.Panes)
 	}
 }
 

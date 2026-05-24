@@ -146,20 +146,26 @@ func runStatusdStart(args []string) error {
 	if *flags.JSON {
 		return errors.New("--json is only valid with --once for statusd start")
 	}
-	if *webAddr != "" {
-		server := &web.Server{
-			Addr:        *webAddr,
-			StatePath:   cfg.StatePath,
-			CapturePane: tmux.CapturePaneANSI,
-			BuildTime:   buildVersionInfo().Time,
+
+	// Always serve the unix socket so CLI read/status can reach the daemon.
+	// The TCP --web-addr is additional and optional.
+	server := &web.Server{
+		Addr:        *webAddr,
+		SocketPath:  cfg.SocketPath,
+		Store:       daemon.Store(),
+		CapturePane: tmux.CapturePaneANSI,
+		BuildTime:   buildVersionInfo().Time,
+	}
+	go func() {
+		if err := server.Serve(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "statusd server stopped: %v\n", err)
 		}
-		go func() {
-			if err := server.Serve(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "statusd web server (%s) stopped: %v\n", *webAddr, err)
-			}
-		}()
+	}()
+	fmt.Fprintf(os.Stderr, "statusd IPC listening on %s\n", cfg.SocketPath)
+	if *webAddr != "" {
 		fmt.Fprintf(os.Stderr, "statusd web UI listening on %s\n", *webAddr)
 	}
+
 	err := daemon.Start(ctx)
 	if errors.Is(err, context.Canceled) {
 		return nil
@@ -178,8 +184,8 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 			cfg.Interval = d
 		}
 	}
-	if !set["state-path"] && file.StatePath != "" {
-		cfg.StatePath = file.StatePath
+	if !set["socket-path"] && file.SocketPath != "" {
+		cfg.SocketPath = file.SocketPath
 	}
 	if !set["log-path"] && file.LogPath != "" {
 		cfg.LogPath = file.LogPath
@@ -222,13 +228,13 @@ func runStatusdRead(args []string) error {
 	}
 	fs := flag.NewFlagSet("statusd read", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	statePath := fs.String("state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	socketPath := fs.String("socket-path", statusd.DefaultSocketPath, "daemon IPC unix socket")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	snapshot, err := statusd.ReadSnapshot(*statePath)
+	snapshot, err := fetchOrLiveSnapshot(*socketPath)
 	if err != nil {
 		return err
 	}
@@ -245,13 +251,13 @@ func runStatusdStatus(args []string) error {
 	}
 	fs := flag.NewFlagSet("statusd status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	statePath := fs.String("state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	socketPath := fs.String("socket-path", statusd.DefaultSocketPath, "daemon IPC unix socket")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	snapshot, err := statusd.ReadSnapshot(*statePath)
+	snapshot, err := fetchOrLiveSnapshot(*socketPath)
 	if err != nil {
 		return err
 	}
@@ -259,7 +265,7 @@ func runStatusdStatus(args []string) error {
 		return printJSON(snapshot)
 	}
 	now := tmactNow()
-	fmt.Printf("state_path: %s\n", *statePath)
+	fmt.Printf("socket_path: %s\n", *socketPath)
 	fmt.Printf("last_update: %s\n", snapshot.Timestamp.Format(time.RFC3339))
 	fmt.Printf("age: %s\n", formatAge(now.Sub(snapshot.Timestamp)))
 	fmt.Printf("stale: %t\n", snapshot.IsStale(now))
@@ -267,6 +273,23 @@ func runStatusdStatus(args []string) error {
 	fmt.Printf("sessions: %d\n", snapshot.Summary.Sessions)
 	fmt.Printf("errors: %d\n", snapshot.Summary.Errors)
 	return nil
+}
+
+// fetchOrLiveSnapshot tries the daemon over the unix socket first; if the
+// daemon is down, it falls back to a one-shot live capture. The fallback is
+// noticeably slower (multi-sample capture for valid classification) so we log
+// to stderr before doing it.
+func fetchOrLiveSnapshot(socketPath string) (statusd.Snapshot, error) {
+	snap, err := statusd.FetchSnapshot(socketPath)
+	if err == nil {
+		return snap, nil
+	}
+	if !errors.Is(err, statusd.ErrDaemonUnavailable) {
+		return statusd.Snapshot{}, err
+	}
+	fmt.Fprintln(os.Stderr, "statusd daemon not running; capturing live (this may take ~1s)")
+	cfg := statusd.Config{TmuxOptions: false}
+	return statusd.NewDaemon(cfg).RunOnce(context.Background())
 }
 
 type statusdFlagValues struct {
@@ -281,10 +304,10 @@ type statusdFlagValues struct {
 func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
 	values := &statusdFlagValues{Config: statusd.Config{TmuxOptions: true}}
 	fs.DurationVar(&values.Config.Interval, "interval", statusd.DefaultInterval, "scan interval")
-	fs.StringVar(&values.Config.StatePath, "state-path", statusd.DefaultStatePath, "latest JSON snapshot path")
+	fs.StringVar(&values.Config.SocketPath, "socket-path", statusd.DefaultSocketPath, "daemon IPC unix socket")
 	fs.StringVar(&values.Config.LogPath, "log-path", "", "optional JSONL daemon log path")
 	fs.BoolVar(&values.Config.TmuxOptions, "tmux-options", true, "write @ai-* tmux options")
-	values.NoTmuxOptions = fs.Bool("no-tmux-options", false, "only write the state file")
+	values.NoTmuxOptions = fs.Bool("no-tmux-options", false, "skip writing @ai-* tmux options")
 	fs.IntVar(&values.Config.CaptureLines, "capture-lines", statusd.DefaultCaptureLines, "number of pane history lines to capture")
 	fs.IntVar(&values.Config.InitialSamples, "initial-samples", statusd.DefaultInitialSamples, "captures per pane before statusd has history")
 	fs.DurationVar(&values.Config.RunningDebounce, "running-debounce", statusd.DefaultRunningDebounce, "keep running indicator after changes")
@@ -328,10 +351,10 @@ func validateStatusdConfig(cfg statusd.Config) error {
 
 func statusdUsage() error {
 	fmt.Fprint(os.Stderr, `Usage:
-  tmact statusd start [--interval 1s] [--state-path /tmp/tmact-status.json] [--no-tmux-options]
-  tmact statusd once [--json] [--state-path /tmp/tmact-status.json] [--initial-samples 2]
-  tmact statusd read [--json] [--state-path /tmp/tmact-status.json]
-  tmact statusd status [--state-path /tmp/tmact-status.json]
+  tmact statusd start [--interval 1s] [--socket-path /tmp/tmact-statusd.sock] [--no-tmux-options]
+  tmact statusd once [--json] [--initial-samples 2]
+  tmact statusd read [--json] [--socket-path /tmp/tmact-statusd.sock]
+  tmact statusd status [--socket-path /tmp/tmact-statusd.sock]
 `)
 	return nil
 }

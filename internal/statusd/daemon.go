@@ -11,11 +11,18 @@ import (
 type Daemon struct {
 	cfg         Config
 	mem         *Memory
+	store       *Store
 	optionCache *TmuxOptionCache
 }
 
 func NewDaemon(cfg Config) *Daemon {
-	return &Daemon{cfg: cfg.withDefaults(), mem: NewMemory(), optionCache: NewTmuxOptionCache()}
+	return &Daemon{cfg: cfg.withDefaults(), mem: NewMemory(), store: NewStore(), optionCache: NewTmuxOptionCache()}
+}
+
+// Store returns the in-memory snapshot store the daemon publishes to. The web
+// server and IPC handlers read from this; nothing is written to disk.
+func (d *Daemon) Store() *Store {
+	return d.store
 }
 
 func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
@@ -34,12 +41,7 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 			}
 		}
 	}
-	if err := WriteSnapshot(d.cfg.StatePath, snapshot); err != nil {
-		if scanErr != nil {
-			return snapshot, scanErr
-		}
-		return snapshot, err
-	}
+	d.store.Publish(snapshot)
 	if d.cfg.LogPath != "" {
 		_ = appendLog(d.cfg.LogPath, snapshot)
 	}

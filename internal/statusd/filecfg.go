@@ -23,7 +23,7 @@ const (
 type FileConfig struct {
 	WebAddr     string `json:"web_addr,omitempty"`
 	Interval    string `json:"interval,omitempty"`
-	StatePath   string `json:"state_path,omitempty"`
+	SocketPath  string `json:"socket_path,omitempty"`
 	LogPath     string `json:"log_path,omitempty"`
 	TmuxOptions *bool  `json:"tmux_options,omitempty"`
 }
@@ -34,7 +34,7 @@ func DefaultFileConfig() FileConfig {
 	return FileConfig{
 		WebAddr:     DefaultWebAddr,
 		Interval:    DefaultFileInterval.String(),
-		StatePath:   DefaultStatePath,
+		SocketPath:  DefaultSocketPath,
 		LogPath:     DefaultLogPath,
 		TmuxOptions: &t,
 	}

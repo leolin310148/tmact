@@ -22,8 +22,8 @@ func TestLoadOrCreateFileConfig_SeedsWhenMissing(t *testing.T) {
 	if cfg.WebAddr != DefaultWebAddr {
 		t.Errorf("WebAddr = %q, want %q", cfg.WebAddr, DefaultWebAddr)
 	}
-	if cfg.StatePath != DefaultStatePath {
-		t.Errorf("StatePath = %q, want %q", cfg.StatePath, DefaultStatePath)
+	if cfg.SocketPath != DefaultSocketPath {
+		t.Errorf("SocketPath = %q, want %q", cfg.SocketPath, DefaultSocketPath)
 	}
 	if cfg.LogPath != DefaultLogPath {
 		t.Errorf("LogPath = %q, want %q", cfg.LogPath, DefaultLogPath)
@@ -57,7 +57,7 @@ func TestLoadFileConfig_ParsesValues(t *testing.T) {
 	body := `{
   "web_addr": "0.0.0.0:7890",
   "interval": "5s",
-  "state_path": "/tmp/x.json",
+  "socket_path": "/tmp/x.sock",
   "log_path": "/tmp/x.jsonl",
   "tmux_options": false
 }`
@@ -74,7 +74,7 @@ func TestLoadFileConfig_ParsesValues(t *testing.T) {
 	if d := cfg.IntervalDuration(); d != 5*time.Second {
 		t.Errorf("Interval = %v, want 5s", d)
 	}
-	if cfg.StatePath != "/tmp/x.json" || cfg.LogPath != "/tmp/x.jsonl" {
+	if cfg.SocketPath != "/tmp/x.sock" || cfg.LogPath != "/tmp/x.jsonl" {
 		t.Errorf("paths not parsed: %+v", cfg)
 	}
 	if cfg.TmuxOptions == nil || *cfg.TmuxOptions {

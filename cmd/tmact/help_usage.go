@@ -19,7 +19,7 @@ Usage:
   tmact detect [--target sample:0.0] [--lines 120] [--json]
   tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
-  tmact statusd start|once|read|status [--state-path /tmp/tmact-status.json]
+  tmact statusd start|once|read|status [--socket-path /tmp/tmact-statusd.sock]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent sample-codex] [--json]
