@@ -60,6 +60,8 @@ type Server struct {
 	SendText func(target, text string, enter bool) error
 	// SendKey sends one tmux key to a pane; defaults to tmux.SendKeys.
 	SendKey func(target, key string) error
+	// ClearPane clears the visible pane and its tmux scrollback history.
+	ClearPane func(target string) error
 	// STTProviderPath is the local provider config path; defaults to
 	// ~/.tmact/stt_provider.json.
 	STTProviderPath string
@@ -103,6 +105,13 @@ func (s *Server) sendKey() func(string, string) error {
 		return s.SendKey
 	}
 	return func(target, key string) error { return tmux.SendKeys(target, []string{key}) }
+}
+
+func (s *Server) clearPane() func(string) error {
+	if s.ClearPane != nil {
+		return s.ClearPane
+	}
+	return tmux.ClearPane
 }
 
 func (s *Server) sttProvider() (stt.ProviderConfig, error) {
@@ -765,7 +774,7 @@ var imageMIMEByExt = map[string]string{
 
 // inputMsg is a client-to-server WebSocket message.
 type inputMsg struct {
-	T string `json:"t"`           // "text", "send", or "key"
+	T string `json:"t"`           // "text", "send", "key", or "clear"
 	S string `json:"s,omitempty"` // literal text for "text"/"send"
 	K string `json:"k,omitempty"` // tmux key name for "key"
 }
@@ -869,6 +878,8 @@ func (s *Server) applyInput(target string, m inputMsg) error {
 			return fmt.Errorf("key not allowed: %q", m.K)
 		}
 		return s.sendKey()(target, m.K)
+	case "clear":
+		return s.clearPane()(target)
 	default:
 		return fmt.Errorf("unknown message type: %q", m.T)
 	}

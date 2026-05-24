@@ -265,6 +265,14 @@ func SendKeys(target string, keys []string) error {
 	return runTmux(args...)
 }
 
+func ClearPane(target string) error {
+	if err := SendKeys(target, []string{"C-l"}); err != nil {
+		return err
+	}
+	time.Sleep(100 * time.Millisecond)
+	return runTmux("clear-history", "-t", target)
+}
+
 func SetSessionOption(session string, key string, value string) error {
 	if session == "" {
 		return fmt.Errorf("session cannot be empty")

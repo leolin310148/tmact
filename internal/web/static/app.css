@@ -310,7 +310,8 @@
   #send-btn { background: var(--accent); color: #fff; border: 0; }
   #record-btn { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
   #record-btn.busy { color: var(--fg-dim); }
-  #send-btn:disabled, #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #send-btn:disabled,
+  #record-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Recording overlay — a dim backdrop while the mic is live. The info card
      is pinned just above the input bar and the red Stop button lands exactly
@@ -651,7 +652,7 @@
   .qb-dock:not(.open) .qb-ic-close { display: none; }
   .qb-dock.open .qb-ic-open { display: none; }
 
-  .upload-btn, .selection-btn {
+  .upload-btn, .selection-btn, .clear-pane-btn {
     display: none;
     position: absolute; right: 12px; bottom: 12px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
@@ -668,15 +669,21 @@
     user-select: none;
     touch-action: manipulation;
   }
-  .upload-btn svg, .selection-btn svg { width: 16px; height: 16px; display: block; }
+  .upload-btn svg, .selection-btn svg, .clear-pane-btn svg { width: 16px; height: 16px; display: block; }
   .upload-btn:hover, .upload-btn:active,
-  .selection-btn:hover, .selection-btn:active { opacity: 1; }
-  .upload-btn:disabled, .selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .upload-btn.ready, .selection-btn.ready { display: flex; }
+  .selection-btn:hover, .selection-btn:active,
+  .clear-pane-btn:hover, .clear-pane-btn:active { opacity: 1; }
+  .upload-btn:disabled, .selection-btn:disabled, .clear-pane-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .upload-btn.ready, .selection-btn.ready, .clear-pane-btn.ready { display: flex; }
   .selection-btn {
     bottom: 60px;
     color: var(--amber);
     border-color: var(--amber);
+  }
+  .clear-pane-btn {
+    bottom: 108px;
+    color: var(--fg-dim);
+    border-color: var(--fg-dim);
   }
   .selection-btn.active {
     opacity: 1;
@@ -713,7 +720,7 @@
     opacity: 1;
     background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
-  .content-wrap.upload-ready .help-btn { bottom: 108px; }
+  .content-wrap.upload-ready .help-btn { bottom: 156px; }
 
   /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
      each paired with a label showing the relevant hotkey. The amber/dashed
@@ -771,6 +778,7 @@
   .help-ring.tone-quick, .help-tip.tone-quick { --help-color: var(--accent); }
   .help-ring.tone-upload, .help-tip.tone-upload { --help-color: var(--green); }
   .help-ring.tone-selection, .help-tip.tone-selection { --help-color: var(--amber); }
+  .help-ring.tone-clear, .help-tip.tone-clear { --help-color: var(--fg-dim); }
   .help-ring.tone-settings, .help-tip.tone-settings { --help-color: var(--fg-dim); }
   .help-tip .help-desc { font-size: 12px; line-height: 1.4; }
 
@@ -816,8 +824,9 @@
     .qb-dock.ready { display: flex; }
     .upload-btn { bottom: 60px; }
     .selection-btn { bottom: 108px; }
-    .help-btn { bottom: 156px; }
-    .content-wrap.upload-ready .help-btn { bottom: 156px; }
+    .clear-pane-btn { bottom: 156px; }
+    .help-btn { bottom: 204px; }
+    .content-wrap.upload-ready .help-btn { bottom: 204px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */

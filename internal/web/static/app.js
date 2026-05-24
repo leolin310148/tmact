@@ -363,6 +363,11 @@ function sendDraft() {
   syncDraft();
 }
 
+function clearPaneOutput() {
+  if (!state.selected) return;
+  if (!wsSend({ t: "clear" })) showInputError("not connected — try again");
+}
+
 const _voice = createVoice({ showInputError, syncDraft });
 const {
   syncRecordButton,
@@ -589,8 +594,10 @@ function wireInput() {
   // up) when Send/Record is tapped.
   $("send-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("record-btn").addEventListener("pointerdown", (e) => e.preventDefault());
+  $("clear-pane-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("selection-btn").addEventListener("pointerdown", (e) => e.preventDefault());
   $("send-btn").addEventListener("click", sendDraft);
+  $("clear-pane-btn").addEventListener("click", clearPaneOutput);
   $("upload-btn").addEventListener("click", openFileUploadPicker);
   $("selection-btn").addEventListener("click", toggleSelectionMode);
   $("file-upload").addEventListener("change", (e) => {
@@ -750,6 +757,17 @@ const { loadQuickConfig, wireQuick, syncQuickDock, closeQuickMenu } = _quick;
 // capturing first, Option+1 would be sent to the pane instead of switching.
 function wireHotkeys() {
   document.addEventListener("keydown", (e) => {
+    if (state.selected && $("settings-overlay").hidden) {
+      const k = e.key.toLowerCase();
+      const clearPane = (e.metaKey && !e.ctrlKey && !e.altKey && k === "k")
+        || (e.ctrlKey && !e.metaKey && !e.altKey && k === "l");
+      if (clearPane) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearPaneOutput();
+        return;
+      }
+    }
     // macOS-only chord: plain Option, no Ctrl/Cmd. Mobile has no Option key,
     // and an open settings panel may legitimately want Option for text input.
     if (!e.altKey || e.ctrlKey || e.metaKey || isMobile()) return;

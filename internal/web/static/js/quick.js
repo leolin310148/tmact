@@ -117,21 +117,26 @@ export function createQuick({ wsSend, showInputError, findPane, syncSelectionBut
     const dock = $("qb-dock");
     const uploadBtn = $("upload-btn");
     const selectionBtn = $("selection-btn");
+    const clearPaneBtn = $("clear-pane-btn");
     const wrap = $("content-wrap");
     if (state.selected) {
       dock.classList.add("ready");
       uploadBtn.classList.add("ready");
       selectionBtn.classList.add("ready");
+      clearPaneBtn.classList.add("ready");
       wrap.classList.add("upload-ready");
       uploadBtn.disabled = upload.busy;
       selectionBtn.disabled = false;
+      clearPaneBtn.disabled = false;
     } else {
       dock.classList.remove("ready");
       uploadBtn.classList.remove("ready");
       selectionBtn.classList.remove("ready");
+      clearPaneBtn.classList.remove("ready");
       wrap.classList.remove("upload-ready");
       uploadBtn.disabled = true;
       selectionBtn.disabled = true;
+      clearPaneBtn.disabled = true;
       closeQuickMenu();
     }
     syncSelectionButton();

@@ -133,6 +133,7 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 	for _, want := range []string{
 		`id="upload-btn"`,
 		`id="selection-btn"`,
+		`id="clear-pane-btn"`,
 		`id="file-upload"`,
 		`id="file-upload" type="file" multiple hidden`,
 	} {
@@ -144,6 +145,10 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`openFileUploadPicker`,
 		`upload-btn").addEventListener("click"`,
 		`selection-btn").addEventListener("click", toggleSelectionMode)`,
+		`clear-pane-btn").addEventListener("click", clearPaneOutput)`,
+		`wsSend({ t: "clear" })`,
+		`e.metaKey && !e.ctrlKey && !e.altKey && k === "k"`,
+		`e.ctrlKey && !e.metaKey && !e.altKey && k === "l"`,
 		`const files = Array.from(e.target.files || [])`,
 		`e.key === "Tab" && e.shiftKey`,
 		`return { t: "key", k: "BTab" }`,
@@ -154,6 +159,7 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`!state.selectionMode && document.activeElement === $("direct-input")`,
 		`tone: "upload"`,
 		`tone: "selection"`,
+		`tone: "clear"`,
 		`tone: "settings"`,
 	} {
 		if !strings.Contains(scripts, want) {
@@ -168,11 +174,13 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`.key-area { display: flex; }`,
 		`.selection-btn`,
 		`.selection-btn.active`,
+		`.clear-pane-btn`,
 		`.content-wrap.selection-mode::after`,
 		`.content-wrap.selection-mode pre#content`,
 		`user-select: none`,
 		`user-select: text`,
 		`.help-ring.tone-upload`,
+		`.help-ring.tone-clear`,
 		`.help-tip.tone-settings`,
 		`bottom: 60px;`,
 	} {
@@ -1190,6 +1198,20 @@ func TestApplyInputKeyRejected(t *testing.T) {
 	}}
 	if err := s.applyInput("%7", inputMsg{T: "key", K: "rm -rf"}); err == nil {
 		t.Fatal("expected error for disallowed key")
+	}
+}
+
+func TestApplyInputClearPane(t *testing.T) {
+	var gotTarget string
+	s := &Server{ClearPane: func(target string) error {
+		gotTarget = target
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "clear"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotTarget != "%7" {
+		t.Fatalf("ClearPane got %q, want %%7", gotTarget)
 	}
 }
 
