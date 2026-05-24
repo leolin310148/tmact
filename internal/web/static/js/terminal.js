@@ -101,6 +101,19 @@ const RULE_OPEN = "", RULE_CLOSE = "";
 // real HTML <table> is spliced back in after ansiToHTML.
 const TABLE_OPEN = "", TABLE_CLOSE = "";
 const TABLE_PLACEHOLDER_RE = /(\d+)/g;
+// extractURLs wraps URL spans so a long-press "Copy link" on mobile yields a
+// clean URL even when terminal wrap split the URL across lines with leading
+// indent. URL_OPEN<idx>URL_SEP<visible>URL_CLOSE markers survive ansiToHTML;
+// the visible body keeps its original \n + spaces inside the rendered <a> so
+// the pane stays visually faithful to the terminal layout.
+const URL_OPEN = "", URL_SEP = "", URL_CLOSE = "";
+const URL_PLACEHOLDER_RE = /(\d+)([\s\S]*?)/g;
+// URL detection. The match extends across a soft wrap only when the next line
+// starts with horizontal whitespace AND a URL-path character — so
+// `https://x\n  /path` joins but `https://x\n  Some sentence` does not. This
+// covers the common github-link wrap case without gluing prose onto URLs.
+const URL_RE = /https?:\/\/[^\s<>"'`]+(?:\n[ \t]+[\/?&=#+%~@:.\-][^\s<>"'`]*)*/g;
+const URL_TRAIL_RE = /[.,;:!?)\]}>'"`]+$/;
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
@@ -259,6 +272,21 @@ function extractTables(text) {
   return { text: out.join("\n"), tables };
 }
 
+function extractURLs(text) {
+  const urls = [];
+  const replaced = text.replace(URL_RE, (match) => {
+    let trailing = "";
+    const tm = match.match(URL_TRAIL_RE);
+    if (tm) { trailing = tm[0]; match = match.slice(0, -trailing.length); }
+    if (!/^https?:\/\/.+/.test(match)) return match + trailing;
+    const href = match.replace(/\n[ \t]+/g, "");
+    const idx = urls.length;
+    urls.push(href);
+    return URL_OPEN + idx + URL_SEP + match + URL_CLOSE + trailing;
+  });
+  return { text: replaced, urls };
+}
+
 function wrapRuleLines(text) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -303,11 +331,21 @@ export function setContent(text, opts) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
   const extracted = extractTables(text);
-  let html = ansiToHTML(wrapRuleLines(extracted.text))
+  const linkified = extractURLs(extracted.text);
+  let html = ansiToHTML(wrapRuleLines(linkified.text))
     .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
     .replaceAll(RULE_CLOSE, "</span>");
   if (extracted.tables.length) {
     html = html.replace(TABLE_PLACEHOLDER_RE, (_, n) => extracted.tables[+n] || "");
+  }
+  if (linkified.urls.length) {
+    html = html.replace(URL_PLACEHOLDER_RE, (_, n, body) => {
+      const href = linkified.urls[+n];
+      if (!href) return body;
+      // target=_blank gives desktop click-to-open; long-press on mobile copies
+      // the clean href (without the terminal-wrap newline/indent in `body`).
+      return '<a href="' + escapeHTML(href) + '" target="_blank" rel="noopener noreferrer" class="tui-link">' + body + "</a>";
+    });
   }
   pre.innerHTML = html;
   markImagePaths(pre, opts && opts.cwd);
@@ -315,4 +353,4 @@ export function setContent(text, opts) {
 }
 
 // Exported for tests.
-export const __test__ = { extractTables, parseTableBlock, renderTable, joinWrappedFrames };
+export const __test__ = { extractTables, parseTableBlock, renderTable, joinWrappedFrames, extractURLs };

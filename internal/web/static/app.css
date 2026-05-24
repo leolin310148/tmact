@@ -239,6 +239,16 @@
     cursor: zoom-in;
     -webkit-touch-callout: none;
   }
+  /* Wrapped-URL link: visible body keeps the terminal's \n + leading indent so
+     the pane looks the same, but the <a href> is the clean URL — long-press
+     "Copy link" on mobile drops the wrap, and desktop click opens a new tab. */
+  .tui-link {
+    color: var(--direct);
+    text-decoration: underline;
+    text-decoration-color: rgba(121,192,255,0.55);
+    text-underline-offset: 2px;
+  }
+  .tui-link:hover { text-decoration-color: var(--direct); }
   /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
      mouse scroll/selection fall through to the <pre> behind it. */
   #direct-input {
