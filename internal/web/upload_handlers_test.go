@@ -1,0 +1,235 @@
+package web
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+)
+
+/* ---- image paste ---- */
+
+func imageUploadRequest(t *testing.T, body string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("image", "clipboard.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(part, body); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/paste-image", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+func TestPasteImageSavesFileAndReturnsPath(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{PasteImageDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	png := "\x89PNG\r\n\x1a\n" + "pretend image body"
+	handler.ServeHTTP(rec, imageUploadRequest(t, png))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	path := got["path"]
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("path = %q, want it saved under %q", path, dir)
+	}
+	if !strings.HasSuffix(path, ".png") {
+		t.Fatalf("path = %q, want a .png extension sniffed from the bytes", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("saved image not readable: %v", err)
+	}
+	if string(data) != png {
+		t.Fatalf("saved bytes = %q, want the uploaded image verbatim", string(data))
+	}
+}
+
+func TestPasteImageRejectsNonImage(t *testing.T) {
+	handler := (&Server{PasteImageDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, imageUploadRequest(t, "this is plain text, not an image"))
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", rec.Code)
+	}
+}
+
+func TestPasteImageRejectsNonPOST(t *testing.T) {
+	handler := (&Server{PasteImageDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/paste-image", nil))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+/* ---- file upload ---- */
+
+func fileUploadRequest(t *testing.T, field, filename, bodyText string) *http.Request {
+	t.Helper()
+	return filesUploadRequest(t, field, []uploadPart{{filename: filename, bodyText: bodyText}})
+}
+
+type uploadPart struct {
+	filename string
+	bodyText string
+}
+
+func filesUploadRequest(t *testing.T, field string, parts []uploadPart) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, upload := range parts {
+		part, err := mw.CreateFormFile(field, upload.filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(part, upload.bodyText); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/upload-file", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+func TestUploadFileSavesFileAndReturnsPath(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{UploadDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, fileUploadRequest(t, "file", "../notes?.txt", "hello upload"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	path := got.Path
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("path = %q, want it saved under %q", path, dir)
+	}
+	if len(got.Paths) != 1 || got.Paths[0] != path {
+		t.Fatalf("paths = %#v, want single path %q", got.Paths, path)
+	}
+	if !strings.HasSuffix(path, "notes.txt") {
+		t.Fatalf("path = %q, want sanitized filename suffix notes.txt", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("saved upload not readable: %v", err)
+	}
+	if string(data) != "hello upload" {
+		t.Fatalf("saved bytes = %q, want uploaded file verbatim", string(data))
+	}
+}
+
+func TestUploadFileSavesMultipleFilesAndReturnsPaths(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{UploadDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, filesUploadRequest(t, "file", []uploadPart{
+		{filename: "one.txt", bodyText: "first"},
+		{filename: "../two?.md", bodyText: "second"},
+	}))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Paths) != 2 {
+		t.Fatalf("paths = %#v, want two saved files", got.Paths)
+	}
+	if got.Path != got.Paths[0] {
+		t.Fatalf("path = %q, want first path %q", got.Path, got.Paths[0])
+	}
+
+	for i, wantBody := range []string{"first", "second"} {
+		path := got.Paths[i]
+		if !strings.HasPrefix(path, dir) {
+			t.Fatalf("path %d = %q, want it saved under %q", i, path, dir)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("saved upload %d not readable: %v", i, err)
+		}
+		if string(data) != wantBody {
+			t.Fatalf("saved bytes %d = %q, want %q", i, string(data), wantBody)
+		}
+	}
+	if !strings.HasSuffix(got.Paths[1], "two.md") {
+		t.Fatalf("second path = %q, want sanitized filename suffix two.md", got.Paths[1])
+	}
+}
+
+func TestUploadFileRejectsMissingFile(t *testing.T) {
+	handler := (&Server{UploadDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, fileUploadRequest(t, "other", "notes.txt", "hello"))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestUploadFileRejectsNonPOST(t *testing.T) {
+	handler := (&Server{UploadDir: t.TempDir()}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/upload-file", nil))
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestSanitizeUploadFilename(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"../notes?.txt", "notes.txt"},
+		{"  .hidden  ", "hidden"},
+		{"", "file"},
+		{"résumé 2026.pdf", "r-sum-2026.pdf"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := sanitizeUploadFilename(tc.in); got != tc.want {
+				t.Fatalf("sanitizeUploadFilename(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
