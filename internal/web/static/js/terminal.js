@@ -118,22 +118,80 @@ function previewableImagePath(path) {
 const TABLE_TOP_RE = /^[ \t]*[┌╔][─═]+(?:[┬╦][─═]+)*[┐╗][ \t]*$/;
 const TABLE_BOT_RE = /^[ \t]*[└╚][─═]+(?:[┴╩][─═]+)*[┘╝][ \t]*$/;
 const TABLE_SEP_RE = /^[ \t]*[├╠][─═]+(?:[┼╬][─═]+)*[┤╣][ \t]*$/;
-const TABLE_ROW_RE = /^[ \t]*[│║].*[│║][ \t]*$/;
+// A line that's *only* mid/end frame chars (no start corner) is a wrap
+// continuation of the preceding frame line. joinWrappedFrames merges those
+// back so the per-line top/bot/sep regexes can match the full frame.
+const FRAME_START_RE = /^[ \t]*[┌├└╔╠╚]/;
+const FRAME_CONT_RE = /^[ \t]*[─═┬┴┼╦╩╬][─═┬┴┼╦╩╬┐┘┤╗╝╣ \t]*[┐┘┤╗╝╣─═┬┴┼╦╩╬][ \t]*$/;
 
+function joinWrappedFrames(lines) {
+  const out = [];
+  for (const raw of lines) {
+    if (out.length > 0) {
+      const v = raw.replace(ANSI_STRIP_RE, "");
+      const prevV = out[out.length - 1].replace(ANSI_STRIP_RE, "");
+      const prevIsFrame =
+        FRAME_START_RE.test(prevV) ||
+        (FRAME_CONT_RE.test(prevV) && !/[┐┘┤╗╝╣]\s*$/.test(prevV));
+      if (prevIsFrame && FRAME_CONT_RE.test(v)) {
+        out[out.length - 1] += v.replace(/^[ \t]+/, "");
+        continue;
+      }
+    }
+    out.push(raw);
+  }
+  return out;
+}
+
+// parseTableBlock joins terminal-wrapped continuation lines into logical rows.
+// The column count comes from the top frame's ┬/╦ markers; each row segment
+// (delimited by ├─┤ or the top/bottom frame) is concatenated then split by
+// │/║. A row whose cell count doesn't match `cols` invalidates the whole
+// block — better to fall back to raw text than render a misaligned table.
 function parseTableBlock(blockLines) {
-  const rows = [];
-  let headerEnd = -1;
+  let cols = 0;
   for (const raw of blockLines) {
     const v = raw.replace(ANSI_STRIP_RE, "");
-    if (TABLE_TOP_RE.test(v) || TABLE_BOT_RE.test(v)) continue;
+    if (TABLE_TOP_RE.test(v)) {
+      const m = v.match(/[┬╦]/g);
+      cols = (m ? m.length : 0) + 1;
+      break;
+    }
+  }
+  if (cols < 1) return { rows: [], headerEnd: -1 };
+
+  const rows = [];
+  let headerEnd = -1;
+  let buf = "";
+  let invalid = false;
+
+  const flush = () => {
+    if (!buf) return;
+    // Strip leading/trailing edge bars (and the surrounding whitespace that
+    // terminal padding may have inserted), then split on inner bars.
+    const trimmed = buf.replace(/^[ \t]*[│║]/, "").replace(/[│║][ \t]*$/, "");
+    const cells = trimmed.split(/[│║]/).map((c) => c.trim());
+    if (cells.length !== cols) { invalid = true; }
+    else rows.push(cells);
+    buf = "";
+  };
+
+  for (const raw of blockLines) {
+    const v = raw.replace(ANSI_STRIP_RE, "");
+    if (TABLE_TOP_RE.test(v) || TABLE_BOT_RE.test(v)) { flush(); continue; }
     if (TABLE_SEP_RE.test(v)) {
-      if (headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
+      flush();
+      if (!invalid && headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
       continue;
     }
-    if (!TABLE_ROW_RE.test(v)) continue;
-    const inner = v.replace(/^[ \t]*[│║]/, "").replace(/[│║][ \t]*$/, "");
-    rows.push(inner.split(/[│║]/).map((c) => c.trim()));
+    // A continuation line may have no bars at all (just wrapped cell text).
+    // Append verbatim — preserve trailing whitespace because that's where the
+    // word boundary at the wrap point lives.
+    buf += v;
   }
+  flush();
+
+  if (invalid) return { rows: [], headerEnd: -1 };
   return { rows, headerEnd };
 }
 
@@ -162,23 +220,27 @@ function renderTable(parsed) {
 }
 
 function extractTables(text) {
-  const lines = text.split("\n");
+  const lines = joinWrappedFrames(text.split("\n"));
   const tables = [];
   const out = [];
   let i = 0;
   while (i < lines.length) {
     const v = lines[i].replace(ANSI_STRIP_RE, "");
     if (TABLE_TOP_RE.test(v)) {
+      // Scan ahead for the bottom frame. Tolerate intervening lines without
+      // bars: terminal wrap can split a row into a frame-less continuation
+      // line. We cap the scan so a stray ┌─┐ in prose without a closer can't
+      // swallow the rest of the buffer.
       let j = i + 1;
-      while (j < lines.length) {
+      const limit = Math.min(lines.length, i + 1 + 600);
+      while (j < limit) {
         const vj = lines[j].replace(ANSI_STRIP_RE, "");
         if (TABLE_BOT_RE.test(vj)) break;
-        // A blank line or non-table line before the bottom frame means this
-        // wasn't a real table — give up and emit lines verbatim.
-        if (!TABLE_ROW_RE.test(vj) && !TABLE_SEP_RE.test(vj)) { j = -1; break; }
+        // Bail if we hit another top frame before closing — broken nesting.
+        if (TABLE_TOP_RE.test(vj)) { j = -1; break; }
         j++;
       }
-      if (j > 0 && j < lines.length) {
+      if (j > 0 && j < lines.length && TABLE_BOT_RE.test(lines[j].replace(ANSI_STRIP_RE, ""))) {
         const parsed = parseTableBlock(lines.slice(i, j + 1));
         if (parsed.rows.length > 0) {
           const idx = tables.length;
