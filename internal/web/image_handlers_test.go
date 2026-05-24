@@ -118,6 +118,30 @@ func TestImageEndpointRejectsHomeRelativePath(t *testing.T) {
 	}
 }
 
+func TestImageEndpointServesSVG(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "logo.svg")
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`
+	if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "image/svg+xml") {
+		t.Fatalf("Content-Type = %q, want image/svg+xml", got)
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") {
+		t.Fatalf("CSP = %q, want a strict policy", csp)
+	}
+}
+
 func TestImageEndpointRejectsNonImage(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "not-image.png")
@@ -147,6 +171,9 @@ func TestSniffImageExtension(t *testing.T) {
 		{"gif89", []byte("GIF89a\x00\x00\x00\x00\x00\x00"), "gif"},
 		{"webp", []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), "webp"},
 		{"bmp", []byte("BM\x00\x00\x00\x00\x00\x00"), "bmp"},
+		{"svg-bare", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`), "svg"},
+		{"svg-xml-decl", []byte(`<?xml version="1.0"?>` + "\n" + `<SVG xmlns="x"></SVG>`), "svg"},
+		{"svg-bom", append([]byte{0xEF, 0xBB, 0xBF}, []byte(`<svg/>`)...), "svg"},
 		{"unknown", []byte("plain text bytes"), ""},
 	}
 	for _, tc := range cases {

@@ -96,7 +96,7 @@ function ansiToHTML(raw) {
 // characters never wraps or leaks into the rendered pane.
 const RULE_OPEN = "", RULE_CLOSE = "";
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
+const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
 
 function previewableImagePath(path) {

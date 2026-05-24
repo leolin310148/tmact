@@ -130,8 +130,8 @@ func TestPaneWSStreamsContent(t *testing.T) {
 	if err := wsjson.Read(ctx, c, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.T != "content" || m.S != "pane body" {
-		t.Fatalf("got %+v, want content/pane body", m)
+	if m.T != "patch" || m.From != 0 || strings.Join(m.Lines, "\n") != "pane body" {
+		t.Fatalf("got %+v, want patch from=0 lines=[pane body]", m)
 	}
 }
 
@@ -147,8 +147,8 @@ func TestPaneWSContentCarriesDetectedQuestion(t *testing.T) {
 	if err := wsjson.Read(ctx, c, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.T != "content" || m.Q == nil {
-		t.Fatalf("got %+v, want a content message with a question", m)
+	if m.T != "patch" || m.Q == nil {
+		t.Fatalf("got %+v, want a patch message with a question", m)
 	}
 	if len(m.Q.Choices) != 2 {
 		t.Fatalf("question choices = %d, want 2", len(m.Q.Choices))
@@ -166,8 +166,43 @@ func TestPaneWSContentOmitsQuestionWhenNone(t *testing.T) {
 	if err := wsjson.Read(ctx, c, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.T != "content" || m.Q != nil {
-		t.Fatalf("got %+v, want a content message with no question", m)
+	if m.T != "patch" || m.Q != nil {
+		t.Fatalf("got %+v, want a patch message with no question", m)
+	}
+}
+
+func TestPaneWSPatchOmitsCommonPrefix(t *testing.T) {
+	captures := []string{
+		"line 1\nline 2\nline 3",
+		"line 1\nline 2\nline 4\nline 5",
+	}
+	idx := 0
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) {
+			if idx >= len(captures) {
+				return captures[len(captures)-1], nil
+			}
+			out := captures[idx]
+			idx++
+			return out, nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var first outMsg
+	if err := wsjson.Read(ctx, c, &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.From != 0 || len(first.Lines) != 3 {
+		t.Fatalf("first patch %+v, want from=0 with 3 lines", first)
+	}
+	var second outMsg
+	if err := wsjson.Read(ctx, c, &second); err != nil {
+		t.Fatal(err)
+	}
+	if second.From != 2 || strings.Join(second.Lines, "|") != "line 4|line 5" {
+		t.Fatalf("second patch %+v, want from=2 lines=[line 4 line 5]", second)
 	}
 }
 

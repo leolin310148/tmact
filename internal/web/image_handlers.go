@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"os"
@@ -64,12 +65,19 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	mimeType := imageMIMEByExt[ext]
 	if mimeType == "" {
 		writeJSONError(w, http.StatusUnsupportedMediaType,
-			"unsupported image format (expected PNG, JPEG, GIF, WebP, or BMP)")
+			"unsupported image format (expected PNG, JPEG, GIF, WebP, BMP, or SVG)")
 		return
 	}
 
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if ext == "svg" {
+		// Belt-and-suspenders: an SVG rendered via <img> never executes scripts,
+		// but a user opening the URL directly would view it as a document. A
+		// strict CSP blocks scripts and external loads in that case too.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	}
 	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
 }
 
@@ -98,8 +106,14 @@ func localImagePathScheme(path string) (string, bool) {
 // sniffImageExtension reads an upload's leading bytes and returns a canonical
 // image extension (no dot), or "" for anything it does not recognise as an
 // image. It rewinds the reader so the caller still sees the whole file.
+//
+// SVG is text-based without a fixed binary signature, so the check is a
+// case-insensitive search for "<svg" in the first 512 bytes — after any BOM,
+// XML declaration, or DOCTYPE. False positives (e.g. HTML containing an
+// inline <svg>) get treated as SVG, which is acceptable here: the renderer
+// is <img> + a strict CSP, and the file the user pointed at is theirs.
 func sniffImageExtension(rs io.ReadSeeker) string {
-	head := make([]byte, 16)
+	head := make([]byte, 512)
 	n, _ := io.ReadFull(rs, head)
 	if _, err := rs.Seek(0, io.SeekStart); err != nil {
 		return ""
@@ -116,9 +130,19 @@ func sniffImageExtension(rs io.ReadSeeker) string {
 		return "webp"
 	case len(head) >= 2 && head[0] == 'B' && head[1] == 'M':
 		return "bmp"
+	case looksLikeSVG(head):
+		return "svg"
 	default:
 		return ""
 	}
+}
+
+func looksLikeSVG(b []byte) bool {
+	// Drop UTF-8 BOM so the substring search lines up with the document body.
+	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		b = b[3:]
+	}
+	return bytes.Contains(bytes.ToLower(b), []byte("<svg"))
 }
 
 var imageMIMEByExt = map[string]string{
@@ -127,4 +151,5 @@ var imageMIMEByExt = map[string]string{
 	"gif":  "image/gif",
 	"webp": "image/webp",
 	"bmp":  "image/bmp",
+	"svg":  "image/svg+xml",
 }

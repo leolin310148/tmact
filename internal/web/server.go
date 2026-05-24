@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/stt"
@@ -26,6 +27,8 @@ const (
 	wsCaptureInterval = 200 * time.Millisecond
 	wsCaptureLines    = 400
 	wsReadLimit       = 1 << 20
+	wsPingInterval    = 25 * time.Second
+	wsPingTimeout     = 10 * time.Second
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
@@ -160,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
+	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
 	mux.HandleFunc("/api/version", s.handleVersion)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
@@ -191,6 +195,8 @@ func (s *Server) Serve(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	go s.runUploadsGC(ctx)
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
@@ -209,14 +215,47 @@ func (s *Server) Serve(ctx context.Context) error {
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	info, err := os.Stat(s.StatePath)
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "snapshot not available: "+err.Error())
+		return
+	}
+	etag := snapshotETag(info)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("ETag", etag)
+	if match := r.Header.Get("If-None-Match"); match != "" && etagMatches(match, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	data, err := os.ReadFile(s.StatePath)
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "snapshot not available: "+err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
+}
+
+// snapshotETag derives a weak ETag from the snapshot file's mtime+size — the
+// daemon rewrites the file in full each tick, so identical mtime+size means
+// identical bytes for any practical purpose.
+func snapshotETag(info os.FileInfo) string {
+	return fmt.Sprintf(`W/"%d-%d"`, info.ModTime().UnixNano(), info.Size())
+}
+
+// etagMatches handles the common If-None-Match shapes: a single ETag, a
+// comma-separated list, or "*".
+func etagMatches(header, etag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "*" {
+		return true
+	}
+	for _, part := range strings.Split(header, ",") {
+		if strings.TrimSpace(part) == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

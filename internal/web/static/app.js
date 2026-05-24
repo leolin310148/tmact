@@ -1,4 +1,4 @@
-import { fetchSnapshot, transcribeAudio } from "./js/api.js";
+import { fetchSnapshot, subscribeSnapshot, transcribeAudio } from "./js/api.js";
 import { $, clamp, h, isMobile } from "./js/dom.js";
 import { state, upload } from "./js/state.js";
 import { createPaneStream } from "./js/stream.js";
@@ -213,19 +213,28 @@ function renderOptions(q) {
 
 async function refreshSnapshot() {
   try {
-    const snap = await fetchSnapshot();
-    state.snapshot = snap;
-    renderStatusline(snap);
-    renderMode();
-    restoreSelection();
-    syncQuickDock();
+    applySnapshot(await fetchSnapshot());
   } catch (e) {
     // Keep the last snapshot; the stale dot surfaces the lost connection.
+    checkStale();
   }
+}
+
+// Snapshot delivery: prefer SSE push from /api/snapshot/stream; on stream
+// error (network blip, idle timeout in some proxies, or older statusd build),
+// fall back to a periodic GET. Either way the rendered UI ends up the same.
+let snapshotTimer = null;
+let snapshotSSE = null;
+
+function applySnapshot(snap) {
+  state.snapshot = snap;
+  renderStatusline(snap);
+  renderMode();
+  restoreSelection();
+  syncQuickDock();
   checkStale();
 }
 
-let snapshotTimer = null;
 function startPolling() {
   if (snapshotTimer === null) {
     snapshotTimer = setInterval(() => { refreshSnapshot(); checkStale(); }, POLL_MS);
@@ -236,17 +245,43 @@ function stopPolling() {
   snapshotTimer = null;
 }
 
+function startSnapshotStream() {
+  if (snapshotSSE) return;
+  snapshotSSE = subscribeSnapshot(
+    (snap) => { stopPolling(); applySnapshot(snap); },
+    () => {
+      snapshotSSE = null;
+      startPolling();
+    },
+  );
+}
+function stopSnapshotStream() {
+  if (snapshotSSE) { snapshotSSE(); snapshotSSE = null; }
+}
+
 /* ---- pane WebSocket (output stream + input relay) ---- */
 
+// paneLines mirrors the server-side lastLines buffer: each patch from the
+// WS replaces lines[from:], so the client only renders the joined string.
+// Reset on every openWS — a fresh connection always starts with from=0.
+let paneLines = [];
 const paneStream = createPaneStream({
   getSelectedPane: () => state.selected,
-  onContent: (text, question) => {
+  onPatch: (from, lines, question) => {
+    paneLines = paneLines.slice(0, from).concat(lines);
     const p = findPane(state.selected);
-    setContent(text, { cwd: p && p.cwd });
+    setContent(paneLines.join("\n"), { cwd: p && p.cwd });
     renderOptions(question);
   },
   onQuestion: renderOptions,
   onError: showInputError,
+  onStatus: (s) => {
+    // Surface a reconnecting hint in the mode-indicator line; on reconnect
+    // the next "open" clears it. The error timer is independent — its 6s
+    // auto-clear can still wipe an inline error message.
+    if (s === "reconnecting") setInputStatus("reconnecting…");
+    else if (s === "open") setInputStatus("");
+  },
 });
 
 function closeWS() {
@@ -254,6 +289,7 @@ function closeWS() {
 }
 
 function openWS(paneID) {
+  paneLines = [];
   paneStream.open(paneID);
 }
 
@@ -785,10 +821,11 @@ function wireHotkeys() {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopPolling();
+    stopSnapshotStream();
     closeWS();
   } else {
     refreshSnapshot();
-    startPolling();
+    startSnapshotStream();
     if (state.selected) openWS(state.selected);
   }
 });
@@ -807,4 +844,4 @@ if ("serviceWorker" in navigator) {
   });
 }
 refreshSnapshot();
-if (!document.hidden) startPolling();
+if (!document.hidden) startSnapshotStream();

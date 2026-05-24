@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,12 +26,20 @@ type inputMsg struct {
 }
 
 // outMsg is a server-to-client WebSocket message.
+//
+//   - "patch" — incremental pane update. Lines[From:] replaces the client's
+//     buffer from index From onwards. From=0 with the full line list is the
+//     initial snapshot; From=len(lastLines) with empty Lines means append
+//     nothing (used on connect when capture is empty).
+//   - "error" — server-side error text in S, no buffer change.
 type outMsg struct {
-	T string `json:"t"` // "content" or "error"
-	S string `json:"s"`
+	T     string   `json:"t"`
+	S     string   `json:"s,omitempty"`
+	From  int      `json:"from,omitempty"`
+	Lines []string `json:"lines,omitempty"`
 	// Q is the interactive menu the pane is waiting on, when one is detected.
-	// It rides along with each "content" message so the browser can offer
-	// quick-answer buttons; nil (omitted) means there is no question to answer.
+	// It rides along with each "patch" so the browser can offer quick-answer
+	// buttons; nil (omitted) means there is no question to answer.
 	Q *prompt.Question `json:"q,omitempty"`
 }
 
@@ -50,6 +59,28 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+
+	// Periodic ping/pong so a dead connection (laptop sleep, NAT drop, proxy
+	// timeout) is noticed within wsPingInterval rather than waiting for the
+	// next browser input. Each Ping waits up to wsPingTimeout for the pong.
+	go func() {
+		t := time.NewTicker(wsPingInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				pingCtx, pingCancel := context.WithTimeout(ctx, wsPingTimeout)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
 
 	var writeMu sync.Mutex
 	write := func(m outMsg) error {
@@ -77,6 +108,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 
 	last := ""
+	var lastLines []string
 	push := func() bool {
 		content, err := s.capture()(pane, wsCaptureLines)
 		if err != nil {
@@ -87,7 +119,22 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			return true
 		}
 		last = content
-		return write(outMsg{T: "content", S: content, Q: prompt.DetectQuestion(content)}) == nil
+		next := strings.Split(content, "\n")
+		// Find longest common prefix line count; the client only needs the
+		// diverging tail. Typical AI-agent output advances one line per tick,
+		// so this collapses a 400-line capture to a 1-line patch.
+		p := 0
+		for p < len(lastLines) && p < len(next) && lastLines[p] == next[p] {
+			p++
+		}
+		tail := append([]string(nil), next[p:]...)
+		lastLines = next
+		return write(outMsg{
+			T:     "patch",
+			From:  p,
+			Lines: tail,
+			Q:     prompt.DetectQuestion(content),
+		}) == nil
 	}
 
 	if !push() {

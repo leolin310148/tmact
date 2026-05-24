@@ -43,7 +43,7 @@ func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
 	ext := sniffImageExtension(file)
 	if ext == "" {
 		writeJSONError(w, http.StatusUnsupportedMediaType,
-			"unsupported image format (expected PNG, JPEG, GIF, WebP, or BMP)")
+			"unsupported image format (expected PNG, JPEG, GIF, WebP, BMP, or SVG)")
 		return
 	}
 
