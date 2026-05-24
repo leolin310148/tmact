@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panestate"
@@ -44,7 +45,17 @@ type Options struct {
 	Interval           time.Duration
 	IdleIgnorePatterns []string
 	CaptureRuntimes    []string
+	// MaxConcurrency caps the number of panes inspected in parallel. Each
+	// inspectPane fires a `tmux capture-pane` (and possibly pgrep/ps for
+	// runtime detection) so the wall-time of a full cycle is dominated by
+	// subprocess fork+exec. Defaults to defaultMaxConcurrency.
+	MaxConcurrency int
 }
+
+// defaultMaxConcurrency is the worker-pool size when Options.MaxConcurrency is
+// unset. The tmux server serializes commands internally, so values past ~8
+// stop helping and start adding scheduler noise.
+const defaultMaxConcurrency = 8
 
 type Report struct {
 	Timestamp string       `json:"ts"`
@@ -140,11 +151,42 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 	}
 	report := Report{
 		Timestamp: time.Now().Format(time.RFC3339),
-		Panes:     make([]PaneStatus, 0, len(panes)),
+		Panes:     make([]PaneStatus, len(panes)),
 	}
-	for _, pane := range panes {
-		report.Panes = append(report.Panes, inspector.inspectPane(pane))
+	if len(panes) == 0 {
+		return report, nil
 	}
+
+	workers := options.MaxConcurrency
+	if workers <= 0 {
+		workers = defaultMaxConcurrency
+	}
+	if workers > len(panes) {
+		workers = len(panes)
+	}
+
+	// Parallelize the inspect loop: each inspectPane is dominated by an
+	// `exec.Command("tmux", "capture-pane", ...)` round-trip, so the loop is
+	// IO-bound on subprocess fork+exec. tmux itself serializes commands so
+	// excessive concurrency just buys scheduler noise. Results are written
+	// into report.Panes by index to preserve the caller's pane order.
+	type job struct{ idx int }
+	jobs := make(chan job, len(panes))
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				report.Panes[j.idx] = inspector.inspectPane(panes[j.idx])
+			}
+		}()
+	}
+	for i := range panes {
+		jobs <- job{idx: i}
+	}
+	close(jobs)
+	wg.Wait()
 	return report, nil
 }
 

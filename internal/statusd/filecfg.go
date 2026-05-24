@@ -14,7 +14,7 @@ const (
 	DefaultFileConfigName = "statusd.json"
 	DefaultWebAddr        = "127.0.0.1:7890"
 	DefaultLogPath        = "/tmp/tmact-statusd.jsonl"
-	DefaultFileInterval   = 3 * time.Second
+	DefaultFileInterval   = 500 * time.Millisecond
 )
 
 // FileConfig is the on-disk shape of ~/.tmact/statusd.json. Pointer / string

@@ -8,7 +8,7 @@ import (
 
 const (
 	DefaultSocketPath      = "/tmp/tmact-statusd.sock"
-	DefaultInterval        = time.Second
+	DefaultInterval        = 500 * time.Millisecond
 	DefaultStaleAfter      = 10 * time.Second
 	DefaultCaptureLines    = 40
 	DefaultRunningDebounce = 5 * time.Second
