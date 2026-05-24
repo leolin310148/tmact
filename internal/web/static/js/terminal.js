@@ -184,10 +184,12 @@ function parseTableBlock(blockLines) {
       if (!invalid && headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
       continue;
     }
-    // A continuation line may have no bars at all (just wrapped cell text).
-    // Append verbatim — preserve trailing whitespace because that's where the
-    // word boundary at the wrap point lives.
+    // A continuation line may have no bars (wrap mid-cell). Always append; a
+    // complete row is signalled by accumulating exactly cols+1 bars total —
+    // anything beyond that means we glued two rows together and need to flush.
     buf += v;
+    const bars = (buf.match(/[│║]/g) || []).length;
+    if (bars >= cols + 1) flush();
   }
   flush();
 
@@ -313,4 +315,4 @@ export function setContent(text, opts) {
 }
 
 // Exported for tests.
-export const __test__ = { extractTables, parseTableBlock, renderTable };
+export const __test__ = { extractTables, parseTableBlock, renderTable, joinWrappedFrames };
