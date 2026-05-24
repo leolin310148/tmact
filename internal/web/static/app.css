@@ -17,8 +17,10 @@
     --pane-font: 13px;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; overflow-x: hidden; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
   body {
+    height: var(--tmact-vvh, 100dvh);
+    max-height: var(--tmact-vvh, 100dvh);
     background: var(--bg);
     color: var(--fg);
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

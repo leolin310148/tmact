@@ -707,25 +707,28 @@ function wireInput() {
 
 /* ---- mobile: keep the app inside the visual viewport ---- */
 
-// The soft keyboard shrinks the visual viewport but not the layout, so the
-// input bar and the bottom of the pane end up hidden behind it. Pin the body
-// to the visual viewport; on a resize (keyboard open/close) also re-anchor the
-// output to its last line so the live tail stays in view.
+// The soft keyboard shrinks the visual viewport but not the layout viewport.
+// Keep the flex shell sized to the visible viewport and cancel Safari's
+// document-level focus scroll; pane output has its own scroll container, so
+// resizing must not force it to the captured tmux buffer's blank tail.
 function fitViewport() {
   const vv = window.visualViewport;
   if (!vv) return;
-  document.body.style.height = vv.height + "px";
+  document.documentElement.style.setProperty("--tmact-vvh", vv.height + "px");
   window.scrollTo(0, 0);
   positionRecOverlay();
 }
-function pinViewport() {
+function scheduleFitViewport() {
   fitViewport();
-  const pre = $("content");
-  pre.scrollTop = pre.scrollHeight;
+  requestAnimationFrame(fitViewport);
+  setTimeout(fitViewport, 80);
+  setTimeout(fitViewport, 260);
 }
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", pinViewport);
+  window.visualViewport.addEventListener("resize", scheduleFitViewport);
   window.visualViewport.addEventListener("scroll", fitViewport);
+  window.addEventListener("orientationchange", scheduleFitViewport);
+  document.addEventListener("focusin", scheduleFitViewport);
   fitViewport();
 }
 

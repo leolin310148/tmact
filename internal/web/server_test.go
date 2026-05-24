@@ -264,6 +264,18 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
+		`--tmact-vvh`,
+		`scheduleFitViewport`,
+		`document.addEventListener("focusin", scheduleFitViewport)`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing viewport keyboard guard %q", want)
+		}
+	}
+	if strings.Contains(app, `pre.scrollTop = pre.scrollHeight`) {
+		t.Fatal("app script must not scroll pane output to the blank tmux tail on keyboard resize")
+	}
+	for _, want := range []string{
 		`.agent-icon.runtime-claude`,
 		`.agent-icon.runtime-codex`,
 		`.agent-icon.runtime-copilot`,
@@ -271,6 +283,8 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`.image-path`,
 		`.image-preview`,
 		`.image-preview img`,
+		`height: var(--tmact-vvh, 100dvh);`,
+		`overflow: hidden;`,
 		`@keyframes agent-shine`,
 		`@keyframes agent-rainbow`,
 		`display: block;`,
