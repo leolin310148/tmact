@@ -95,6 +95,12 @@ function ansiToHTML(raw) {
 // the markers to a CSS-drawn rule, so the original terminal-width run of rule
 // characters never wraps or leaks into the rendered pane.
 const RULE_OPEN = "", RULE_CLOSE = "";
+// extractTables collapses box-drawing tables (┌─┐ / │…│ / └─┘) into a single
+// PUA placeholder line so the surrounding pre-wrap layout never tries to align
+// columns at terminal cell widths — a fight the web font always loses. The
+// real HTML <table> is spliced back in after ansiToHTML.
+const TABLE_OPEN = "", TABLE_CLOSE = "";
+const TABLE_PLACEHOLDER_RE = /(\d+)/g;
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
@@ -103,6 +109,90 @@ function previewableImagePath(path) {
   if (path.startsWith("~/")) return false;
   const scheme = URL_SCHEME_RE.exec(path);
   return !scheme || scheme[0].toLowerCase() === "file://";
+}
+
+// Box-drawing borders we treat as table frames. The top/bottom-corner regexes
+// only match a line whose visible characters are entirely frame chars, so a
+// `┌` that happens to appear mid-line in pane output (e.g. inside agent text)
+// will not start a false-positive table.
+const TABLE_TOP_RE = /^[ \t]*[┌╔][─═]+(?:[┬╦][─═]+)*[┐╗][ \t]*$/;
+const TABLE_BOT_RE = /^[ \t]*[└╚][─═]+(?:[┴╩][─═]+)*[┘╝][ \t]*$/;
+const TABLE_SEP_RE = /^[ \t]*[├╠][─═]+(?:[┼╬][─═]+)*[┤╣][ \t]*$/;
+const TABLE_ROW_RE = /^[ \t]*[│║].*[│║][ \t]*$/;
+
+function parseTableBlock(blockLines) {
+  const rows = [];
+  let headerEnd = -1;
+  for (const raw of blockLines) {
+    const v = raw.replace(ANSI_STRIP_RE, "");
+    if (TABLE_TOP_RE.test(v) || TABLE_BOT_RE.test(v)) continue;
+    if (TABLE_SEP_RE.test(v)) {
+      if (headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
+      continue;
+    }
+    if (!TABLE_ROW_RE.test(v)) continue;
+    const inner = v.replace(/^[ \t]*[│║]/, "").replace(/[│║][ \t]*$/, "");
+    rows.push(inner.split(/[│║]/).map((c) => c.trim()));
+  }
+  return { rows, headerEnd };
+}
+
+function renderTable(parsed) {
+  const { rows, headerEnd } = parsed;
+  if (!rows.length) return "";
+  const hEnd = headerEnd > 0 ? headerEnd : 0;
+  const parts = ['<div class="tui-table-wrap"><table class="tui-table">'];
+  if (hEnd > 0) {
+    parts.push("<thead>");
+    for (let r = 0; r < hEnd; r++) {
+      parts.push("<tr>");
+      for (const c of rows[r]) parts.push("<th>" + escapeHTML(c) + "</th>");
+      parts.push("</tr>");
+    }
+    parts.push("</thead>");
+  }
+  parts.push("<tbody>");
+  for (let r = hEnd; r < rows.length; r++) {
+    parts.push("<tr>");
+    for (const c of rows[r]) parts.push("<td>" + escapeHTML(c) + "</td>");
+    parts.push("</tr>");
+  }
+  parts.push("</tbody></table></div>");
+  return parts.join("");
+}
+
+function extractTables(text) {
+  const lines = text.split("\n");
+  const tables = [];
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const v = lines[i].replace(ANSI_STRIP_RE, "");
+    if (TABLE_TOP_RE.test(v)) {
+      let j = i + 1;
+      while (j < lines.length) {
+        const vj = lines[j].replace(ANSI_STRIP_RE, "");
+        if (TABLE_BOT_RE.test(vj)) break;
+        // A blank line or non-table line before the bottom frame means this
+        // wasn't a real table — give up and emit lines verbatim.
+        if (!TABLE_ROW_RE.test(vj) && !TABLE_SEP_RE.test(vj)) { j = -1; break; }
+        j++;
+      }
+      if (j > 0 && j < lines.length) {
+        const parsed = parseTableBlock(lines.slice(i, j + 1));
+        if (parsed.rows.length > 0) {
+          const idx = tables.length;
+          tables.push(renderTable(parsed));
+          out.push(TABLE_OPEN + idx + TABLE_CLOSE);
+          i = j + 1;
+          continue;
+        }
+      }
+    }
+    out.push(lines[i]);
+    i++;
+  }
+  return { text: out.join("\n"), tables };
 }
 
 function wrapRuleLines(text) {
@@ -148,10 +238,17 @@ function markImagePaths(root, cwd) {
 export function setContent(text, opts) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-  const html = ansiToHTML(wrapRuleLines(text))
+  const extracted = extractTables(text);
+  let html = ansiToHTML(wrapRuleLines(extracted.text))
     .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
     .replaceAll(RULE_CLOSE, "</span>");
+  if (extracted.tables.length) {
+    html = html.replace(TABLE_PLACEHOLDER_RE, (_, n) => extracted.tables[+n] || "");
+  }
   pre.innerHTML = html;
   markImagePaths(pre, opts && opts.cwd);
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
+
+// Exported for tests.
+export const __test__ = { extractTables, parseTableBlock, renderTable };

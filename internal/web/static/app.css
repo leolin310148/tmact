@@ -197,6 +197,41 @@
     border-top: 1px solid var(--border);
     vertical-align: top;
   }
+  /* Box-drawing tables (┌─┐ │…│ └─┘) get parsed out of the pre-wrapped pane
+     text and re-emitted as real <table>s. The wrapper escapes the ambient
+     <pre> monospace context (sans-serif, normal whitespace) and provides a
+     horizontal scroll for tables wider than the viewport. Cell text wraps on
+     word boundaries so a long row reflows instead of forcing the whole table
+     into a side-scroll. */
+  .tui-table-wrap {
+    display: block;
+    margin: 0.6em 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    white-space: normal;
+  }
+  .tui-table {
+    border-collapse: collapse;
+    width: max-content;
+    max-width: 100%;
+  }
+  .tui-table th, .tui-table td {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .tui-table th {
+    background: var(--panel-2);
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .tui-table tbody tr:nth-child(even) td {
+    background: rgba(255,255,255,0.02);
+  }
   .image-path {
     color: var(--direct);
     text-decoration: underline dotted rgba(121,192,255,0.55);
