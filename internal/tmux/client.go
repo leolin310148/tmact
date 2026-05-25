@@ -273,6 +273,37 @@ func ClearPane(target string) error {
 	return runTmux("clear-history", "-t", target)
 }
 
+// PaneAttachedClients returns the count of clients attached to the session
+// that contains target (a pane id like "%12" or any tmux target spec). Zero
+// means the session is detached — safe for the web UI to resize the window
+// without fighting a live terminal client's reported size.
+func PaneAttachedClients(target string) (int, error) {
+	if target == "" {
+		return 0, fmt.Errorf("target cannot be empty")
+	}
+	out, err := outputTmux("display-message", "-t", target, "-p", "#{session_attached}")
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0, fmt.Errorf("invalid session_attached %q: %w", out, err)
+	}
+	return n, nil
+}
+
+// ResizeWindow resizes the window containing target to cols x rows. tmux
+// accepts a pane id as target and applies the size to the enclosing window.
+func ResizeWindow(target string, cols, rows int) error {
+	if target == "" {
+		return fmt.Errorf("target cannot be empty")
+	}
+	if cols <= 0 || rows <= 0 {
+		return fmt.Errorf("invalid size %dx%d", cols, rows)
+	}
+	return runTmux("resize-window", "-t", target, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
+}
+
 func SetSessionOption(session string, key string, value string) error {
 	if session == "" {
 		return fmt.Errorf("session cannot be empty")

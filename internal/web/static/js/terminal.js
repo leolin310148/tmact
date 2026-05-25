@@ -344,6 +344,38 @@ function markImagePaths(root, cwd) {
   }
 }
 
+// measurePaneSize estimates how many tmux cols × rows fit in pre#content at
+// the current font + viewport. Returns null when the pane isn't laid out yet
+// (initial paint, hidden tab) so the caller can skip sending a degenerate size.
+export function measurePaneSize() {
+  const pre = $("content");
+  if (!pre) return null;
+  const cs = window.getComputedStyle(pre);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const padT = parseFloat(cs.paddingTop) || 0;
+  const padB = parseFloat(cs.paddingBottom) || 0;
+  const innerW = pre.clientWidth - padL - padR;
+  const innerH = pre.clientHeight - padT - padB;
+  if (innerW <= 0 || innerH <= 0) return null;
+
+  // A 100-char probe averages out subpixel rounding so the cell width comes
+  // out stable across fonts and zoom levels.
+  const probe = document.createElement("span");
+  probe.textContent = "M".repeat(100);
+  probe.style.cssText =
+    "position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:-9999px;" +
+    "font-family:" + cs.fontFamily + ";font-size:" + cs.fontSize + ";" +
+    "font-weight:" + cs.fontWeight + ";letter-spacing:" + cs.letterSpacing;
+  document.body.appendChild(probe);
+  const charW = probe.getBoundingClientRect().width / 100;
+  document.body.removeChild(probe);
+
+  const lineH = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) || 13) * 1.4;
+  if (!(charW > 0) || !(lineH > 0)) return null;
+  return { cols: Math.floor(innerW / charW), rows: Math.floor(innerH / lineH) };
+}
+
 export function setContent(text, opts) {
   const pre = $("content");
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;

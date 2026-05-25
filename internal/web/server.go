@@ -58,6 +58,12 @@ type Server struct {
 	SendKey func(target, key string) error
 	// ClearPane clears the visible pane and its tmux scrollback history.
 	ClearPane func(target string) error
+	// AttachedClients returns the number of clients attached to the session
+	// containing target; defaults to tmux.PaneAttachedClients.
+	AttachedClients func(target string) (int, error)
+	// ResizeWindow resizes the window containing target to cols x rows;
+	// defaults to tmux.ResizeWindow.
+	ResizeWindow func(target string, cols, rows int) error
 	// STTProviderPath is the local provider config path; defaults to
 	// ~/.tmact/stt_provider.json.
 	STTProviderPath string
@@ -108,6 +114,20 @@ func (s *Server) clearPane() func(string) error {
 		return s.ClearPane
 	}
 	return tmux.ClearPane
+}
+
+func (s *Server) attachedClients() func(string) (int, error) {
+	if s.AttachedClients != nil {
+		return s.AttachedClients
+	}
+	return tmux.PaneAttachedClients
+}
+
+func (s *Server) resizeWindow() func(string, int, int) error {
+	if s.ResizeWindow != nil {
+		return s.ResizeWindow
+	}
+	return tmux.ResizeWindow
 }
 
 func (s *Server) sttProvider() (stt.ProviderConfig, error) {

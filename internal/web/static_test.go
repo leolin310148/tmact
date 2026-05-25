@@ -213,9 +213,21 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`.replace(URL_ANSI_RE, "")`,
 		`.replace(/\n[ \t]+/g, "")`,
 		`class="tui-link"`,
+		`export function measurePaneSize()`,
 	} {
 		if !strings.Contains(terminal, want) {
 			t.Fatalf("terminal module missing %q", want)
+		}
+	}
+	for _, want := range []string{
+		`measurePaneSize`,
+		`{ t: "resize", cols: sz.cols, rows: sz.rows }`,
+		`window.addEventListener("resize", scheduleResize)`,
+		`window.visualViewport.addEventListener("resize", scheduleResize)`,
+		`lastSentSize = { cols: 0, rows: 0 }`,
+	} {
+		if !strings.Contains(app, want) {
+			t.Fatalf("app script missing resize wiring %q", want)
 		}
 	}
 	for _, want := range []string{
