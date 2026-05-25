@@ -186,6 +186,16 @@
     -webkit-user-select: none;
     user-select: none;
   }
+  /* On real pointer devices (desktop trackpad/mouse) the pane is always
+     selectable — drag selects, plain click still falls through to direct
+     mode via the mouseup handler. Coarse pointers keep the toggle button
+     so a tap can't accidentally start a selection. */
+  @media (pointer: fine) {
+    pre#content {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+  }
   /* TUI horizontal-rule lines (rows of ─). Box-art borders from tools like
      Claude Code are wider than a phone viewport, and pre-wrap would split
      them across several visual rows. The script replaces those character runs

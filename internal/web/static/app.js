@@ -679,9 +679,12 @@ function wireInput() {
   });
 
   const direct = $("direct-input");
-  // A plain click/tap on the output focuses the invisible overlay for direct
-  // keystroke passthrough. Text selection is intentionally reserved for
-  // selection mode so direct mode does not need focus/selection heuristics.
+  // A plain click on the output focuses the invisible overlay for direct
+  // keystroke passthrough; a drag selects pane text (desktop only — coarse
+  // pointers keep the toggle button so a tap can't accidentally start a
+  // selection). The mouseup handler skips refocusing direct-input when a
+  // non-empty selection lives in pre#content, otherwise the focus change
+  // would erase the selection before the user can copy it.
   const content = $("content");
   content.addEventListener("mouseup", () => {
     if (state.selectionMode) {
@@ -689,6 +692,12 @@ function wireInput() {
       renderMode();
       return;
     }
+    // After a shift-drag we want to leave focus alone — refocusing
+    // #direct-input would clear the just-made selection in pre#content
+    // and the user can't even copy it. The next plain click returns to
+    // direct mode via this same handler.
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && content.contains(sel.anchorNode)) return;
     direct.focus();
   });
   content.addEventListener("click", (e) => {

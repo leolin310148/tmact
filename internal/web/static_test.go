@@ -109,7 +109,6 @@ func TestIndexIncludesMobileUploadControls(t *testing.T) {
 		`if (state.selectionMode)`,
 		`!draft.value.trim()`,
 		`sendDirect({ t: "key", k: "Enter" })`,
-		`selection mode so direct mode does not need focus/selection heuristics`,
 		`!state.selectionMode && document.activeElement === $("direct-input")`,
 		`tone: "upload"`,
 		`tone: "selection"`,
