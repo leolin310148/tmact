@@ -101,14 +101,18 @@ async function loadSTTSettings() {
 }
 
 async function loadVersionInfo() {
-  const el = $("build-time");
-  el.textContent = "loading…";
+  const buildEl = $("build-time");
+  const hashEl = $("asset-hash");
+  buildEl.textContent = "loading…";
+  hashEl.textContent = "loading…";
   try {
     const { res, data } = await loadVersion();
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    el.textContent = data.build_time || "unavailable";
+    buildEl.textContent = data.build_time || "unavailable";
+    hashEl.textContent = data.asset_hash || "unavailable";
   } catch (e) {
-    el.textContent = "unavailable";
+    buildEl.textContent = "unavailable";
+    hashEl.textContent = "unavailable";
   }
 }
 

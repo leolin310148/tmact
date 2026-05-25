@@ -1,4 +1,8 @@
-const CACHE_NAME = "tmact-app-shell-v15";
+// CACHE_NAME's suffix is rewritten by the Go server to a content hash of the
+// embedded static assets, so any change under internal/web/static/ buys a
+// fresh cache automatically — no manual bump needed. The literal vDEV here is
+// only what you see when reading the file on disk.
+const CACHE_NAME = "tmact-app-shell-vDEV";
 const APP_SHELL_URLS = [
   "/",
   "/index.html",

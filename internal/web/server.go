@@ -5,15 +5,19 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -190,6 +194,10 @@ func (s *Server) Handler() http.Handler {
 	if err != nil {
 		panic(err) // embedded path is fixed at build time
 	}
+	// /sw.js is served with a content-hash cache key so any change to an
+	// embedded static asset busts the browser's service-worker cache without
+	// requiring a manual version bump.
+	mux.HandleFunc("/sw.js", s.handleServiceWorker)
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
@@ -203,6 +211,67 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+var (
+	staticHashOnce sync.Once
+	staticHashVal  string
+	swBodyOnce     sync.Once
+	swBodyVal      []byte
+	swBodyErr      error
+	cacheNameRe    = regexp.MustCompile(`tmact-app-shell-v[0-9A-Za-z]+`)
+)
+
+// staticAssetHash returns a short content hash covering every embedded static
+// file. Any edit under internal/web/static/ flips the hash, which propagates
+// into the service worker's CACHE_NAME so the browser refetches the shell.
+func staticAssetHash() string {
+	staticHashOnce.Do(func() {
+		h := sha256.New()
+		_ = fs.WalkDir(staticFS, "static", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			f, err := staticFS.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, _ = io.WriteString(h, path+"\x00")
+			_, _ = io.Copy(h, f)
+			_, _ = h.Write([]byte{0})
+			return nil
+		})
+		staticHashVal = hex.EncodeToString(h.Sum(nil))[:12]
+	})
+	return staticHashVal
+}
+
+func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	swBodyOnce.Do(func() {
+		raw, err := fs.ReadFile(staticFS, "static/sw.js")
+		if err != nil {
+			swBodyErr = err
+			return
+		}
+		swBodyVal = cacheNameRe.ReplaceAll(raw, []byte("tmact-app-shell-"+staticAssetHash()))
+	})
+	if swBodyErr != nil {
+		http.Error(w, "service worker unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	// no-store keeps the SW script itself fresh; the SW manages its own cache.
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = w.Write(swBodyVal)
+}
+
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -213,7 +282,8 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(struct {
 		BuildTime string `json:"build_time"`
-	}{BuildTime: s.BuildTime})
+		AssetHash string `json:"asset_hash"`
+	}{BuildTime: s.BuildTime, AssetHash: staticAssetHash()})
 }
 
 // Serve runs the HTTP server until ctx is cancelled, then shuts down
