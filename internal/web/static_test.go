@@ -207,9 +207,11 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`IMAGE_PATH_RE`,
 		`span.className = "image-path"`,
 		`span.dataset.path`,
-		`const URL_RE =`,
+		`const URL_CHARS =`,
+		`new RegExp(`,
 		`function extractURLs(text)`,
-		`match.replace(/\n[ \t]+/g, "")`,
+		`.replace(URL_ANSI_RE, "")`,
+		`.replace(/\n[ \t]+/g, "")`,
 		`class="tui-link"`,
 	} {
 		if !strings.Contains(terminal, want) {

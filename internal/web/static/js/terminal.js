@@ -108,12 +108,23 @@ const TABLE_PLACEHOLDER_RE = /(\d+)/g;
 // the pane stays visually faithful to the terminal layout.
 const URL_OPEN = "", URL_SEP = "", URL_CLOSE = "";
 const URL_PLACEHOLDER_RE = /(\d+)([\s\S]*?)/g;
-// URL detection. The match extends across a soft wrap only when the next line
-// starts with horizontal whitespace AND a URL-path character — so
-// `https://x\n  /path` joins but `https://x\n  Some sentence` does not. This
-// covers the common github-link wrap case without gluing prose onto URLs.
-const URL_RE = /https?:\/\/[^\s<>"'`]+(?:\n[ \t]+[\/?&=#+%~@:.\-][^\s<>"'`]*)*/g;
+// URL detection. The char class is RFC 3986 reserved + unreserved + percent —
+// ASCII only, so CJK punctuation, backslashes, and prose can't be glued onto a
+// URL. ANSI escape sequences are allowed mid-URL: tmux `capture-pane -e -J`
+// re-asserts SGR state at a soft-wrap join, so a visually contiguous URL like
+// github.com/x/y is stored as `github.com/x\x1b[...m/y` in raw output. The
+// match extends across a soft wrap only when the next line starts with
+// horizontal whitespace AND a URL-path character, covering the github-link
+// wrap without joining prose onto URLs.
+const URL_CHARS = "A-Za-z0-9\\-._~:/?#\\[\\]@!$&*+,;=%()";
+const URL_ANSI = "(?:\\x1b\\[[0-9;?]*[ -/]*[@-~]|\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\))";
+const URL_ATOM = "(?:[" + URL_CHARS + "]|" + URL_ANSI + ")";
+const URL_RE = new RegExp(
+  "https?://" + URL_ATOM + "+(?:\\n[ \\t]+(?:[/?&=#+%~@:.\\-]|" + URL_ANSI + ")" + URL_ATOM + "*)*",
+  "g",
+);
 const URL_TRAIL_RE = /[.,;:!?)\]}>'"`]+$/;
+const URL_ANSI_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
@@ -275,14 +286,20 @@ function extractTables(text) {
 function extractURLs(text) {
   const urls = [];
   const replaced = text.replace(URL_RE, (match) => {
+    // Pull ANSI escapes out of the body and re-emit them AFTER the placeholder
+    // so the SGR state transitions still apply to subsequent text, but the
+    // body itself is a flat string — keeping ansiToHTML from crossing <a> and
+    // <span> boundaries (which produces malformed HTML).
+    const trailingAnsi = (match.match(URL_ANSI_RE) || []).join("");
+    let clean = match.replace(URL_ANSI_RE, "");
     let trailing = "";
-    const tm = match.match(URL_TRAIL_RE);
-    if (tm) { trailing = tm[0]; match = match.slice(0, -trailing.length); }
-    if (!/^https?:\/\/.+/.test(match)) return match + trailing;
-    const href = match.replace(/\n[ \t]+/g, "");
+    const tm = clean.match(URL_TRAIL_RE);
+    if (tm) { trailing = tm[0]; clean = clean.slice(0, -trailing.length); }
+    if (!/^https?:\/\/.+/.test(clean)) return match;
+    const href = clean.replace(/\n[ \t]+/g, "");
     const idx = urls.length;
     urls.push(href);
-    return URL_OPEN + idx + URL_SEP + match + URL_CLOSE + trailing;
+    return URL_OPEN + idx + URL_SEP + clean + URL_CLOSE + trailing + trailingAnsi;
   });
   return { text: replaced, urls };
 }
