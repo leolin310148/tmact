@@ -41,6 +41,9 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 			}
 		}
 	}
+	if _, err := EnforcePaneSize(d.cfg); err != nil {
+		snapshot.addError("pane_size", "", err)
+	}
 	d.store.Publish(snapshot)
 	if d.cfg.LogPath != "" {
 		_ = appendLog(d.cfg.LogPath, snapshot)

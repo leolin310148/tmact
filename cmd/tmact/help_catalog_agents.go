@@ -144,6 +144,8 @@ func statusdHelpFlags() []helpFlag {
 		{Name: "--initial-samples", Value: "N", Description: "captures per pane before statusd has history"},
 		{Name: "--running-debounce", Value: "DURATION", Description: "keep running indicator after changes"},
 		{Name: "--stale-after", Value: "DURATION", Description: "mark snapshot stale after this age"},
+		{Name: "--pane-cols", Value: "N", Description: "fixed tmux window width (0 disables sweep)"},
+		{Name: "--pane-rows", Value: "N", Description: "fixed tmux window height (0 disables sweep)"},
 		{Name: "--idle-ignore", Value: "REGEXP", Description: "line regexp ignored by sample hashing; may be repeated"},
 		{Name: "--session", Value: "GLOB", Description: "include sessions matching glob; may be repeated"},
 		{Name: "--exclude-session", Value: "GLOB", Description: "exclude sessions matching glob; may be repeated"},

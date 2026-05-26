@@ -95,60 +95,12 @@ func TestApplyInputClearPane(t *testing.T) {
 	}
 }
 
-func TestApplyInputResizeDetached(t *testing.T) {
-	type call struct {
-		target     string
-		cols, rows int
-	}
-	var got call
-	s := &Server{
-		AttachedClients: func(string) (int, error) { return 0, nil },
-		ResizeWindow: func(target string, cols, rows int) error {
-			got = call{target, cols, rows}
-			return nil
-		},
-	}
-	if err := s.applyInput("%7", inputMsg{T: "resize", Cols: 180, Rows: 50}); err != nil {
-		t.Fatal(err)
-	}
-	if got.target != "%7" || got.cols != 180 || got.rows != 50 {
-		t.Fatalf("ResizeWindow got %+v, want target=%%7 cols=180 rows=50", got)
-	}
-}
-
-func TestApplyInputResizeSkipsWhenAttached(t *testing.T) {
-	s := &Server{
-		AttachedClients: func(string) (int, error) { return 1, nil },
-		ResizeWindow: func(string, int, int) error {
-			t.Fatal("ResizeWindow must not run when a client is attached")
-			return nil
-		},
-	}
-	if err := s.applyInput("%7", inputMsg{T: "resize", Cols: 180, Rows: 50}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestApplyInputResizeOutOfRange(t *testing.T) {
-	calls := 0
-	s := &Server{
-		AttachedClients: func(string) (int, error) { calls++; return 0, nil },
-		ResizeWindow:    func(string, int, int) error { calls++; return nil },
-	}
-	cases := []inputMsg{
-		{T: "resize", Cols: 0, Rows: 0},
-		{T: "resize", Cols: 10, Rows: 50},   // cols below min
-		{T: "resize", Cols: 80, Rows: 1},    // rows below min
-		{T: "resize", Cols: 9999, Rows: 50}, // cols above max
-		{T: "resize", Cols: 80, Rows: 999},  // rows above max
-	}
-	for _, m := range cases {
-		if err := s.applyInput("%7", m); err == nil {
-			t.Fatalf("expected error for %+v", m)
-		}
-	}
-	if calls != 0 {
-		t.Fatalf("AttachedClients/ResizeWindow called %d times for invalid sizes", calls)
+func TestApplyInputResizeIgnored(t *testing.T) {
+	// statusd owns the tmux window size; the server tolerates legacy "resize"
+	// frames from older browser bundles but must not act on them.
+	s := &Server{}
+	if err := s.applyInput("%7", inputMsg{T: "resize"}); err != nil {
+		t.Fatalf("resize must be a silent no-op, got %v", err)
 	}
 }
 

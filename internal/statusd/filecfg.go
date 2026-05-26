@@ -26,17 +26,22 @@ type FileConfig struct {
 	SocketPath  string `json:"socket_path,omitempty"`
 	LogPath     string `json:"log_path,omitempty"`
 	TmuxOptions *bool  `json:"tmux_options,omitempty"`
+	PaneCols    *int   `json:"pane_cols,omitempty"`
+	PaneRows    *int   `json:"pane_rows,omitempty"`
 }
 
 // DefaultFileConfig is the seed written when statusd.json is missing.
 func DefaultFileConfig() FileConfig {
 	t := true
+	cols, rows := DefaultPaneCols, DefaultPaneRows
 	return FileConfig{
 		WebAddr:     DefaultWebAddr,
 		Interval:    DefaultFileInterval.String(),
 		SocketPath:  DefaultSocketPath,
 		LogPath:     DefaultLogPath,
 		TmuxOptions: &t,
+		PaneCols:    &cols,
+		PaneRows:    &rows,
 	}
 }
 

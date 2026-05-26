@@ -212,21 +212,23 @@ func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
 		`.replace(URL_ANSI_RE, "")`,
 		`.replace(/\n[ \t]+/g, "")`,
 		`class="tui-link"`,
-		`export function measurePaneSize()`,
 	} {
 		if !strings.Contains(terminal, want) {
 			t.Fatalf("terminal module missing %q", want)
 		}
 	}
-	for _, want := range []string{
+	// statusd owns the tmux window size; the browser must not ship code that
+	// reports its viewport over the WS (it would re-introduce the rag-edged
+	// scrollback we get when devices of different widths share a session).
+	for _, banned := range []string{
 		`measurePaneSize`,
-		`{ t: "resize", cols: sz.cols, rows: sz.rows }`,
-		`window.addEventListener("resize", scheduleResize)`,
-		`window.visualViewport.addEventListener("resize", scheduleResize)`,
-		`lastSentSize = { cols: 0, rows: 0 }`,
+		`t: "resize"`,
 	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing resize wiring %q", want)
+		if strings.Contains(app, banned) {
+			t.Fatalf("app script must not include resize wiring %q", banned)
+		}
+		if strings.Contains(terminal, banned) {
+			t.Fatalf("terminal module must not include resize wiring %q", banned)
 		}
 	}
 	for _, want := range []string{

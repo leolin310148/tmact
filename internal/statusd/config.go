@@ -13,6 +13,13 @@ const (
 	DefaultCaptureLines    = 40
 	DefaultRunningDebounce = 5 * time.Second
 	DefaultInitialSamples  = 2
+	// DefaultPaneCols is the fixed tmux window width the daemon enforces so
+	// scrollback history stays visually consistent across browsers and devices.
+	// CSS pre-wrap in the web UI handles narrower viewports without re-flowing
+	// tmux's grid (which would fragment the history at the old width).
+	DefaultPaneCols = 140
+	// DefaultPaneRows is the corresponding fixed window height.
+	DefaultPaneRows = 40
 )
 
 type Config struct {
@@ -27,12 +34,20 @@ type Config struct {
 	IdleIgnorePatterns []string
 	IncludeSessions    []string
 	ExcludeSessions    []string
+	// PaneCols / PaneRows define the fixed tmux window size the daemon keeps
+	// every detached window at. Zero disables the sweep entirely.
+	PaneCols int
+	PaneRows int
 
 	Now              func() time.Time
 	Sleep            func(time.Duration)
 	ListPanes        func() ([]tmux.Pane, error)
 	CapturePane      func(string, int) (string, error)
 	SetSessionOption func(string, string, string) error
+	// ListWindowSizes and ResizeWindow are injection points for the pane-width
+	// sweep; default to the live tmux helpers.
+	ListWindowSizes func() ([]tmux.WindowSize, error)
+	ResizeWindow    func(target string, cols, rows int) error
 }
 
 func (c Config) withDefaults() Config {
@@ -68,6 +83,18 @@ func (c Config) withDefaults() Config {
 	}
 	if c.SetSessionOption == nil {
 		c.SetSessionOption = tmux.SetSessionOption
+	}
+	if c.PaneCols < 0 {
+		c.PaneCols = 0
+	}
+	if c.PaneRows < 0 {
+		c.PaneRows = 0
+	}
+	if c.ListWindowSizes == nil {
+		c.ListWindowSizes = tmux.ListWindowSizes
+	}
+	if c.ResizeWindow == nil {
+		c.ResizeWindow = tmux.ResizeWindow
 	}
 	return c
 }

@@ -273,25 +273,6 @@ func ClearPane(target string) error {
 	return runTmux("clear-history", "-t", target)
 }
 
-// PaneAttachedClients returns the count of clients attached to the session
-// that contains target (a pane id like "%12" or any tmux target spec). Zero
-// means the session is detached — safe for the web UI to resize the window
-// without fighting a live terminal client's reported size.
-func PaneAttachedClients(target string) (int, error) {
-	if target == "" {
-		return 0, fmt.Errorf("target cannot be empty")
-	}
-	out, err := outputTmux("display-message", "-t", target, "-p", "#{session_attached}")
-	if err != nil {
-		return 0, err
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(out))
-	if err != nil {
-		return 0, fmt.Errorf("invalid session_attached %q: %w", out, err)
-	}
-	return n, nil
-}
-
 // ResizeWindow resizes the window containing target to cols x rows. tmux
 // accepts a pane id as target and applies the size to the enclosing window.
 func ResizeWindow(target string, cols, rows int) error {
@@ -302,6 +283,54 @@ func ResizeWindow(target string, cols, rows int) error {
 		return fmt.Errorf("invalid size %dx%d", cols, rows)
 	}
 	return runTmux("resize-window", "-t", target, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
+}
+
+// WindowSize describes one tmux window for the fixed-width sweep. Attached
+// tracks whether any tmux client is attached to the owning session — resizing
+// such a window would fight the attached client on the next render tick.
+type WindowSize struct {
+	WindowID string
+	Width    int
+	Height   int
+	Attached bool
+}
+
+// ListWindowSizes returns the current size of every tmux window across all
+// sessions, plus whether the owning session has any attached client.
+func ListWindowSizes() ([]WindowSize, error) {
+	out, err := outputTmux("list-windows", "-a", "-F", "#{window_id}\t#{window_width}\t#{window_height}\t#{session_attached}")
+	if err != nil {
+		return nil, err
+	}
+	var sizes []WindowSize
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 4 {
+			return nil, fmt.Errorf("invalid window row %q", line)
+		}
+		w, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid window width %q: %w", parts[1], err)
+		}
+		h, err := strconv.Atoi(parts[2])
+		if err != nil {
+			return nil, fmt.Errorf("invalid window height %q: %w", parts[2], err)
+		}
+		attached, err := strconv.Atoi(parts[3])
+		if err != nil {
+			return nil, fmt.Errorf("invalid session_attached %q: %w", parts[3], err)
+		}
+		sizes = append(sizes, WindowSize{
+			WindowID: parts[0],
+			Width:    w,
+			Height:   h,
+			Attached: attached > 0,
+		})
+	}
+	return sizes, nil
 }
 
 func SetSessionOption(session string, key string, value string) error {

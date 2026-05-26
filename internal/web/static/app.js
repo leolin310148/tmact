@@ -2,7 +2,7 @@ import { fetchSnapshot, subscribeSnapshot, transcribeAudio } from "./js/api.js";
 import { $, clamp, h, isMobile } from "./js/dom.js";
 import { state, upload } from "./js/state.js";
 import { createPaneStream } from "./js/stream.js";
-import { measurePaneSize, setContent } from "./js/terminal.js";
+import { setContent } from "./js/terminal.js";
 import { createVoice } from "./js/voice.js";
 import { wireHelp } from "./js/help.js";
 import { loadClientSettings, wireSettings } from "./js/settings.js";
@@ -280,32 +280,13 @@ const paneStream = createPaneStream({
     // the next "open" clears it. The error timer is independent — its 6s
     // auto-clear can still wipe an inline error message.
     if (s === "reconnecting") setInputStatus("reconnecting…");
-    else if (s === "open") { setInputStatus(""); sendPaneResize(true); }
+    else if (s === "open") setInputStatus("");
   },
 });
 
-// Cached last-sent resize so a noisy `window.resize` storm collapses to one
-// tmux call. Reset on every openWS — a freshly-opened session was sized by
-// whatever client last attached, not by us.
-let lastSentSize = { cols: 0, rows: 0 };
-function sendPaneResize(force) {
-  if (!state.selected) return;
-  const sz = measurePaneSize();
-  if (!sz) return;
-  if (!force && sz.cols === lastSentSize.cols && sz.rows === lastSentSize.rows) return;
-  if (paneStream.send({ t: "resize", cols: sz.cols, rows: sz.rows })) {
-    lastSentSize = sz;
-  }
-}
-let resizeDebounce = null;
-function scheduleResize() {
-  if (resizeDebounce) clearTimeout(resizeDebounce);
-  resizeDebounce = setTimeout(() => { resizeDebounce = null; sendPaneResize(false); }, 250);
-}
-window.addEventListener("resize", scheduleResize);
-if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", scheduleResize);
-}
+// tmux window size is owned by statusd (fixed --pane-cols/--pane-rows) so the
+// browser doesn't request a resize on viewport change. The pane <pre> uses
+// CSS pre-wrap to fit narrower viewports without re-flowing the tmux grid.
 
 function closeWS() {
   paneStream.close();
@@ -313,7 +294,6 @@ function closeWS() {
 
 function openWS(paneID) {
   paneLines = [];
-  lastSentSize = { cols: 0, rows: 0 };
   paneStream.open(paneID);
 }
 

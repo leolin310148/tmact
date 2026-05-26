@@ -193,6 +193,12 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 	if !set["tmux-options"] && !set["no-tmux-options"] && file.TmuxOptions != nil {
 		cfg.TmuxOptions = *file.TmuxOptions
 	}
+	if !set["pane-cols"] && file.PaneCols != nil {
+		cfg.PaneCols = *file.PaneCols
+	}
+	if !set["pane-rows"] && file.PaneRows != nil {
+		cfg.PaneRows = *file.PaneRows
+	}
 }
 
 func runStatusdOnce(args []string) error {
@@ -312,6 +318,8 @@ func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
 	fs.IntVar(&values.Config.InitialSamples, "initial-samples", statusd.DefaultInitialSamples, "captures per pane before statusd has history")
 	fs.DurationVar(&values.Config.RunningDebounce, "running-debounce", statusd.DefaultRunningDebounce, "keep running indicator after changes")
 	fs.DurationVar(&values.Config.StaleAfter, "stale-after", statusd.DefaultStaleAfter, "mark snapshot stale after this age")
+	fs.IntVar(&values.Config.PaneCols, "pane-cols", statusd.DefaultPaneCols, "fixed tmux window width (0 disables sweep)")
+	fs.IntVar(&values.Config.PaneRows, "pane-rows", statusd.DefaultPaneRows, "fixed tmux window height (0 disables sweep)")
 	fs.Var(&values.IdleIgnore, "idle-ignore", "regexp for lines ignored by sample hashing; may be repeated")
 	fs.Var(&values.IncludeSession, "session", "include sessions matching glob; may be repeated")
 	fs.Var(&values.ExcludeSession, "exclude-session", "exclude sessions matching glob; may be repeated")

@@ -19,23 +19,15 @@ import (
 var paneIDPattern = regexp.MustCompile(`^%[0-9]+$`)
 
 // inputMsg is a client-to-server WebSocket message.
+//
+// Older clients may still send "resize" frames; the server ignores them — the
+// statusd daemon enforces a fixed tmux window size so the scrollback grid
+// stays consistent across devices, and the browser does the visual wrap.
 type inputMsg struct {
-	T    string `json:"t"`              // "text", "send", "key", "clear", or "resize"
-	S    string `json:"s,omitempty"`    // literal text for "text"/"send"
-	K    string `json:"k,omitempty"`    // tmux key name for "key"
-	Cols int    `json:"cols,omitempty"` // resize: requested window columns
-	Rows int    `json:"rows,omitempty"` // resize: requested window rows
+	T string `json:"t"`           // "text", "send", "key", "clear" (or legacy "resize", ignored)
+	S string `json:"s,omitempty"` // literal text for "text"/"send"
+	K string `json:"k,omitempty"` // tmux key name for "key"
 }
-
-// Resize bounds. Lower bound rejects degenerate measurements (a partly-loaded
-// page can briefly report 0x0). Upper bound matches a comfortable maximum for
-// a desktop browser plus headroom.
-const (
-	resizeMinCols = 20
-	resizeMinRows = 5
-	resizeMaxCols = 500
-	resizeMaxRows = 200
-)
 
 // outMsg is a server-to-client WebSocket message.
 //
@@ -185,20 +177,9 @@ func (s *Server) applyInput(target string, m inputMsg) error {
 	case "clear":
 		return s.clearPane()(target)
 	case "resize":
-		if m.Cols < resizeMinCols || m.Cols > resizeMaxCols || m.Rows < resizeMinRows || m.Rows > resizeMaxRows {
-			return fmt.Errorf("invalid resize %dx%d", m.Cols, m.Rows)
-		}
-		// Only resize when nothing else is attached to this session — a CLI
-		// client's reported viewport would otherwise fight the browser on the
-		// next tmux render tick.
-		n, err := s.attachedClients()(target)
-		if err != nil {
-			return err
-		}
-		if n > 0 {
-			return nil
-		}
-		return s.resizeWindow()(target, m.Cols, m.Rows)
+		// Tolerated for backwards compatibility — older browser bundles still
+		// send this on connect. statusd owns window sizing now.
+		return nil
 	default:
 		return fmt.Errorf("unknown message type: %q", m.T)
 	}
