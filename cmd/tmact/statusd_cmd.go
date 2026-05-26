@@ -199,6 +199,24 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 	if !set["pane-rows"] && file.PaneRows != nil {
 		cfg.PaneRows = *file.PaneRows
 	}
+	if len(cfg.Peers) == 0 && len(file.Peers) > 0 {
+		for _, p := range file.Peers {
+			if p.Name == "" || p.URL == "" {
+				continue
+			}
+			cfg.Peers = append(cfg.Peers, statusd.Peer{Name: p.Name, URL: p.URL})
+		}
+	}
+	if cfg.PeerInterval == 0 {
+		if d := file.PeerIntervalDuration(); d > 0 {
+			cfg.PeerInterval = d
+		}
+	}
+	if cfg.PeerTimeout == 0 {
+		if d := file.PeerTimeoutDuration(); d > 0 {
+			cfg.PeerTimeout = d
+		}
+	}
 }
 
 func runStatusdOnce(args []string) error {

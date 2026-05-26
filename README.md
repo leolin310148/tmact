@@ -58,6 +58,28 @@ http://127.0.0.1:7890
 The web UI can send input to tmux panes, so it binds to `127.0.0.1` by default.
 Only bind it to `0.0.0.0` on a trusted network.
 
+### Federation (multi-host)
+
+statusd can pull snapshots from other statusd instances and merge them into
+its own `/api/snapshot`, so one web UI can list tmux sessions from several
+machines. Add a `peers` array to `~/.tmact/statusd.json`:
+
+```json
+{
+  "web_addr": "0.0.0.0:7890",
+  "peers": [
+    { "name": "z13", "url": "http://100.65.95.50:7890" }
+  ],
+  "peer_interval": "1s",
+  "peer_timeout": "2s"
+}
+```
+
+Remote sessions and panes appear with a `<name>@` prefix on their ids (e.g.
+`z13@probe`, pane id `z13@%0`) and carry a `"peer": "z13"` field. Today the
+merge is snapshot-only; sending text/keys to a remote pane and live pane
+streaming over WebSocket will follow.
+
 ## Safety
 
 Most commands preview actions first and require `--execute` before pressing

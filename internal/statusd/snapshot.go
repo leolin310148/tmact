@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panestate"
@@ -14,6 +15,11 @@ import (
 )
 
 const maxSnapshotErrors = 32
+
+// PeerSeparator splits a peer name from the embedded tmux identifier in
+// merged snapshots (e.g. "z13@%0", "z13@probe:0.0"). The `@` character does
+// not appear in tmux session names or pane ids, so the split is unambiguous.
+const PeerSeparator = "@"
 
 type Snapshot struct {
 	Version      int                      `json:"version"`
@@ -47,6 +53,9 @@ type SessionStatus struct {
 	Stale        bool      `json:"stale"`
 	RowBucket    int       `json:"row_bucket"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Peer is empty for local sessions and the peer name when this session
+	// was merged in from a remote statusd via PeerFetcher.
+	Peer string `json:"peer,omitempty"`
 }
 
 type PaneStatus struct {
@@ -75,6 +84,9 @@ type PaneStatus struct {
 	LastChangedAt  *time.Time     `json:"last_changed_at,omitempty"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	Error          string         `json:"error,omitempty"`
+	// Peer is empty for local panes and the peer name when this pane was
+	// merged in from a remote statusd via PeerFetcher.
+	Peer string `json:"peer,omitempty"`
 }
 
 type SnapshotError struct {
@@ -366,6 +378,94 @@ func (s Snapshot) IsStale(now time.Time) bool {
 		staleAfter = DefaultStaleAfter
 	}
 	return now.Sub(s.Timestamp) > staleAfter
+}
+
+// MergePeers folds remote peer snapshots into local. Each peer's sessions
+// and panes are added with a "<name>@" prefix on their map keys, Target,
+// Session, ActiveTarget, and PaneID; the Peer field marks the origin so the
+// UI and send-router can tell remote from local. Peer fetch errors and
+// errors reported in the remote snapshot are propagated into local.Errors
+// with scope "peer:<name>" / "peer:<name>:<remote-scope>". Summary is
+// recomputed after the merge.
+func MergePeers(local Snapshot, peers map[string]PeerSnapshot) Snapshot {
+	if len(peers) == 0 {
+		return local
+	}
+	if local.Sessions == nil {
+		local.Sessions = map[string]SessionStatus{}
+	}
+	if local.Panes == nil {
+		local.Panes = map[string]PaneStatus{}
+	}
+	names := make([]string, 0, len(peers))
+	for n := range peers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		ps := peers[name]
+		if ps.Err != nil {
+			(&local).addError("peer:"+name, "", ps.Err)
+			continue
+		}
+		if !ps.Reachable {
+			continue
+		}
+		prefix := name + PeerSeparator
+		for k, pane := range ps.Snapshot.Panes {
+			pane.Peer = name
+			if pane.Target != "" {
+				pane.Target = prefix + pane.Target
+			}
+			if pane.Session != "" {
+				pane.Session = prefix + pane.Session
+			}
+			if pane.PaneID != "" {
+				pane.PaneID = prefix + pane.PaneID
+			}
+			local.Panes[prefix+k] = pane
+		}
+		for k, session := range ps.Snapshot.Sessions {
+			session.Peer = name
+			if session.Session != "" {
+				session.Session = prefix + session.Session
+			}
+			if session.ActiveTarget != "" {
+				session.ActiveTarget = prefix + session.ActiveTarget
+			}
+			local.Sessions[prefix+k] = session
+		}
+		for _, e := range ps.Snapshot.Errors {
+			scope := "peer:" + name
+			if e.Scope != "" {
+				scope = scope + ":" + e.Scope
+			}
+			target := e.Target
+			if target != "" {
+				target = prefix + target
+			}
+			if len(local.Errors) >= maxSnapshotErrors {
+				break
+			}
+			local.Errors = append(local.Errors, SnapshotError{
+				Scope:  scope,
+				Target: target,
+				Error:  e.Error,
+			})
+		}
+	}
+	local.Summary = summarize(local)
+	return local
+}
+
+// SplitPeerTarget returns (peerName, localTarget) for ids produced by
+// MergePeers. For unprefixed ids (local panes) peerName is empty and the
+// input is returned unchanged.
+func SplitPeerTarget(id string) (peer string, rest string) {
+	if i := strings.Index(id, PeerSeparator); i > 0 {
+		return id[:i], id[i+len(PeerSeparator):]
+	}
+	return "", id
 }
 
 func filterPanes(panes []tmux.Pane, include []string, exclude []string) []tmux.Pane {

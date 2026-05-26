@@ -39,6 +39,12 @@ type Config struct {
 	PaneCols int
 	PaneRows int
 
+	// Peers is the list of remote statusd instances whose snapshots are
+	// merged into the local one. Empty disables federation.
+	Peers        []Peer
+	PeerInterval time.Duration
+	PeerTimeout  time.Duration
+
 	Now              func() time.Time
 	Sleep            func(time.Duration)
 	ListPanes        func() ([]tmux.Pane, error)

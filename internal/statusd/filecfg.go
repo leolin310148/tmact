@@ -21,13 +21,22 @@ const (
 // fields let us tell "absent" from "explicit zero" so CLI flags can override
 // only the keys the user actually set.
 type FileConfig struct {
-	WebAddr     string `json:"web_addr,omitempty"`
-	Interval    string `json:"interval,omitempty"`
-	SocketPath  string `json:"socket_path,omitempty"`
-	LogPath     string `json:"log_path,omitempty"`
-	TmuxOptions *bool  `json:"tmux_options,omitempty"`
-	PaneCols    *int   `json:"pane_cols,omitempty"`
-	PaneRows    *int   `json:"pane_rows,omitempty"`
+	WebAddr      string           `json:"web_addr,omitempty"`
+	Interval     string           `json:"interval,omitempty"`
+	SocketPath   string           `json:"socket_path,omitempty"`
+	LogPath      string           `json:"log_path,omitempty"`
+	TmuxOptions  *bool            `json:"tmux_options,omitempty"`
+	PaneCols     *int             `json:"pane_cols,omitempty"`
+	PaneRows     *int             `json:"pane_rows,omitempty"`
+	Peers        []PeerFileConfig `json:"peers,omitempty"`
+	PeerInterval string           `json:"peer_interval,omitempty"`
+	PeerTimeout  string           `json:"peer_timeout,omitempty"`
+}
+
+// PeerFileConfig is the on-disk shape of one entry in FileConfig.Peers.
+type PeerFileConfig struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 // DefaultFileConfig is the seed written when statusd.json is missing.
@@ -73,7 +82,41 @@ func LoadFileConfig(path string) (FileConfig, error) {
 			return FileConfig{}, fmt.Errorf("parse %s: invalid interval %q: %w", path, cfg.Interval, err)
 		}
 	}
+	if cfg.PeerInterval != "" {
+		if _, err := time.ParseDuration(cfg.PeerInterval); err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid peer_interval %q: %w", path, cfg.PeerInterval, err)
+		}
+	}
+	if cfg.PeerTimeout != "" {
+		if _, err := time.ParseDuration(cfg.PeerTimeout); err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid peer_timeout %q: %w", path, cfg.PeerTimeout, err)
+		}
+	}
 	return cfg, nil
+}
+
+// PeerIntervalDuration returns the parsed peer poll interval, or zero if unset.
+func (c FileConfig) PeerIntervalDuration() time.Duration {
+	if c.PeerInterval == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.PeerInterval)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+// PeerTimeoutDuration returns the parsed per-fetch timeout, or zero if unset.
+func (c FileConfig) PeerTimeoutDuration() time.Duration {
+	if c.PeerTimeout == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.PeerTimeout)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // WriteFileConfig writes cfg as pretty JSON, creating parent dirs as needed.
