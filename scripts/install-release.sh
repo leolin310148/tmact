@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Install the latest macOS tmact binary from GitHub Releases.
+# Install the latest tmact binary from GitHub Releases (macOS and Linux/WSL).
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
@@ -9,12 +9,14 @@
 #   TMACT_REPO=owner/repo           GitHub repository (default: leolin310148/tmact)
 #   TMACT_VERSION=v0.1.0            Release tag to install (default: latest)
 #   TMACT_BIN_DIR=$HOME/.local/bin  Install directory
-#   TMACT_INSTALL_STATUSD=1         Also install the macOS LaunchAgent
+#   TMACT_INSTALL_STATUSD=1         Also install the statusd service
+#                                   (macOS launchd or Linux systemd --user)
 #   GH_TOKEN=...                    Token for private release downloads
 #
 # statusd reads ~/.tmact/statusd.json itself and seeds defaults on first run.
-# To change the web bind address, edit that file and reload:
-#   launchctl kickstart -k gui/$(id -u)/com.tmact.statusd
+# To change the web bind address, edit that file and reload the service:
+#   macOS:  launchctl kickstart -k gui/$(id -u)/com.tmact.statusd
+#   Linux:  systemctl --user restart tmact-statusd.service
 
 set -eu
 
@@ -24,13 +26,14 @@ bin_dir="${TMACT_BIN_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in
   Darwin) os="darwin" ;;
-  *) echo "tmact release installer currently supports macOS only" >&2; exit 1 ;;
+  Linux)  os="linux" ;;
+  *) echo "tmact release installer supports macOS and Linux only (got $(uname -s))" >&2; exit 1 ;;
 esac
 
 case "$(uname -m)" in
-  arm64) arch="arm64" ;;
-  x86_64) arch="amd64" ;;
-  *) echo "unsupported macOS architecture: $(uname -m)" >&2; exit 1 ;;
+  arm64|aarch64) arch="arm64" ;;
+  x86_64|amd64)  arch="amd64" ;;
+  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
 asset="tmact_${os}_${arch}.tar.gz"
@@ -69,7 +72,13 @@ fi
 
 if [ -f "$tmp_dir/checksums.txt" ]; then
   if grep " ${asset}\$" "$tmp_dir/checksums.txt" > "$tmp_dir/checksum.txt"; then
-    (cd "$tmp_dir" && shasum -a 256 -c checksum.txt)
+    if command -v shasum >/dev/null 2>&1; then
+      (cd "$tmp_dir" && shasum -a 256 -c checksum.txt)
+    elif command -v sha256sum >/dev/null 2>&1; then
+      (cd "$tmp_dir" && sha256sum -c checksum.txt)
+    else
+      echo "    WARNING: no shasum/sha256sum available; skipping verification" >&2
+    fi
   fi
 else
   echo "    WARNING: checksums.txt not available; skipping verification" >&2
@@ -86,14 +95,17 @@ case ":$PATH:" in
 esac
 
 if [ "${TMACT_INSTALL_STATUSD:-0}" = "1" ]; then
-  label="com.tmact.statusd"
-  plist="$HOME/Library/LaunchAgents/${label}.plist"
   bin_path="$bin_dir/tmact"
 
-  echo "==> Installing ${label} LaunchAgent"
-  echo "    statusd reads ${HOME}/.tmact/statusd.json (auto-seeded on first run)"
-  mkdir -p "$HOME/Library/LaunchAgents"
-  cat > "$plist" <<EOF
+  case "$os" in
+    darwin)
+      label="com.tmact.statusd"
+      plist="$HOME/Library/LaunchAgents/${label}.plist"
+
+      echo "==> Installing ${label} LaunchAgent"
+      echo "    statusd reads ${HOME}/.tmact/statusd.json (auto-seeded on first run)"
+      mkdir -p "$HOME/Library/LaunchAgents"
+      cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -124,10 +136,49 @@ if [ "${TMACT_INSTALL_STATUSD:-0}" = "1" ]; then
 </dict>
 </plist>
 EOF
-  domain="gui/$(id -u)"
-  launchctl bootout "$domain/$label" 2>/dev/null || true
-  launchctl bootstrap "$domain" "$plist"
-  echo "==> Loaded $plist"
+      domain="gui/$(id -u)"
+      launchctl bootout "$domain/$label" 2>/dev/null || true
+      launchctl bootstrap "$domain" "$plist"
+      echo "==> Loaded $plist"
+      ;;
+    linux)
+      unit="tmact-statusd.service"
+      unit_dir="$HOME/.config/systemd/user"
+      unit_path="$unit_dir/$unit"
+
+      if ! command -v systemctl >/dev/null 2>&1 \
+        || ! systemctl --user show-environment >/dev/null 2>&1; then
+        echo "==> Skipping statusd service: systemctl --user not available" >&2
+        echo "    (WSL? enable systemd in /etc/wsl.conf, or start statusd manually:" >&2
+        echo "       ${bin_path} statusd start &)" >&2
+      else
+        echo "==> Installing ${unit} (systemd user unit)"
+        echo "    statusd reads ${HOME}/.tmact/statusd.json (auto-seeded on first run)"
+        mkdir -p "$unit_dir"
+        cat > "$unit_path" <<EOF
+[Unit]
+Description=tmact statusd pane snapshot daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=${bin_path} statusd start
+WorkingDirectory=${HOME}
+Environment=PATH=${PATH}
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/tmp/tmact-statusd.out.log
+StandardError=append:/tmp/tmact-statusd.err.log
+
+[Install]
+WantedBy=default.target
+EOF
+        systemctl --user daemon-reload
+        systemctl --user enable --now "$unit"
+        echo "==> Loaded $unit_path"
+      fi
+      ;;
+  esac
 fi
 
 "$bin_dir/tmact" version

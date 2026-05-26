@@ -1,0 +1,16 @@
+[Unit]
+Description=tmact statusd pane snapshot daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=__TMACT_BIN__ statusd start
+WorkingDirectory=__TMACT_WORKDIR__
+Environment=PATH=__TMACT_PATH__
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/tmp/tmact-statusd.out.log
+StandardError=append:/tmp/tmact-statusd.err.log
+
+[Install]
+WantedBy=default.target

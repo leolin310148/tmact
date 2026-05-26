@@ -48,6 +48,7 @@ internal/web/                 # statusd web UI server and static assets
 examples/                     # sample YAML configs
 docs/                         # release and smoke-test notes
 launchd/                      # macOS LaunchAgent template
+systemd/                      # Linux systemd --user unit template
 ```
 
 ## Useful Commands
@@ -64,7 +65,13 @@ When changing examples, keep them parseable and runnable with `--dry-run
 
 ## Status Daemon
 
-Local source installs can build and refresh the macOS LaunchAgent:
+Local source installs build the binary and refresh the statusd service:
+
+- macOS — LaunchAgent at `~/Library/LaunchAgents/com.tmact.statusd.plist`
+- Linux/WSL — systemd user unit at
+  `~/.config/systemd/user/tmact-statusd.service` (skipped when
+  `systemctl --user` is unavailable, e.g. WSL without
+  `systemd=true` in `/etc/wsl.conf`)
 
 ```sh
 scripts/install.sh
@@ -76,7 +83,7 @@ Install only the binary:
 scripts/install.sh --bin-only
 ```
 
-The generated LaunchAgent runs the installed binary from `~/.local/bin/tmact`.
+The generated service runs the installed binary from `~/.local/bin/tmact`.
 
 ## Contribution Notes
 

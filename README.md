@@ -24,11 +24,15 @@ Use the CLI when you want scriptable tmux control:
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
 
-Install the release binary:
+Install the release binary (macOS or Linux/WSL, amd64/arm64):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
+
+On WSL, statusd auto-start requires `systemd` (set `systemd=true` in
+`/etc/wsl.conf` and `wsl --shutdown`); without it the binary still installs
+fine and you can launch statusd manually with `tmact statusd start &`.
 
 ## Web Interface
 
@@ -38,7 +42,8 @@ that pane, offers quick buttons for common prompts, uploads files or clipboard
 images and pastes their saved paths, and can use configured speech-to-text for
 voice input.
 
-Start it with the LaunchAgent installer:
+Start it with the service installer (LaunchAgent on macOS, systemd `--user`
+unit on Linux/WSL):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | env TMACT_INSTALL_STATUSD=1 sh
