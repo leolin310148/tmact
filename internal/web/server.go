@@ -84,6 +84,20 @@ type Server struct {
 	Logf func(format string, args ...any)
 	// BuildTime is the VCS timestamp shown in the settings panel.
 	BuildTime string
+	// Peers is the set of remote statusd instances reachable for /ws/pane
+	// proxying. Pane ids with a "<name>@" prefix matching a peer name are
+	// bridged to that peer's WebSocket instead of acted on locally.
+	Peers []statusd.Peer
+}
+
+// lookupPeer returns the peer config for name, or false when none matches.
+func (s *Server) lookupPeer(name string) (statusd.Peer, bool) {
+	for _, p := range s.Peers {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return statusd.Peer{}, false
 }
 
 func (s *Server) capture() func(string, int) (string, error) {

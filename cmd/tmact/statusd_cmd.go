@@ -155,6 +155,7 @@ func runStatusdStart(args []string) error {
 		Store:       daemon.Store(),
 		CapturePane: tmux.CapturePaneANSI,
 		BuildTime:   buildVersionInfo().Time,
+		Peers:       cfg.Peers,
 	}
 	go func() {
 		if err := server.Serve(ctx); err != nil {

@@ -12,11 +12,15 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
-// paneIDPattern restricts pane targets to canonical tmux pane ids (%12). Acting
-// strictly on a pane id means a request value can never be read as a tmux flag.
-var paneIDPattern = regexp.MustCompile(`^%[0-9]+$`)
+// paneIDPattern accepts a canonical tmux pane id (%12) and a federated pane
+// id of the form <peer>@%12 where the peer name is restricted to a small
+// allowlisted character set. Acting strictly on the pattern means a request
+// value can never be read as a tmux flag and the peer-name portion can never
+// be read as a URL component with surprising semantics.
+var paneIDPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`)
 
 // inputMsg is a client-to-server WebSocket message.
 //
@@ -50,7 +54,16 @@ type outMsg struct {
 func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	pane := r.URL.Query().Get("pane")
 	if !paneIDPattern.MatchString(pane) {
-		writeJSONError(w, http.StatusBadRequest, `invalid "pane" parameter, expected a tmux pane id like %12`)
+		writeJSONError(w, http.StatusBadRequest, `invalid "pane" parameter, expected a tmux pane id like %12 or peer@%12`)
+		return
+	}
+	if peerName, localPane := statusd.SplitPeerTarget(pane); peerName != "" {
+		peer, ok := s.lookupPeer(peerName)
+		if !ok {
+			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("unknown peer %q", peerName))
+			return
+		}
+		s.proxyPaneWS(w, r, peer, localPane)
 		return
 	}
 
