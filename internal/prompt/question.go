@@ -1,5 +1,7 @@
 package prompt
 
+import "strings"
+
 // Question is a detected interactive menu in pane output: a prompt the agent
 // is waiting on plus the numbered choices a user can pick. It is a looser,
 // presentation-oriented detection than Detect — the web UI turns each Choice
@@ -53,6 +55,11 @@ func choicesFromOptions(options []Option) []Choice {
 // question.
 func detectTrailingChoicePrompt(raw string) *Prompt {
 	recent := recentLines(cleanedLines(raw), 40)
+	// Codex's structured questions print a hint footer ("tab to add notes |
+	// enter to submit answer", "←/→ to navigate questions | esc to interrupt")
+	// below the menu. Strip those so the trailing-distance check below sees
+	// the numbered options as the pane's bottom content.
+	recent = trimMenuFooter(recent)
 
 	type located struct {
 		index  int
@@ -107,6 +114,34 @@ func detectTrailingChoicePrompt(raw string) *Prompt {
 		detected.SelectedOption = selected
 	}
 	return detected
+}
+
+// trimMenuFooter strips trailing hint lines printed below an interactive menu.
+// Codex and Claude render keyboard shortcuts like "tab to add notes",
+// "enter to submit", "esc to interrupt", or arrow-key navigation hints — chrome
+// that sits beneath the numbered options without scrolling them out of view.
+func trimMenuFooter(lines []string) []string {
+	for len(lines) > 0 && isMenuFooter(lines[len(lines)-1]) {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func isMenuFooter(line string) bool {
+	lower := strings.ToLower(line)
+	switch {
+	case strings.HasPrefix(lower, "tab to "),
+		strings.HasPrefix(lower, "enter to "),
+		strings.HasPrefix(lower, "esc to "),
+		strings.HasPrefix(lower, "esc "):
+		return true
+	}
+	for _, prefix := range []string{"←", "→", "↑", "↓"} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // menuPromptText returns the line immediately above the first option — the

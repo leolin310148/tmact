@@ -61,6 +61,41 @@ func TestDetectQuestionFromCodexCursorMenu(t *testing.T) {
 	}
 }
 
+func TestDetectQuestionFromCodexStructuredQuestion(t *testing.T) {
+	// Codex's structured-question UI prints multi-line wrapped option labels
+	// and a hint footer below the menu. The detector must look past those and
+	// still recognise the menu as the active question.
+	raw := `Some preamble explaining the trade-offs.
+
+  Question 1/3 (3 unanswered)
+  你希望監控資訊第一版放在哪裡？
+
+  › 1. 新增 Monitor tab (Recommended)  Control 保持操作
+                                       導向，監控集中在獨
+                                       立頁面。
+    2. 嵌入 Control                    在現有主畫面直接顯
+                                       示關鍵指標。
+    3. Peer modal 詳細                 只在點開單一機器時
+                                       顯示詳細監控。
+    4. None of the above               Optionally, add
+                                       details in notes
+                                       (tab).
+
+  tab to add notes | enter to submit answer
+  ←/→ to navigate questions | esc to interrupt
+`
+	q := DetectQuestion(raw)
+	if q == nil {
+		t.Fatal("expected a question")
+	}
+	if len(q.Choices) != 4 {
+		t.Fatalf("choices = %d, want 4", len(q.Choices))
+	}
+	if q.Choices[0].Number != 1 || q.Choices[3].Number != 4 {
+		t.Fatalf("choice numbers = %#v", q.Choices)
+	}
+}
+
 func TestDetectQuestionIgnoresProseNumberedList(t *testing.T) {
 	// A numbered list with no selection cursor is the agent talking, not a
 	// menu — it must not register as a question.
