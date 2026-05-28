@@ -127,6 +127,9 @@ func runStatusdStart(args []string) error {
 	if err := validateStatusdConfig(cfg); err != nil {
 		return err
 	}
+	cfg.Logf = func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "statusd: "+format+"\n", args...)
+	}
 
 	daemon := statusd.NewDaemon(cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

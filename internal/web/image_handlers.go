@@ -14,6 +14,9 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if s.maybeProxyPeerHTTP(w, r, "/api/image") {
+		return
+	}
 
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	if path == "" {

@@ -31,11 +31,13 @@ const HOTKEY_INDEX = {};
 PANE_HOTKEYS.forEach((label, i) => { HOTKEY_INDEX[HOTKEY_CODE[label]] = i; });
 
 function paneStateClass(p) {
+  if (p.stale) return "stale";
   if (p.asking) return "asking";
   if (p.running) return "running";
   return "idle";
 }
 function paneStateLabel(p) {
+  if (p.stale) return "stale";
   if (p.asking) return "asking";
   if (p.running) return "working";
   if (p.idle) return "idle";
@@ -46,13 +48,25 @@ const RUNTIME_ICON = { claude: "cc", codex: "cx", copilot: "cp", gemini: "g" };
 function paneRuntime(p) {
   return (p.runtime || "").toLowerCase();
 }
+function panePeer(p) {
+  return p && p.peer ? String(p.peer) : "";
+}
+function sessionLabel(p) {
+  const peer = panePeer(p);
+  const session = p && p.session ? String(p.session) : "";
+  if (peer && session.startsWith(peer + "@")) return session.slice(peer.length + 1);
+  return session;
+}
 function paneIndicator(p) {
   const runtime = paneRuntime(p);
   const icon = RUNTIME_ICON[runtime];
   if (icon) {
     const cls = ["agent-icon", "runtime-" + runtime];
-    if (p.running) cls.push("running");
-    if (p.asking) cls.push("asking");
+    if (p.stale) cls.push("stale");
+    else {
+      if (p.running) cls.push("running");
+      if (p.asking) cls.push("asking");
+    }
     return h("span", {
       class: cls.join(" "),
       title: runtime + " — " + paneStateLabel(p),
@@ -84,29 +98,37 @@ function renderStatusline(snap) {
     return;
   }
   panes.sort((a, b) =>
-    a.session.localeCompare(b.session) ||
+    panePeer(a).localeCompare(panePeer(b)) ||
+    sessionLabel(a).localeCompare(sessionLabel(b)) ||
     a.window_index - b.window_index ||
     a.pane_index - b.pane_index);
 
   const perSession = {};
-  for (const p of panes) perSession[p.session] = (perSession[p.session] || 0) + 1;
+  for (const p of panes) {
+    const k = panePeer(p) + "\0" + sessionLabel(p);
+    perSession[k] = (perSession[k] || 0) + 1;
+  }
 
   // Freeze the rendered order so the Option+key hotkeys map to the same chips
   // the user sees, in the same left-to-right sequence.
   state.paneOrder = panes.map((p) => p.pane_id);
 
   panes.forEach((p, i) => {
-    const label = perSession[p.session] > 1
-      ? p.session + ":" + p.window_index
-      : p.session;
+    const peer = panePeer(p);
+    const baseLabel = sessionLabel(p);
+    const labelKey = peer + "\0" + baseLabel;
+    const label = perSession[labelKey] > 1
+      ? baseLabel + ":" + p.window_index
+      : baseLabel;
     const indicator = paneIndicator(p);
     const key = PANE_HOTKEYS[i];
     const chip = h("div", {
-      class: "chip" + (p.pane_id === state.selected ? " sel" : ""),
-      title: (p.cwd || p.session) + " — " + paneStateLabel(p)
+      class: "chip" + (p.pane_id === state.selected ? " sel" : "") + (p.stale ? " stale" : ""),
+      title: (peer ? peer + " — " : "") + (p.cwd || p.session) + " — " + paneStateLabel(p)
         + (key ? " — Option+" + key : ""),
     },
       key ? h("span", { class: "chip-key", text: key }) : null,
+      peer ? h("span", { class: "peer-badge", text: peer }) : null,
       indicator,
       h("span", { text: label }));
     chip.onclick = () => selectPane(p.pane_id);
@@ -270,7 +292,7 @@ const paneStream = createPaneStream({
   onPatch: (from, lines, question) => {
     paneLines = paneLines.slice(0, from).concat(lines);
     const p = findPane(state.selected);
-    setContent(paneLines.join("\n"), { cwd: p && p.cwd });
+    setContent(paneLines.join("\n"), { cwd: p && p.cwd, peer: panePeer(p) });
     renderOptions(question);
   },
   onQuestion: renderOptions,
@@ -279,8 +301,13 @@ const paneStream = createPaneStream({
     // Surface a reconnecting hint in the mode-indicator line; on reconnect
     // the next "open" clears it. The error timer is independent — its 6s
     // auto-clear can still wipe an inline error message.
-    if (s === "reconnecting") setInputStatus("reconnecting…");
-    else if (s === "open") setInputStatus("");
+    if (s === "connecting") {
+      setInputStatus("connecting…");
+      if (paneLines.length === 0) setContent("Connecting…");
+    } else if (s === "reconnecting") {
+      setInputStatus("reconnecting…");
+      if (paneLines.length === 0) setContent("Reconnecting…");
+    } else if (s === "open") setInputStatus("");
   },
 });
 
@@ -302,7 +329,14 @@ function wsSend(obj) {
 }
 
 function selectPane(paneID) {
-  if (!paneID || paneID === state.selected) return;
+  if (!paneID) return;
+  if (paneID === state.selected) {
+    paneLines = [];
+    setContent("Reconnecting…");
+    renderOptions(null);
+    openWS(paneID);
+    return;
+  }
   state.selected = paneID;
   rememberSelection(paneID);
   const draft = $("draft");
@@ -424,6 +458,10 @@ const _upload = createUpload({
   showInputError,
   syncDraft,
   wsSend,
+  getSelectedPeer: () => {
+    const p = findPane(state.selected);
+    return panePeer(p);
+  },
 });
 const {
   clipboardImage,
@@ -465,10 +503,11 @@ function ensureImagePreview() {
   return imagePreview;
 }
 
-function previewImagePath(path, cwd) {
+function previewImagePath(path, cwd, peer) {
   const ui = ensureImagePreview();
   const qs = new URLSearchParams({ path });
   if (cwd) qs.set("cwd", cwd);
+  if (peer) qs.set("peer", peer);
   ui.overlay.querySelector("img").src = "/api/image?" + qs.toString();
   ui.overlay.querySelector(".image-preview-path").textContent = path;
   ui.overlay.hidden = false;
@@ -488,7 +527,7 @@ function imageTarget(e) {
 }
 
 function openImageTarget(target) {
-  previewImagePath(target.dataset.path || target.textContent, target.dataset.cwd || "");
+  previewImagePath(target.dataset.path || target.textContent, target.dataset.cwd || "", target.dataset.peer || "");
 }
 
 /* ---- mode 2: direct keystroke passthrough ---- */

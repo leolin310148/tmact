@@ -3,7 +3,7 @@
 // callbacks.onPatch(from, lines, question) — patch from the server
 // callbacks.onError(msg)                   — server-side error text
 // callbacks.onQuestion(q)                  — cleared (q=null) on close
-// callbacks.onStatus(state)                — "open" | "reconnecting" | "closed"
+// callbacks.onStatus(state)                — "connecting" | "open" | "reconnecting" | "closed"
 //
 // Backoff starts at 1s, doubles to 30s; resets to 1s after a connection has
 // been open for STABLE_MS. document.visibilitychange is handled by the caller
@@ -57,6 +57,7 @@ export function createPaneStream(callbacks) {
     }
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
+    status("connecting");
     const sock = new WebSocket(`${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}`);
     ws = sock;
     sock.onopen = () => {

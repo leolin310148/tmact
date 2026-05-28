@@ -77,6 +77,7 @@ type PaneStatus struct {
 	InputReady     bool           `json:"input_ready"`
 	Running        bool           `json:"running"`
 	Asking         bool           `json:"asking"`
+	Stale          bool           `json:"stale,omitempty"`
 	Confidence     string         `json:"confidence,omitempty"`
 	Signals        []string       `json:"signals,omitempty"`
 	Prompt         *prompt.Prompt `json:"prompt,omitempty"`
@@ -406,14 +407,20 @@ func MergePeers(local Snapshot, peers map[string]PeerSnapshot) Snapshot {
 		ps := peers[name]
 		if ps.Err != nil {
 			(&local).addError("peer:"+name, "", ps.Err)
-			continue
+			if !hasPeerSnapshotData(ps.Snapshot) {
+				continue
+			}
 		}
-		if !ps.Reachable {
+		if !ps.Reachable && !hasPeerSnapshotData(ps.Snapshot) {
 			continue
 		}
 		prefix := name + PeerSeparator
+		peerStale := ps.Err != nil
 		for k, pane := range ps.Snapshot.Panes {
 			pane.Peer = name
+			if peerStale {
+				pane.Stale = true
+			}
 			if pane.Target != "" {
 				pane.Target = prefix + pane.Target
 			}
@@ -427,6 +434,9 @@ func MergePeers(local Snapshot, peers map[string]PeerSnapshot) Snapshot {
 		}
 		for k, session := range ps.Snapshot.Sessions {
 			session.Peer = name
+			if peerStale {
+				session.Stale = true
+			}
 			if session.Session != "" {
 				session.Session = prefix + session.Session
 			}
@@ -456,6 +466,10 @@ func MergePeers(local Snapshot, peers map[string]PeerSnapshot) Snapshot {
 	}
 	local.Summary = summarize(local)
 	return local
+}
+
+func hasPeerSnapshotData(snapshot Snapshot) bool {
+	return len(snapshot.Sessions) > 0 || len(snapshot.Panes) > 0
 }
 
 // SplitPeerTarget returns (peerName, localTarget) for ids produced by

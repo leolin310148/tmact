@@ -54,6 +54,7 @@ type Config struct {
 	// sweep; default to the live tmux helpers.
 	ListWindowSizes func() ([]tmux.WindowSize, error)
 	ResizeWindow    func(target string, cols, rows int) error
+	Logf            func(format string, args ...any)
 }
 
 func (c Config) withDefaults() Config {

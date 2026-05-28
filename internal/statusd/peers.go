@@ -43,6 +43,7 @@ type PeerFetcher struct {
 
 	mu    sync.RWMutex
 	state map[string]PeerSnapshot
+	logf  func(format string, args ...any)
 }
 
 // NewPeerFetcher returns a fetcher that polls peers every interval, giving
@@ -66,6 +67,12 @@ func NewPeerFetcher(peers []Peer, interval, timeout time.Duration) *PeerFetcher 
 
 // Peers returns the configured peer list.
 func (f *PeerFetcher) Peers() []Peer { return f.peers }
+
+// SetLogger configures diagnostic logging for peer state changes. It should be
+// set before Start is called.
+func (f *PeerFetcher) SetLogger(logf func(format string, args ...any)) {
+	f.logf = logf
+}
 
 // Start launches one fetch loop per peer; it returns immediately. The
 // goroutines run until ctx is done.
@@ -96,34 +103,66 @@ func (f *PeerFetcher) fetchOnce(ctx context.Context, p Peer) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
-		f.store(p.Name, PeerSnapshot{Err: err, FetchedAt: f.now()})
+		f.storeError(p.Name, err)
 		return
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
-		f.store(p.Name, PeerSnapshot{Err: err, FetchedAt: f.now()})
+		f.storeError(p.Name, err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		f.store(p.Name, PeerSnapshot{
-			Err:       fmt.Errorf("peer %s returned HTTP %d", p.Name, resp.StatusCode),
-			FetchedAt: f.now(),
-		})
+		f.storeError(p.Name, fmt.Errorf("peer %s returned HTTP %d", p.Name, resp.StatusCode))
 		return
 	}
 	var snap Snapshot
 	if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
-		f.store(p.Name, PeerSnapshot{Err: fmt.Errorf("decode %s: %w", p.Name, err), FetchedAt: f.now()})
+		f.storeError(p.Name, fmt.Errorf("decode %s: %w", p.Name, err))
 		return
 	}
 	f.store(p.Name, PeerSnapshot{Snapshot: snap, FetchedAt: f.now(), Reachable: true})
 }
 
+func (f *PeerFetcher) storeError(name string, err error) {
+	f.mu.Lock()
+	prev := f.state[name]
+	shouldLog := f.shouldLogPeerError(prev, err)
+	prev.Err = err
+	prev.FetchedAt = f.now()
+	prev.Reachable = false
+	f.state[name] = prev
+	f.mu.Unlock()
+	if shouldLog {
+		f.log("peer %s unreachable: %v", name, err)
+	}
+}
+
 func (f *PeerFetcher) store(name string, snap PeerSnapshot) {
 	f.mu.Lock()
+	prev := f.state[name]
+	wasUnreachable := prev.Err != nil || (!prev.Reachable && !prev.FetchedAt.IsZero())
 	f.state[name] = snap
 	f.mu.Unlock()
+	if snap.Reachable && wasUnreachable {
+		f.log("peer %s reachable again", name)
+	}
+}
+
+func (f *PeerFetcher) shouldLogPeerError(prev PeerSnapshot, err error) bool {
+	if err == nil {
+		return false
+	}
+	if prev.Err == nil {
+		return true
+	}
+	return prev.Err.Error() != err.Error()
+}
+
+func (f *PeerFetcher) log(format string, args ...any) {
+	if f.logf != nil {
+		f.logf(format, args...)
+	}
 }
 
 // Latest returns a copy of the current peer state map. A peer that has not

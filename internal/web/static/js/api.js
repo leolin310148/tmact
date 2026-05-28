@@ -49,12 +49,16 @@ export function transcribeAudio(form) {
   return jsonResponse("/api/transcribe", { method: "POST", body: form });
 }
 
-export function uploadClipboardImage(form) {
-  return jsonResponse("/api/paste-image", { method: "POST", body: form });
+function peerQuery(peer) {
+  return peer ? "?peer=" + encodeURIComponent(peer) : "";
 }
 
-export function uploadPaneFiles(form) {
-  return jsonResponse("/api/upload-file", { method: "POST", body: form });
+export function uploadClipboardImage(form, peer) {
+  return jsonResponse("/api/paste-image" + peerQuery(peer), { method: "POST", body: form });
+}
+
+export function uploadPaneFiles(form, peer) {
+  return jsonResponse("/api/upload-file" + peerQuery(peer), { method: "POST", body: form });
 }
 
 export function loadSTTConfig() {

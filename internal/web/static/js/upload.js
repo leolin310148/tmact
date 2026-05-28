@@ -7,7 +7,7 @@ import { $ } from "./dom.js";
 import { state, upload } from "./state.js";
 import { uploadClipboardImage, uploadPaneFiles } from "./api.js";
 
-export function createUpload({ setInputStatus, showInputError, syncDraft, wsSend }) {
+export function createUpload({ setInputStatus, showInputError, syncDraft, wsSend, getSelectedPeer }) {
   // clipboardImage returns the first image File on a paste event's clipboard,
   // or null. A screenshot or copied picture arrives as a file item while plain
   // text does not, so this also tells an image paste apart from a text paste.
@@ -35,7 +35,7 @@ export function createUpload({ setInputStatus, showInputError, syncDraft, wsSend
     try {
       const form = new FormData();
       form.append("image", file, file.name || "paste.png");
-      const { res, data } = await uploadClipboardImage(form);
+      const { res, data } = await uploadClipboardImage(form, getSelectedPeer && getSelectedPeer());
       if (!res.ok || !data.path) {
         throw new Error(data.error || ("image upload failed: HTTP " + res.status));
       }
@@ -62,7 +62,7 @@ export function createUpload({ setInputStatus, showInputError, syncDraft, wsSend
     try {
       const form = new FormData();
       files.forEach((file, i) => form.append("file", file, file.name || ("upload-" + (i + 1))));
-      const { res, data } = await uploadPaneFiles(form);
+      const { res, data } = await uploadPaneFiles(form, getSelectedPeer && getSelectedPeer());
       const paths = Array.isArray(data.paths) ? data.paths : (data.path ? [data.path] : []);
       if (!res.ok || paths.length === 0) {
         throw new Error(data.error || ("file upload failed: HTTP " + res.status));

@@ -21,6 +21,7 @@ func NewDaemon(cfg Config) *Daemon {
 	d := &Daemon{cfg: cfg, mem: NewMemory(), store: NewStore(), optionCache: NewTmuxOptionCache()}
 	if len(cfg.Peers) > 0 {
 		d.peers = NewPeerFetcher(cfg.Peers, cfg.PeerInterval, cfg.PeerTimeout)
+		d.peers.SetLogger(cfg.Logf)
 	}
 	return d
 }

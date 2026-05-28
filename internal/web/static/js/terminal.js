@@ -316,7 +316,7 @@ function wrapRuleLines(text) {
   return lines.join("\n");
 }
 
-function markImagePaths(root, cwd) {
+function markImagePaths(root, cwd, peer) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -334,6 +334,7 @@ function markImagePaths(root, cwd) {
       span.textContent = m[0];
       span.dataset.path = m[0];
       if (cwd) span.dataset.cwd = cwd;
+      if (peer) span.dataset.peer = peer;
       span.title = "Command-click to preview image";
       frag.appendChild(span);
       last = IMAGE_PATH_RE.lastIndex;
@@ -365,7 +366,7 @@ export function setContent(text, opts) {
     });
   }
   pre.innerHTML = html;
-  markImagePaths(pre, opts && opts.cwd);
+  markImagePaths(pre, opts && opts.cwd, opts && opts.peer);
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 

@@ -76,9 +76,11 @@ machines. Add a `peers` array to `~/.tmact/statusd.json`:
 ```
 
 Remote sessions and panes appear with a `<name>@` prefix on their ids (e.g.
-`z13@probe`, pane id `z13@%0`) and carry a `"peer": "z13"` field. Today the
-merge is snapshot-only; sending text/keys to a remote pane and live pane
-streaming over WebSocket will follow.
+`z13@probe`, pane id `z13@%0`) and carry a `"peer": "z13"` field. Selecting a
+remote pane in the web UI proxies its live stream, text/key input, uploads, and
+image previews through that peer's statusd. If a peer goes unreachable, its
+last successful snapshot stays visible as stale while the fetch error is
+reported in `/api/snapshot`.
 
 ## Safety
 

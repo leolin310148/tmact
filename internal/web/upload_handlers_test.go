@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 /* ---- image paste ---- */
@@ -212,6 +214,59 @@ func TestUploadFileRejectsNonPOST(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestUploadFileProxiesToPeer(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("peer") != "" {
+			t.Fatalf("upstream query still has peer: %s", r.URL.RawQuery)
+		}
+		if r.URL.Path != "/api/upload-file" {
+			t.Fatalf("path = %q, want /api/upload-file", r.URL.Path)
+		}
+		if err := r.ParseMultipartForm(maxFileUploadBytes); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("form file: %v", err)
+		}
+		defer file.Close()
+		body, err := io.ReadAll(file)
+		if err != nil {
+			t.Fatalf("read file: %v", err)
+		}
+		if string(body) != "hello remote" {
+			t.Fatalf("body = %q, want hello remote", string(body))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"path":  "/remote/upload/notes.txt",
+			"paths": []string{"/remote/upload/notes.txt"},
+		})
+	}))
+	defer upstream.Close()
+
+	handler := (&Server{
+		Peers: []statusd.Peer{{Name: "z13", URL: upstream.URL}},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	req := fileUploadRequest(t, "file", "notes.txt", "hello remote")
+	req.URL.RawQuery = "peer=z13"
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Path != "/remote/upload/notes.txt" || len(got.Paths) != 1 {
+		t.Fatalf("got %#v, want remote upload response", got)
 	}
 }
 

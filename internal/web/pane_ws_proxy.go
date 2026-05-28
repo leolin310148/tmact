@@ -21,6 +21,7 @@ const peerDialTimeout = 5 * time.Second
 // the upgrade happens; once both ends are upgraded the bridge just shuttles
 // frames and exits on the first failure.
 func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer statusd.Peer, pane string) {
+	started := time.Now()
 	upstreamURL, err := peerWSURL(peer.URL, pane)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("invalid peer URL %q: %v", peer.URL, err))
@@ -31,6 +32,7 @@ func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer status
 	upstream, _, err := websocket.Dial(dialCtx, upstreamURL, nil)
 	dialCancel()
 	if err != nil {
+		s.logf("peer ws %s pane %s dial failed after %s: %v", peer.Name, pane, time.Since(started).Round(time.Millisecond), err)
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("peer %s dial failed: %v", peer.Name, err))
 		return
 	}
@@ -43,6 +45,10 @@ func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer status
 	}
 	defer client.CloseNow()
 	client.SetReadLimit(wsReadLimit)
+	s.logf("peer ws %s pane %s connected in %s", peer.Name, pane, time.Since(started).Round(time.Millisecond))
+	defer func() {
+		s.logf("peer ws %s pane %s closed after %s", peer.Name, pane, time.Since(started).Round(time.Second))
+	}()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

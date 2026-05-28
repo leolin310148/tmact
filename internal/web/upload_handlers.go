@@ -20,6 +20,9 @@ func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if s.maybeProxyPeerHTTP(w, r, "/api/paste-image") {
+		return
+	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxImageUploadBytes)
 	if err := r.ParseMultipartForm(maxImageUploadBytes); err != nil {
@@ -81,6 +84,9 @@ func (s *Server) handlePasteImage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.maybeProxyPeerHTTP(w, r, "/api/upload-file") {
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,6 +92,39 @@ func TestMergePeersRecordsFetchErrorAndSkipsUnreachable(t *testing.T) {
 	}
 }
 
+func TestMergePeersKeepsLastSnapshotOnFetchError(t *testing.T) {
+	local := Snapshot{
+		Sessions: map[string]SessionStatus{},
+		Panes:    map[string]PaneStatus{},
+	}
+	remote := Snapshot{
+		Sessions: map[string]SessionStatus{
+			"probe": {Session: "probe", ActiveTarget: "probe:0.0"},
+		},
+		Panes: map[string]PaneStatus{
+			"probe:0.0": {Target: "probe:0.0", Session: "probe", PaneID: "%0"},
+		},
+	}
+	merged := MergePeers(local, map[string]PeerSnapshot{
+		"z13": {Snapshot: remote, Err: errors.New("dial: refused"), FetchedAt: time.Now()},
+	})
+
+	pane, ok := merged.Panes["z13@probe:0.0"]
+	if !ok {
+		t.Fatalf("expected stale peer pane to stay visible; got %v", keys(merged.Panes))
+	}
+	if !pane.Stale || pane.Peer != "z13" {
+		t.Fatalf("pane = %#v, want stale z13 pane", pane)
+	}
+	session, ok := merged.Sessions["z13@probe"]
+	if !ok || !session.Stale {
+		t.Fatalf("session = %#v ok=%v, want stale peer session", session, ok)
+	}
+	if len(merged.Errors) != 1 || merged.Errors[0].Scope != "peer:z13" {
+		t.Fatalf("errors = %#v, want peer:z13 fetch error", merged.Errors)
+	}
+}
+
 func TestMergePeersEmptyMapReturnsLocalUnchanged(t *testing.T) {
 	local := Snapshot{
 		Sessions: map[string]SessionStatus{"a": {Session: "a"}},
@@ -161,6 +195,62 @@ func TestPeerFetcherRecordsHTTPError(t *testing.T) {
 		return ok && s.Err != nil && !s.Reachable
 	}) {
 		t.Fatalf("expected an error to be recorded for broken peer; got %#v", f.Latest())
+	}
+}
+
+func TestPeerFetcherPreservesLastSnapshotOnHTTPError(t *testing.T) {
+	fail := false
+	remote := Snapshot{
+		Sessions: map[string]SessionStatus{"r": {Session: "r"}},
+		Panes:    map[string]PaneStatus{"r:0.0": {Target: "r:0.0", Session: "r", PaneID: "%0"}},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(remote)
+	}))
+	defer srv.Close()
+
+	f := NewPeerFetcher([]Peer{{Name: "remote", URL: srv.URL}}, time.Second, time.Second)
+	ctx := context.Background()
+	f.fetchOnce(ctx, Peer{Name: "remote", URL: srv.URL})
+	fail = true
+	f.fetchOnce(ctx, Peer{Name: "remote", URL: srv.URL})
+
+	got := f.Latest()["remote"]
+	if got.Err == nil || got.Reachable {
+		t.Fatalf("got %#v, want unreachable error state", got)
+	}
+	if len(got.Snapshot.Panes) != 1 {
+		t.Fatalf("snapshot panes = %#v, want last successful snapshot preserved", got.Snapshot.Panes)
+	}
+}
+
+func TestPeerFetcherLogsPeerStateChanges(t *testing.T) {
+	var logs []string
+	f := NewPeerFetcher([]Peer{{Name: "z13", URL: "http://example.test"}}, time.Second, time.Second)
+	f.SetLogger(func(format string, args ...any) {
+		logs = append(logs, fmt.Sprintf(format, args...))
+	})
+
+	f.storeError("z13", errors.New("context deadline exceeded"))
+	f.storeError("z13", errors.New("context deadline exceeded"))
+	f.storeError("z13", errors.New("connection refused"))
+	f.store("z13", PeerSnapshot{Reachable: true, FetchedAt: time.Now()})
+
+	if len(logs) != 3 {
+		t.Fatalf("logs = %#v, want first failure, changed failure, and recovery", logs)
+	}
+	if !strings.Contains(logs[0], "peer z13 unreachable: context deadline exceeded") {
+		t.Fatalf("first log = %q", logs[0])
+	}
+	if !strings.Contains(logs[1], "peer z13 unreachable: connection refused") {
+		t.Fatalf("second log = %q", logs[1])
+	}
+	if logs[2] != "peer z13 reachable again" {
+		t.Fatalf("third log = %q", logs[2])
 	}
 }
 

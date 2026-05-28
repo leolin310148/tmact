@@ -55,6 +55,19 @@
   }
   .chip:hover { border-color: var(--fg-dim); }
   .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
+  .chip.stale { border-style: dashed; opacity: 0.72; }
+  .peer-badge {
+    flex: 0 0 auto;
+    font: 700 9px/1 var(--mono);
+    color: var(--amber);
+    background: rgba(210,153,34,0.12);
+    border: 1px solid rgba(210,153,34,0.45);
+    border-radius: 3px;
+    padding: 2px 4px;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* Desktop pane-switch hotkey badge: shows which Option+key jumps to this
      chip (Option+1…0, then Option+q…p). Hidden on phones — see media query. */
   .chip-key {
@@ -70,6 +83,7 @@
   .chip.sel .chip-key { color: #fff; border-color: var(--accent); }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-dim); }
   .dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.stale { background: var(--fg-dim); box-shadow: none; }
   .agent-icon {
     position: relative;
     flex: 0 0 auto;
@@ -87,6 +101,12 @@
   .agent-icon.runtime-codex { color: #79c0ff; border-color: rgba(121,192,255,0.45); background: rgba(121,192,255,0.08); }
   .agent-icon.runtime-copilot { color: #7ee787; border-color: rgba(126,231,135,0.45); background: rgba(126,231,135,0.08); }
   .agent-icon.runtime-gemini { color: #d2a8ff; border-color: rgba(210,168,255,0.45); background: rgba(210,168,255,0.08); }
+  .agent-icon.stale {
+    opacity: 0.7;
+    border-style: dashed;
+    animation: none;
+    box-shadow: none;
+  }
   .agent-icon.running {
     border-color: currentColor;
     animation: agent-shine 1.4s ease-in-out infinite;
@@ -897,6 +917,7 @@
     /* The Option+key hotkeys are a hardware-keyboard feature — no badge on
        phones, where panes are reached by tapping. */
     .chip-key { display: none; }
+    .peer-badge { max-width: 48px; font-size: 8px; padding: 1px 3px; }
     .dot { width: 6px; height: 6px; }
     .dot.asking { width: 10px; height: 10px; font-size: 8px; }
     .agent-icon { min-width: 17px; height: 12px; font-size: 8px; padding: 0 2px; }
