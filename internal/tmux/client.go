@@ -343,8 +343,19 @@ func SetSessionOption(session string, key string, value string) error {
 	return runTmux("set-option", "-q", "-t", session, key, value)
 }
 
+// tmuxArgs prepends the global `-u` flag so tmux always treats the client as
+// UTF-8 capable. Without it, a tmux command run from a process with no
+// LC_ALL/LC_CTYPE/LANG in its environment (notably the statusd daemon launched
+// by launchd / systemd) is seen as a non-UTF-8 client, and the server then
+// replaces every unprintable byte in format output — including the literal TAB
+// used as a field delimiter — with "_". That silently broke ListWindowSizes
+// (the fixed-width sweep) and would corrupt captured CJK/box-drawing content.
+func tmuxArgs(args []string) []string {
+	return append([]string{"-u"}, args...)
+}
+
 func runTmux(args ...string) error {
-	cmd := exec.Command("tmux", args...)
+	cmd := exec.Command("tmux", tmuxArgs(args)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -357,7 +368,7 @@ func runTmux(args ...string) error {
 }
 
 func outputTmux(args ...string) (string, error) {
-	cmd := exec.Command("tmux", args...)
+	cmd := exec.Command("tmux", tmuxArgs(args)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
