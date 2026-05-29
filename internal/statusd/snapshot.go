@@ -101,12 +101,23 @@ type paneMemory struct {
 	LastChangedAt time.Time
 }
 
+// runtimeCacheTTL bounds how long statusd reuses a pane's cached process-tree
+// runtime before re-walking. A pane's runtime almost never changes without its
+// foreground command changing (which invalidates the entry immediately), so a
+// few seconds is a safe ceiling that still collapses the per-tick pgrep/ps
+// fork storm at the 500ms poll interval.
+const runtimeCacheTTL = 5 * time.Second
+
 type Memory struct {
-	panes map[string]paneMemory
+	panes        map[string]paneMemory
+	runtimeCache *panestatus.RuntimeCache
 }
 
 func NewMemory() *Memory {
-	return &Memory{panes: map[string]paneMemory{}}
+	return &Memory{
+		panes:        map[string]paneMemory{},
+		runtimeCache: panestatus.NewRuntimeCache(runtimeCacheTTL),
+	}
 }
 
 func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, error) {
@@ -138,6 +149,7 @@ func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, erro
 			panestatus.RuntimeCopilot,
 			panestatus.RuntimeGemini,
 		},
+		RuntimeCache: mem.runtimeCache,
 	}, cfg.CapturePane, cfg.Sleep)
 	if err != nil {
 		snapshot.addError("inspect", "", err)

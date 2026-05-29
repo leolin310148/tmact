@@ -50,6 +50,10 @@ type Options struct {
 	// runtime detection) so the wall-time of a full cycle is dominated by
 	// subprocess fork+exec. Defaults to defaultMaxConcurrency.
 	MaxConcurrency int
+	// RuntimeCache, when non-nil, memoizes the child-process-tree runtime
+	// detection across inspect cycles so a repeated poller (statusd) need not
+	// re-walk every pane's process tree on every tick. nil disables caching.
+	RuntimeCache *RuntimeCache
 }
 
 // defaultMaxConcurrency is the worker-pool size when Options.MaxConcurrency is
@@ -105,6 +109,7 @@ type inspector struct {
 	processRuntime processRuntimeFunc
 	ignore         []*regexp.Regexp
 	captureRuntime map[string]bool
+	runtimeCache   *RuntimeCache
 }
 
 func Inspect(options Options) (Report, error) {
@@ -126,15 +131,9 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 	if options.Samples <= 0 {
 		options.Samples = 1
 	}
-	patterns := append([]string{}, DefaultIdleIgnorePatterns...)
-	patterns = append(patterns, options.IdleIgnorePatterns...)
-	compiled := make([]*regexp.Regexp, 0, len(patterns))
-	for _, pattern := range patterns {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			return Report{}, err
-		}
-		compiled = append(compiled, re)
+	compiled, err := compileIdlePatterns(options.IdleIgnorePatterns)
+	if err != nil {
+		return Report{}, err
 	}
 	captureRuntime := map[string]bool{}
 	for _, runtime := range options.CaptureRuntimes {
@@ -148,6 +147,7 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 		processRuntime: processRuntime,
 		ignore:         compiled,
 		captureRuntime: captureRuntime,
+		runtimeCache:   options.RuntimeCache,
 	}
 	report := Report{
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -187,7 +187,52 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 	}
 	close(jobs)
 	wg.Wait()
+
+	if options.RuntimeCache != nil {
+		live := make(map[int]struct{}, len(panes))
+		for _, p := range panes {
+			if p.PanePID > 0 {
+				live[p.PanePID] = struct{}{}
+			}
+		}
+		options.RuntimeCache.retain(live)
+	}
 	return report, nil
+}
+
+// idleRegexCache memoizes compiled idle-ignore patterns. The pattern set is
+// fixed for a given daemon, so recompiling on every poll (twice a second) is
+// wasted work; compiled regexps are immutable and safe to share.
+var (
+	idleRegexMu    sync.Mutex
+	idleRegexCache = map[string][]*regexp.Regexp{}
+)
+
+func compileIdlePatterns(extra []string) ([]*regexp.Regexp, error) {
+	patterns := append([]string{}, DefaultIdleIgnorePatterns...)
+	patterns = append(patterns, extra...)
+	key := strings.Join(patterns, "\x00")
+
+	idleRegexMu.Lock()
+	cached, ok := idleRegexCache[key]
+	idleRegexMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, err
+		}
+		compiled = append(compiled, re)
+	}
+
+	idleRegexMu.Lock()
+	idleRegexCache[key] = compiled
+	idleRegexMu.Unlock()
+	return compiled, nil
 }
 
 func listPanes(options Options) ([]tmux.Pane, error) {
@@ -299,14 +344,48 @@ func (i inspector) shouldCapture(runtime string) bool {
 }
 
 func (i inspector) detectRuntime(pane tmux.Pane, raw string) RuntimeDetection {
+	// Fast path: when pane_current_command itself names a known agent (or
+	// tmact), the foreground process *is* that runtime, so a process-tree walk
+	// can only confirm the same answer — skip the pgrep/ps fork storm. We key
+	// off pane_current_command (ground truth for the running program), never
+	// the user-assignable window name, and keep the command-precedence used by
+	// ClassifyRuntime so a mislabeled window can't override it.
+	if rt, ok := commandRuntime(pane.CurrentCommand); ok {
+		det := RuntimeDetection{Runtime: rt, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
+		return mergeRuntimeSignals(det, ClassifyRuntime(pane, raw))
+	}
+
 	processRuntime := RuntimeDetection{Runtime: RuntimeUnknown, Confidence: ConfidenceLow}
 	if i.processRuntime != nil {
-		processRuntime = i.processRuntime(pane.PanePID)
+		// The process tree rarely changes between ticks, so memoize it keyed by
+		// (pid, command); the cache re-walks on command change or after its TTL.
+		processRuntime = i.runtimeCache.lookup(pane.PanePID, pane.CurrentCommand, func() RuntimeDetection {
+			return i.processRuntime(pane.PanePID)
+		})
 	}
 	if processRuntime.Runtime != RuntimeUnknown {
 		return mergeRuntimeSignals(processRuntime, ClassifyRuntime(pane, raw))
 	}
 	return ClassifyRuntime(pane, raw)
+}
+
+// commandRuntime reports the agent named by a pane's foreground command, using
+// the same precedence as ClassifyRuntime's pane_current_command checks.
+func commandRuntime(command string) (string, bool) {
+	cmd := strings.ToLower(command)
+	switch {
+	case containsAny(cmd, "codex"):
+		return RuntimeCodex, true
+	case containsAny(cmd, "claude"):
+		return RuntimeClaude, true
+	case containsAny(cmd, "gemini"):
+		return RuntimeGemini, true
+	case containsAny(cmd, "copilot"):
+		return RuntimeCopilot, true
+	case cmd == "tmact":
+		return RuntimeTmact, true
+	}
+	return "", false
 }
 
 func (i inspector) captureSamples(target string) (string, bool, string, error) {
