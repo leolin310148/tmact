@@ -17,6 +17,16 @@ The earlier README documented an aspirational stack (SQLite, gocron, cobra,
 HTTP API, n8n boundary). None of that exists in code — don't add it without
 the user asking. State is plain files on disk.
 
+The statusd browser UI is a **Vite + React + TypeScript** app under
+`internal/web/frontend/` (the only Node toolchain in the repo). Its production
+bundle is built into `internal/web/static/` (embedded via `go:embed`) and is
+**not committed** — `internal/web/static/` is gitignored except `.gitkeep`. So
+`go build`/`go test` need the UI built first: run `make web` (or `make build` /
+`make test`, which do it for you). The Go server contract is unchanged — the
+React app speaks the same `/api/*` + `/ws/pane` endpoints. See
+`internal/web/frontend/MIGRATION_SPEC.md` (parity contract) and
+`internal/web/frontend/src/ARCHITECTURE.md` (React coordination contract).
+
 ## Where Things Live
 
 - CLI dispatch & flag wiring: `cmd/tmact/main.go` (one big file; subcommand

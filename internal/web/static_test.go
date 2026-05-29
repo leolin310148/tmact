@@ -1,11 +1,65 @@
 package web
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// The browser UI is a Vite + React + TypeScript app under internal/web/frontend/
+// whose production build is emitted into internal/web/static/ (embedded by
+// go:embed). These tests assert what the SERVER genuinely guarantees about the
+// BUILT app — the index shell, the hashed /assets/* bundle, the PWA service
+// worker, manifest, and icons. Behavioral parity of the JS itself is covered by
+// the frontend Vitest suite (src/**/*.test.ts), not by grepping served source.
+//
+// On a fresh checkout where `make web` has not run, internal/web/static holds
+// only .gitkeep; requireBuilt() skips the build-dependent tests so `go test`
+// still passes without the Node toolchain. `make test` builds first, so CI runs
+// them for real.
+
+func requireBuilt(t *testing.T) {
+	t.Helper()
+	b, err := fs.ReadFile(staticFS, "static/index.html")
+	if err != nil || !strings.Contains(string(b), `id="root"`) {
+		t.Skip("React UI not built into internal/web/static — run `make web` first")
+	}
+}
+
+func servedBody(t *testing.T, handler http.Handler, path string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status = %d, want 200", path, rec.Code)
+	}
+	return rec.Body.String()
+}
+
+var (
+	moduleScriptRe = regexp.MustCompile(`<script[^>]+type="module"[^>]+src="(/assets/[^"]+\.js)"`)
+	stylesheetRe   = regexp.MustCompile(`<link[^>]+rel="stylesheet"[^>]+href="(/assets/[^"]+\.css)"`)
+)
+
+// builtAssetPaths parses the served index.html for the hashed JS + CSS bundle
+// paths Vite injected. The names contain a content hash, so callers must
+// discover them rather than hard-code them.
+func builtAssetPaths(t *testing.T, handler http.Handler) (jsPath, cssPath string) {
+	t.Helper()
+	index := servedBody(t, handler, "/")
+	js := moduleScriptRe.FindStringSubmatch(index)
+	if js == nil {
+		t.Fatalf("index.html has no <script type=module src=/assets/*.js>:\n%s", index)
+	}
+	css := stylesheetRe.FindStringSubmatch(index)
+	if css == nil {
+		t.Fatalf("index.html has no <link rel=stylesheet href=/assets/*.css>:\n%s", index)
+	}
+	return js[1], css[1]
+}
 
 func TestIndexPageServed(t *testing.T) {
 	handler := (&Server{}).Handler()
@@ -20,276 +74,105 @@ func TestIndexPageServed(t *testing.T) {
 	}
 }
 
-func TestIndexIncludesPWAInstallHooks(t *testing.T) {
+func TestIndexServesReactAppShell(t *testing.T) {
+	requireBuilt(t)
 	handler := (&Server{}).Handler()
 	body := servedBody(t, handler, "/")
-	app := servedBody(t, handler, "/app.js")
 
 	for _, want := range []string{
+		`<div id="root">`,
 		`<meta name="theme-color" content="#0e1116" />`,
 		`<link rel="manifest" href="/manifest.json" />`,
 		`<link rel="apple-touch-icon" href="/icons/icon-180.png" />`,
-		`<link rel="stylesheet" href="/app.css" />`,
-		`<script type="module" src="/app.js"></script>`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
+			t.Fatalf("index shell missing %q", want)
 		}
 	}
-	if !strings.Contains(app, `navigator.serviceWorker.register("/sw.js")`) {
-		t.Fatal("app script missing service worker registration")
+	if !moduleScriptRe.MatchString(body) {
+		t.Fatal("index shell missing hashed module <script src=/assets/*.js>")
+	}
+	if !stylesheetRe.MatchString(body) {
+		t.Fatal("index shell missing hashed <link rel=stylesheet href=/assets/*.css>")
 	}
 }
 
-func TestIndexIncludesVoiceTranscribeControls(t *testing.T) {
+// The hand-written shell's DOM ids and API endpoints used to be asserted against
+// the served source. React renders the DOM at runtime, so we assert their string
+// literals survive in the bundled JS — a cheap smoke that every feature shipped.
+func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
+	requireBuilt(t)
 	handler := (&Server{}).Handler()
-	body := servedBody(t, handler, "/")
-	app := servedBody(t, handler, "/app.js")
-	voice := servedBody(t, handler, "/js/voice.js")
-	api := servedBody(t, handler, "/js/api.js")
-	scripts := app + "\n" + voice
+	jsPath, _ := builtAssetPaths(t, handler)
+	js := servedBody(t, handler, jsPath)
 
+	// PWA service worker registration.
+	if !strings.Contains(js, "/sw.js") {
+		t.Fatal("bundled app missing service worker registration (/sw.js)")
+	}
+	// Every server endpoint the UI speaks to (string literals survive minify).
 	for _, want := range []string{
-		`id="record-btn"`,
-		`id="rec-send"`,
+		"/api/snapshot", "/api/snapshot/stream", "/api/version",
+		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
+		"/api/paste-image", "/api/upload-file", "/api/image", "/ws/pane",
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
+		if !strings.Contains(js, want) {
+			t.Fatalf("bundled app missing endpoint %q", want)
 		}
 	}
+	// Control element ids the original shell shipped (JSX id="..." → string lit).
 	for _, want := range []string{
-		`MediaRecorder`,
-		`navigator.mediaDevices.getUserMedia`,
-		`insertTranscript`,
-		`finishRecordingConfirm`,
-		`startRecording({ confirmOnStop: true })`,
-		`startRecording({ confirmOnStop: false })`,
-		`suppressRecordTextInput`,
+		"record-btn", "rec-send", "upload-btn", "selection-btn", "clear-pane-btn",
+		"file-upload", "gear-btn", "settings-overlay", "running-effect", "build-time",
+		"qb-fab", "help-btn", "stale-dot", "conn-status", "option-bar", "direct-input",
 	} {
-		if !strings.Contains(scripts, want) {
-			t.Fatalf("voice scripts missing %q", want)
+		if !strings.Contains(js, want) {
+			t.Fatalf("bundled app missing control id %q", want)
 		}
 	}
-	if !strings.Contains(api, `"/api/transcribe"`) {
-		t.Fatal("api module missing transcribe endpoint")
+	// statusd owns the tmux window size; the browser must NOT measure its viewport
+	// and report it over the WS (it re-introduces rag-edged shared scrollback).
+	if strings.Contains(js, "measurePaneSize") {
+		t.Fatal("bundled app must not include pane-size measurement / resize wiring")
 	}
 }
 
-func TestIndexIncludesMobileUploadControls(t *testing.T) {
+func TestBundledStyleHasRuntimeClasses(t *testing.T) {
+	requireBuilt(t)
 	handler := (&Server{}).Handler()
-	body := servedBody(t, handler, "/")
-	style := servedBody(t, handler, "/app.css")
-	app := servedBody(t, handler, "/app.js")
-	help := servedBody(t, handler, "/js/help.js")
-	api := servedBody(t, handler, "/js/api.js")
-	scripts := app + "\n" + help
+	_, cssPath := builtAssetPaths(t, handler)
+	css := servedBody(t, handler, cssPath)
 
+	// Class names, keyframe ids and custom properties are not renamed by CSS
+	// minification, so these survive the build verbatim.
 	for _, want := range []string{
-		`id="upload-btn"`,
-		`id="selection-btn"`,
-		`id="clear-pane-btn"`,
-		`id="file-upload"`,
-		`id="file-upload" type="file" multiple hidden`,
+		".agent-icon", "runtime-claude", "runtime-codex", "runtime-copilot",
+		"runtime-gemini", "agent-shine", "agent-rainbow", "--pane-font",
+		"--tmact-vvh", ".image-preview", ".image-path", ".selection-btn",
+		".clear-pane-btn", ".effect-preview",
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
-		}
-	}
-	for _, want := range []string{
-		`openFileUploadPicker`,
-		`upload-btn").addEventListener("click"`,
-		`selection-btn").addEventListener("click", toggleSelectionMode)`,
-		`clear-pane-btn").addEventListener("click", clearPaneOutput)`,
-		`wsSend({ t: "clear" })`,
-		`e.metaKey && !e.ctrlKey && !e.altKey && k === "k"`,
-		`e.ctrlKey && !e.metaKey && !e.altKey && k === "l"`,
-		`const files = Array.from(e.target.files || [])`,
-		`e.key === "Tab" && e.shiftKey`,
-		`return { t: "key", k: "BTab" }`,
-		`if (state.selectionMode)`,
-		`!draft.value.trim()`,
-		`sendDirect({ t: "key", k: "Enter" })`,
-		`!state.selectionMode && document.activeElement === $("direct-input")`,
-		`tone: "upload"`,
-		`tone: "selection"`,
-		`tone: "clear"`,
-		`tone: "settings"`,
-	} {
-		if !strings.Contains(scripts, want) {
-			t.Fatalf("app/help scripts missing %q", want)
-		}
-	}
-	if !strings.Contains(api, `"/api/upload-file"`) {
-		t.Fatal("api module missing upload endpoint")
-	}
-	for _, want := range []string{
-		`@media (any-pointer: coarse)`,
-		`.key-area { display: flex; }`,
-		`.selection-btn`,
-		`.selection-btn.active`,
-		`.clear-pane-btn`,
-		`.content-wrap.selection-mode::after`,
-		`.content-wrap.selection-mode pre#content`,
-		`user-select: none`,
-		`user-select: text`,
-		`.help-ring.tone-upload`,
-		`.help-ring.tone-clear`,
-		`.help-tip.tone-settings`,
-		`bottom: 60px;`,
-	} {
-		if !strings.Contains(style, want) {
-			t.Fatalf("style sheet missing %q", want)
+		if !strings.Contains(css, want) {
+			t.Fatalf("bundled stylesheet missing %q", want)
 		}
 	}
 }
 
-func TestIndexIncludesSettingsControls(t *testing.T) {
+func TestServedAssetsContentTypes(t *testing.T) {
+	requireBuilt(t)
 	handler := (&Server{}).Handler()
-	body := servedBody(t, handler, "/")
-	style := servedBody(t, handler, "/app.css")
-	api := servedBody(t, handler, "/js/api.js")
+	jsPath, cssPath := builtAssetPaths(t, handler)
 
-	for _, want := range []string{
-		`id="gear-btn"`,
-		`id="settings-overlay"`,
-		`id="font-range"`,
-		`id="running-effect"`,
-		`id="running-effect-preview"`,
-		`id="build-time"`,
-		`Build Time`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("index page missing %q", want)
-		}
-	}
-	if !strings.Contains(style, `--pane-font`) {
-		t.Fatal("app stylesheet missing pane font variable")
-	}
-	if !strings.Contains(style, `.effect-preview`) {
-		t.Fatal("app stylesheet missing running effect preview")
-	}
-	if !strings.Contains(api, `"/api/settings/stt"`) {
-		t.Fatal("api module missing settings API call")
-	}
-	if !strings.Contains(api, `"/api/version"`) {
-		t.Fatal("api module missing version API call")
-	}
-	settings := servedBody(t, handler, "/js/settings.js")
-	if !strings.Contains(settings, `applyRunningEffect`) {
-		t.Fatal("settings script missing running effect setting")
-	}
-	if !strings.Contains(settings, `loadVersionInfo`) {
-		t.Fatal("settings script missing version info loader")
-	}
-}
-
-func TestAppIncludesAgentChipIconsAndAsciiRules(t *testing.T) {
-	handler := (&Server{}).Handler()
-	app := servedBody(t, handler, "/app.js")
-	terminal := servedBody(t, handler, "/js/terminal.js")
-	style := servedBody(t, handler, "/app.css")
-
-	for _, want := range []string{
-		`const RUNTIME_ICON = { claude: "cc", codex: "cx", copilot: "cp", gemini: "g" }`,
-		`function paneIndicator(p)`,
-		`class: cls.join(" ")`,
-		`if (!p.asking) return null;`,
-	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing %q", want)
-		}
-	}
-	for _, want := range []string{
-		`/^[─-]+$/`,
-		`lines[i] = RULE_OPEN + RULE_CLOSE;`,
-		`role="separator"`,
-		`IMAGE_PATH_RE`,
-		`span.className = "image-path"`,
-		`span.dataset.path`,
-		`const URL_CHARS =`,
-		`new RegExp(`,
-		`function extractURLs(text)`,
-		`.replace(URL_ANSI_RE, "")`,
-		`.replace(/\n[ \t]+/g, "")`,
-		`class="tui-link"`,
-	} {
-		if !strings.Contains(terminal, want) {
-			t.Fatalf("terminal module missing %q", want)
-		}
-	}
-	// statusd owns the tmux window size; the browser must not ship code that
-	// reports its viewport over the WS (it would re-introduce the rag-edged
-	// scrollback we get when devices of different widths share a session).
-	for _, banned := range []string{
-		`measurePaneSize`,
-		`t: "resize"`,
-	} {
-		if strings.Contains(app, banned) {
-			t.Fatalf("app script must not include resize wiring %q", banned)
-		}
-		if strings.Contains(terminal, banned) {
-			t.Fatalf("terminal module must not include resize wiring %q", banned)
-		}
-	}
-	for _, want := range []string{
-		`previewImagePath`,
-		`new URLSearchParams({ path })`,
-		`e.target.closest(".image-path")`,
-		`!e.metaKey`,
-		`IMAGE_LONG_PRESS_MS`,
-		`pointerdown`,
-		`pointercancel`,
-	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing %q", want)
-		}
-	}
-	for _, want := range []string{
-		`--tmact-vvh`,
-		`scheduleFitViewport`,
-		`document.addEventListener("focusin", scheduleFitViewport)`,
-	} {
-		if !strings.Contains(app, want) {
-			t.Fatalf("app script missing viewport keyboard guard %q", want)
-		}
-	}
-	if strings.Contains(app, `pre.scrollTop = pre.scrollHeight`) {
-		t.Fatal("app script must not scroll pane output to the blank tmux tail on keyboard resize")
-	}
-	for _, want := range []string{
-		`.agent-icon.runtime-claude`,
-		`.agent-icon.runtime-codex`,
-		`.agent-icon.runtime-copilot`,
-		`.agent-icon.runtime-gemini`,
-		`.image-path`,
-		`.image-preview`,
-		`.image-preview img`,
-		`height: var(--tmact-vvh, 100dvh);`,
-		`overflow: hidden;`,
-		`@keyframes agent-shine`,
-		`@keyframes agent-rainbow`,
-		`display: block;`,
-		`border-top: 1px solid var(--border);`,
-	} {
-		if !strings.Contains(style, want) {
-			t.Fatalf("app style missing %q", want)
-		}
-	}
-}
-
-func TestPWAAssetsContentTypes(t *testing.T) {
-	handler := (&Server{}).Handler()
 	tests := []struct {
 		path        string
 		contentType string
 	}{
 		{"/manifest.json", "application/json"},
-		{"/app.css", "text/css"},
-		{"/app.js", "text/javascript"},
 		{"/sw.js", "text/javascript"},
 		{"/icons/icon-180.png", "image/png"},
 		{"/icons/icon-192.png", "image/png"},
 		{"/icons/icon-512.png", "image/png"},
+		{jsPath, "text/javascript"},
+		{cssPath, "text/css"},
 	}
 
 	for _, tt := range tests {
@@ -307,14 +190,24 @@ func TestPWAAssetsContentTypes(t *testing.T) {
 	}
 }
 
-func servedBody(t *testing.T, handler http.Handler, path string) string {
-	t.Helper()
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("%s status = %d, want 200", path, rec.Code)
+// The Go server rewrites sw.js's CACHE_NAME suffix to a content hash of every
+// embedded static file, so any rebuilt asset busts the offline cache without a
+// manual bump. Verify the rewrite fired and matches /api/version's asset_hash.
+func TestServiceWorkerCacheNameMatchesAssetHash(t *testing.T) {
+	requireBuilt(t)
+	handler := (&Server{}).Handler()
+	sw := servedBody(t, handler, "/sw.js")
+
+	if strings.Contains(sw, "tmact-app-shell-vDEV") {
+		t.Fatal("sw.js CACHE_NAME still the literal vDEV — server rewrite did not fire")
 	}
-	return rec.Body.String()
+	m := regexp.MustCompile(`tmact-app-shell-([0-9a-f]{12})`).FindStringSubmatch(sw)
+	if m == nil {
+		t.Fatal("sw.js CACHE_NAME not rewritten to a 12-hex content hash")
+	}
+	if ver := servedBody(t, handler, "/api/version"); !strings.Contains(ver, m[1]) {
+		t.Fatalf("/api/version asset_hash does not match sw cache hash %q: %s", m[1], ver)
+	}
 }
 
 func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
@@ -322,11 +215,15 @@ func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sw.js", nil))
 
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/sw.js status = %d, want 200", rec.Code)
+	}
 	body := rec.Body.String()
 	for _, want := range []string{
 		`url.pathname.startsWith("/api/")`,
 		`url.pathname.startsWith("/ws/")`,
-		`APP_SHELL_PATHS.has(url.pathname)`,
+		`isShellPath(url.pathname)`,
+		`startsWith("/assets/")`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("service worker missing %q", want)

@@ -33,12 +33,27 @@ pastes their saved paths, and can use configured speech-to-text for voice input.
 
 ## Development
 
-- Run tests with `go test ./...`.
-- Build with `go build -o .cache/tmact ./cmd/tmact`.
-- Run local commands with `go run ./cmd/tmact ...`.
-- Use `gofmt` on edited Go files.
-- Keep dependencies minimal; current external deps are YAML config and the web
-  socket package.
+The browser UI is a Vite + React + TypeScript app under `internal/web/frontend/`.
+Its production build is emitted into `internal/web/static/` (embedded via
+`go:embed`) and is **not committed** — `internal/web/static/` holds only
+`.gitkeep` in git. Build it before building/testing the Go binary.
+
+- Build everything: `make build` (runs the frontend build, then `go build ./...`).
+- Build just the UI: `make web` (Vite → `internal/web/static/`). Requires Node
+  (the repo was set up with Node 22 + npm 10).
+- Run tests: `make test` (frontend Vitest + `go test ./...`). For Go-only after a
+  build, `go test ./...` works; the build-dependent web tests `t.Skip` when the UI
+  has not been built.
+- Live UI dev loop: `make web-dev` runs the Vite dev server on `:5234` and proxies
+  `/api` + `/ws` to a running statusd (default `127.0.0.1:7890`; override with
+  `TMACT_STATUSD=host:port`). Lets you iterate on the UI without rebuilding the
+  Go binary.
+- Run local commands with `go run ./cmd/tmact ...` (build the UI first if you need
+  the web server).
+- Use `gofmt` on edited Go files; the frontend is TypeScript-strict (`make web`
+  type-checks via `tsc` before bundling).
+- Keep Go dependencies minimal; current external Go deps are YAML config and the
+  web socket package. The frontend's npm deps live in `internal/web/frontend/`.
 
 ## Safety
 

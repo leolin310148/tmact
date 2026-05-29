@@ -3,22 +3,27 @@
 // fresh cache automatically — no manual bump needed. The literal vDEV here is
 // only what you see when reading the file on disk.
 const CACHE_NAME = "tmact-app-shell-vDEV";
+
+// Stable, known-path shell entries to precache on install. The React build emits
+// content-hashed JS/CSS under /assets/ whose names change every build, so they
+// cannot be enumerated here; the fetch handler caches them opportunistically
+// (network-first) once they are first requested. Offline support is preserved:
+// after one online load, "/" + its hashed assets are all in the cache.
 const APP_SHELL_URLS = [
   "/",
   "/index.html",
-  "/app.css",
-  "/app.js",
-  "/js/api.js",
-  "/js/dom.js",
-  "/js/state.js",
-  "/js/stream.js",
-  "/js/terminal.js",
   "/manifest.json",
   "/icons/icon-180.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
 const APP_SHELL_PATHS = new Set(APP_SHELL_URLS);
+
+// A request is part of the app shell if it is a known stable path OR a hashed
+// build asset under /assets/.
+function isShellPath(pathname) {
+  return APP_SHELL_PATHS.has(pathname) || pathname.startsWith("/assets/");
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -57,7 +62,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (!APP_SHELL_PATHS.has(url.pathname)) {
+  if (!isShellPath(url.pathname)) {
     return;
   }
 
