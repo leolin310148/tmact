@@ -13,7 +13,6 @@ const (
 	DefaultFileConfigDir  = ".tmact"
 	DefaultFileConfigName = "statusd.json"
 	DefaultWebAddr        = "127.0.0.1:7890"
-	DefaultLogPath        = "/tmp/tmact-statusd.jsonl"
 	DefaultFileInterval   = 500 * time.Millisecond
 )
 
@@ -44,6 +43,12 @@ type PeerFileConfig struct {
 }
 
 // DefaultFileConfig is the seed written when statusd.json is missing.
+//
+// LogPath is deliberately left empty: when set, the daemon appends a full
+// snapshot to it every tick (500ms) with no rotation, which grows without
+// bound (gigabytes within a day). Diagnostics/errors go to stderr (captured
+// by launchd/systemd), so the snapshot log is opt-in via --log-path or an
+// explicit log_path in the config.
 func DefaultFileConfig() FileConfig {
 	t := true
 	usage := true
@@ -52,7 +57,6 @@ func DefaultFileConfig() FileConfig {
 		WebAddr:     DefaultWebAddr,
 		Interval:    DefaultFileInterval.String(),
 		SocketPath:  DefaultSocketPath,
-		LogPath:     DefaultLogPath,
 		TmuxOptions: &t,
 		PaneCols:    &cols,
 		PaneRows:    &rows,

@@ -25,8 +25,8 @@ func TestLoadOrCreateFileConfig_SeedsWhenMissing(t *testing.T) {
 	if cfg.SocketPath != DefaultSocketPath {
 		t.Errorf("SocketPath = %q, want %q", cfg.SocketPath, DefaultSocketPath)
 	}
-	if cfg.LogPath != DefaultLogPath {
-		t.Errorf("LogPath = %q, want %q", cfg.LogPath, DefaultLogPath)
+	if cfg.LogPath != "" {
+		t.Errorf("LogPath = %q, want empty (snapshot log opt-in)", cfg.LogPath)
 	}
 	if cfg.IntervalDuration() != DefaultFileInterval {
 		t.Errorf("Interval = %v, want %v", cfg.IntervalDuration(), DefaultFileInterval)
