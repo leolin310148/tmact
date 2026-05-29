@@ -264,7 +264,19 @@ function applySnapshot(snap) {
   renderMode();
   restoreSelection();
   syncQuickDock();
+  pruneCache(snap);
   checkStale();
+}
+
+// pruneCache drops cached buffers for panes that no longer exist, so the cache
+// tracks the live pane set. The selected pane is kept even if a snapshot
+// momentarily omits it (e.g. a transient peer fetch failure).
+function pruneCache(snap) {
+  if (!snap || !snap.panes) return;
+  const live = new Set(Object.values(snap.panes).map((p) => p.pane_id));
+  for (const id in paneCache) {
+    if (id !== state.selected && !live.has(id)) delete paneCache[id];
+  }
 }
 
 function startPolling() {
@@ -297,10 +309,16 @@ function stopSnapshotStream() {
 // WS replaces lines[from:], so the client only renders the joined string.
 // Reset on every openWS — a fresh connection always starts with from=0.
 let paneLines = [];
+// Per-pane buffer cache for stale-while-revalidate: switching back to a pane
+// paints its last-known lines instantly, and the WS's first (from=0) patch
+// then swaps in the fresh capture with no "Connecting…" flash. Pruned to the
+// live pane set in applySnapshot so it can't grow without bound.
+const paneCache = {};
 const paneStream = createPaneStream({
   getSelectedPane: () => state.selected,
   onPatch: (from, lines, question) => {
     paneLines = paneLines.slice(0, from).concat(lines);
+    if (state.selected) paneCache[state.selected] = paneLines;
     const p = findPane(state.selected);
     setContent(paneLines.join("\n"), { cwd: p && p.cwd, peer: panePeer(p) });
     renderOptions(question);
@@ -330,7 +348,15 @@ function closeWS() {
 }
 
 function openWS(paneID) {
-  paneLines = [];
+  // Seed from the cache so a revisited pane shows content immediately; the
+  // first patch (from=0) replaces it. A never-seen pane stays empty, and the
+  // synchronous "connecting" status below paints the "Connecting…" placeholder.
+  const cached = paneCache[paneID];
+  paneLines = cached ? cached.slice() : [];
+  if (paneLines.length) {
+    const p = findPane(paneID);
+    setContent(paneLines.join("\n"), { cwd: p && p.cwd, peer: panePeer(p) });
+  }
   paneStream.open(paneID);
 }
 
@@ -341,9 +367,8 @@ function wsSend(obj) {
 function selectPane(paneID) {
   if (!paneID) return;
   if (paneID === state.selected) {
-    paneLines = [];
-    setContent("Reconnecting…");
-    renderOptions(null);
+    // Re-selecting the current pane forces a reconnect; keep the cached output
+    // on screen and let the WS refresh it rather than blanking to a placeholder.
     openWS(paneID);
     return;
   }
