@@ -208,6 +208,15 @@ function setInputStatus(msg) {
   syncIndicator();
 }
 
+// setConnStatus shows the live-connection note ("connecting…") in the strip
+// above the chips, so it never reflows the pane-list row. An empty string
+// hides the strip.
+function setConnStatus(msg) {
+  const el = $("conn-status");
+  el.textContent = msg;
+  el.classList.toggle("show", msg !== "");
+}
+
 // renderOptions rebuilds the quick-answer bar from a detected menu prompt:
 // each numbered option becomes a button that relays its digit into the pane.
 // An absent or empty question clears the bar. The bar is CSS-hidden on
@@ -299,16 +308,16 @@ const paneStream = createPaneStream({
   onQuestion: renderOptions,
   onError: showInputError,
   onStatus: (s) => {
-    // Surface a reconnecting hint in the mode-indicator line; on reconnect
-    // the next "open" clears it. The error timer is independent — its 6s
-    // auto-clear can still wipe an inline error message.
+    // Surface the connection state in the strip above the chips (so it never
+    // reflows the pane list); on reconnect the next "open" clears it. The
+    // input-bar error/upload slot is independent and stays put.
     if (s === "connecting") {
-      setInputStatus("connecting…");
+      setConnStatus("connecting…");
       if (paneLines.length === 0) setContent("Connecting…");
     } else if (s === "reconnecting") {
-      setInputStatus("reconnecting…");
+      setConnStatus("reconnecting…");
       if (paneLines.length === 0) setContent("Reconnecting…");
-    } else if (s === "open") setInputStatus("");
+    } else if (s === "open") setConnStatus("");
   },
 });
 

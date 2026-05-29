@@ -356,10 +356,28 @@
   /* Shown only when the keys overflow a single row (JS sets .overflowing). */
   .key-toggle { display: none; padding: 5px 10px; }
   .key-area.overflowing .key-toggle { display: inline-block; }
+  /* Connection-status strip — sits directly above the pane-list chips so
+     "connecting…" / "reconnecting…" never reflows the chip row below it
+     (only the pane output shrinks). Shown via JS by toggling .show. */
+  .conn-status {
+    flex: 0 0 auto; display: none;
+    padding: 5px 10px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    font: 11px/1.4 var(--mono); letter-spacing: 0.3px; color: var(--fg-dim);
+  }
+  .conn-status.show { display: block; }
   /* Quick-answer buttons for a detected menu prompt — one per numbered
-     option. Hidden by default; the phone media query reveals it when it
-     holds buttons, so it is a mobile-only convenience. */
-  .option-bar { display: none; flex-wrap: wrap; gap: 5px; }
+     option. Lives above the chips (not in the input bar) so showing/hiding it
+     reflows only the pane output, never the chip row. Hidden by default; the
+     phone media query reveals it when it holds buttons (mobile-only). */
+  .option-bar {
+    flex: 0 0 auto;
+    display: none; flex-wrap: wrap; gap: 5px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
   .option-bar button {
     flex: 0 1 auto; min-width: 0; max-width: 100%;
     display: flex; align-items: baseline; gap: 6px;
