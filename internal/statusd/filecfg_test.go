@@ -34,6 +34,9 @@ func TestLoadOrCreateFileConfig_SeedsWhenMissing(t *testing.T) {
 	if cfg.TmuxOptions == nil || !*cfg.TmuxOptions {
 		t.Errorf("TmuxOptions should default to true")
 	}
+	if cfg.AgentUsage == nil || !*cfg.AgentUsage {
+		t.Errorf("AgentUsage should default to true")
+	}
 
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("seed file not written: %v", err)

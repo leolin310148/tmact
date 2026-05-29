@@ -80,6 +80,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runStatusd(args[1:])
+	case "usage":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runUsage(args[1:])
 	case "stt-set":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")

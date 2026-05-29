@@ -31,6 +31,10 @@ type FileConfig struct {
 	Peers        []PeerFileConfig `json:"peers,omitempty"`
 	PeerInterval string           `json:"peer_interval,omitempty"`
 	PeerTimeout  string           `json:"peer_timeout,omitempty"`
+	// AgentUsage enables the web UI's agent quota / rate-limit usage panel,
+	// which reads each agent's local OAuth credentials read-only and polls the
+	// provider usage endpoints on a slow ticker. Defaults to true when absent.
+	AgentUsage *bool `json:"agent_usage,omitempty"`
 }
 
 // PeerFileConfig is the on-disk shape of one entry in FileConfig.Peers.
@@ -42,6 +46,7 @@ type PeerFileConfig struct {
 // DefaultFileConfig is the seed written when statusd.json is missing.
 func DefaultFileConfig() FileConfig {
 	t := true
+	usage := true
 	cols, rows := DefaultPaneCols, DefaultPaneRows
 	return FileConfig{
 		WebAddr:     DefaultWebAddr,
@@ -51,6 +56,7 @@ func DefaultFileConfig() FileConfig {
 		TmuxOptions: &t,
 		PaneCols:    &cols,
 		PaneRows:    &rows,
+		AgentUsage:  &usage,
 	}
 }
 

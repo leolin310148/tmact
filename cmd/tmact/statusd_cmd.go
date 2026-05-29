@@ -100,6 +100,7 @@ func runStatusdStart(args []string) error {
 	flags := statusdFlags(fs)
 	once := fs.Bool("once", false, "run one scan then exit")
 	webAddr := fs.String("web-addr", "", "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)")
+	agentUsage := fs.Bool("agent-usage", true, "serve the web agent quota/rate-limit usage panel (reads agent OAuth creds read-only)")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file (JSON); auto-created with defaults if missing")
 
 	if err := fs.Parse(args); err != nil {
@@ -124,6 +125,11 @@ func runStatusdStart(args []string) error {
 
 	cfg := flags.config()
 	applyFileConfig(&cfg, webAddr, fileCfg, set)
+	// Agent-usage panel: CLI flag wins; otherwise honor the file value.
+	usageEnabled := *agentUsage
+	if !set["agent-usage"] && fileCfg.AgentUsage != nil {
+		usageEnabled = *fileCfg.AgentUsage
+	}
 	if err := validateStatusdConfig(cfg); err != nil {
 		return err
 	}
@@ -153,12 +159,13 @@ func runStatusdStart(args []string) error {
 	// Always serve the unix socket so CLI read/status can reach the daemon.
 	// The TCP --web-addr is additional and optional.
 	server := &web.Server{
-		Addr:        *webAddr,
-		SocketPath:  cfg.SocketPath,
-		Store:       daemon.Store(),
-		CapturePane: tmux.CapturePaneANSI,
-		BuildTime:   buildVersionInfo().Time,
-		Peers:       cfg.Peers,
+		Addr:         *webAddr,
+		SocketPath:   cfg.SocketPath,
+		Store:        daemon.Store(),
+		CapturePane:  tmux.CapturePaneANSI,
+		BuildTime:    buildVersionInfo().Time,
+		Peers:        cfg.Peers,
+		UsageEnabled: usageEnabled,
 	}
 	go func() {
 		if err := server.Serve(ctx); err != nil {

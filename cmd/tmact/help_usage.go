@@ -20,6 +20,7 @@ Usage:
   tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
   tmact statusd start|once|read|status [--socket-path /tmp/tmact-statusd.sock]
+  tmact usage [--provider claude|codex] [--json]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
   tmact summarize [--config examples/agents.yaml] [--agent sample-codex] [--json]
@@ -48,6 +49,7 @@ Commands:
   inspect   detect runtime and idle/running state for tmux panes
   status    summarize configured agent panes
   statusd   maintain a cached tmux pane status snapshot
+  usage     fetch Claude / Codex quota and rate-limit usage
   stt-set   configure statusd web UI voice transcription
   inbox     list agent panes that need human intervention
   summarize summarize recent pane and git activity

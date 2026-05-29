@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentusage"
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -88,6 +89,18 @@ type Server struct {
 	// proxying. Pane ids with a "<name>@" prefix matching a peer name are
 	// bridged to that peer's WebSocket instead of acted on locally.
 	Peers []statusd.Peer
+	// UsageEnabled turns on the slow agent-usage refresher and the
+	// /api/agent-usage endpoint. Off by default; reads agent OAuth credentials
+	// read-only and hits provider usage endpoints on a slow ticker.
+	UsageEnabled bool
+	// UsageInterval is how often agent usage is refreshed; defaults to 5m.
+	UsageInterval time.Duration
+	// FetchUsage fetches agent usage; defaults to agentusage.Fetch (all
+	// providers). Overridable in tests.
+	FetchUsage func(ctx context.Context) agentusage.Snapshot
+
+	// usage caches the latest agent-usage snapshot the refresher produces.
+	usage usageCache
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -195,6 +208,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
+	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
 	mux.HandleFunc("/api/version", s.handleVersion)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
@@ -294,6 +308,9 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 
 	go s.runUploadsGC(ctx)
+	if s.UsageEnabled {
+		go s.runUsageRefresh(ctx)
+	}
 
 	listeners, err := s.listeners()
 	if err != nil {

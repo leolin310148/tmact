@@ -8,6 +8,7 @@ import { wireHelp } from "./js/help.js";
 import { loadClientSettings, wireSettings } from "./js/settings.js";
 import { createQuick } from "./js/quick.js";
 import { createUpload } from "./js/upload.js";
+import { wireUsage } from "./js/usage.js";
 
 const POLL_MS = 1000;
 const STALE_MS = 10000;
@@ -983,6 +984,7 @@ wireCopyLine();
 wireSettings();
 wireQuick();
 wireHelp();
+wireUsage();
 wireRecordHotkey();
 wireHotkeys();
 if ("serviceWorker" in navigator) {

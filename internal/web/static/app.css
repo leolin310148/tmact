@@ -193,6 +193,41 @@
     content: ""; position: absolute; inset: 0; pointer-events: none;
     box-shadow: inset 0 0 0 0.5px rgba(121, 192, 255, 0.2);
   }
+  /* Agent usage overlay: semi-transparent, top-right, never blocks the pane
+     (pointer-events: none). One row per provider, statusline-chip look. */
+  /* One semi-transparent bubble holding a grid so the columns line up across
+     provider rows. Layout per row:
+       icon | sess% | sess-pace | / | week% | week-pace */
+  .usage-panel {
+    position: absolute; z-index: 28;
+    /* Fold in the safe-area insets so the panel clears the notch / status bar
+       when installed as a PWA (black-translucent status bar) and the rounded
+       corner / camera cutout in landscape. Insets are 0 on desktop. */
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    display: grid;
+    grid-template-columns: auto auto auto auto auto auto;
+    align-content: start; justify-items: end;
+    gap: 2px 6px;
+    padding: 5px 9px; border-radius: 7px;
+    background: rgba(14,17,22,0.82);
+    border: 1px solid var(--border);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    pointer-events: none; opacity: 0.9;
+    max-width: 80%;
+    font: 11px/1.3 var(--mono);
+  }
+  .usage-panel .u-icon { justify-self: start; }
+  .usage-panel .u-remain { color: var(--fg); }
+  .usage-panel .u-sep { color: var(--fg-dim); }
+  .usage-panel .u-pace.reserve { color: var(--green); }
+  .usage-panel .u-pace.deficit { color: var(--red); }
+  .usage-panel .u-err {
+    grid-column: 2 / -1; justify-self: start;
+    color: var(--fg-dim); font-size: 10px;
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  }
   /* `overflow: hidden auto` + pre-wrap: pane text wraps and scrolls
      vertically only — it never scrolls sideways. Top padding folds in a
      fraction of the safe-area inset so the first line clears the notch /
@@ -956,6 +991,14 @@
     .dot { width: 6px; height: 6px; }
     .dot.asking { width: 10px; height: 10px; font-size: 8px; }
     .agent-icon { min-width: 17px; height: 12px; font-size: 8px; padding: 0 2px; }
+    /* Phone: shrink the usage overlay so it sits in the top-right corner
+       without covering much pane output; safe-area insets keep it below the
+       notch. Tighter top so it tucks against the status bar. */
+    .usage-panel {
+      top: calc(env(safe-area-inset-top, 0px) - 8px);
+      right: calc(6px + env(safe-area-inset-right, 0px));
+      gap: 1px 5px; padding: 4px 7px; max-width: 92%; font-size: 9px;
+    }
     /* The draft text stays small to fit more lines; `maximum-scale=1` in the
        viewport meta stops iOS Safari zooming the focused box (it would
        otherwise zoom for any input font under 16px). */
