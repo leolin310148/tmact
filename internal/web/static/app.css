@@ -775,6 +775,41 @@
     user-select: text;
   }
 
+  /* Contextual copy bar — surfaces only while a non-empty selection lives in
+     the pane (set by the selectionchange handler). Anchored bottom-left so it
+     never collides with the right-hand button column / lightning FAB. Lets the
+     user copy a multi-line selection with terminal soft-wraps glued back into
+     a single line, working around the fact that wrapped output copies with
+     stray newlines + continuation indent. */
+  .copyline-bar {
+    display: none;
+    position: absolute; left: 12px; bottom: 12px; z-index: 31;
+    flex-direction: row; align-items: center; gap: 6px;
+    max-width: calc(100% - 70px);
+  }
+  .copyline-bar.visible { display: flex; }
+  .copyline-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent); color: #fff;
+    border: 1px solid var(--accent); border-radius: 18px;
+    padding: 8px 14px; font: 12px/1 var(--mono);
+    cursor: pointer; white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  .copyline-btn svg { width: 15px; height: 15px; display: block; }
+  .copyline-btn:active { filter: brightness(0.9); }
+  .copyline-btn.alt {
+    background: rgba(28,35,48,0.82); color: var(--fg);
+    border-color: var(--border);
+  }
+  .copyline-btn.copied {
+    background: var(--green); border-color: var(--green); color: #06210f;
+  }
+
   /* Help button — always visible (the desktop Option+key hotkeys benefit from
      hints too). On phones it sits above Upload and the lightning FAB. */
   .help-btn {

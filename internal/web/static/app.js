@@ -882,9 +882,104 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// --- Contextual "copy as one line" bar -------------------------------------
+// A multi-line selection of wrapped pane output copies with the terminal's
+// soft-wrap newlines + continuation indent baked in. These re-join the
+// selection: joinGlue drops the wrap entirely (best for paths / URLs /
+// commands), joinSpace collapses each wrap to a single space (best for prose).
+function joinGlue(text) {
+  return text.replace(/[ \t]*\n[ \t]*/g, "");
+}
+function joinSpace(text) {
+  return text.replace(/[ \t]*\n[ \t]*/g, " ");
+}
+
+// copyText writes to the clipboard, falling back to a hidden-textarea
+// execCommand for plain-http origins where navigator.clipboard is unavailable
+// (the statusd web UI is usually served over a LAN IP, not https/localhost).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through to legacy path */ }
+  try {
+    const ta = h("textarea", { readonly: "" });
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+// paneSelectionText returns the current selection only when it is non-empty
+// and anchored inside the pane output, so a selection in the draft box (or
+// anywhere else) never triggers the bar.
+function paneSelectionText() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return "";
+  const content = $("content");
+  if (!content.contains(sel.anchorNode) || !content.contains(sel.focusNode)) return "";
+  return sel.toString();
+}
+
+let copyFlashUntil = 0;
+function syncCopyLineBar() {
+  const bar = $("copyline-bar");
+  const has = paneSelectionText().trim().length > 0 || Date.now() < copyFlashUntil;
+  bar.classList.toggle("visible", has);
+  bar.setAttribute("aria-hidden", has ? "false" : "true");
+}
+
+function wireCopyLine() {
+  const joinBtn = $("copyline-join");
+  const spaceBtn = $("copyline-space");
+  let flashTimer = null;
+  const run = (btn, transform) => async () => {
+    const text = paneSelectionText();
+    if (!text) return;
+    if (!(await copyText(transform(text)))) return;
+    // Hold the bar up briefly so the green "copied" flash is visible even when
+    // the execCommand fallback collapsed the pane selection.
+    copyFlashUntil = Date.now() + 900;
+    joinBtn.classList.remove("copied");
+    spaceBtn.classList.remove("copied");
+    btn.classList.add("copied");
+    syncCopyLineBar();
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      btn.classList.remove("copied");
+      syncCopyLineBar();
+    }, 900);
+  };
+  // pointerdown preventDefault keeps the pane selection alive while the tap is
+  // processed — otherwise focus moves to the button and the selection (which we
+  // still need to read) collapses before the click handler runs.
+  for (const btn of [joinBtn, spaceBtn]) {
+    btn.addEventListener("pointerdown", (e) => e.preventDefault());
+  }
+  joinBtn.addEventListener("click", run(joinBtn, joinGlue));
+  spaceBtn.addEventListener("click", run(spaceBtn, joinSpace));
+  // One listener covers desktop drag-select, mobile selection-mode handles, and
+  // selection loss on pane re-render / pane switch.
+  document.addEventListener("selectionchange", syncCopyLineBar);
+  syncCopyLineBar();
+}
+
 loadClientSettings();
 loadQuickConfig();
 wireInput();
+wireCopyLine();
 wireSettings();
 wireQuick();
 wireHelp();
