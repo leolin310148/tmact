@@ -25,6 +25,16 @@
 import { useUsage } from "../hooks/useUsage";
 import type { AgentUsage, Pace, ProviderUsage, RateWindow } from "../types/server";
 
+// fmtUSD renders a dollar-equivalent spend compactly: <$10 keeps cents
+// ("$5.62"), <$1000 drops them ("$562"), ≥$1000 uses a k suffix ("$3.5k").
+// Mirrors the spirit of codeburn's compact cost columns.
+function fmtUSD(n: number): string {
+  if (!(n > 0)) return "$0";
+  if (n < 10) return "$" + n.toFixed(2);
+  if (n < 1000) return "$" + Math.round(n);
+  return "$" + (n / 1000).toFixed(1) + "k";
+}
+
 // RUNTIME_ICON mirrors usage.js exactly.
 const RUNTIME_ICON: Record<string, string> = {
   claude: "cc",
@@ -103,16 +113,20 @@ function WindowCells({ w, keyBase }: { w: RateWindow | undefined; keyBase: strin
 
 // ProviderRows lays one provider into the grid: icon | % | reserve | time. Each
 // provider takes two lines — session on top, weekly below — with the icon in
-// column 1 of the first line (u-icon-tall spans both lines so it sits vertically
-// centred). An errored provider spans the value columns (u-err, cols 2-4) with
-// its message instead and the icon stays one row tall. Mirrors usage.js render()
-// per-provider body.
+// column 1 of the first line and the month-to-date spend tucked directly under
+// it in column 1 of the second line. To keep that placement the cells are
+// emitted in grid auto-flow order (icon, session, spend, weekly): icon fills
+// row1col1, session fills the rest of row1, spend lands at row2col1 (the first
+// free cell), then weekly fills row2col2–4. The spend cell is always emitted
+// (empty when there is no spend) so row2col1 stays occupied and the next
+// provider can't auto-flow into it. An errored provider spans the value columns
+// (u-err, cols 2-4) with its message instead. Mirrors usage.js render() per
+// provider body.
 function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   const runtime = (p.provider || "").toLowerCase();
   const icon = RUNTIME_ICON[runtime] || runtime.slice(0, 2);
   const title = p.provider + (p.plan ? " · " + p.plan : "") + (p.account ? " · " + p.account : "");
-  const iconCls =
-    "agent-icon u-icon" + (p.error ? "" : " u-icon-tall") + " runtime-" + runtime;
+  const iconCls = "agent-icon u-icon runtime-" + runtime;
   const base = "p" + idx;
   if (p.error) {
     return (
@@ -128,12 +142,22 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   }
   const byName: Record<string, RateWindow> = {};
   for (const w of p.windows || []) byName[w.name] = w;
+  // Dollar-equivalent month-to-date token spend (codeburn-style), tucked under
+  // the runtime badge on the weekly line (column 1, left-aligned).
+  const spend = p.spend ? fmtUSD(p.spend.month_usd) : "";
   return (
     <>
       <span key={base + ":icon"} className={iconCls} title={title}>
         {icon}
       </span>
       <WindowCells key={base + ":session"} keyBase={base + ":session"} w={byName.session} />
+      <span
+        key={base + ":spend"}
+        className="u-spend"
+        title="month-to-date dollar-equivalent token spend (API rates)"
+      >
+        {spend}
+      </span>
       <WindowCells key={base + ":weekly"} keyBase={base + ":weekly"} w={byName.weekly} />
     </>
   );

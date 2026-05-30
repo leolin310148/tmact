@@ -175,8 +175,21 @@ export interface ProviderUsage {
    * metered spend window; absent/null otherwise.
    */
   cost?: CostWindow | null;
+  /**
+   * Go: `*SpendWindow` with `,omitempty` — locally-computed dollar-equivalent
+   * token spend (LiteLLM-priced, like codeburn) for the current calendar week
+   * and month. Absent/null when the provider has no local session logs.
+   */
+  spend?: SpendWindow | null;
   /** Go: `error,omitempty` — per-provider failure reason. */
   error?: string;
+}
+
+export interface SpendWindow {
+  /** Week-to-date dollar-equivalent token spend (USD). */
+  week_usd: number;
+  /** Month-to-date dollar-equivalent token spend (USD). */
+  month_usd: number;
 }
 
 export interface RateWindow {
