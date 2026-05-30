@@ -633,6 +633,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     paneCache: paneCacheRef,
     selectPane,
     syncQuickDock,
+    renderMode,
     closeWS,
     openWS,
   });

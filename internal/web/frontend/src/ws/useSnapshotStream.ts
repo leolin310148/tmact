@@ -86,6 +86,16 @@ export interface SnapshotStreamDeps {
    */
   syncQuickDock: () => void;
   /**
+   * app.js `renderMode()`. `applySnapshot` calls it on every snapshot
+   * (old app.js:264) — NOT just on selection/focus events. renderMode has
+   * imperative side effects that must apply at boot: it sets the responsive
+   * #draft placeholder (mobile vs desktop) and the "Select a pane to enable
+   * input" #mode-text when nothing is selected. Without this, a fresh load with
+   * no restorable selection (selectPane → renderMode never fires) leaves the
+   * mobile placeholder showing the desktop ⌘/Ctrl hint and hides #mode-indicator.
+   */
+  renderMode: () => void;
+  /**
    * app.js `closeWS()` → `paneStream.close()`. Called when the tab goes hidden.
    */
   closeWS: () => void;
@@ -211,14 +221,20 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   }, [state]);
 
   // applySnapshot — port of app.js `applySnapshot(snap)`. Mutate state by
-  // reference, then re-render (the original re-ran renderStatusline + renderMode;
-  // here a single bump() re-renders the chips/mode components, which read live
-  // state and freeze `state.paneOrder` inside StatusLine's render — see note).
+  // reference, then re-render: the original re-ran renderStatusline (→ bump(),
+  // which re-renders the chips/mode components, which read live state and freeze
+  // `state.paneOrder` inside StatusLine's render — see note) and then renderMode.
+  // renderMode is injected (depsRef.current.renderMode) because, unlike
+  // renderStatusline, its imperative side effects (the responsive #draft
+  // placeholder + the "Select a pane to enable input" #mode-text) are NOT a pure
+  // re-render — bump() alone would not apply them. Calling it here mirrors the
+  // original's per-snapshot renderMode and fixes the boot case (fresh load, no
+  // restorable selection → selectPane/renderMode otherwise never fire).
   //
   // ORDER MATTERS and mirrors the original exactly:
   //   1. state.snapshot = snap
   //   2. renderStatusline(snap)  → bump() (StatusLine freezes state.paneOrder)
-  //   3. renderMode()            → covered by the same bump()
+  //   3. renderMode()            → depsRef.current.renderMode() (placeholder + mode-text)
   //   4. restoreSelection()      → may call selectPane (which itself re-renders)
   //   5. syncQuickDock()
   //   6. pruneCache(snap)
@@ -232,7 +248,8 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   const applySnapshot = useCallback(
     (snap: Snapshot): void => {
       state.snapshot = snap;
-      bump(); // renderStatusline(snap) + renderMode()
+      bump(); // renderStatusline(snap)
+      depsRef.current.renderMode(); // renderMode() — old app.js:264 (placeholder + mode-text)
       restoreSelection();
       depsRef.current.syncQuickDock();
       pruneCache(snap);
