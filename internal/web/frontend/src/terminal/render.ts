@@ -153,6 +153,17 @@ const URL_RE = new RegExp(
 const URL_TRAIL_RE = /[.,;:!?)\]}>'"`]+$/;
 const URL_ANSI_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const ANSI_STRIP_RE = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+// TRAILING_BLANK_RE matches the run of trailing blank ROWS that render() strips
+// (see the trim comment in render()). A row counts as blank when it holds only
+// whitespace AND/OR ANSI escapes — tmux `capture-pane -e` re-asserts SGR state
+// on otherwise-empty cells, so a padding row can arrive as e.g. "\x1b[49m   "
+// rather than pure spaces. Reusing ANSI_STRIP_RE's source keeps this in step
+// with every other blank-line check in this file (joinWrappedFrames /
+// parseTableBlock / wrapRuleLines / extractTables all strip ANSI before judging
+// a line blank). The `[ \t\r]` class also folds in the CR of a CRLF pane.
+const TRAILING_BLANK_RE = new RegExp(
+  "(?:\\r?\\n(?:" + ANSI_STRIP_RE.source + "|[ \\t\\r])*)+$",
+);
 export const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
 
@@ -374,7 +385,22 @@ export interface RenderOpts {
 // a separate DOM pass after the HTML is in the document (see ContentPane).
 export function render(text: string, _opts?: RenderOpts): string {
   void _opts;
-  const extracted = extractTables(text);
+  // Trim trailing blank rows before rendering. tmux `capture-pane` returns the
+  // full pane grid, so a shell idling at its prompt arrives as a few real lines
+  // followed by dozens of empty rows. The original setContent rendered those
+  // rows verbatim, which made pre#content taller than the viewport even for a
+  // single line of output; the stick-to-bottom auto-scroll (ContentPane) then
+  // parked on the blank tail and scrolled the real prompt out of view above the
+  // fold (the "content is little but still scrolls, shown blank" report).
+  // Dropping the trailing blank rows keeps short output fitting the pane (no
+  // scroll, shown from the top) while genuinely long output still overflows and
+  // follows the bottom exactly as before. A row counts as blank even when it is
+  // only ANSI escapes (tmux `-e` re-asserts SGR on empty cells) — see
+  // TRAILING_BLANK_RE. Only the trailing blank ROWS are removed: the last
+  // non-blank line keeps its own trailing spaces/SGR, and leading or interior
+  // blank lines are left untouched.
+  const trimmed = text.replace(TRAILING_BLANK_RE, "");
+  const extracted = extractTables(trimmed);
   const linkified = extractURLs(extracted.text);
   let html = ansiToHTML(wrapRuleLines(linkified.text))
     .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')

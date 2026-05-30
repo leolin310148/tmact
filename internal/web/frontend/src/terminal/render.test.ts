@@ -434,6 +434,60 @@ describe("render integration", () => {
   it("escapes html in non-URL/non-table text", () => {
     expect(render("a < b & c > d")).toBe("a &lt; b &amp; c &gt; d");
   });
+
+  // Regression: tmux capture-pane pads a prompt-idle pane with trailing empty
+  // rows. Rendering them verbatim made #content overflow and the stick-to-bottom
+  // auto-scroll parked on the blank tail, hiding the real output. render() now
+  // strips trailing blank ROWS so short output fits the pane (no scroll).
+  it("strips trailing blank lines (tmux pane padding)", () => {
+    expect(render("prompt\n❯\n\n\n\n\n")).toBe("prompt\n❯");
+  });
+
+  it("strips trailing rows that are whitespace-only too", () => {
+    expect(render("a\nb\n   \n\t\n  ")).toBe("a\nb");
+  });
+
+  it("keeps the last non-blank line's own trailing spaces, and leading/interior blanks", () => {
+    // leading blank kept, interior blank kept, "b   " keeps its trailing spaces,
+    // only the trailing empty rows after it are removed.
+    expect(render("\na\n\nb   \n\n")).toBe("\na\n\nb   ");
+  });
+
+  it("strips trailing blank rows even when they carry only ANSI escapes (capture-pane -e re-asserts SGR)", () => {
+    // tmux `-e` re-asserts SGR state on visually-empty cells, so a padding row
+    // can arrive as e.g. "\x1b[49m   " instead of pure spaces. These must still
+    // be trimmed, or the scroll bug resurfaces for colored output. A plain
+    // [ \t]-only check would miss them.
+    const E = "\x1b";
+    expect(render(`prompt\n❯\n${E}[49m   \n${E}[49m   `)).toBe("prompt\n❯");
+  });
+
+  it("strips trailing CRLF blank rows (the \\r? branch of the trim)", () => {
+    // Defensive: the real tmux→server→client path is LF-only, but the trim
+    // tolerates CRLF so a refactor that drops \\r? would be caught here.
+    expect(render("a\r\nb\r\n\r\n\r\n")).toBe("a\r\nb");
+  });
+
+  it("collapses an all-blank pane to empty, but keeps a lone whitespace line with no trailing newline", () => {
+    expect(render("\n\n\n")).toBe("");
+    // A blank-row run is matched per "\n…": a first whitespace-only row with no
+    // preceding newline has nothing to anchor on, so it survives verbatim.
+    expect(render("   \n  \n")).toBe("   ");
+    expect(render("   ")).toBe("   ");
+  });
+
+  it("trims tmux padding after a table/rule/URL without dropping the block", () => {
+    // The trim runs BEFORE extractTables/wrapRuleLines/extractURLs, so a
+    // structured block that ends the output (then padded with blank rows) must
+    // survive intact — the common "finished command output" case.
+    const tableOut = render(["┌───┐", "│ hi │", "└───┘", "", "", ""].join("\n"));
+    expect(tableOut).toContain('class="tui-table"');
+    expect(tableOut).toContain("<td>hi</td>");
+    expect(render("─".repeat(10) + "\n\n")).toBe(
+      '<span class="tui-rule" role="separator"></span>',
+    );
+    expect(render("https://example.com/x\n\n\n")).toContain('class="tui-link"');
+  });
 });
 
 // ---------------------------------------------------------------------------
