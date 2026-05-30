@@ -24,8 +24,18 @@
 //   syncRecordButton toggled `#record-btn.busy`, `.disabled`, and `.title`. To
 //   preserve that exact imperative timing, App owns refs to both buttons
 //   (recordBtnRef / sendBtnRef) and mutates them in those callbacks; React must
-//   not control their disabled state. They start `disabled` exactly as the
-//   index.html markup did. Click handlers come from props:
+//   not control their disabled state.
+//
+//   CRITICAL: we therefore must NOT render a static `disabled` prop here, even
+//   though index.html shipped both buttons disabled. React's synthetic event
+//   system suppresses click/mouse dispatch whenever the FIBER PROPS say disabled
+//   (shouldPreventMouseEvent) — it never consults the live DOM. App enables them
+//   via `el.disabled = false`, which updates the DOM but not React's props, so a
+//   static `disabled` literal would leave props.disabled === true and onClick
+//   would never fire (pointerdown still would — it is not in that suppression
+//   list). The disabled state lives ONLY on the DOM: syncRecordButton owns
+//   #record-btn (mount + selectPane); App seeds + selectPane owns #send-btn.
+//   Click handlers come from props:
 //     onRecord ← `() => startRecording({ confirmOnStop: false })` (useVoice).
 //     onSend   ← `sendDraft` (App).
 //
@@ -77,7 +87,6 @@ export default function InputBar({
           className="icon-btn"
           type="button"
           ref={recordBtnRef}
-          disabled
           title="record voice"
           aria-label="record voice"
           onPointerDown={onPointerDownNoBlur}
@@ -94,7 +103,6 @@ export default function InputBar({
           className="icon-btn"
           type="button"
           ref={sendBtnRef}
-          disabled
           title="send"
           aria-label="send"
           onPointerDown={onPointerDownNoBlur}

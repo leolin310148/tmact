@@ -7,8 +7,22 @@
 // #upload-btn/#selection-btn/#clear-pane-btn, selectPane enabling #upload-btn)
 // can still reach them via getElementById. React must NOT own their
 // disabled/aria-pressed state — App mutates them imperatively, exactly as the
-// original did. We therefore render the static initial attributes from
-// index.html (all `disabled`; selection `aria-pressed="false"`).
+// original did.
+//
+// CRITICAL: we must NOT render a static `disabled` prop here either, even though
+// index.html shipped these buttons disabled. React's synthetic event system
+// reads `disabled` from the FIBER PROPS (shouldPreventMouseEvent), not from the
+// live DOM, and silently drops click/mouse dispatch for any element whose props
+// say disabled. App enables these buttons by writing `el.disabled = false`
+// directly (syncQuickDock / syncSelectionButton / selectPane) — but that only
+// changes the DOM, not React's remembered props. A static `disabled` literal
+// would therefore leave props.disabled === true forever, so onClick would never
+// fire even though the button looks and behaves enabled natively. (pointerdown
+// is NOT in shouldPreventMouseEvent's list, which is why the broken buttons
+// still ran onPointerDownNoBlur but never their onClick.) So the disabled state
+// lives ONLY on the DOM, owned imperatively by App; React never sets the prop.
+// aria-pressed is likewise a DOM attribute App mutates (syncSelectionButton); we
+// seed its initial value here.
 //
 // onPointerDownNoBlur audit (ARCHITECTURE.md §6): selection / clear-pane / help
 // get pointerdown preventDefault; #upload-btn does NOT (app.js wires no
@@ -59,7 +73,6 @@ export function UploadControls({
         type="button"
         title="upload file"
         aria-label="upload file"
-        disabled
         onClick={onUpload}
       >
         <svg
@@ -83,7 +96,6 @@ export function UploadControls({
         title="selection mode"
         aria-label="selection mode"
         aria-pressed="false"
-        disabled
         onPointerDown={onPointerDownNoBlur}
         onClick={onSelection}
       >
@@ -108,7 +120,6 @@ export function UploadControls({
         type="button"
         title="clear pane"
         aria-label="clear pane"
-        disabled
         onPointerDown={onPointerDownNoBlur}
         onClick={onClear}
       >

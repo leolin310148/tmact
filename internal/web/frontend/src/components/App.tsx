@@ -716,6 +716,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     wireRecordHotkey();
     syncRecordButton();
     syncDraft();
+    // #send-btn carries no static `disabled` prop (a static one would make React
+    // suppress its onClick forever — see InputBar's PARITY MODEL). selectPane is
+    // the only path that enables it, so seed the initial DOM-disabled state here
+    // to match the original "no pane selected → send disabled" markup.
+    if (sendBtnRef.current) sendBtnRef.current.disabled = !state.selected;
 
     // app.js wired document focusin → renderMode and focusout → setTimeout(renderMode,0)
     // so the .direct class follows focus into/out of #direct-input.
