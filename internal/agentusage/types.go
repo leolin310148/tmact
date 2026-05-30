@@ -35,6 +35,14 @@ type ProviderUsage struct {
 	// when the provider has no local logs or scanning is unsupported.
 	Spend *SpendWindow `json:"spend,omitempty"`
 	Error string       `json:"error,omitempty"`
+	// Stale marks a last-known reading shown in place of an error: the latest
+	// refresh failed (Error says why, e.g. an expired agent token) but the
+	// previous good Windows are kept so the panel doesn't blank out. Cleared the
+	// moment a refresh succeeds again.
+	Stale bool `json:"stale,omitempty"`
+	// StaleSince is when refreshes started failing for this provider (when the
+	// shown Windows stopped being refreshed). Nil unless Stale.
+	StaleSince *time.Time `json:"stale_since,omitempty"`
 }
 
 // SpendWindow is the locally-computed token spend over the current calendar

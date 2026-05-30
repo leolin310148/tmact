@@ -93,19 +93,28 @@ function paceInfo(pace: Pace | null | undefined): { cls: string; text: string } 
 // undefined) still emits empty cells so the columns stay aligned across rows.
 // Mirrors usage.js appendWindow() byte-for-behavior. `keyBase` only namespaces
 // the three React keys; it is NOT rendered.
-function WindowCells({ w, keyBase }: { w: RateWindow | undefined; keyBase: string }) {
+function WindowCells({
+  w,
+  keyBase,
+  stale,
+}: {
+  w: RateWindow | undefined;
+  keyBase: string;
+  stale?: boolean;
+}) {
   const remain = w ? Math.max(0, Math.round(100 - (w.used_percent || 0))) + "%" : "";
   const pace = w ? paceInfo(w.pace) : null;
   const t = w && w.resets_at ? fmtShort(w.resets_at) : "";
+  const dim = stale ? " u-stale" : "";
   return (
     <>
-      <span key={keyBase + ":remain"} className="u-remain" title={w ? fmtCountdown(w.resets_at) : ""}>
+      <span key={keyBase + ":remain"} className={"u-remain" + dim} title={w ? fmtCountdown(w.resets_at) : ""}>
         {remain}
       </span>
-      <span key={keyBase + ":pace"} className={"u-pace" + (pace ? " " + pace.cls : "")}>
+      <span key={keyBase + ":pace"} className={"u-pace" + (pace ? " " + pace.cls : "") + dim}>
         {pace ? pace.text : ""}
       </span>
-      <span key={keyBase + ":time"} className="u-time">
+      <span key={keyBase + ":time"} className={"u-time" + dim}>
         {t}
       </span>
     </>
@@ -126,10 +135,17 @@ function WindowCells({ w, keyBase }: { w: RateWindow | undefined; keyBase: strin
 function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   const runtime = (p.provider || "").toLowerCase();
   const icon = RUNTIME_ICON[runtime] || runtime.slice(0, 2);
-  const title = p.provider + (p.plan ? " · " + p.plan : "") + (p.account ? " · " + p.account : "");
-  const iconCls = "agent-icon u-icon runtime-" + runtime;
+  const hasWindows = !!(p.windows && p.windows.length > 0);
+  const stale = !!p.stale;
+  let title = p.provider + (p.plan ? " · " + p.plan : "") + (p.account ? " · " + p.account : "");
+  // A stale block keeps showing the last-known windows; surface the failure
+  // reason on the badge tooltip so the dimming is explainable.
+  if (stale && p.error) title += " · stale: " + p.error;
+  const iconCls = "agent-icon u-icon runtime-" + runtime + (stale ? " stale" : "");
   const base = "p" + idx;
-  if (p.error) {
+  // Error block only when there are no windows to fall back to. A stale provider
+  // (error present but last-known windows kept) renders its windows dimmed.
+  if (p.error && !hasWindows) {
     return (
       <>
         <span key={base + ":icon"} className={iconCls} title={title}>
@@ -151,15 +167,15 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
       <span key={base + ":icon"} className={iconCls} title={title}>
         {icon}
       </span>
-      <WindowCells key={base + ":session"} keyBase={base + ":session"} w={byName.session} />
+      <WindowCells key={base + ":session"} keyBase={base + ":session"} w={byName.session} stale={stale} />
       <span
         key={base + ":spend"}
-        className="u-spend"
+        className={"u-spend" + (stale ? " u-stale" : "")}
         title="month-to-date dollar-equivalent token spend (API rates)"
       >
         {spend}
       </span>
-      <WindowCells key={base + ":weekly"} keyBase={base + ":weekly"} w={byName.weekly} />
+      <WindowCells key={base + ":weekly"} keyBase={base + ":weekly"} w={byName.weekly} stale={stale} />
     </>
   );
 }

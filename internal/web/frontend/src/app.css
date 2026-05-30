@@ -231,6 +231,9 @@
   }
   .usage-panel .u-icon { justify-self: start; }
   .usage-panel .u-remain { color: var(--fg); }
+  /* Stale = last-known reading shown after a failed refresh; dim the values so
+     they read as "not fresh" (the badge also gets the dashed .stale style). */
+  .usage-panel .u-stale { opacity: 0.45; }
   .usage-panel .u-time { color: var(--fg-dim); }
   .usage-panel .u-pace.reserve { color: var(--green); }
   .usage-panel .u-pace.deficit { color: var(--red); }

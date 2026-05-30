@@ -183,6 +183,14 @@ export interface ProviderUsage {
   spend?: SpendWindow | null;
   /** Go: `error,omitempty` — per-provider failure reason. */
   error?: string;
+  /**
+   * Go: `stale,omitempty` — true when `windows` is a last-known reading kept
+   * after the latest refresh failed (e.g. an expired agent token). `error`
+   * carries the failure reason. Render the block dimmed rather than as an error.
+   */
+  stale?: boolean;
+  /** Go: `*time.Time` `stale_since,omitempty` — when refreshes began failing. */
+  stale_since?: string | null;
 }
 
 export interface SpendWindow {

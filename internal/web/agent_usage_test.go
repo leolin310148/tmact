@@ -88,6 +88,73 @@ func TestRunUsageRefreshPopulatesCacheOnce(t *testing.T) {
 	}
 }
 
+func TestCarryForwardStaleKeepsLastKnownWindows(t *testing.T) {
+	now := time.Now()
+	prev := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Plan: "max", Windows: []agentusage.RateWindow{{Name: "session", UsedPercent: 30}}},
+	}}
+	// Fresh fetch fails for claude (expired token) with no windows.
+	fresh := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Error: "access token expired (run `claude` to re-authenticate)"},
+	}}
+
+	out := carryForwardStale(prev, true, fresh, now)
+	got := out.Providers[0]
+	if !got.Stale {
+		t.Fatalf("provider should be marked stale: %+v", got)
+	}
+	if len(got.Windows) != 1 || got.Windows[0].UsedPercent != 30 {
+		t.Fatalf("last-known windows not carried forward: %+v", got.Windows)
+	}
+	if got.Error == "" {
+		t.Fatalf("stale provider should keep the failure reason for a tooltip")
+	}
+	if got.StaleSince == nil || !got.StaleSince.Equal(now) {
+		t.Fatalf("StaleSince = %v, want %v", got.StaleSince, now)
+	}
+}
+
+func TestCarryForwardStalePrefersFreshSuccess(t *testing.T) {
+	prev := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Stale: true, Windows: []agentusage.RateWindow{{Name: "session", UsedPercent: 30}}},
+	}}
+	// Fresh fetch succeeds — must replace the stale reading entirely.
+	fresh := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Windows: []agentusage.RateWindow{{Name: "session", UsedPercent: 80}}},
+	}}
+
+	out := carryForwardStale(prev, true, fresh, time.Now())
+	got := out.Providers[0]
+	if got.Stale || got.Windows[0].UsedPercent != 80 {
+		t.Fatalf("fresh success should win, got %+v", got)
+	}
+}
+
+func TestCarryForwardStaleNoPrevReturnsFresh(t *testing.T) {
+	fresh := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Error: "not logged in"},
+	}}
+	out := carryForwardStale(agentusage.Snapshot{}, false, fresh, time.Now())
+	if out.Providers[0].Stale || out.Providers[0].Error != "not logged in" {
+		t.Fatalf("with no prior data the fresh error must pass through: %+v", out.Providers[0])
+	}
+}
+
+func TestCarryForwardStalePreservesOnsetAcrossChain(t *testing.T) {
+	onset := time.Now().Add(-2 * time.Hour)
+	prev := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Stale: true, StaleSince: &onset, Error: "expired",
+			Windows: []agentusage.RateWindow{{Name: "session", UsedPercent: 30}}},
+	}}
+	fresh := agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Error: "expired"},
+	}}
+	out := carryForwardStale(prev, true, fresh, time.Now())
+	if got := out.Providers[0].StaleSince; got == nil || !got.Equal(onset) {
+		t.Fatalf("StaleSince should keep the original onset across chained staleness: %v", got)
+	}
+}
+
 // peerWithSpend starts a fake peer serving /api/agent-usage with the given
 // per-provider week/month spend.
 func peerWithSpend(t *testing.T, claudeWeek, claudeMonth float64) *httptest.Server {

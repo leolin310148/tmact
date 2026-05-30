@@ -88,7 +88,9 @@ func (s *Server) runUsageRefresh(ctx context.Context) {
 	refresh := func() {
 		fctx, cancel := context.WithTimeout(ctx, usageFetchTimeout)
 		defer cancel()
-		s.usage.store(s.fetchUsage(fctx))
+		fresh := s.fetchUsage(fctx)
+		prev, havePrev := s.usage.load()
+		s.usage.store(carryForwardStale(prev, havePrev, fresh, time.Now()))
 	}
 	refresh()
 	ticker := time.NewTicker(s.usageInterval())
@@ -101,6 +103,45 @@ func (s *Server) runUsageRefresh(ctx context.Context) {
 			refresh()
 		}
 	}
+}
+
+// carryForwardStale keeps the usage panel populated across transient
+// usage-fetch failures — most often an agent's OAuth token expiring between
+// agent runs (tmact never refreshes the agents' credentials). When a provider
+// in the fresh snapshot has regressed to an error with no windows, but the
+// previous snapshot had good windows for it, the last-known windows are shown
+// marked Stale (with the fresh error as the reason) instead of blanking the
+// block. Once the agent runs and refreshes its own token, the next fetch
+// succeeds and replaces the stale reading.
+func carryForwardStale(prev agentusage.Snapshot, havePrev bool, fresh agentusage.Snapshot, now time.Time) agentusage.Snapshot {
+	if !havePrev {
+		return fresh
+	}
+	prevByName := make(map[string]agentusage.ProviderUsage, len(prev.Providers))
+	for _, p := range prev.Providers {
+		prevByName[p.Provider] = p
+	}
+	for i, p := range fresh.Providers {
+		// Keep any provider that fetched cleanly (or returned partial data).
+		if p.Error == "" || len(p.Windows) > 0 {
+			continue
+		}
+		old, ok := prevByName[p.Provider]
+		if !ok || len(old.Windows) == 0 {
+			continue // nothing good to fall back to — show the error as-is
+		}
+		merged := old // carry windows / plan / account / cost forward
+		merged.Stale = true
+		merged.Error = p.Error // why this refresh failed (panel tooltip)
+		if old.Stale && old.StaleSince != nil {
+			merged.StaleSince = old.StaleSince // preserve the original onset
+		} else {
+			t := now
+			merged.StaleSince = &t
+		}
+		fresh.Providers[i] = merged
+	}
+	return fresh
 }
 
 // spendCache holds the most recent merged (local + peers) per-provider token
