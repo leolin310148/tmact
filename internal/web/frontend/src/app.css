@@ -27,6 +27,18 @@
     display: flex;
     flex-direction: column;
   }
+  /* The vanilla UI rendered .content-wrap / nav.statusline / .input-bar as
+     direct flex children of <body>. React mounts them one level deeper inside
+     #root, so #root must itself fill the body column and re-establish the
+     column flex context — otherwise content-wrap's `flex:1` is ignored, the
+     pane output grows to its natural height, and the bottom bars overflow the
+     (overflow:hidden) body. Most visible on phones where --tmact-vvh shrinks. */
+  #root {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
 
   /* tmux-style status line: one strip of every pane, fixed at the bottom
      alongside the helper keys and input. */
