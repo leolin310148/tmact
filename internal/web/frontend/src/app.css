@@ -248,7 +248,9 @@
      line, left-aligned so it sits directly under the cc/cx badge above it. */
   .usage-panel .u-spend {
     justify-self: start;
-    color: var(--fg-dim); font-size: 8px; letter-spacing: 0.2px;
+    /* Relative so it stays a notch smaller than the window rows at every
+       breakpoint — an absolute px here would overtake the 7px phone panel. */
+    color: var(--fg-dim); font-size: 0.85em; letter-spacing: 0.2px;
   }
   .usage-panel .u-err {
     grid-column: 2 / -1; justify-self: start;
