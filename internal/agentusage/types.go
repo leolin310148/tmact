@@ -28,8 +28,20 @@ type ProviderUsage struct {
 	// (session window before weekly windows).
 	Windows []RateWindow `json:"windows,omitempty"`
 	// Cost is the metered/extra-usage spend window when the plan exposes one.
-	Cost  *CostWindow `json:"cost,omitempty"`
-	Error string      `json:"error,omitempty"`
+	Cost *CostWindow `json:"cost,omitempty"`
+	// Spend is the dollar-equivalent token spend computed locally from this
+	// agent's on-disk session logs (LiteLLM-priced, like codeburn) — what the
+	// tokens would cost at API rates, independent of the flat-rate plan. Nil
+	// when the provider has no local logs or scanning is unsupported.
+	Spend *SpendWindow `json:"spend,omitempty"`
+	Error string       `json:"error,omitempty"`
+}
+
+// SpendWindow is the locally-computed token spend over the current calendar
+// week-to-date and month-to-date, in USD.
+type SpendWindow struct {
+	WeekUSD  float64 `json:"week_usd"`
+	MonthUSD float64 `json:"month_usd"`
 }
 
 // RateWindow is a single rolling usage window.

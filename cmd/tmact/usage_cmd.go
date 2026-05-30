@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentspend"
 	"github.com/leolin310148/tmact/internal/agentusage"
 )
 
@@ -41,6 +42,14 @@ Flags:
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	snapshot := agentusage.Fetch(ctx, providers...)
+	// Fetch returns quota only; attach locally-computed token spend for display
+	// (the web server refreshes the two on separate cadences — see agent_usage.go).
+	spend := agentspend.Compute(time.Now())
+	for i := range snapshot.Providers {
+		if sp, ok := spend[snapshot.Providers[i].Provider]; ok {
+			snapshot.Providers[i].Spend = &agentusage.SpendWindow{WeekUSD: sp.WeekUSD, MonthUSD: sp.MonthUSD}
+		}
+	}
 
 	if *jsonOutput {
 		return printJSON(snapshot)
@@ -63,7 +72,7 @@ func printUsageTable(snapshot agentusage.Snapshot) {
 			fmt.Printf("  ! %s\n", p.Error)
 			continue
 		}
-		if len(p.Windows) == 0 && p.Cost == nil {
+		if len(p.Windows) == 0 && p.Cost == nil && p.Spend == nil {
 			fmt.Println("  (no usage data)")
 			continue
 		}
@@ -86,6 +95,9 @@ func printUsageTable(snapshot agentusage.Snapshot) {
 			default:
 				fmt.Printf("  extra usage    $%.2f\n", c.Used)
 			}
+		}
+		if s := p.Spend; s != nil {
+			fmt.Printf("  token spend    $%.2f wk · $%.2f mo (API-rate equiv)\n", s.WeekUSD, s.MonthUSD)
 		}
 	}
 }

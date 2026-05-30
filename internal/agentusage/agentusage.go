@@ -51,5 +51,11 @@ func Fetch(ctx context.Context, names ...string) Snapshot {
 	}
 	wg.Wait()
 
+	// NOTE: Fetch returns quota only. Token spend (the LiteLLM-priced
+	// dollar-equivalent) is computed separately via internal/agentspend on its
+	// own cadence — quota hits rate-limited provider endpoints (slow refresh)
+	// while spend is a cheap local disk scan (fast refresh). Callers that want
+	// both attach spend themselves (see cmd/tmact/usage_cmd.go and the web
+	// server's spend refresher).
 	return Snapshot{GeneratedAt: time.Now(), Providers: results}
 }
