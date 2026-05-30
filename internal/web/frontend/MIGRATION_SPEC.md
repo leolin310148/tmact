@@ -307,7 +307,7 @@ In `main.tsx`, on `window` `"load"`: `navigator.serviceWorker?.register("/sw.js"
 
 **Absorption notes:**
 - `dom.js` → `lib/dom.ts` (`clamp`, `escapeHTML`, `isMobile`); `escapeHTML` still required inside `terminal/render.ts`.
-- `terminal.js` is ported as a **pure function** (`render(text, opts) → htmlString` + `markImagePaths` post-pass). `ContentPane` assigns via `dangerouslySetInnerHTML`, then runs `markImagePaths`/scroll restoration in a layout effect. React must NOT diff the inner HTML.
+- `terminal.js` is ported as a **pure function** (`render(text, opts) → htmlString` + `markImagePaths` post-pass). `ContentPane` renders a childless `pre#content` and assigns its `innerHTML` imperatively in a `useLayoutEffect` (the pure renderer's output), then runs `markImagePaths`/scroll restoration. React must NOT diff the inner HTML.
 - `api.js` → `api/client.ts`; `stream.js` → `ws/usePaneStream.ts`; voice/upload/usage/settings/quick/help each map to a hook + component pair.
 
 ---
@@ -401,6 +401,7 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 24. Image paths: `IMAGE_PATH_RE` (.png/.jpg/.jpeg/.gif/.webp/.bmp/.svg, case-insensitive); not previewable if `~/`-prefixed; TreeWalker collects all text nodes before replacing; `<span class="image-path" data-path data-cwd data-peer>`.
 25. Placeholder replacement order: rules → tables → URLs (private-use U+E000-range markers survive `escapeHTML`).
 26. Auto-scroll: if within 60 px of bottom before render, scroll to bottom after; otherwise preserve.
+26a. **Intentional deviation (web-UI improvement, NOT in the original):** before building HTML, `render()` strips trailing blank ROWS via `TRAILING_BLANK_RE` (a row is blank when it holds only whitespace and/or ANSI escapes — tmux `capture-pane -e` re-asserts SGR on empty cells, so padding can arrive as `\x1b[49m   `). tmux returns the full pane grid, so an idle prompt arrives as a few real lines + dozens of empty rows; rendering them verbatim made `#content` overflow and the stick-to-bottom auto-scroll (item 26) park on the blank tail, hiding the real prompt. Only trailing blank rows are removed — the last non-blank line keeps its own trailing spaces/SGR, and leading/interior blanks are untouched. The original `setContent` did NOT trim.
 
 **Draft input**
 27. `autoGrowDraft`: set `height:auto`, read `scrollHeight`+borders, clamp to 200 px, set `overflowY`.
@@ -527,7 +528,7 @@ Each unit is independently implementable once Unit 0–6 land.
 3. **Units 1–3** (types, API client, store/context) gate every component. Units 4–6 (WS, snapshot, terminal renderer) gate the content path. Everything ≥7 is parallelizable after that. Unit 18 (App) is last (integration).
 
 ### Highest-parity-risk areas (extra scrutiny + dedicated tests)
-- **Imperative DOM where React batching would diverge:** `autoGrowDraft` needs synchronous `scrollHeight` reads (`useLayoutEffect`); `setContent` replaces whole `innerHTML` (`dangerouslySetInnerHTML` + imperative `markImagePaths`/scroll in layout effect, NOT React reconciliation); focus management via refs.
+- **Imperative DOM where React batching would diverge:** `autoGrowDraft` needs synchronous `scrollHeight` reads (`useLayoutEffect`); `setContent` replaces whole `innerHTML` (imperative `pre#content.innerHTML` assignment + `markImagePaths`/scroll in a layout effect, NOT React reconciliation); focus management via refs.
 - **`pointerdown` `preventDefault` on every button** (send/record/upload/selection/clear/draft-clear/FAB/option/copyline/help). Missing one breaks mobile soft-keyboard. Shared `onPointerDownNoBlur` + audit every button.
 - **Listener phase/order:** hotkeys + voice suppression are capture-phase and must register before `#direct-input`'s keydown.
 - **Module-scoped mutable state** (`backoff`, `currentPane`, `imgUploading`, `ctrlArmed`, `snapshotEtag`/`lastSnapshot`, `paneLines`/`paneCache`) → refs, not React state.
