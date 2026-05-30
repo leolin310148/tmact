@@ -234,6 +234,16 @@
   .usage-panel .u-time { color: var(--fg-dim); }
   .usage-panel .u-pace.reserve { color: var(--green); }
   .usage-panel .u-pace.deficit { color: var(--red); }
+  /* Hairline divider between provider blocks: a full-width 1px rule on its own
+     grid row, dim so it groups each agent's two rows without drawing the eye. */
+  .usage-panel .u-sep {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    height: 1px;
+    margin: 2px 0;
+    background: var(--border);
+    opacity: 0.7;
+  }
   /* Month-to-date dollar-equivalent spend: a single column-1 cell on the weekly
      line, left-aligned so it sits directly under the cc/cx badge above it. */
   .usage-panel .u-spend {

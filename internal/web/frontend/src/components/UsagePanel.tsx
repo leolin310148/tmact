@@ -22,6 +22,7 @@
 // static `aria-hidden="true"` from index.html is preserved unchanged (the
 // original render() never touched it).
 
+import { Fragment } from "react";
 import { useUsage } from "../hooks/useUsage";
 import type { AgentUsage, Pace, ProviderUsage, RateWindow } from "../types/server";
 
@@ -173,7 +174,13 @@ export default function UsagePanel() {
   return (
     <div className="usage-panel" id="usage-panel" hidden={hidden} aria-hidden="true">
       {providers.map((p, i) => (
-        <ProviderRows key={"p" + i} p={p} idx={i} />
+        <Fragment key={"p" + i}>
+          {/* A thin full-width rule between provider blocks (not before the
+              first), so each agent's two-row usage/spend block reads as its
+              own group. */}
+          {i > 0 ? <span className="u-sep" aria-hidden="true" /> : null}
+          <ProviderRows p={p} idx={i} />
+        </Fragment>
       ))}
     </div>
   );
