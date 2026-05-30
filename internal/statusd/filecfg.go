@@ -34,6 +34,17 @@ type FileConfig struct {
 	// which reads each agent's local OAuth credentials read-only and polls the
 	// provider usage endpoints on a slow ticker. Defaults to true when absent.
 	AgentUsage *bool `json:"agent_usage,omitempty"`
+	// AgentCost enables the token-spend (cost) computation shown in that panel:
+	// a local session-log scan priced at API rates, plus peer roll-up. Defaults
+	// to true when absent. Set false on a machine (e.g. a peer) that should
+	// neither compute its own cost nor contribute spend to a hub's total.
+	AgentCost *bool `json:"agent_cost,omitempty"`
+	// UsageInterval / SpendInterval tune the agent-usage panel refresh cadences
+	// independently (Go duration strings, e.g. "5m", "30s"). UsageInterval
+	// drives the rate-limited quota fetch; SpendInterval the local token-spend
+	// scan + peer roll-up. Empty uses defaults (5m / 60s).
+	UsageInterval string `json:"usage_interval,omitempty"`
+	SpendInterval string `json:"spend_interval,omitempty"`
 }
 
 // PeerFileConfig is the on-disk shape of one entry in FileConfig.Peers.
@@ -102,7 +113,35 @@ func LoadFileConfig(path string) (FileConfig, error) {
 			return FileConfig{}, fmt.Errorf("parse %s: invalid peer_timeout %q: %w", path, cfg.PeerTimeout, err)
 		}
 	}
+	if cfg.UsageInterval != "" {
+		if _, err := time.ParseDuration(cfg.UsageInterval); err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid usage_interval %q: %w", path, cfg.UsageInterval, err)
+		}
+	}
+	if cfg.SpendInterval != "" {
+		if _, err := time.ParseDuration(cfg.SpendInterval); err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid spend_interval %q: %w", path, cfg.SpendInterval, err)
+		}
+	}
 	return cfg, nil
+}
+
+// UsageIntervalDuration returns the parsed quota refresh interval, or zero if unset.
+func (c FileConfig) UsageIntervalDuration() time.Duration {
+	d, err := time.ParseDuration(c.UsageInterval)
+	if c.UsageInterval == "" || err != nil {
+		return 0
+	}
+	return d
+}
+
+// SpendIntervalDuration returns the parsed token-spend refresh interval, or zero if unset.
+func (c FileConfig) SpendIntervalDuration() time.Duration {
+	d, err := time.ParseDuration(c.SpendInterval)
+	if c.SpendInterval == "" || err != nil {
+		return 0
+	}
+	return d
 }
 
 // PeerIntervalDuration returns the parsed peer poll interval, or zero if unset.

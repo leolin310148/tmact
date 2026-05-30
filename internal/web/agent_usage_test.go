@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 func TestAgentUsageReturns404WhenDisabled(t *testing.T) {
@@ -84,5 +85,129 @@ func TestRunUsageRefreshPopulatesCacheOnce(t *testing.T) {
 	<-done
 	if calls < 1 {
 		t.Fatalf("fetch calls = %d, want >= 1", calls)
+	}
+}
+
+// peerWithSpend starts a fake peer serving /api/agent-usage with the given
+// per-provider week/month spend.
+func peerWithSpend(t *testing.T, claudeWeek, claudeMonth float64) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent-usage" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(agentusage.Snapshot{
+			Providers: []agentusage.ProviderUsage{
+				{Provider: "claude", Spend: &agentusage.SpendWindow{WeekUSD: claudeWeek, MonthUSD: claudeMonth}},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func localSpend(week, month float64) map[string]agentusage.SpendWindow {
+	return map[string]agentusage.SpendWindow{
+		"claude": {WeekUSD: week, MonthUSD: month},
+	}
+}
+
+func TestAddPeerSpendSumsAcrossMachines(t *testing.T) {
+	peer := peerWithSpend(t, 100, 500)
+	s := &Server{Peers: []statusd.Peer{{Name: "z13", URL: peer.URL}}}
+	out := localSpend(10, 50)
+	s.addPeerSpend(context.Background(), out)
+
+	got := out["claude"]
+	if got.WeekUSD != 110 || got.MonthUSD != 550 {
+		t.Fatalf("claude spend = %+v, want week 110 month 550", got)
+	}
+}
+
+func TestAddPeerSpendFallsBackToCachedWhenPeerDown(t *testing.T) {
+	peer := peerWithSpend(t, 100, 500)
+	s := &Server{Peers: []statusd.Peer{{Name: "z13", URL: peer.URL}}}
+
+	// First refresh primes the cache.
+	out1 := localSpend(10, 50)
+	s.addPeerSpend(context.Background(), out1)
+	if out1["claude"].WeekUSD != 110 {
+		t.Fatalf("priming failed: %+v", out1["claude"])
+	}
+
+	// Peer goes down; merge must reuse the last-known 100/500.
+	peer.Close()
+	out2 := localSpend(10, 50)
+	s.addPeerSpend(context.Background(), out2)
+	if out2["claude"].WeekUSD != 110 || out2["claude"].MonthUSD != 550 {
+		t.Fatalf("fallback spend = %+v, want week 110 month 550", out2["claude"])
+	}
+}
+
+// Cost-only mode: a peer runs spend with quota disabled. The endpoint must
+// still serve (not 404) and synthesize providers from the spend map so a hub
+// can aggregate them.
+func TestServeCostOnlyWhenQuotaDisabled(t *testing.T) {
+	s := &Server{UsageEnabled: false, SpendEnabled: true}
+	s.spend.store(map[string]agentusage.SpendWindow{
+		"claude": {WeekUSD: 12, MonthUSD: 34},
+		"codex":  {WeekUSD: 56, MonthUSD: 78},
+	})
+
+	handler := s.Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent-usage", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (cost-only must serve)", rec.Code)
+	}
+	var got agentusage.Snapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Providers) != 2 {
+		t.Fatalf("providers = %d, want 2 synthesized from spend", len(got.Providers))
+	}
+	// Sorted: claude before codex.
+	if got.Providers[0].Provider != "claude" || got.Providers[0].Spend == nil || got.Providers[0].Spend.WeekUSD != 12 {
+		t.Fatalf("provider[0] = %+v", got.Providers[0])
+	}
+	if got.Providers[0].Windows != nil {
+		t.Fatalf("cost-only provider should have no quota windows: %+v", got.Providers[0].Windows)
+	}
+}
+
+func TestServeReturns404WhenBothDisabled(t *testing.T) {
+	s := &Server{UsageEnabled: false, SpendEnabled: false}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent-usage", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 when both quota and cost are off", rec.Code)
+	}
+}
+
+// Serve-time merge: quota snapshot + separately-cached spend, without mutating
+// the cached quota snapshot across requests.
+func TestServeMergesSpendCacheWithoutMutatingQuota(t *testing.T) {
+	s := &Server{UsageEnabled: true}
+	s.usage.store(agentusage.Snapshot{Providers: []agentusage.ProviderUsage{
+		{Provider: "claude", Plan: "max"},
+	}})
+	s.spend.store(map[string]agentusage.SpendWindow{"claude": {WeekUSD: 42, MonthUSD: 99}})
+
+	handler := s.Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/agent-usage", nil))
+	var got agentusage.Snapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Providers[0].Spend == nil || got.Providers[0].Spend.WeekUSD != 42 {
+		t.Fatalf("served spend = %+v, want week 42", got.Providers[0].Spend)
+	}
+	// The cached quota snapshot must remain spend-free (no cross-request mutation).
+	cached, _ := s.usage.load()
+	if cached.Providers[0].Spend != nil {
+		t.Fatalf("cached quota snapshot was mutated: %+v", cached.Providers[0].Spend)
 	}
 }

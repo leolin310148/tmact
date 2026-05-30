@@ -101,6 +101,7 @@ func runStatusdStart(args []string) error {
 	once := fs.Bool("once", false, "run one scan then exit")
 	webAddr := fs.String("web-addr", "", "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)")
 	agentUsage := fs.Bool("agent-usage", true, "serve the web agent quota/rate-limit usage panel (reads agent OAuth creds read-only)")
+	agentCost := fs.Bool("agent-cost", true, "compute token-spend (cost) in the usage panel; disable on machines that should not compute/contribute cost")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file (JSON); auto-created with defaults if missing")
 
 	if err := fs.Parse(args); err != nil {
@@ -129,6 +130,11 @@ func runStatusdStart(args []string) error {
 	usageEnabled := *agentUsage
 	if !set["agent-usage"] && fileCfg.AgentUsage != nil {
 		usageEnabled = *fileCfg.AgentUsage
+	}
+	// Token-spend (cost): same precedence, independent toggle.
+	spendEnabled := *agentCost
+	if !set["agent-cost"] && fileCfg.AgentCost != nil {
+		spendEnabled = *fileCfg.AgentCost
 	}
 	if err := validateStatusdConfig(cfg); err != nil {
 		return err
@@ -159,13 +165,16 @@ func runStatusdStart(args []string) error {
 	// Always serve the unix socket so CLI read/status can reach the daemon.
 	// The TCP --web-addr is additional and optional.
 	server := &web.Server{
-		Addr:         *webAddr,
-		SocketPath:   cfg.SocketPath,
-		Store:        daemon.Store(),
-		CapturePane:  tmux.CapturePaneANSI,
-		BuildTime:    buildVersionInfo().Time,
-		Peers:        cfg.Peers,
-		UsageEnabled: usageEnabled,
+		Addr:          *webAddr,
+		SocketPath:    cfg.SocketPath,
+		Store:         daemon.Store(),
+		CapturePane:   tmux.CapturePaneANSI,
+		BuildTime:     buildVersionInfo().Time,
+		Peers:         cfg.Peers,
+		UsageEnabled:  usageEnabled,
+		SpendEnabled:  spendEnabled,
+		UsageInterval: cfg.UsageInterval,
+		SpendInterval: cfg.SpendInterval,
 	}
 	go func() {
 		if err := server.Serve(ctx); err != nil {
@@ -226,6 +235,16 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 	if cfg.PeerTimeout == 0 {
 		if d := file.PeerTimeoutDuration(); d > 0 {
 			cfg.PeerTimeout = d
+		}
+	}
+	if cfg.UsageInterval == 0 {
+		if d := file.UsageIntervalDuration(); d > 0 {
+			cfg.UsageInterval = d
+		}
+	}
+	if cfg.SpendInterval == 0 {
+		if d := file.SpendIntervalDuration(); d > 0 {
+			cfg.SpendInterval = d
 		}
 	}
 }

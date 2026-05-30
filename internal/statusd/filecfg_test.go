@@ -85,6 +85,63 @@ func TestLoadFileConfig_ParsesValues(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfig_UsageAndSpendIntervals(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	body := `{"usage_interval": "10m", "spend_interval": "30s"}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig: %v", err)
+	}
+	if d := cfg.UsageIntervalDuration(); d != 10*time.Minute {
+		t.Errorf("UsageInterval = %v, want 10m", d)
+	}
+	if d := cfg.SpendIntervalDuration(); d != 30*time.Second {
+		t.Errorf("SpendInterval = %v, want 30s", d)
+	}
+	// Unset → zero so the web package defaults apply.
+	if d := (FileConfig{}).SpendIntervalDuration(); d != 0 {
+		t.Errorf("unset SpendInterval = %v, want 0", d)
+	}
+}
+
+func TestLoadFileConfig_AgentCostToggle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	if err := os.WriteFile(path, []byte(`{"agent_cost": false}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig: %v", err)
+	}
+	if cfg.AgentCost == nil || *cfg.AgentCost {
+		t.Errorf("AgentCost = %v, want pointer to false", cfg.AgentCost)
+	}
+	// Absent → nil so the CLI default (enabled) applies.
+	other := filepath.Join(dir, "other.json")
+	if err := os.WriteFile(other, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if c, _ := LoadFileConfig(other); c.AgentCost != nil {
+		t.Errorf("absent AgentCost = %v, want nil", c.AgentCost)
+	}
+}
+
+func TestLoadFileConfig_BadSpendInterval(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	if err := os.WriteFile(path, []byte(`{"spend_interval": "nope"}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadFileConfig(path); err == nil {
+		t.Fatal("expected error for invalid spend_interval")
+	}
+}
+
 func TestLoadFileConfig_BadJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "statusd.json")

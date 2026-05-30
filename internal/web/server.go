@@ -94,18 +94,38 @@ type Server struct {
 	// proxying. Pane ids with a "<name>@" prefix matching a peer name are
 	// bridged to that peer's WebSocket instead of acted on locally.
 	Peers []statusd.Peer
-	// UsageEnabled turns on the slow agent-usage refresher and the
-	// /api/agent-usage endpoint. Off by default; reads agent OAuth credentials
-	// read-only and hits provider usage endpoints on a slow ticker.
+	// UsageEnabled turns on the quota / rate-limit refresher (reads agent OAuth
+	// credentials read-only and hits provider usage endpoints on a slow
+	// ticker). The /api/agent-usage endpoint is served whenever UsageEnabled OR
+	// SpendEnabled is on, so a machine can run cost-only with quota off.
 	UsageEnabled bool
-	// UsageInterval is how often agent usage is refreshed; defaults to 5m.
+	// UsageInterval is how often quota / rate-limit usage is refreshed (hits
+	// provider endpoints); defaults to 5m.
 	UsageInterval time.Duration
+	// SpendInterval is how often token spend (local logs + peers) is recomputed
+	// (cheap local disk scan); defaults to 1h, independent of UsageInterval.
+	SpendInterval time.Duration
+	// SpendEnabled turns on the token-spend (cost) computation and its merge
+	// into the agent-usage panel. When false, the panel shows quota only — no
+	// local disk scan, no peer spend fetch. Lets a peer (or any machine) opt
+	// out of cost so it neither computes nor contributes spend to a hub's
+	// total — or, inversely, run cost-only with UsageEnabled=false.
+	SpendEnabled bool
 	// FetchUsage fetches agent usage; defaults to agentusage.Fetch (all
 	// providers). Overridable in tests.
 	FetchUsage func(ctx context.Context) agentusage.Snapshot
 
-	// usage caches the latest agent-usage snapshot the refresher produces.
+	// usage caches the latest quota snapshot the usage refresher produces.
 	usage usageCache
+	// spend caches the latest merged (local + peers) per-provider token spend,
+	// refreshed on its own faster cadence and merged with the quota snapshot at
+	// serve time.
+	spend spendCache
+	// peerSpend caches each peer's last-known per-provider spend so a briefly
+	// unreachable peer (z13 flaps over Tailscale) keeps contributing its last
+	// figure to the merged total instead of dropping out and making the number
+	// jump. Keyed by peer name.
+	peerSpend peerSpendCache
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -313,8 +333,14 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 
 	go s.runUploadsGC(ctx)
+	// Quota and cost are independently gated: a peer can run cost-only (spend
+	// served for a hub to aggregate) without ever hitting the rate-limited
+	// quota endpoints.
 	if s.UsageEnabled {
 		go s.runUsageRefresh(ctx)
+	}
+	if s.SpendEnabled {
+		go s.runSpendRefresh(ctx)
 	}
 
 	listeners, err := s.listeners()

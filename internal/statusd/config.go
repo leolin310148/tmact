@@ -45,6 +45,13 @@ type Config struct {
 	PeerInterval time.Duration
 	PeerTimeout  time.Duration
 
+	// UsageInterval / SpendInterval set the web agent-usage refresh cadences.
+	// Quota (rate-limited provider endpoints) refreshes on UsageInterval;
+	// token spend (local disk scan + peers) on SpendInterval. Zero uses the
+	// web package defaults (5m / 60s).
+	UsageInterval time.Duration
+	SpendInterval time.Duration
+
 	Now              func() time.Time
 	Sleep            func(time.Duration)
 	ListPanes        func() ([]tmux.Pane, error)
