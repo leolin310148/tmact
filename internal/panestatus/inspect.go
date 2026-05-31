@@ -274,7 +274,7 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	status.Runtime = runtime.Runtime
 	status.Confidence = runtime.Confidence
 	status.Signals = append(status.Signals, runtime.Signals...)
-	if !i.shouldCapture(status.Runtime) {
+	if !i.shouldCapture(status.Runtime, pane.CurrentCommand) {
 		status.Signals = appendSignal(status.Signals, "capture_skipped")
 		return status
 	}
@@ -336,11 +336,28 @@ func idleState(state string) bool {
 	return state == panestate.StateIdle || state == panestate.StateWaitingInput
 }
 
-func (i inspector) shouldCapture(runtime string) bool {
+func (i inspector) shouldCapture(runtime, command string) bool {
 	if len(i.captureRuntime) == 0 {
 		return true
 	}
-	return i.captureRuntime[runtime]
+	if i.captureRuntime[runtime] {
+		return true
+	}
+	// An interactive remote/shell wrapper (ssh, mosh) hides the real runtime
+	// from both pane_current_command and the local process tree — the agent
+	// runs on the far end. Its only fingerprint is the pane text, so we must
+	// capture it even when the wrapper itself isn't on the runtime allowlist;
+	// the second-round text classification then recognizes the nested agent.
+	return isWrapperCommand(command)
+}
+
+func isWrapperCommand(command string) bool {
+	switch strings.ToLower(command) {
+	case "ssh", "mosh", "mosh-client":
+		return true
+	default:
+		return false
+	}
 }
 
 func (i inspector) detectRuntime(pane tmux.Pane, raw string) RuntimeDetection {
@@ -476,7 +493,7 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	switch {
 	case containsAny(text, "openai codex", "codex app"):
 		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
-	case containsAny(text, "claude code"):
+	case containsAny(text, "claude code", "bypass permissions on", "without interrupting claude"):
 		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	case containsAny(text, "gemini"):
 		return RuntimeDetection{Runtime: RuntimeGemini, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}

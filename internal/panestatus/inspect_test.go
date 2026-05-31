@@ -41,6 +41,28 @@ func TestClassifyRuntimeDetectsShellCommand(t *testing.T) {
 	}
 }
 
+// Claude Code's running UI never prints the literal "claude code" string, so an
+// ssh-wrapped pane (no command/window/process fingerprint) must be recognized
+// by its distinctive chrome instead.
+func TestClassifyRuntimeDetectsClaudeFromRunningChrome(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{name: "bypass banner", raw: "✻ Crunched for 16s\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt"},
+		{name: "btw tip", raw: "  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pane := tmux.Pane{CurrentCommand: "ssh", WindowName: "scroll"}
+			detected := ClassifyRuntime(pane, tc.raw)
+			if detected.Runtime != RuntimeClaude {
+				t.Fatalf("runtime = %q, want claude", detected.Runtime)
+			}
+		})
+	}
+}
+
 func TestClassifyRuntimeShellCommandBeatsStaleAgentScrollback(t *testing.T) {
 	pane := tmux.Pane{CurrentCommand: "zsh", WindowName: "zsh"}
 	raw := "Claude Code v2.1.139\nold answer\nGemini reviewer failed\n❯"
@@ -289,5 +311,71 @@ func TestInspectPaneDetectsProceedQuestion(t *testing.T) {
 	}
 	if status.Idle {
 		t.Fatal("pane should not be idle")
+	}
+}
+
+// An ssh-wrapped pane (mac -> peer -> ssh -> remote agent) reports
+// current_command "ssh" with no local agent in its process tree, so the
+// first-round runtime is "unknown" and the agent allowlist wouldn't match it.
+// The wrapper exception must still capture it so the second-round pane-text
+// classification can recognize the nested Claude.
+func TestInspectPaneCapturesSSHWrappedAgent(t *testing.T) {
+	panes := []tmux.Pane{{
+		Session:        "z13@d2r",
+		WindowIndex:    1,
+		WindowName:     "scroll",
+		PaneIndex:      0,
+		PaneID:         "%3",
+		CurrentCommand: "ssh",
+	}}
+	captures := 0
+	report, err := inspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeClaude, RuntimeCodex, RuntimeCopilot, RuntimeGemini}}, func(string, int) (string, error) {
+		captures++
+		return "✻ Crunched for 16s\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt\n", nil
+	}, func(time.Duration) {}, func(int) RuntimeDetection {
+		return RuntimeDetection{Runtime: RuntimeUnknown, Confidence: ConfidenceLow}
+	})
+	if err != nil {
+		t.Fatalf("inspectPanes returned error: %v", err)
+	}
+	if captures != 1 {
+		t.Fatalf("captures = %d, want 1 (ssh wrapper must be captured)", captures)
+	}
+	status := report.Panes[0]
+	if status.Runtime != RuntimeClaude {
+		t.Fatalf("runtime = %q, want claude", status.Runtime)
+	}
+	for _, sig := range status.Signals {
+		if sig == "capture_skipped" {
+			t.Fatalf("ssh pane was skipped; signals = %#v", status.Signals)
+		}
+	}
+}
+
+// Plain shells outside the allowlist must still be skipped — the wrapper
+// exception is narrow and must not regress the capture-cost optimization.
+func TestInspectPaneStillSkipsPlainShell(t *testing.T) {
+	panes := []tmux.Pane{{
+		Session:        "work",
+		WindowName:     "zsh",
+		PaneID:         "%1",
+		CurrentCommand: "zsh",
+	}}
+	captures := 0
+	report, err := inspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeClaude, RuntimeCodex}}, func(string, int) (string, error) {
+		captures++
+		return "project $\n", nil
+	}, func(time.Duration) {}, func(int) RuntimeDetection {
+		return RuntimeDetection{Runtime: RuntimeUnknown, Confidence: ConfidenceLow}
+	})
+	if err != nil {
+		t.Fatalf("inspectPanes returned error: %v", err)
+	}
+	if captures != 0 {
+		t.Fatalf("captures = %d, want 0 (plain shell must stay skipped)", captures)
+	}
+	sigs := report.Panes[0].Signals
+	if len(sigs) == 0 || sigs[len(sigs)-1] != "capture_skipped" {
+		t.Fatalf("signals = %#v", sigs)
 	}
 }
