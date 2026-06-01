@@ -9,7 +9,7 @@ import "time"
 // DeltaPercent is actual − expected: positive means AHEAD of pace (burning too
 // fast, "in deficit"); negative means BEHIND pace (conserving, "in reserve").
 type Pace struct {
-	Stage           string `json:"stage"` // see paceStage values
+	Stage           string  `json:"stage"` // see paceStage values
 	DeltaPercent    float64 `json:"delta_percent"`
 	ExpectedPercent float64 `json:"expected_percent"`
 	ActualPercent   float64 `json:"actual_percent"`
