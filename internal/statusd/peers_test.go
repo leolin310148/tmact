@@ -31,7 +31,7 @@ func TestMergePeersPrefixesIDsAndSetsPeer(t *testing.T) {
 		Errors: []SnapshotError{{Scope: "tmux", Target: "probe:0.0", Error: "remote boom"}},
 	}
 	peers := map[string]PeerSnapshot{
-		"z13": {Snapshot: remote, Reachable: true, FetchedAt: time.Now()},
+		"peer-a": {Snapshot: remote, Reachable: true, FetchedAt: time.Now()},
 	}
 
 	merged := MergePeers(local, peers)
@@ -39,33 +39,33 @@ func TestMergePeersPrefixesIDsAndSetsPeer(t *testing.T) {
 	if _, ok := merged.Panes["main:0.0"]; !ok {
 		t.Fatalf("local pane main:0.0 dropped after merge")
 	}
-	if pane, ok := merged.Panes["z13@probe:0.0"]; !ok {
-		t.Fatalf("expected merged key z13@probe:0.0; got keys %v", keys(merged.Panes))
+	if pane, ok := merged.Panes["peer-a@probe:0.0"]; !ok {
+		t.Fatalf("expected merged key peer-a@probe:0.0; got keys %v", keys(merged.Panes))
 	} else {
-		if pane.Peer != "z13" {
-			t.Fatalf("pane.Peer = %q want z13", pane.Peer)
+		if pane.Peer != "peer-a" {
+			t.Fatalf("pane.Peer = %q want peer-a", pane.Peer)
 		}
-		if pane.Target != "z13@probe:0.0" {
-			t.Fatalf("pane.Target = %q want z13@probe:0.0", pane.Target)
+		if pane.Target != "peer-a@probe:0.0" {
+			t.Fatalf("pane.Target = %q want peer-a@probe:0.0", pane.Target)
 		}
-		if pane.Session != "z13@probe" {
-			t.Fatalf("pane.Session = %q want z13@probe", pane.Session)
+		if pane.Session != "peer-a@probe" {
+			t.Fatalf("pane.Session = %q want peer-a@probe", pane.Session)
 		}
-		if pane.PaneID != "z13@%0" {
-			t.Fatalf("pane.PaneID = %q want z13@%%0", pane.PaneID)
+		if pane.PaneID != "peer-a@%0" {
+			t.Fatalf("pane.PaneID = %q want peer-a@%%0", pane.PaneID)
 		}
 	}
-	if sess, ok := merged.Sessions["z13@probe"]; !ok {
-		t.Fatalf("expected merged session z13@probe; got %v", keys(merged.Sessions))
+	if sess, ok := merged.Sessions["peer-a@probe"]; !ok {
+		t.Fatalf("expected merged session peer-a@probe; got %v", keys(merged.Sessions))
 	} else {
-		if sess.Peer != "z13" || sess.Session != "z13@probe" || sess.ActiveTarget != "z13@probe:0.0" {
+		if sess.Peer != "peer-a" || sess.Session != "peer-a@probe" || sess.ActiveTarget != "peer-a@probe:0.0" {
 			t.Fatalf("session = %#v", sess)
 		}
 	}
 	if got := len(merged.Errors); got != 1 {
 		t.Fatalf("expected 1 propagated error, got %d (%v)", got, merged.Errors)
 	}
-	if merged.Errors[0].Scope != "peer:z13:tmux" || merged.Errors[0].Target != "z13@probe:0.0" {
+	if merged.Errors[0].Scope != "peer:peer-a:tmux" || merged.Errors[0].Target != "peer-a@probe:0.0" {
 		t.Fatalf("propagated error = %#v", merged.Errors[0])
 	}
 	if merged.Summary.Sessions != 2 || merged.Summary.Panes != 2 {
@@ -106,22 +106,22 @@ func TestMergePeersKeepsLastSnapshotOnFetchError(t *testing.T) {
 		},
 	}
 	merged := MergePeers(local, map[string]PeerSnapshot{
-		"z13": {Snapshot: remote, Err: errors.New("dial: refused"), FetchedAt: time.Now()},
+		"peer-a": {Snapshot: remote, Err: errors.New("dial: refused"), FetchedAt: time.Now()},
 	})
 
-	pane, ok := merged.Panes["z13@probe:0.0"]
+	pane, ok := merged.Panes["peer-a@probe:0.0"]
 	if !ok {
 		t.Fatalf("expected stale peer pane to stay visible; got %v", keys(merged.Panes))
 	}
-	if !pane.Stale || pane.Peer != "z13" {
-		t.Fatalf("pane = %#v, want stale z13 pane", pane)
+	if !pane.Stale || pane.Peer != "peer-a" {
+		t.Fatalf("pane = %#v, want stale peer-a pane", pane)
 	}
-	session, ok := merged.Sessions["z13@probe"]
+	session, ok := merged.Sessions["peer-a@probe"]
 	if !ok || !session.Stale {
 		t.Fatalf("session = %#v ok=%v, want stale peer session", session, ok)
 	}
-	if len(merged.Errors) != 1 || merged.Errors[0].Scope != "peer:z13" {
-		t.Fatalf("errors = %#v, want peer:z13 fetch error", merged.Errors)
+	if len(merged.Errors) != 1 || merged.Errors[0].Scope != "peer:peer-a" {
+		t.Fatalf("errors = %#v, want peer:peer-a fetch error", merged.Errors)
 	}
 }
 
@@ -139,11 +139,11 @@ func TestMergePeersEmptyMapReturnsLocalUnchanged(t *testing.T) {
 
 func TestSplitPeerTarget(t *testing.T) {
 	cases := map[string][2]string{
-		"":              {"", ""},
-		"main:0.0":      {"", "main:0.0"},
-		"z13@probe:0.0": {"z13", "probe:0.0"},
-		"z13@%0":        {"z13", "%0"},
-		"@bad":          {"", "@bad"}, // leading @ -> no peer name; treat as local
+		"":                 {"", ""},
+		"main:0.0":         {"", "main:0.0"},
+		"peer-a@probe:0.0": {"peer-a", "probe:0.0"},
+		"peer-a@%0":        {"peer-a", "%0"},
+		"@bad":             {"", "@bad"}, // leading @ -> no peer name; treat as local
 	}
 	for input, want := range cases {
 		gotPeer, gotRest := SplitPeerTarget(input)
@@ -230,26 +230,26 @@ func TestPeerFetcherPreservesLastSnapshotOnHTTPError(t *testing.T) {
 
 func TestPeerFetcherLogsPeerStateChanges(t *testing.T) {
 	var logs []string
-	f := NewPeerFetcher([]Peer{{Name: "z13", URL: "http://example.test"}}, time.Second, time.Second)
+	f := NewPeerFetcher([]Peer{{Name: "peer-a", URL: "http://example.test"}}, time.Second, time.Second)
 	f.SetLogger(func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	})
 
-	f.storeError("z13", errors.New("context deadline exceeded"))
-	f.storeError("z13", errors.New("context deadline exceeded"))
-	f.storeError("z13", errors.New("connection refused"))
-	f.store("z13", PeerSnapshot{Reachable: true, FetchedAt: time.Now()})
+	f.storeError("peer-a", errors.New("context deadline exceeded"))
+	f.storeError("peer-a", errors.New("context deadline exceeded"))
+	f.storeError("peer-a", errors.New("connection refused"))
+	f.store("peer-a", PeerSnapshot{Reachable: true, FetchedAt: time.Now()})
 
 	if len(logs) != 3 {
 		t.Fatalf("logs = %#v, want first failure, changed failure, and recovery", logs)
 	}
-	if !strings.Contains(logs[0], "peer z13 unreachable: context deadline exceeded") {
+	if !strings.Contains(logs[0], "peer peer-a unreachable: context deadline exceeded") {
 		t.Fatalf("first log = %q", logs[0])
 	}
-	if !strings.Contains(logs[1], "peer z13 unreachable: connection refused") {
+	if !strings.Contains(logs[1], "peer peer-a unreachable: connection refused") {
 		t.Fatalf("second log = %q", logs[1])
 	}
-	if logs[2] != "peer z13 reachable again" {
+	if logs[2] != "peer peer-a reachable again" {
 		t.Fatalf("third log = %q", logs[2])
 	}
 }

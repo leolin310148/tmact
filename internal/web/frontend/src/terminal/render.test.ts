@@ -368,13 +368,13 @@ describe("markImagePaths", () => {
   it("wraps a previewable image path in an image-path span with data attrs", () => {
     const root = document.createElement("pre");
     root.textContent = "open /home/u/pic.png please";
-    markImagePaths(root, "/home/u", "z13");
+    markImagePaths(root, "/home/u", "peer-a");
     const span = root.querySelector("span.image-path");
     expect(span).not.toBeNull();
     expect(span?.textContent).toBe("/home/u/pic.png");
     expect((span as HTMLElement).dataset.path).toBe("/home/u/pic.png");
     expect((span as HTMLElement).dataset.cwd).toBe("/home/u");
-    expect((span as HTMLElement).dataset.peer).toBe("z13");
+    expect((span as HTMLElement).dataset.peer).toBe("peer-a");
     expect((span as HTMLElement).title).toBe("Command-click to preview image");
     // surrounding text preserved
     expect(root.textContent).toBe("open /home/u/pic.png please");

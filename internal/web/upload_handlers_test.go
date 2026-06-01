@@ -248,11 +248,11 @@ func TestUploadFileProxiesToPeer(t *testing.T) {
 	defer upstream.Close()
 
 	handler := (&Server{
-		Peers: []statusd.Peer{{Name: "z13", URL: upstream.URL}},
+		Peers: []statusd.Peer{{Name: "peer-a", URL: upstream.URL}},
 	}).Handler()
 	rec := httptest.NewRecorder()
 	req := fileUploadRequest(t, "file", "notes.txt", "hello remote")
-	req.URL.RawQuery = "peer=z13"
+	req.URL.RawQuery = "peer=peer-a"
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {

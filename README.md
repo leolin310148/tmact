@@ -68,7 +68,7 @@ machines. Add a `peers` array to `~/.tmact/statusd.json`:
 {
   "web_addr": "0.0.0.0:7890",
   "peers": [
-    { "name": "z13", "url": "http://100.65.95.50:7890" }
+    { "name": "peer-a", "url": "http://peer-a.example:7890" }
   ],
   "peer_interval": "1s",
   "peer_timeout": "2s"
@@ -76,7 +76,7 @@ machines. Add a `peers` array to `~/.tmact/statusd.json`:
 ```
 
 Remote sessions and panes appear with a `<name>@` prefix on their ids (e.g.
-`z13@probe`, pane id `z13@%0`) and carry a `"peer": "z13"` field. Selecting a
+`peer-a@probe`, pane id `peer-a@%0`) and carry a `"peer": "peer-a"` field. Selecting a
 remote pane in the web UI proxies its live stream, text/key input, uploads, and
 image previews through that peer's statusd. If a peer goes unreachable, its
 last successful snapshot stays visible as stale while the fetch error is

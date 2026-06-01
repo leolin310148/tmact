@@ -17,7 +17,7 @@ import (
 const maxSnapshotErrors = 32
 
 // PeerSeparator splits a peer name from the embedded tmux identifier in
-// merged snapshots (e.g. "z13@%0", "z13@probe:0.0"). The `@` character does
+// merged snapshots (e.g. "peer-a@%0", "peer-a@probe:0.0"). The `@` character does
 // not appear in tmux session names or pane ids, so the split is unambiguous.
 const PeerSeparator = "@"
 

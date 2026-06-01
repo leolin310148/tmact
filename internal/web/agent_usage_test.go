@@ -182,7 +182,7 @@ func localSpend(week, month float64) map[string]agentusage.SpendWindow {
 
 func TestAddPeerSpendSumsAcrossMachines(t *testing.T) {
 	peer := peerWithSpend(t, 100, 500)
-	s := &Server{Peers: []statusd.Peer{{Name: "z13", URL: peer.URL}}}
+	s := &Server{Peers: []statusd.Peer{{Name: "peer-a", URL: peer.URL}}}
 	out := localSpend(10, 50)
 	s.addPeerSpend(context.Background(), out)
 
@@ -194,7 +194,7 @@ func TestAddPeerSpendSumsAcrossMachines(t *testing.T) {
 
 func TestAddPeerSpendFallsBackToCachedWhenPeerDown(t *testing.T) {
 	peer := peerWithSpend(t, 100, 500)
-	s := &Server{Peers: []statusd.Peer{{Name: "z13", URL: peer.URL}}}
+	s := &Server{Peers: []statusd.Peer{{Name: "peer-a", URL: peer.URL}}}
 
 	// First refresh primes the cache.
 	out1 := localSpend(10, 50)

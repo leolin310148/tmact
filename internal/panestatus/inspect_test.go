@@ -321,7 +321,7 @@ func TestInspectPaneDetectsProceedQuestion(t *testing.T) {
 // classification can recognize the nested Claude.
 func TestInspectPaneCapturesSSHWrappedAgent(t *testing.T) {
 	panes := []tmux.Pane{{
-		Session:        "z13@d2r",
+		Session:        "peer-a@d2r",
 		WindowIndex:    1,
 		WindowName:     "scroll",
 		PaneIndex:      0,

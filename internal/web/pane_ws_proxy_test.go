@@ -42,8 +42,8 @@ func TestPeerWSURLRejectsBadScheme(t *testing.T) {
 }
 
 func TestPaneIDPatternAcceptsFederatedID(t *testing.T) {
-	accepted := []string{"%0", "%2511", "z13@%0", "my-host.tail@%99", "z_w@%1"}
-	rejected := []string{"", "%", "%a", "@%0", "z13@", "z13@@%0", "z13@n0t", "z13@%-1", "x@y@%0", "not-a-pane"}
+	accepted := []string{"%0", "%2511", "peer-a@%0", "my-host.tail@%99", "z_w@%1"}
+	rejected := []string{"", "%", "%a", "@%0", "peer-a@", "peer-a@@%0", "peer-a@n0t", "peer-a@%-1", "x@y@%0", "not-a-pane"}
 	for _, p := range accepted {
 		if !paneIDPattern.MatchString(p) {
 			t.Errorf("paneIDPattern rejected %q (should accept)", p)

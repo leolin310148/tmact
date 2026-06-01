@@ -17,7 +17,7 @@ const (
 
 // Peer identifies a remote statusd instance whose snapshot should be merged
 // into the local one. Name is the prefix used in merged pane/session ids
-// (e.g. peer "z13" → pane id "z13@%0", session "z13@probe").
+// (e.g. peer "peer-a" -> pane id "peer-a@%0", session "peer-a@probe").
 type Peer struct {
 	Name string
 	URL  string

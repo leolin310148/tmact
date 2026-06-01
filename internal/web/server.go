@@ -122,7 +122,7 @@ type Server struct {
 	// serve time.
 	spend spendCache
 	// peerSpend caches each peer's last-known per-provider spend so a briefly
-	// unreachable peer (z13 flaps over Tailscale) keeps contributing its last
+	// unreachable peer keeps contributing its last
 	// figure to the merged total instead of dropping out and making the number
 	// jump. Keyed by peer name.
 	peerSpend peerSpendCache
