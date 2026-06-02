@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -141,8 +142,8 @@ func TestUploadFileSavesFileAndReturnsPath(t *testing.T) {
 	if len(got.Paths) != 1 || got.Paths[0] != path {
 		t.Fatalf("paths = %#v, want single path %q", got.Paths, path)
 	}
-	if !strings.HasSuffix(path, "notes.txt") {
-		t.Fatalf("path = %q, want sanitized filename suffix notes.txt", path)
+	if path != filepath.Join(dir, "notes.txt") {
+		t.Fatalf("path = %q, want sanitized original filename under upload dir", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -192,8 +193,52 @@ func TestUploadFileSavesMultipleFilesAndReturnsPaths(t *testing.T) {
 			t.Fatalf("saved bytes %d = %q, want %q", i, string(data), wantBody)
 		}
 	}
-	if !strings.HasSuffix(got.Paths[1], "two.md") {
-		t.Fatalf("second path = %q, want sanitized filename suffix two.md", got.Paths[1])
+	if got.Paths[0] != filepath.Join(dir, "one.txt") {
+		t.Fatalf("first path = %q, want original filename one.txt", got.Paths[0])
+	}
+	if got.Paths[1] != filepath.Join(dir, "two.md") {
+		t.Fatalf("second path = %q, want sanitized original filename two.md", got.Paths[1])
+	}
+}
+
+func TestUploadFileAvoidsClobberingSameFilename(t *testing.T) {
+	dir := t.TempDir()
+	handler := (&Server{UploadDir: dir}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, filesUploadRequest(t, "file", []uploadPart{
+		{filename: "notes.txt", bodyText: "first"},
+		{filename: "notes.txt", bodyText: "second"},
+	}))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	wantPaths := []string{
+		filepath.Join(dir, "notes.txt"),
+		filepath.Join(dir, "notes-1.txt"),
+	}
+	if len(got.Paths) != len(wantPaths) {
+		t.Fatalf("paths = %#v, want %#v", got.Paths, wantPaths)
+	}
+	for i, want := range wantPaths {
+		if got.Paths[i] != want {
+			t.Fatalf("path %d = %q, want %q", i, got.Paths[i], want)
+		}
+	}
+	for i, wantBody := range []string{"first", "second"} {
+		data, err := os.ReadFile(wantPaths[i])
+		if err != nil {
+			t.Fatalf("saved upload %d not readable: %v", i, err)
+		}
+		if string(data) != wantBody {
+			t.Fatalf("saved bytes %d = %q, want %q", i, string(data), wantBody)
+		}
 	}
 }
 

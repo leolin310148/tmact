@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -143,8 +144,7 @@ func saveUploadedFile(dir string, header *multipart.FileHeader) (string, error) 
 	}
 	defer file.Close()
 
-	name := sanitizeUploadFilename(header.Filename)
-	out, err := os.CreateTemp(dir, "upload-"+time.Now().Format("20060102-150405")+"-*-"+name)
+	out, err := createUploadFile(dir, sanitizeUploadFilename(header.Filename))
 	if err != nil {
 		return "", err
 	}
@@ -160,6 +160,33 @@ func saveUploadedFile(dir string, header *multipart.FileHeader) (string, error) 
 		path = abs
 	}
 	return path, nil
+}
+
+func createUploadFile(dir, name string) (*os.File, error) {
+	if name == "" {
+		name = "file"
+	}
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	if base == "" {
+		base = "file"
+	}
+	for i := 0; i < 1000; i++ {
+		candidate := name
+		if i > 0 {
+			candidate = base + "-" + strconv.Itoa(i) + ext
+		}
+		path := filepath.Join(dir, candidate)
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			return file, nil
+		}
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		return nil, err
+	}
+	return nil, errors.New("could not allocate a unique upload filename")
 }
 
 func sanitizeUploadFilename(name string) string {

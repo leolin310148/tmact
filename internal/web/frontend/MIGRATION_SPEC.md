@@ -159,7 +159,7 @@ Body (max 64 KB) `application/json`: `{ "model": string, "endpoint": string, "ap
 
 ### 2.10 `POST /api/upload-file`
 
-`multipart/form-data`, field `file` repeated for multiple files. Optional `?peer=`. Max 100 MB. Filename sanitized (alnum + `.-_`, collapse dashes, trim, cap 120 chars, preserve ext). Saves `upload-<TS>-*-<name>`. Returns `{ "path": "<first>", "paths": ["<...>"] }` (or just `paths` if none); rollback (delete) on partial failure → 500. Missing field → 400.
+`multipart/form-data`, field `file` repeated for multiple files. Optional `?peer=`. Max 100 MB. Filename sanitized (alnum + `.-_`, collapse dashes, trim, cap 120 chars, preserve ext). Saves as the sanitized original filename; if that path already exists, appends `-1`, `-2`, etc. before the extension. Returns `{ "path": "<first>", "paths": ["<...>"] }` (or just `paths` if none); rollback (delete) on partial failure → 500. Missing field → 400.
 
 ### 2.11 `GET /api/image`
 
