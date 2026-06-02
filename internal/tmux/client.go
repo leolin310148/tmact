@@ -173,9 +173,10 @@ func CapturePane(target string, lines int) (string, error) {
 	return capturePane(target, lines, false)
 }
 
-// CapturePaneANSI is CapturePane plus tmux's -e flag, keeping colour and
-// attribute escape sequences. Use it only where the consumer renders escapes
-// (the web UI); classifiers should stay on the plain CapturePane.
+// CapturePaneANSI is CapturePane with tmux's -e flag (keeping colour and
+// attribute escape sequences) and without -J (so full-width input-box borders
+// don't get joined onto the next line — see capturePane). Use it only where the
+// consumer renders escapes (the web UI); classifiers stay on the plain CapturePane.
 func CapturePaneANSI(target string, lines int) (string, error) {
 	return capturePane(target, lines, true)
 }
@@ -185,9 +186,18 @@ func capturePane(target string, lines int, escapes bool) (string, error) {
 		lines = 120
 	}
 
-	args := []string{"capture-pane", "-t", target, "-p", "-J", "-S", "-" + strconv.Itoa(lines)}
+	args := []string{"capture-pane", "-t", target, "-p", "-S", "-" + strconv.Itoa(lines)}
 	if escapes {
+		// ANSI path = the web UI. Deliberately omit -J: an agent input-box
+		// border is exactly the pane width, so tmux marks that full-width row
+		// as wrap-continued and -J would glue it onto the following prompt line
+		// into one double-width logical line that soft-wraps and mangles the box
+		// in the browser. Leaving each terminal row on its own line is what the
+		// web renderer expects (joinWrappedFrames handles real box-art tables).
 		args = append(args, "-e")
+	} else {
+		// Classifiers/pattern matchers want wrapped long lines rejoined.
+		args = append(args, "-J")
 	}
 	cmd := exec.Command("tmux", args...)
 
