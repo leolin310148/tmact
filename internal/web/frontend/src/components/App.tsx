@@ -82,6 +82,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useHelp } from "../hooks/useHelp";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { useViewport } from "../hooks/useViewport";
+import { useInputHistory } from "../hooks/useInputHistory";
 
 // Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
 const SELECTED_KEY = "tmact.selectedPane";
@@ -138,6 +139,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const directRef = useRef<HTMLTextAreaElement | null>(null);
   const recordBtnRef = useRef<HTMLButtonElement | null>(null);
   const sendBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // ----- input history (frontend-only; last 20 sent draft messages) -----
+  const history = useInputHistory();
 
   // ----- setContent (§7) -----
   // app.js setContent(text, opts) replaced pre#content.innerHTML; here we push
@@ -460,10 +464,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       showInputError("not connected — try again");
       return;
     }
+    history.record(draft.value);
     draft.value = "";
     delete state.drafts[state.selected];
     syncDraft();
-  }, [state, wsSend, showInputError, syncDraft]);
+  }, [state, wsSend, showInputError, syncDraft, history]);
 
   const clearPaneOutput = useCallback(() => {
     if (!state.selected) return;
@@ -525,8 +530,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     const draft = draftRef.current;
     if (!draft) return;
     if (state.selected) state.drafts[state.selected] = draft.value;
+    history.reset(); // typing leaves history-browsing mode
     syncDraft();
-  }, [state, syncDraft]);
+  }, [state, syncDraft, history]);
 
   const onDraftKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -535,6 +541,31 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
         sendDraft();
+        return;
+      }
+      // ArrowUp/ArrowDown recall sent-message history (shell-style). Only kick in
+      // at the textarea boundary so multi-line editing still works; once browsing
+      // history, keep navigating regardless of caret until the user types/sends.
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        const caret = draft.selectionStart === draft.selectionEnd ? draft.selectionStart : -1;
+        const atStart = caret === 0;
+        const atEnd = caret === draft.value.length;
+        const next =
+          e.key === "ArrowUp"
+            ? history.navigating() || atStart
+              ? history.recallPrev(draft.value)
+              : null
+            : history.navigating() || atEnd
+              ? history.recallNext(draft.value)
+              : null;
+        if (next === null) return; // nothing to recall — let the caret move normally
+        e.preventDefault();
+        draft.value = next;
+        if (state.selected) state.drafts[state.selected] = next;
+        syncDraft();
+        const end = next.length;
+        draft.setSelectionRange(end, end);
         return;
       }
       if (
@@ -552,7 +583,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         sendDirect({ t: "key", k: "Enter" });
       }
     },
-    [state, sendDraft, syncSelectionButton, renderMode, sendDirect],
+    [state, sendDraft, syncSelectionButton, renderMode, sendDirect, history, syncDraft],
   );
 
   const onDraftPaste = useCallback(
