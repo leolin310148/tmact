@@ -35,6 +35,10 @@ import type { PaneStatus, Snapshot } from "../types/server";
 // Timing constants — byte-identical to app.js's literals. Do NOT drift.
 const POLL_MS = 1000;
 const STALE_MS = 10000;
+// Grace window before a `hidden` tab is torn down. A hidden→visible round-trip
+// shorter than this (mobile scroll / address-bar / brief app switch) is treated
+// as no interruption at all, so the pane WS is never needlessly reconnected.
+const VIS_HIDE_GRACE_MS = 600;
 
 // localStorage key for the last-selected pane — verbatim from app.js
 // (`SELECTED_KEY`). Reads tolerate malformed/absent values exactly as the
@@ -315,21 +319,44 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
     }
   }, []);
 
-  // Visibility lifecycle — port of app.js's `visibilitychange` listener.
-  //   hidden:  stop polling, close SSE, close the pane WS.
-  //   visible: refresh the snapshot, restart SSE, reopen the pane WS for the
-  //            current selection (only when one is selected).
+  // Visibility lifecycle — port of app.js's `visibilitychange` listener, with a
+  // debounce/idempotence layer (intentional deviation from app.js).
+  //   hidden:  after VIS_HIDE_GRACE_MS, stop polling, close SSE, close pane WS.
+  //   visible: if a hide was still pending, just cancel it (nothing was torn
+  //            down → no reopen); otherwise, only if we genuinely tore down,
+  //            refresh the snapshot, restart SSE, reopen the pane WS.
+  // Why: app.js closed+reopened on EVERY transition. On phones a transient blip
+  // (scroll, address-bar show/hide, brief app switch) fires hidden→visible in
+  // quick succession, and the unconditional reopen forced a full WS reconnect
+  // that replays the whole pane snapshot — a churn that compounds the render
+  // load. The grace window absorbs blips and the torn-down guard makes a
+  // redundant "visible" a no-op, so a live connection is left untouched.
   // Registered ONCE on mount; the handler reads live refs/state so it never goes
-  // stale. Cleanup removes the listener and tears down the SSE/poll resources so
-  // the hook leaves nothing running (the original never unmounts, but the React
-  // lifecycle requires a teardown to avoid leaks).
+  // stale. Cleanup removes the listener, clears the pending hide, and tears down
+  // SSE/poll so the hook leaves nothing running.
   useEffect(() => {
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    let tornDown = false;
     const onVisibility = () => {
       if (document.hidden) {
-        stopPolling();
-        stopSnapshotStream();
-        depsRef.current.closeWS();
+        if (hideTimer !== null) return; // teardown already scheduled
+        hideTimer = setTimeout(() => {
+          hideTimer = null;
+          tornDown = true;
+          stopPolling();
+          stopSnapshotStream();
+          depsRef.current.closeWS();
+        }, VIS_HIDE_GRACE_MS);
       } else {
+        if (hideTimer !== null) {
+          // Came back within the grace window — nothing was torn down, so leave
+          // the live SSE/poll/WS exactly as they are (this is the churn fix).
+          clearTimeout(hideTimer);
+          hideTimer = null;
+          return;
+        }
+        if (!tornDown) return; // already live; a redundant "visible" is a no-op
+        tornDown = false;
         void refreshSnapshot();
         startSnapshotStream();
         if (state.selected) depsRef.current.openWS(state.selected);
@@ -338,6 +365,7 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
+      if (hideTimer !== null) clearTimeout(hideTimer);
       stopPolling();
       stopSnapshotStream();
     };
