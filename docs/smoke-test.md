@@ -63,6 +63,16 @@ Boot placeholder (fresh load, no saved selection): on a narrow viewport the
 `#draft` placeholder reads "Type a prompt, then tap Send" (not the desktop
 ⌘/Ctrl hint) and the mode strip shows "Select a pane to enable input".
 
+Markdown table view (bottom-left `#markdown-btn` toggle):
+
+5. Select a pane whose output is a pipe-delimited table (aligned `a | b | c`
+   rows; a GitHub `---|---` row is optional — without it every row is a body row).
+6. Tap the toggle. Expect: the pipe block becomes a bordered `table.tui-table`;
+   non-table lines (totals, the shell prompt) stay as raw terminal text below it.
+7. Tap again → back to raw pipes. `.active` highlight and
+   `localStorage["tmact.settings"].markdownView` track the state across reloads.
+   Default is off, so the first paint is always the raw terminal view.
+
 ## Notes Template
 
 ```text

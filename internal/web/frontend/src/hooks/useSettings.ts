@@ -29,6 +29,10 @@ const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
 interface ClientSettings {
   paneFont?: number;
   runningEffect?: string;
+  // markdown view toggle (pane output rendered with pipe tables); global,
+  // persisted, default off. Owned by App's React state, not the overlay form —
+  // it just shares the tmact.settings blob via the read/save helpers below.
+  markdownView?: boolean;
 }
 
 function readClientSettings(): ClientSettings {
@@ -48,6 +52,17 @@ function saveClientSettings(patch: ClientSettings): void {
   } catch (e) {
     /* ignore */
   }
+}
+
+// Markdown-view persistence. App seeds its React state from readMarkdownView()
+// at startup and calls saveMarkdownView() on each toggle. Kept here so the
+// tmact.settings shape stays owned by one module.
+export function readMarkdownView(): boolean {
+  return readClientSettings().markdownView === true;
+}
+
+export function saveMarkdownView(on: boolean): void {
+  saveClientSettings({ markdownView: on });
 }
 
 function clampFont(px: unknown): number {

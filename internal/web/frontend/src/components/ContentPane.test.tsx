@@ -27,6 +27,7 @@ function mount(overrides: Partial<Props> = {}) {
     text: "",
     cwd: null,
     peer: null,
+    markdown: false,
     selectionMode: false,
     onPreviewImage: vi.fn(),
     onRefocusDirect: vi.fn(),
@@ -64,5 +65,19 @@ describe("ContentPane", () => {
     expect(span).not.toBeNull();
     expect(span?.dataset.path).toBe("/abs/shot.png");
     expect(span?.dataset.cwd).toBe("/work");
+  });
+
+  it("re-renders pane output as a table when markdown flips on", () => {
+    // Mount paints the placeholder (settledRef); first real setContent is a rerender.
+    const { pre, rerender } = mount({ text: "" });
+    rerender({ text: "a | b\nc | d", markdown: false });
+    // Raw view: pipes stay as plain text, no table.
+    expect(pre.querySelector("table")).toBeNull();
+    expect(pre.textContent).toContain("a | b");
+    // Toggling markdown on re-runs render() with { markdown: true }.
+    rerender({ text: "a | b\nc | d", markdown: true });
+    const table = pre.querySelector("table.tui-table");
+    expect(table).not.toBeNull();
+    expect(pre.querySelector("td")?.textContent).toBe("a");
   });
 });

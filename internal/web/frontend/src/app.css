@@ -836,12 +836,12 @@
   .upload-btn:disabled, .selection-btn:disabled, .clear-pane-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .upload-btn.ready, .selection-btn.ready, .clear-pane-btn.ready { display: flex; }
   .selection-btn {
-    bottom: 60px;
+    bottom: 108px;
     color: var(--amber);
     border-color: var(--amber);
   }
   .clear-pane-btn {
-    bottom: 108px;
+    bottom: 156px;
     color: var(--fg-dim);
     border-color: var(--fg-dim);
   }
@@ -858,6 +858,36 @@
   .content-wrap.selection-mode pre#content {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  /* Markdown-view toggle — bottom-LEFT circular FAB (clear of the right-side
+     right-side FAB column, directly below the selection-mode toggle (both are
+     view toggles). Hidden until a pane is selected (.ready), highlighted while
+     markdown view is on (.active). bottom offsets sit in the upload/selection/
+     clear stack — see the two breakpoints below. */
+  .markdown-btn {
+    display: none;
+    position: absolute; right: 12px; bottom: 60px; z-index: 30;
+    width: 34px; height: 34px; padding: 0;
+    align-items: center; justify-content: center;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--accent);
+    border: 1px solid var(--accent);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .markdown-btn svg { width: 17px; height: 17px; display: block; }
+  .markdown-btn.ready { display: flex; }
+  .markdown-btn:hover, .markdown-btn:active { opacity: 1; }
+  .markdown-btn.active {
+    opacity: 1;
+    background: var(--accent); color: #fff; border-color: var(--accent);
   }
 
   /* Contextual copy bar — surfaces only while a non-empty selection lives in
@@ -916,7 +946,7 @@
     opacity: 1;
     background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
-  .content-wrap.upload-ready .help-btn { bottom: 156px; }
+  .content-wrap.upload-ready .help-btn { bottom: 204px; }
 
   /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
      each paired with a label showing the relevant hotkey. The amber/dashed
@@ -1019,10 +1049,11 @@
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
     .upload-btn { bottom: 60px; }
-    .selection-btn { bottom: 108px; }
-    .clear-pane-btn { bottom: 156px; }
-    .help-btn { bottom: 204px; }
-    .content-wrap.upload-ready .help-btn { bottom: 204px; }
+    .markdown-btn { bottom: 108px; }
+    .selection-btn { bottom: 156px; }
+    .clear-pane-btn { bottom: 204px; }
+    .help-btn { bottom: 252px; }
+    .content-wrap.upload-ready .help-btn { bottom: 252px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */

@@ -57,6 +57,7 @@ import { ConnStatus } from "./ConnStatus";
 import { StaleDot } from "./StaleDot";
 import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
+import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
 import ImagePreview, { buildImageSrc } from "./ImagePreview";
 import InputBar from "./InputBar";
@@ -78,7 +79,7 @@ import { useSnapshotStream } from "../ws/useSnapshotStream";
 import { useVoice } from "../hooks/useVoice";
 import { useUpload } from "../hooks/useUpload";
 import { useQuick } from "../hooks/useQuick";
-import { useSettings } from "../hooks/useSettings";
+import { useSettings, readMarkdownView, saveMarkdownView } from "../hooks/useSettings";
 import { useHelp } from "../hooks/useHelp";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { useViewport } from "../hooks/useViewport";
@@ -125,6 +126,20 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // image-preview lightbox (app.js previewImagePath/close).
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const imagePathRef = useRef<string>("");
+
+  // markdown-view toggle — global + persisted (tmact.settings.markdownView),
+  // seeded once at mount. Flipping it re-renders ContentPane (which re-runs
+  // render() with { markdown }); the default is off so the raw path is the
+  // first paint. App owns this as React state (not the settings overlay form)
+  // because ContentPane reads it as a prop.
+  const [markdownView, setMarkdownView] = useState<boolean>(() => readMarkdownView());
+  const toggleMarkdownView = useCallback(() => {
+    setMarkdownView((on) => {
+      const next = !on;
+      saveMarkdownView(next);
+      return next;
+    });
+  }, []);
 
   // ----- module-scoped mutable state from app.js → refs -----
   const paneLinesRef = useRef<string[]>([]);
@@ -803,10 +818,16 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           text={pc.text}
           cwd={pc.cwd}
           peer={pc.peer}
+          markdown={markdownView}
           selectionMode={state.selectionMode}
           onPreviewImage={previewImagePath}
           onRefocusDirect={onRefocusDirect}
           onBlurDirect={onBlurDirect}
+        />
+        <MarkdownToggle
+          visible={!!state.selected}
+          active={markdownView}
+          onToggle={toggleMarkdownView}
         />
         <DirectInput
           directRef={directRef}

@@ -41,6 +41,8 @@ export interface ContentPaneProps {
   cwd?: string | null;
   /** Selected pane peer (for cross-host image fetch); "" if local. */
   peer?: string | null;
+  /** Markdown view: fold pipe tables into <table> + drop ANSI colours. */
+  markdown: boolean;
   /** Mirrors state.selectionMode (App also owns the content-wrap class). */
   selectionMode: boolean;
   /**
@@ -64,6 +66,7 @@ export default function ContentPane({
   text,
   cwd,
   peer,
+  markdown,
   selectionMode,
   onPreviewImage,
   onRefocusDirect,
@@ -94,10 +97,10 @@ export default function ContentPane({
       return;
     }
     const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-    pre.innerHTML = render(text, { cwd: cwd || undefined, peer: peer || undefined });
+    pre.innerHTML = render(text, { cwd: cwd || undefined, peer: peer || undefined, markdown });
     markImagePaths(pre, cwd, peer);
     if (atBottom) pre.scrollTop = pre.scrollHeight;
-  }, [text, cwd, peer]);
+  }, [text, cwd, peer, markdown]);
 
   // ---- image long-press / preview helpers (app.js) ----
 

@@ -333,6 +333,116 @@ export function extractTables(text: string): ExtractedTables {
   return { text: out.join("\n"), tables };
 }
 
+// ---- markdown pipe tables (opt-in "markdown view" only) ----
+//
+// hc-api-style tools print aligned `a | b | c` tables WITHOUT box-drawing
+// frames (and often without the GitHub `---|---` delimiter row, since the web
+// UI streams the visible screen and the header has scrolled off). The box-table
+// extractor above never matches these. extractPipeTables collapses a run of
+// pipe-delimited rows into the same TABLE_OPEN<idx>TABLE_CLOSE placeholder the
+// box extractor uses, so render() splices a real <table> back in. It runs ONLY
+// when render() is called with { markdown: true } — never in the default raw
+// terminal view, so it can't mangle ordinary pane output.
+
+// A header/divider line inside a pipe table. Tools draw it either GitHub-style
+// (`---|---`) OR ASCII-grid style (`---------+-----------+---`), so it can't be
+// recognised by `|` boundaries alone — the grid style puts `+` at the column
+// joins and never a `|`. A divider is a whole line built only from rule glyphs
+// (`-` `=` `:` plus the `|`/`+` boundaries) with a run of ≥2 dashes; that keeps
+// a lone "—" em-dash data cell (the hc-api last column) from matching, since the
+// em-dash is U+2014, not an ASCII hyphen. Only consulted INSIDE a forming pipe
+// block (between/after real pipe rows), so a stray rule line never starts one.
+const PIPE_SEP_LINE_RE = /^[\s|+:=-]*-{2,}[\s|+:=-]*$/;
+
+function isPipeSepLine(line: string): boolean {
+  return PIPE_SEP_LINE_RE.test(line.replace(ANSI_STRIP_RE, "").trim());
+}
+
+// pipeCells splits one line into trimmed cells, tolerating an optional single
+// leading and trailing bar so both GitHub style (`| a | b |`) and bare aligned
+// style (`a | b`) parse identically. ANSI is stripped first — tmux re-asserts
+// SGR state at soft-wrap joins, which would otherwise split a `|` boundary or
+// leak escapes into a cell. Detection/cells are colour-free; the non-table text
+// keeps its ANSI (only the placeholder swap touches table lines), so the raw
+// terminal colours survive everywhere outside the folded table.
+function pipeCells(line: string): string[] {
+  let s = line.replace(ANSI_STRIP_RE, "").trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+
+// isPipeRow: a candidate table row has an inner bar (≥2 cells). A line with only
+// a leading/trailing bar (1 cell) or no bar at all is not a row.
+function isPipeRow(line: string): boolean {
+  if (!line.replace(ANSI_STRIP_RE, "").includes("|")) return false;
+  return pipeCells(line).length >= 2;
+}
+
+// parsePipeBlock turns a verified run of pipe rows into rows + headerEnd. A
+// divider line (isPipeSepLine — `---|---` or `---+---`) is dropped; if one sits
+// right after the first row, that first row becomes the <thead>. With no
+// divider (the scrolled-header case) every row is a body row (headerEnd -1).
+export function parsePipeBlock(block: string[]): ParsedTable {
+  const rows: string[][] = [];
+  let headerEnd = -1;
+  for (const line of block) {
+    if (isPipeSepLine(line)) {
+      if (headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
+      continue; // drop the divider row (header underline)
+    }
+    rows.push(pipeCells(line));
+  }
+  return { rows, headerEnd };
+}
+
+// extractPipeTables replaces each run of ≥2 consecutive pipe rows with the SAME
+// column count by a TABLE placeholder. `startIdx` continues the index space the
+// box-table extractor already populated so render() can splice from one combined
+// `tables` array. Column-count consistency across ≥2 rows is the false-positive
+// guard: a stray prose `a | b` line on its own never forms a block.
+export function extractPipeTables(text: string, startIdx = 0): ExtractedTables {
+  const lines = text.split("\n");
+  const tables: string[] = [];
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const cur = lines[i] ?? "";
+    // A block starts at a real pipe row (not a divider line that happens to
+    // contain `|`). It then extends over further pipe rows of the SAME column
+    // count plus any interspersed divider lines — the divider may use `+`
+    // boundaries, which are not pipe rows, so they must be bridged explicitly.
+    if (isPipeRow(cur) && !isPipeSepLine(cur)) {
+      const cols = pipeCells(cur).length;
+      let j = i + 1;
+      let pipeRows = 1;
+      while (j < lines.length) {
+        const nxt = lines[j] ?? "";
+        if (isPipeSepLine(nxt)) { j++; continue; }
+        if (isPipeRow(nxt) && pipeCells(nxt).length === cols) { pipeRows++; j++; continue; }
+        break;
+      }
+      // Don't swallow trailing divider/rule lines no pipe row follows — leave
+      // them as text (they read as a rule under the table, not part of it).
+      let end = j;
+      while (end > i && isPipeSepLine(lines[end - 1] ?? "")) end--;
+      if (pipeRows >= 2) {
+        const parsed = parsePipeBlock(lines.slice(i, end));
+        if (parsed.rows.length > 0) {
+          const idx = startIdx + tables.length;
+          tables.push(renderTable(parsed));
+          out.push(TABLE_OPEN + idx + TABLE_CLOSE);
+          i = end;
+          continue;
+        }
+      }
+    }
+    out.push(cur);
+    i++;
+  }
+  return { text: out.join("\n"), tables };
+}
+
 export interface ExtractedURLs {
   text: string;
   urls: string[];
@@ -374,6 +484,11 @@ export function wrapRuleLines(text: string): string {
 export interface RenderOpts {
   cwd?: string;
   peer?: string;
+  // markdown view: additionally fold pipe-delimited tables into <table>. ANSI
+  // colours are preserved on all non-table text (detection strips ANSI only
+  // internally). Off by default, so the raw render path is byte-for-byte
+  // unchanged.
+  markdown?: boolean;
 }
 
 // render is the PURE half of the original setContent: it produces the final HTML
@@ -383,8 +498,8 @@ export interface RenderOpts {
 // symmetry with the original setContent(text, opts), but the HTML render does
 // NOT depend on cwd/peer — those are only used by markImagePaths, which runs as
 // a separate DOM pass after the HTML is in the document (see ContentPane).
-export function render(text: string, _opts?: RenderOpts): string {
-  void _opts;
+export function render(text: string, opts?: RenderOpts): string {
+  const markdown = opts?.markdown === true;
   // Trim trailing blank rows before rendering. tmux `capture-pane` returns the
   // full pane grid, so a shell idling at its prompt arrives as a few real lines
   // followed by dozens of empty rows. The original setContent rendered those
@@ -401,12 +516,23 @@ export function render(text: string, _opts?: RenderOpts): string {
   // blank lines are left untouched.
   const trimmed = text.replace(TRAILING_BLANK_RE, "");
   const extracted = extractTables(trimmed);
-  const linkified = extractURLs(extracted.text);
+  const tables = extracted.tables.slice();
+  let tabledText = extracted.text;
+  // Markdown view additionally folds pipe tables. Detection strips ANSI per line
+  // internally (pipeCells/isPipeRow/isPipeSepLine), but only the matched table
+  // lines are swapped for placeholders — every other line keeps its ANSI, so the
+  // surrounding terminal colours render exactly as in the raw view.
+  if (markdown) {
+    const piped = extractPipeTables(tabledText, tables.length);
+    tables.push(...piped.tables);
+    tabledText = piped.text;
+  }
+  const linkified = extractURLs(tabledText);
   let html = ansiToHTML(wrapRuleLines(linkified.text))
     .replaceAll(RULE_OPEN, '<span class="tui-rule" role="separator">')
     .replaceAll(RULE_CLOSE, "</span>");
-  if (extracted.tables.length) {
-    html = html.replace(TABLE_PLACEHOLDER_RE, (_, n: string) => extracted.tables[+n] || "");
+  if (tables.length) {
+    html = html.replace(TABLE_PLACEHOLDER_RE, (_, n: string) => tables[+n] || "");
   }
   if (linkified.urls.length) {
     html = html.replace(URL_PLACEHOLDER_RE, (_, n: string, body: string) => {

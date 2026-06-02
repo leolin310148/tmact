@@ -9,6 +9,8 @@ import {
   joinWrappedFrames,
   parseTableBlock,
   renderTable,
+  extractPipeTables,
+  parsePipeBlock,
   previewableImagePath,
   markImagePaths,
   IMAGE_PATH_RE,
@@ -330,6 +332,109 @@ describe("parseTableBlock / renderTable / extractTables", () => {
     expect(out).toContain('<table class="tui-table">');
     expect(out).toContain("<td>a</td>");
     expect(out).not.toContain(TABLE_OPEN);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// markdown pipe tables (opt-in render({ markdown: true }))
+// ---------------------------------------------------------------------------
+describe("extractPipeTables / parsePipeBlock", () => {
+  it("folds a run of ≥2 aligned pipe rows into one placeholder (no header)", () => {
+    // Scrolled-header shape: no delimiter row in view → all rows are body rows.
+    const text = [
+      "ITEM-001 | alice | open | —",
+      "ITEM-002 | bob   | done | —",
+    ].join("\n");
+    const { text: outText, tables } = extractPipeTables(text);
+    expect(tables).toHaveLength(1);
+    expect(outText).toBe(TABLE_OPEN + "0" + TABLE_CLOSE);
+    expect(tables[0]).toContain("<td>ITEM-001</td>");
+    expect(tables[0]).toContain("<td>alice</td>");
+    expect(tables[0]).not.toContain("<th>"); // no delimiter ⇒ no header
+  });
+
+  it("treats the first row as <thead> when a --- delimiter follows", () => {
+    const text = ["ID | Name", "--- | ---", "1 | a", "2 | b"].join("\n");
+    const { tables } = extractPipeTables(text);
+    expect(tables).toHaveLength(1);
+    expect(tables[0]).toContain("<thead>");
+    expect(tables[0]).toContain("<th>ID</th>");
+    expect(tables[0]).toContain("<td>1</td>");
+    expect(tables[0]).not.toContain("<td>---</td>"); // delimiter row dropped
+  });
+
+  it("recognizes an ASCII-grid header whose divider uses + boundaries", () => {
+    // The grid case: header bars are `|`, but the divider row joins columns with
+    // `+` (no `|` at all), which must still bridge the block + mark the header.
+    const text = [
+      "Id        | Owner | Title",
+      "----------+-------+-------",
+      "ITEM-001  | alice | first",
+      "ITEM-002  | bob   | second",
+    ].join("\n");
+    const { tables } = extractPipeTables(text);
+    expect(tables).toHaveLength(1);
+    expect(tables[0]).toContain("<thead>");
+    expect(tables[0]).toContain("<th>Id</th>");
+    expect(tables[0]).toContain("<th>Title</th>");
+    expect(tables[0]).toContain("<td>ITEM-001</td>");
+    expect(tables[0]).not.toContain("+----"); // divider row dropped, not a cell
+  });
+
+  it("tolerates GitHub-style leading/trailing bars", () => {
+    const text = ["| a | b |", "| c | d |"].join("\n");
+    const parsed = parsePipeBlock(text.split("\n"));
+    expect(parsed.rows).toEqual([["a", "b"], ["c", "d"]]);
+  });
+
+  it("does NOT fold a single prose line with a bar", () => {
+    const text = "run a | grep b";
+    const { text: outText, tables } = extractPipeTables(text);
+    expect(tables).toHaveLength(0);
+    expect(outText).toBe(text);
+  });
+
+  it("does NOT fold rows whose column counts disagree", () => {
+    const text = ["a | b | c", "d | e"].join("\n");
+    const { tables } = extractPipeTables(text);
+    // The two lines have different column counts, so neither forms a ≥2-row
+    // block of consistent width → left as raw text.
+    expect(tables).toHaveLength(0);
+  });
+
+  it("continues the box-table index space via startIdx", () => {
+    const text = ["a | b", "c | d"].join("\n");
+    const { text: outText } = extractPipeTables(text, 3);
+    expect(outText).toBe(TABLE_OPEN + "3" + TABLE_CLOSE);
+  });
+
+  it("render({ markdown: true }) splices a pipe table; raw render() does not", () => {
+    const text = ["a | b", "c | d"].join("\n");
+    const md = render(text, { markdown: true });
+    expect(md).toContain('<table class="tui-table">');
+    expect(md).toContain("<td>a</td>");
+    expect(md).not.toContain(TABLE_OPEN);
+    // Default raw path leaves the pipes as plain text.
+    const raw = render(text);
+    expect(raw).not.toContain("<table");
+    expect(raw).toContain("a | b");
+  });
+
+  it("folds a pipe table whose cells carry ANSI, keeping clean cell text", () => {
+    const text = [`${ESC}[31ma${ESC}[0m | b`, "c | d"].join("\n");
+    const md = render(text, { markdown: true });
+    // Table cells are colour-free plain text (SGR stripped for detection)...
+    expect(md).toContain("<td>a</td>");
+    expect(md).toContain("<td>b</td>");
+  });
+
+  it("preserves ANSI colour on non-table lines in markdown view", () => {
+    // A coloured prose line above a pipe table must keep its colour span — only
+    // the table lines are swapped for placeholders.
+    const text = [`${ESC}[31mheads up${ESC}[0m`, "a | b", "c | d"].join("\n");
+    const md = render(text, { markdown: true });
+    expect(md).toContain("color:#cc0000"); // the red prose line stays coloured
+    expect(md).toContain('<table class="tui-table">');
   });
 });
 
