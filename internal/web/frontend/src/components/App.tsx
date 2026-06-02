@@ -96,10 +96,20 @@ const SELECTED_KEY = "tmact.selectedPane";
 // STREAM_RENDER_LINES lines to the renderer. This trades browser scrollback
 // depth for repaint cost — an intentional deviation from app.js's render-all.
 const STREAM_RENDER_LINES = 200;
+const PANE_BOTTOM_STICKY_PX = 80;
 
 // renderTail joins only the trailing STREAM_RENDER_LINES lines for display.
 function renderTail(lines: string[]): string {
   return (lines.length > STREAM_RENDER_LINES ? lines.slice(-STREAM_RENDER_LINES) : lines).join("\n");
+}
+
+function contentPaneElement(): HTMLPreElement | null {
+  return document.getElementById("content") as HTMLPreElement | null;
+}
+
+function contentPaneAtBottom(pre: HTMLPreElement | null): boolean {
+  if (!pre) return true;
+  return pre.scrollHeight - pre.scrollTop - pre.clientHeight < PANE_BOTTOM_STICKY_PX;
 }
 
 // findPane scans the live snapshot for a pane by id — verbatim from app.js.
@@ -604,11 +614,28 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   }, []);
 
   // ----- ContentPane focus handlers (mouseup refocus / blur) -----
+  const followPaneBottomThroughKeyboard = useCallback(() => {
+    if (!isMobile()) return;
+    const fit = () => {
+      window.scrollTo(0, 0);
+      const pre = contentPaneElement();
+      if (pre) pre.scrollTop = pre.scrollHeight;
+    };
+    fit();
+    requestAnimationFrame(fit);
+    setTimeout(fit, 80);
+    setTimeout(fit, 180);
+    setTimeout(fit, 320);
+    setTimeout(fit, 520);
+  }, []);
+
   const onRefocusDirect = useCallback(() => {
+    const stickToBottom = contentPaneAtBottom(contentPaneElement());
     if (directRef.current) directRef.current.focus();
+    if (stickToBottom) followPaneBottomThroughKeyboard();
     // mouseup's plain-click path focuses #direct-input; renderMode follows via
     // the focusin listener (app.js relied on the same focus → renderMode chain).
-  }, []);
+  }, [followPaneBottomThroughKeyboard]);
   const onBlurDirect = useCallback(() => {
     if (directRef.current) directRef.current.blur();
     renderMode();
@@ -667,12 +694,23 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         e.preventDefault();
         state.selectionMode = false;
         syncSelectionButton();
+        const stickToBottom = contentPaneAtBottom(contentPaneElement());
         if (directRef.current) directRef.current.focus();
+        if (stickToBottom) followPaneBottomThroughKeyboard();
         renderMode();
         sendDirect({ t: "key", k: "Enter" });
       }
     },
-    [state, sendDraft, syncSelectionButton, renderMode, sendDirect, history, syncDraft],
+    [
+      state,
+      sendDraft,
+      syncSelectionButton,
+      followPaneBottomThroughKeyboard,
+      renderMode,
+      sendDirect,
+      history,
+      syncDraft,
+    ],
   );
 
   const onDraftPaste = useCallback(
