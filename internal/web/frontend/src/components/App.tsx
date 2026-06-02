@@ -88,6 +88,20 @@ import { useInputHistory } from "../hooks/useInputHistory";
 // Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
 const SELECTED_KEY = "tmact.selectedPane";
 
+// Scrollback render cap. The server captures up to wsCaptureLines (400) lines,
+// but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every line) on
+// each repaint, so cost scales with the number of lines rendered. A flooding
+// agent makes that the main-thread bottleneck on phones. We keep the full
+// buffer (paneLines) for patch reconstruction + cache, and only hand the last
+// STREAM_RENDER_LINES lines to the renderer. This trades browser scrollback
+// depth for repaint cost — an intentional deviation from app.js's render-all.
+const STREAM_RENDER_LINES = 200;
+
+// renderTail joins only the trailing STREAM_RENDER_LINES lines for display.
+function renderTail(lines: string[]): string {
+  return (lines.length > STREAM_RENDER_LINES ? lines.slice(-STREAM_RENDER_LINES) : lines).join("\n");
+}
+
 // findPane scans the live snapshot for a pane by id — verbatim from app.js.
 function findPaneIn(snap: Snapshot | null, paneID: string | null): PaneStatus | null {
   if (!snap || !paneID) return null;
@@ -184,6 +198,59 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     [renderLocal],
   );
 
+  // ----- rAF-coalesced pane-stream render (§7, intentional deviation) -----
+  // The pane WS can deliver a burst of patches faster than the browser repaints
+  // (a full-screen-redrawing agent floods at tens of KB/s). app.js called
+  // setContent synchronously per patch, rebuilding the whole pre#content each
+  // time; on phones that pegs the main thread, which starves the event loop
+  // enough to trigger reconnect churn (browser-initiated WS close+reopen, each
+  // replaying the full snapshot — a positive-feedback freeze). Here onPatch
+  // updates the buffer synchronously (so patch reconstruction stays exact) but
+  // defers the repaint to one rAF, collapsing a burst into a single paint per
+  // frame and dropping intermediate frames. One-off setContent (Loading…/pane
+  // switch) stays synchronous; those callers cancelStream() first so a stale
+  // pending flush can't overwrite them a frame later.
+  const streamPendingRef = useRef<{
+    text: string;
+    cwd: string | null;
+    peer: string | null;
+    q: Question | null;
+  } | null>(null);
+  const streamRafRef = useRef<number | null>(null);
+
+  const flushStream = useCallback(() => {
+    streamRafRef.current = null;
+    const p = streamPendingRef.current;
+    if (!p) return;
+    streamPendingRef.current = null;
+    setContent(p.text, { cwd: p.cwd, peer: p.peer });
+    renderOptions(p.q);
+  }, [setContent, renderOptions]);
+
+  const scheduleStream = useCallback(
+    (text: string, cwd: string | null, peer: string | null, q: Question | null) => {
+      streamPendingRef.current = { text, cwd, peer, q };
+      if (streamRafRef.current != null) return;
+      streamRafRef.current =
+        typeof requestAnimationFrame === "function"
+          ? requestAnimationFrame(flushStream)
+          : (setTimeout(flushStream, 16) as unknown as number);
+    },
+    [flushStream],
+  );
+
+  const cancelStream = useCallback(() => {
+    streamPendingRef.current = null;
+    if (streamRafRef.current != null) {
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(streamRafRef.current);
+      else clearTimeout(streamRafRef.current as unknown as ReturnType<typeof setTimeout>);
+      streamRafRef.current = null;
+    }
+  }, []);
+
+  // Drop any in-flight coalesced repaint when App tears down.
+  useEffect(() => cancelStream, [cancelStream]);
+
   // ----- error / status strips (§4, §6 item 83) -----
   const syncIndicator = useCallback(() => {
     // In the port the ModeIndicator computes its own visibility from the two
@@ -240,11 +307,14 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const paneStream = usePaneStream({
     getSelectedPane: () => state.selected,
     onPatch: (from, lines, question) => {
-      paneLinesRef.current = paneLinesRef.current.slice(0, from).concat(lines);
-      if (state.selected) paneCacheRef.current[state.selected] = paneLinesRef.current;
+      // Reconstruct the full buffer synchronously (keeps `from`-splicing exact
+      // and the cache complete), then coalesce the repaint into one rAF and
+      // render only the trailing lines. See scheduleStream above.
+      const buf = paneLinesRef.current.slice(0, from).concat(lines);
+      paneLinesRef.current = buf;
+      if (state.selected) paneCacheRef.current[state.selected] = buf;
       const p = findPaneIn(state.snapshot, state.selected);
-      setContent(paneLinesRef.current.join("\n"), { cwd: p && p.cwd, peer: panePeer(p) });
-      renderOptions(question);
+      scheduleStream(renderTail(buf), p && p.cwd ? p.cwd : null, panePeer(p), question);
     },
     onQuestion: renderOptions,
     onError: showInputError,
@@ -270,22 +340,26 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
   // ----- openWS / closeWS (§7, App-local) -----
   const closeWS = useCallback(() => {
+    cancelStream();
     paneStream.close();
-  }, [paneStream]);
+  }, [paneStream, cancelStream]);
 
   const openWS = useCallback(
     (paneID: string) => {
+      // Drop any coalesced repaint queued for the previous connection so it
+      // can't land a frame after this (re)open's synchronous seed/Loading…
+      cancelStream();
       // Seed from the cache so a revisited pane shows content immediately; the
       // first patch (from=0) replaces it. A never-seen pane stays empty.
       const cached = paneCacheRef.current[paneID];
       paneLinesRef.current = cached ? cached.slice() : [];
       if (paneLinesRef.current.length) {
         const p = findPaneIn(state.snapshot, paneID);
-        setContent(paneLinesRef.current.join("\n"), { cwd: p && p.cwd, peer: panePeer(p) });
+        setContent(renderTail(paneLinesRef.current), { cwd: p && p.cwd, peer: panePeer(p) });
       }
       paneStream.open(paneID);
     },
-    [paneStream, state, setContent],
+    [paneStream, state, setContent, cancelStream],
   );
 
   // ----- syncDraft / autoGrowDraft (§4, imperative — synchronous scrollHeight) ----
