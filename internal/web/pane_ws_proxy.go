@@ -27,15 +27,33 @@ const (
 	// ~20s (sends nothing, never pongs) while the peer's HTTP and a *fresh* WS
 	// flow stay healthy — the classic z13 peer-flap. The only signal that tells
 	// a wedged flow apart from a legitimately idle pane (which still pongs) is
-	// the pong, so we ping often and time out fast: worst-case detection drops
-	// from ~35s (25+10) to ~15s (10+5), after which the browser reconnects onto
-	// a fresh, working flow. An idle pane is never torn down — it still pongs.
+	// the pong, so we ping often and time out fast (worst-case ~15s). An idle
+	// pane is never torn down — it still pongs.
 	proxyPingInterval = 10 * time.Second
 	proxyPingTimeout  = 5 * time.Second
 	proxyStatInterval = 15 * time.Second
 	// proxySlowWrite logs any single downstream write that blocks longer than
 	// this — i.e. the receiver (usually the browser) applying backpressure.
 	proxySlowWrite = 500 * time.Millisecond
+
+	// When the upstream (hub↔peer) flow ends — a wedge caught by the keepalive
+	// above, or the peer closing the WS — the bridge re-dials a fresh upstream
+	// and keeps shuttling to the *same* browser connection instead of tearing
+	// the browser leg down. A transient Tailscale/WSL wedge then costs one
+	// ~12ms re-dial plus a single full-page reseed, invisible to the browser,
+	// instead of a visible disconnect + reconnect-churn + repeated reseed.
+	//
+	// A genuinely dead pane (peer gone, pane closed) would otherwise re-dial
+	// forever, so a circuit breaker gives up after maxConsecutiveSwaps re-dials
+	// that each lasted under minHealthyEpoch. A real wedge resets the counter
+	// because the flow was healthy for minutes first; rapid back-to-back short
+	// epochs mean the peer is down, so we fall back to closing the browser leg
+	// (the old behaviour — the browser then reconnects on its own).
+	minHealthyEpoch     = 2 * time.Second
+	maxConsecutiveSwaps = 4
+	swapBackoffStep     = 200 * time.Millisecond
+	swapBackoffMax      = 2 * time.Second
+	inputWriteTimeout   = 5 * time.Second
 )
 
 // dirStats accumulates per-direction frame counters for one leg of the bridge.
@@ -62,21 +80,17 @@ func durMs(nanos int64) time.Duration {
 	return (time.Duration(nanos) * time.Nanosecond).Round(time.Millisecond)
 }
 
-// copyResult reports which bridge leg ended and why, so the close summary can
-// attribute the teardown to z13 or the browser.
-type copyResult struct {
-	dir string
-	err error
-}
-
 // proxyPaneWS bridges a browser WebSocket connection to the matching /ws/pane
-// endpoint on a remote statusd peer. Raw frames are forwarded in both
-// directions until either side closes or the request context is cancelled.
+// endpoint on a remote statusd peer.
 //
-// Errors during the upstream dial are reported as a JSON HTTP response before
-// the upgrade happens; once both ends are upgraded the bridge shuttles frames,
-// keeps both legs alive with pings, and logs throughput so a freeze can be
-// attributed to the right leg.
+// The browser leg is the anchor: it is accepted once and kept up for the whole
+// session. The hub↔peer (upstream) leg is *swappable* — when it wedges or
+// closes, the bridge re-dials a fresh upstream and keeps shuttling to the same
+// browser connection (see runSwappableBridge). That turns a transient z13
+// peer-flap from a visible disconnect into an invisible re-dial.
+//
+// The first dial happens before the browser upgrade so an unreachable peer is
+// reported as a clean HTTP 502 instead of an accepted-then-dropped WebSocket.
 func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer statusd.Peer, pane string) {
 	started := time.Now()
 	upstreamURL, err := peerWSURL(peer.URL, pane)
@@ -85,128 +99,247 @@ func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer status
 		return
 	}
 
-	dialCtx, dialCancel := context.WithTimeout(r.Context(), peerDialTimeout)
-	upstream, _, err := websocket.Dial(dialCtx, upstreamURL, nil)
-	dialCancel()
+	upstream, err := s.dialUpstream(r.Context(), upstreamURL)
 	if err != nil {
 		s.logf("peer ws %s pane %s dial failed after %s: %v", peer.Name, pane, time.Since(started).Round(time.Millisecond), err)
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("peer %s dial failed: %v", peer.Name, err))
 		return
 	}
-	defer upstream.CloseNow()
-	upstream.SetReadLimit(wsReadLimit)
 	dialDur := time.Since(started)
 
 	client, err := websocket.Accept(w, r, nil)
 	if err != nil {
+		upstream.CloseNow()
 		return
 	}
-	defer client.CloseNow()
 	client.SetReadLimit(wsReadLimit)
 	s.logf("peer ws %s pane %s connected in %s (dial %s)", peer.Name, pane, time.Since(started).Round(time.Millisecond), dialDur.Round(time.Millisecond))
 
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
-	var down, up dirStats // down: peer→client (pane output); up: client→peer (input)
-
-	// Keepalive both legs + periodic throughput log. See the const block above
-	// for why the proxied path needs its own liveness check.
-	go s.proxyKeepalive(ctx, cancel, peer.Name, pane, client, upstream, &down, &up)
-
-	// Bidirectional raw-frame copy. Either side closing cancels the context,
-	// which unblocks the other Read and ends the bridge. The result carries the
-	// direction so the close summary names which leg ended the bridge first —
-	// "peer→client" means z13 (or its tmux capture) closed; "client→peer" means
-	// the browser closed (navigated away / reconnect-churn / tab hidden).
-	done := make(chan copyResult, 2)
-	go func() {
-		err := s.copyFrames(ctx, upstream, client, fmt.Sprintf("%s pane %s peer→client", peer.Name, pane), proxySlowWrite, &down)
-		done <- copyResult{dir: "peer→client (z13 closed)", err: err}
-		cancel()
-	}()
-	go func() {
-		err := s.copyFrames(ctx, client, upstream, fmt.Sprintf("%s pane %s client→peer", peer.Name, pane), 0, &up)
-		done <- copyResult{dir: "client→peer (browser closed)", err: err}
-		cancel()
-	}()
-	first := <-done
-	// Drain the second goroutine so deferred CloseNow / cancel happen after
-	// both copy loops have unwound.
-	<-done
-
-	s.logf("peer ws %s pane %s closed after %s: peer→client %d frames/%d bytes (max write %s, quiet %s); client→peer %d frames/%d bytes; first close: %s: %v",
-		peer.Name, pane, time.Since(started).Round(time.Second),
-		down.frames.Load(), down.bytes.Load(), durMs(down.maxWriteNano.Load()), down.quietFor().Round(time.Second),
-		up.frames.Load(), up.bytes.Load(), first.dir, first.err)
+	s.runSwappableBridge(r.Context(), peer.Name, pane, upstreamURL, client, upstream, started)
 }
 
-// copyFrames shuttles frames from src to dst until either errors, recording
-// throughput into st. dir is a human label used only for logging. When
-// slowWrite > 0, any single downstream Write that blocks longer than it is
-// logged as backpressure from the receiver.
-func (s *Server) copyFrames(ctx context.Context, src, dst *websocket.Conn, dir string, slowWrite time.Duration, st *dirStats) error {
+// dialUpstream opens a /ws/pane connection to a peer with the standard dial
+// timeout and read limit applied.
+func (s *Server) dialUpstream(ctx context.Context, upstreamURL string) (*websocket.Conn, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, peerDialTimeout)
+	defer cancel()
+	conn, _, err := websocket.Dial(dialCtx, upstreamURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	conn.SetReadLimit(wsReadLimit)
+	return conn, nil
+}
+
+// runSwappableBridge shuttles frames between a persistent browser connection
+// and a series of upstream (hub↔peer) connections. The input pump and browser
+// keepalive run for the whole session; the upstream leg is re-dialed in place
+// whenever it wedges or closes, so a transient peer-flap never reaches the
+// browser. It only gives up — closing the browser leg so it reconnects on its
+// own — when the browser itself dies or the peer fails to stay up (circuit
+// breaker), preserving the old worst-case behaviour.
+func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upstreamURL string, client, first *websocket.Conn, started time.Time) {
+	defer client.CloseNow()
+
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	var cur atomic.Pointer[websocket.Conn] // current upstream; nil while re-dialing
+	var down, up dirStats                  // down: peer→client; up: client→peer
+	var swaps atomic.Int64
+
+	// Input pump (client→peer): persists across upstream swaps. A client Read
+	// error means the browser is gone, which ends the whole bridge.
+	go func() {
+		for {
+			typ, data, err := client.Read(ctx)
+			if err != nil {
+				cancel()
+				return
+			}
+			u := cur.Load()
+			if u == nil {
+				continue // input typed during a re-dial gap is dropped
+			}
+			up.frames.Add(1)
+			up.bytes.Add(int64(len(data)))
+			up.lastFrameNano.Store(time.Now().UnixNano())
+			wctx, wcancel := context.WithTimeout(ctx, inputWriteTimeout)
+			_ = u.Write(wctx, typ, data) // a wedged upstream is handled by the swap loop
+			wcancel()
+		}
+	}()
+
+	// Browser keepalive: a dead browser leg cannot be repaired by swapping the
+	// upstream, so a failed ping ends the whole bridge.
+	go func() {
+		t := time.NewTicker(s.proxyPingEvery())
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := pingConn(ctx, client, s.proxyPingDeadline()); err != nil {
+					s.logf("peer ws %s pane %s client (browser) keepalive failed: %v", peerName, pane, err)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
+	go s.proxyStatLogger(ctx, peerName, pane, &down, &up, &swaps)
+
+	upstream := first
+	consecutiveShort := 0
+	firstClose := "browser closed"
 	for {
-		typ, data, err := src.Read(ctx)
-		if err != nil {
-			return err
+		cur.Store(upstream)
+		epochStart := time.Now()
+		epochCtx, epochCancel := context.WithCancel(ctx)
+		go s.upstreamKeepalive(epochCtx, epochCancel, peerName, pane, upstream)
+
+		clientGone, perr := s.pumpDownstream(epochCtx, upstream, client, peerName, pane, &down)
+		cur.Store(nil)
+		upstream.CloseNow()
+		epochCancel()
+
+		if ctx.Err() != nil {
+			break // browser closed / browser keepalive failed
+		}
+		if clientGone {
+			firstClose = fmt.Sprintf("browser write failed: %v", perr)
+			cancel()
+			break
+		}
+
+		// Upstream leg ended while the browser is still here — re-dial and keep
+		// going. A flow that stayed healthy a while (>= minHealthyEpoch) resets
+		// the breaker; back-to-back short epochs mean the peer is down.
+		if time.Since(epochStart) < minHealthyEpoch {
+			consecutiveShort++
+		} else {
+			consecutiveShort = 0
+		}
+		if consecutiveShort > maxConsecutiveSwaps {
+			firstClose = fmt.Sprintf("peer kept failing fast (%d short epochs); giving up: %v", consecutiveShort, perr)
+			s.logf("peer ws %s pane %s %s — closing browser leg so it reconnects", peerName, pane, firstClose)
+			cancel()
+			break
+		}
+		if d := swapBackoff(consecutiveShort); d > 0 {
+			select {
+			case <-ctx.Done():
+			case <-time.After(d):
+			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		swaps.Add(1)
+		s.logf("peer ws %s pane %s upstream flow ended (%v) — re-dialing to keep browser connected (swap #%d)", peerName, pane, perr, swaps.Load())
+		newUp, derr := s.dialUpstream(ctx, upstreamURL)
+		if derr != nil {
+			firstClose = fmt.Sprintf("re-dial failed: %v", derr)
+			s.logf("peer ws %s pane %s %s — closing browser leg", peerName, pane, firstClose)
+			cancel()
+			break
+		}
+		upstream = newUp
+	}
+
+	s.logf("peer ws %s pane %s closed after %s: peer→client %d frames/%d bytes (max write %s, quiet %s); client→peer %d frames/%d bytes; swaps %d; first close: %s",
+		peerName, pane, time.Since(started).Round(time.Second),
+		down.frames.Load(), down.bytes.Load(), durMs(down.maxWriteNano.Load()), down.quietFor().Round(time.Second),
+		up.frames.Load(), up.bytes.Load(), swaps.Load(), firstClose)
+}
+
+// pumpDownstream forwards peer→client frames for one upstream epoch. It returns
+// when the upstream Read fails (wedge caught by upstreamKeepalive, or the peer
+// closing) or a client Write fails. clientGone reports the latter: a broken
+// browser leg can't be repaired by swapping the upstream, so the caller ends
+// the whole bridge instead of re-dialing.
+func (s *Server) pumpDownstream(ctx context.Context, upstream, client *websocket.Conn, peerName, pane string, st *dirStats) (clientGone bool, err error) {
+	for {
+		typ, data, rerr := upstream.Read(ctx)
+		if rerr != nil {
+			return false, rerr
 		}
 		st.frames.Add(1)
 		st.bytes.Add(int64(len(data)))
 		st.lastFrameNano.Store(time.Now().UnixNano())
 
 		writeStart := time.Now()
-		if err := dst.Write(ctx, typ, data); err != nil {
-			return err
+		if werr := client.Write(ctx, typ, data); werr != nil {
+			return true, werr
 		}
 		wd := time.Since(writeStart)
 		if wd.Nanoseconds() > st.maxWriteNano.Load() {
 			st.maxWriteNano.Store(wd.Nanoseconds())
 		}
-		if slowWrite > 0 && wd > slowWrite {
-			s.logf("peer ws %s slow write %s for %d-byte frame — downstream backpressure", dir, wd.Round(time.Millisecond), len(data))
+		if wd > proxySlowWrite {
+			s.logf("peer ws %s pane %s slow write %s for %d-byte frame — browser backpressure", peerName, pane, wd.Round(time.Millisecond), len(data))
 		}
 	}
 }
 
-// proxyKeepalive pings both bridge legs and emits a periodic throughput line.
-// A failing ping identifies which leg died and tears the bridge down via
-// cancel(), so a wedged connection surfaces within proxyPingInterval instead of
-// blocking the copy goroutines indefinitely.
-func (s *Server) proxyKeepalive(ctx context.Context, cancel context.CancelFunc, peerName, pane string, client, upstream *websocket.Conn, down, up *dirStats) {
-	pingT := time.NewTicker(proxyPingInterval)
-	defer pingT.Stop()
-	statT := time.NewTicker(proxyStatInterval)
-	defer statT.Stop()
+// upstreamKeepalive pings one upstream epoch and cancels it on a failed ping,
+// which surfaces a wedged hub↔peer flow within proxyPingTimeout so the bridge
+// can swap onto a fresh flow. An idle pane still pongs and is never torn down.
+func (s *Server) upstreamKeepalive(ctx context.Context, cancel context.CancelFunc, peerName, pane string, upstream *websocket.Conn) {
+	t := time.NewTicker(s.proxyPingEvery())
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := pingConn(ctx, upstream, s.proxyPingDeadline()); err != nil {
+				if ctx.Err() == nil {
+					s.logf("peer ws %s pane %s peer (upstream) keepalive failed: %v — swapping flow", peerName, pane, err)
+				}
+				cancel()
+				return
+			}
+		}
+	}
+}
 
+// proxyStatLogger emits a periodic throughput line covering all upstream epochs
+// of a bridge, so a freeze can be attributed to the right leg.
+func (s *Server) proxyStatLogger(ctx context.Context, peerName, pane string, down, up *dirStats, swaps *atomic.Int64) {
+	t := time.NewTicker(proxyStatInterval)
+	defer t.Stop()
 	var lastDown, lastUp int64
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-statT.C:
+		case <-t.C:
 			df, uf := down.frames.Load(), up.frames.Load()
-			s.logf("peer ws %s pane %s live: peer→client %d frames (+%d, %d bytes, quiet %s); client→peer %d frames (+%d)",
-				peerName, pane, df, df-lastDown, down.bytes.Load(), down.quietFor().Round(time.Millisecond), uf, uf-lastUp)
+			s.logf("peer ws %s pane %s live: peer→client %d frames (+%d, %d bytes, quiet %s); client→peer %d frames (+%d); swaps %d",
+				peerName, pane, df, df-lastDown, down.bytes.Load(), down.quietFor().Round(time.Millisecond), uf, uf-lastUp, swaps.Load())
 			lastDown, lastUp = df, uf
-		case <-pingT.C:
-			// Browser leg first, then the peer leg, so the log says which died.
-			if err := pingConn(ctx, client); err != nil {
-				s.logf("peer ws %s pane %s client (browser) keepalive failed: %v", peerName, pane, err)
-				cancel()
-				return
-			}
-			if err := pingConn(ctx, upstream); err != nil {
-				s.logf("peer ws %s pane %s peer (upstream) keepalive failed: %v", peerName, pane, err)
-				cancel()
-				return
-			}
 		}
 	}
 }
 
-func pingConn(ctx context.Context, c *websocket.Conn) error {
-	pingCtx, pingCancel := context.WithTimeout(ctx, proxyPingTimeout)
+// swapBackoff staggers re-dials after consecutive short-lived upstream epochs so
+// a down peer is not hammered, while a single transient wedge re-dials at once.
+func swapBackoff(consecutiveShort int) time.Duration {
+	if consecutiveShort <= 0 {
+		return 0
+	}
+	d := time.Duration(consecutiveShort) * swapBackoffStep
+	if d > swapBackoffMax {
+		d = swapBackoffMax
+	}
+	return d
+}
+
+func pingConn(ctx context.Context, c *websocket.Conn, timeout time.Duration) error {
+	pingCtx, pingCancel := context.WithTimeout(ctx, timeout)
 	defer pingCancel()
 	return c.Ping(pingCtx)
 }

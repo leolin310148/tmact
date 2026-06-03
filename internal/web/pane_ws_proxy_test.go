@@ -2,9 +2,11 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,6 +140,154 @@ func TestPaneWSProxyBridgesFrames(t *testing.T) {
 	}
 	if echo.T != "text" || echo.S != "ping" {
 		t.Fatalf("echo = %+v, want text/ping", echo)
+	}
+}
+
+func TestPaneWSProxySwapsUpstreamWithoutDroppingBrowser(t *testing.T) {
+	// Upstream "peer" that closes the WS after greeting on the first
+	// connection (simulating a wedged/closed hub↔peer flow) and stays up on the
+	// second. The browser must receive both greetings on the SAME connection —
+	// proving the bridge re-dialed the upstream instead of dropping the browser.
+	var conns int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&conns, 1)
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("upstream accept: %v", err)
+			return
+		}
+		ctx := r.Context()
+		if err := wsjson.Write(ctx, conn, outMsg{T: "patch", From: 0, Lines: []string{fmt.Sprintf("epoch %d", n)}}); err != nil {
+			conn.CloseNow()
+			return
+		}
+		if n == 1 {
+			conn.Close(websocket.StatusNormalClosure, "rotating")
+			return
+		}
+		defer conn.CloseNow()
+		<-ctx.Done() // keep the second flow open
+	}))
+	defer upstream.Close()
+
+	local := httptest.NewServer((&Server{
+		Peers: []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+	}).Handler())
+	defer local.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%250", nil)
+	if err != nil {
+		t.Fatalf("dial local: %v", err)
+	}
+	defer c.CloseNow()
+
+	var first, second outMsg
+	if err := wsjson.Read(ctx, c, &first); err != nil {
+		t.Fatalf("read first greeting: %v", err)
+	}
+	if strings.Join(first.Lines, "") != "epoch 1" {
+		t.Fatalf("first greeting = %+v, want epoch 1", first)
+	}
+	// Same browser connection should now receive the second epoch's greeting
+	// after the bridge transparently re-dials the upstream.
+	if err := wsjson.Read(ctx, c, &second); err != nil {
+		t.Fatalf("read second greeting (post-swap): %v", err)
+	}
+	if strings.Join(second.Lines, "") != "epoch 2" {
+		t.Fatalf("second greeting = %+v, want epoch 2", second)
+	}
+	if got := atomic.LoadInt32(&conns); got < 2 {
+		t.Fatalf("upstream saw %d connections, want >= 2 (a swap)", got)
+	}
+}
+
+func TestPaneWSProxySwapsAfterUpstreamWedge(t *testing.T) {
+	// The real z13 failure mode: the hub↔peer flow stalls — sends nothing and
+	// never answers a ping — WITHOUT closing the socket. Here the first upstream
+	// connection greets then stops reading (so coder/websocket never auto-pongs)
+	// while holding the socket open; the second behaves normally. The browser
+	// must ride across the wedge: receive epoch 1, then epoch 2 on the SAME
+	// connection, driven by the keepalive pong timeout, not a clean close.
+	var conns int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&conns, 1)
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("upstream accept: %v", err)
+			return
+		}
+		ctx := r.Context()
+		if err := wsjson.Write(ctx, conn, outMsg{T: "patch", From: 0, Lines: []string{fmt.Sprintf("epoch %d", n)}}); err != nil {
+			conn.CloseNow()
+			return
+		}
+		if n == 1 {
+			// Wedge: hold the socket open but never Read, so pings go unanswered.
+			select {
+			case <-ctx.Done():
+			case <-time.After(5 * time.Second):
+			}
+			conn.CloseNow()
+			return
+		}
+		// Healthy: keep reading so the library auto-responds to keepalive pings.
+		defer conn.CloseNow()
+		for {
+			if _, _, err := conn.Read(ctx); err != nil {
+				return
+			}
+		}
+	}))
+	defer upstream.Close()
+
+	srv := &Server{
+		Peers:                     []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+		proxyPingIntervalOverride: 150 * time.Millisecond,
+		proxyPingTimeoutOverride:  150 * time.Millisecond,
+	}
+	local := httptest.NewServer(srv.Handler())
+	defer local.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%250", nil)
+	if err != nil {
+		t.Fatalf("dial local: %v", err)
+	}
+	defer c.CloseNow()
+
+	// Read continuously so the browser leg always auto-pongs (the same fast
+	// keepalive runs on the browser side and must not false-time-out).
+	msgs := make(chan string, 8)
+	go func() {
+		for {
+			var m outMsg
+			if err := wsjson.Read(ctx, c, &m); err != nil {
+				return
+			}
+			msgs <- strings.Join(m.Lines, "")
+		}
+	}()
+	want := func(exp string) {
+		t.Helper()
+		select {
+		case got := <-msgs:
+			if got != exp {
+				t.Fatalf("got %q, want %q", got, exp)
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for %q", exp)
+		}
+	}
+
+	want("epoch 1")
+	// After the pong timeout (~interval + timeout) the bridge re-dials upstream
+	// and the SAME browser connection receives the next epoch — no reconnect.
+	want("epoch 2")
+	if got := atomic.LoadInt32(&conns); got < 2 {
+		t.Fatalf("upstream saw %d connections, want >= 2 (a wedge-driven swap)", got)
 	}
 }
 

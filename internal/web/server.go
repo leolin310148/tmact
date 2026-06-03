@@ -126,6 +126,28 @@ type Server struct {
 	// figure to the merged total instead of dropping out and making the number
 	// jump. Keyed by peer name.
 	peerSpend peerSpendCache
+
+	// proxyPingIntervalOverride / proxyPingTimeoutOverride let tests drive the
+	// peer-bridge keepalive cadence fast and deterministically. Zero means use
+	// the package defaults (proxyPingInterval / proxyPingTimeout).
+	proxyPingIntervalOverride time.Duration
+	proxyPingTimeoutOverride  time.Duration
+}
+
+// proxyPingEvery / proxyPingDeadline return the peer-bridge keepalive cadence,
+// honoring a test override when set.
+func (s *Server) proxyPingEvery() time.Duration {
+	if s.proxyPingIntervalOverride > 0 {
+		return s.proxyPingIntervalOverride
+	}
+	return proxyPingInterval
+}
+
+func (s *Server) proxyPingDeadline() time.Duration {
+	if s.proxyPingTimeoutOverride > 0 {
+		return s.proxyPingTimeoutOverride
+	}
+	return proxyPingTimeout
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
