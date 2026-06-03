@@ -25,7 +25,7 @@
 //   pointerdown-preventDefault on #draft-clear (and ONLY #draft-clear here —
 //   send/record are owned by InputBar; see ARCHITECTURE §6).
 
-import type { ClipboardEvent, FormEvent, KeyboardEvent, Ref } from "react";
+import type { ClipboardEvent, FocusEvent, FormEvent, KeyboardEvent, Ref } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 
 interface DraftProps {
@@ -41,6 +41,9 @@ interface DraftProps {
    *  sendDraft; empty-Enter (non-composing, non-selection) → direct mode +
    *  sendDirect({t:"key",k:"Enter"}). preventDefault handled inside the handler. */
   onDraftKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** wireInput's focus path is owned by App so mobile viewport compensation can
+   *  keep the pane pinned while the soft keyboard animates in. */
+  onDraftFocus: (e: FocusEvent<HTMLTextAreaElement>) => void;
   /** wireInput's `draft.addEventListener("paste", …)`: image → upload +
    *  placeInDraft (preventDefault); plain text falls through to the textarea. */
   onDraftPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -53,6 +56,7 @@ export default function Draft({
   draftWrapRef,
   onDraftInput,
   onDraftKeyDown,
+  onDraftFocus,
   onDraftPaste,
   onClearDraft,
 }: DraftProps) {
@@ -69,6 +73,7 @@ export default function Draft({
         disabled
         onInput={onDraftInput}
         onKeyDown={onDraftKeyDown}
+        onFocus={onDraftFocus}
         onPaste={onDraftPaste}
       />
       <button

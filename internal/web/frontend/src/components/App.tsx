@@ -645,10 +645,16 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const onDraftInput = useCallback(() => {
     const draft = draftRef.current;
     if (!draft) return;
+    const stickToBottom = contentPaneAtBottom(contentPaneElement());
     if (state.selected) state.drafts[state.selected] = draft.value;
     history.reset(); // typing leaves history-browsing mode
     syncDraft();
-  }, [state, syncDraft, history]);
+    if (stickToBottom) followPaneBottomThroughKeyboard();
+  }, [state, syncDraft, followPaneBottomThroughKeyboard, history]);
+
+  const onDraftFocus = useCallback(() => {
+    if (contentPaneAtBottom(contentPaneElement())) followPaneBottomThroughKeyboard();
+  }, [followPaneBottomThroughKeyboard]);
 
   const onDraftKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -1019,6 +1025,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
             draftWrapRef={draftWrapRef}
             onDraftInput={onDraftInput}
             onDraftKeyDown={onDraftKeyDown}
+            onDraftFocus={onDraftFocus}
             onDraftPaste={onDraftPaste}
             onClearDraft={clearDraft}
           />
