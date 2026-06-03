@@ -323,7 +323,9 @@ func TestSanitizeUploadFilename(t *testing.T) {
 		{"../notes?.txt", "notes.txt"},
 		{"  .hidden  ", "hidden"},
 		{"", "file"},
-		{"résumé 2026.pdf", "r-sum-2026.pdf"},
+		{"résumé 2026.pdf", "résumé-2026.pdf"},
+		{"報告 final.pdf", "報告-final.pdf"},
+		{"(新機種) 建立資料-Build Board.eml", "新機種-建立資料-Build-Board.eml"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {

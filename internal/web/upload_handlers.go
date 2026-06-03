@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // handlePasteImage accepts a clipboard image upload, writes it to a server-side
@@ -195,11 +197,13 @@ func sanitizeUploadFilename(name string) string {
 		name = ""
 	}
 
+	// Keep Unicode letters/digits verbatim so non-ASCII names (Chinese,
+	// accented Latin, …) survive; collapse everything else — path separators,
+	// punctuation, whitespace, control runes — to a single dash.
 	var b strings.Builder
 	lastDash := false
 	for _, r := range name {
-		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
-		if ok || r == '.' || r == '-' || r == '_' {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '.' || r == '-' || r == '_' {
 			b.WriteRune(r)
 			lastDash = false
 			continue
@@ -228,9 +232,25 @@ func sanitizeUploadFilename(name string) string {
 		maxBase = 120
 		ext = ""
 	}
-	base = strings.TrimRight(base[:maxBase], ".-_")
+	base = strings.TrimRight(truncateToBytes(base, maxBase), ".-_")
 	if base == "" {
 		return "file" + ext
 	}
 	return base + ext
+}
+
+// truncateToBytes shortens s to at most max bytes without splitting a multibyte
+// rune, so a clipped Chinese/UTF-8 filename never becomes invalid UTF-8.
+func truncateToBytes(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	s = s[:max]
+	for len(s) > 0 {
+		if r, _ := utf8.DecodeLastRuneInString(s); r != utf8.RuneError {
+			break
+		}
+		s = s[:len(s)-1]
+	}
+	return s
 }
