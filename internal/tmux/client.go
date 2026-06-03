@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -170,7 +171,13 @@ func ParsePanes(output string) ([]Pane, error) {
 // CapturePane returns the pane's text with escape sequences stripped — the
 // form classifiers and pattern matchers expect.
 func CapturePane(target string, lines int) (string, error) {
-	return capturePane(target, lines, false)
+	return capturePaneContext(context.Background(), target, lines, false)
+}
+
+// CapturePaneContext is CapturePane with cancellation support for long-lived
+// callers such as the web pane stream.
+func CapturePaneContext(ctx context.Context, target string, lines int) (string, error) {
+	return capturePaneContext(ctx, target, lines, false)
 }
 
 // CapturePaneANSI is CapturePane with tmux's -e flag (keeping colour and
@@ -178,10 +185,10 @@ func CapturePane(target string, lines int) (string, error) {
 // don't get joined onto the next line — see capturePane). Use it only where the
 // consumer renders escapes (the web UI); classifiers stay on the plain CapturePane.
 func CapturePaneANSI(target string, lines int) (string, error) {
-	return capturePane(target, lines, true)
+	return capturePaneContext(context.Background(), target, lines, true)
 }
 
-func capturePane(target string, lines int, escapes bool) (string, error) {
+func capturePaneContext(ctx context.Context, target string, lines int, escapes bool) (string, error) {
 	if lines <= 0 {
 		lines = 120
 	}
@@ -199,13 +206,16 @@ func capturePane(target string, lines int, escapes bool) (string, error) {
 		// Classifiers/pattern matchers want wrapped long lines rejoined.
 		args = append(args, "-J")
 	}
-	cmd := exec.Command("tmux", args...)
+	cmd := exec.CommandContext(ctx, "tmux", args...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	output, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", fmt.Errorf("tmux capture-pane failed: %w", ctxErr)
+		}
 		if stderr.Len() > 0 {
 			return "", fmt.Errorf("tmux capture-pane failed: %s", stderr.String())
 		}

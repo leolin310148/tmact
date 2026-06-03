@@ -37,10 +37,12 @@ var staticFS embed.FS
 
 const (
 	wsCaptureInterval = 200 * time.Millisecond
+	wsCaptureTimeout  = 2 * time.Second
 	wsCaptureLines    = 400
 	wsReadLimit       = 1 << 20
 	wsPingInterval    = 25 * time.Second
 	wsPingTimeout     = 10 * time.Second
+	wsWriteTimeout    = 5 * time.Second
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
@@ -62,6 +64,13 @@ type Server struct {
 	Store *statusd.Store
 	// CapturePane captures pane output; defaults to tmux.CapturePane.
 	CapturePane func(target string, lines int) (string, error)
+	// CapturePaneContext captures pane output with cancellation support;
+	// defaults to tmux.CapturePaneContext. CapturePane is still honored for
+	// tests and custom callers that do not need context cancellation.
+	CapturePaneContext func(ctx context.Context, target string, lines int) (string, error)
+	// PaneCaptureTimeout bounds each pane-stream capture; defaults to
+	// wsCaptureTimeout.
+	PaneCaptureTimeout time.Duration
 	// SendText inserts literal text into a pane; defaults to tmux.PasteText.
 	SendText func(target, text string, enter bool) error
 	// SendKey sends one tmux key to a pane; defaults to tmux.SendKeys.
@@ -165,6 +174,25 @@ func (s *Server) capture() func(string, int) (string, error) {
 		return s.CapturePane
 	}
 	return tmux.CapturePane
+}
+
+func (s *Server) captureContext() func(context.Context, string, int) (string, error) {
+	if s.CapturePaneContext != nil {
+		return s.CapturePaneContext
+	}
+	if s.CapturePane != nil {
+		return func(_ context.Context, target string, lines int) (string, error) {
+			return s.CapturePane(target, lines)
+		}
+	}
+	return tmux.CapturePaneContext
+}
+
+func (s *Server) paneCaptureTimeout() time.Duration {
+	if s.PaneCaptureTimeout > 0 {
+		return s.PaneCaptureTimeout
+	}
+	return wsCaptureTimeout
 }
 
 func (s *Server) sendText() func(string, string, bool) error {

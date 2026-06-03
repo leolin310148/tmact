@@ -215,6 +215,26 @@ func TestPaneWSPatchOmitsCommonPrefix(t *testing.T) {
 	}
 }
 
+func TestPaneWSCaptureTimeoutReportsError(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		PaneCaptureTimeout: 30 * time.Millisecond,
+		CapturePaneContext: func(ctx context.Context, _ string, _ int) (string, error) {
+			<-ctx.Done()
+			return "", ctx.Err()
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "error" || !strings.Contains(m.S, "context deadline exceeded") {
+		t.Fatalf("got %+v, want timeout error message", m)
+	}
+}
+
 func TestPaneWSAppliesTextInput(t *testing.T) {
 	type call struct {
 		target, text string

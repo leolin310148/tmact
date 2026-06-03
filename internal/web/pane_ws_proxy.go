@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
+	gws "github.com/gorilla/websocket"
 	"github.com/leolin310148/tmact/internal/statusd"
 )
 
@@ -32,6 +34,11 @@ const (
 	proxyPingInterval = 10 * time.Second
 	proxyPingTimeout  = 5 * time.Second
 	proxyStatInterval = 15 * time.Second
+	// A healthy /ws/pane sends a full initial patch immediately after the
+	// handshake. If a peer accepts and pongs but never sends that first frame,
+	// the remote handler is usually stuck in its initial capture. Swap the
+	// upstream instead of leaving the browser on stale content forever.
+	proxyFirstFrameTimeout = proxyPingInterval + proxyPingTimeout
 	// proxySlowWrite logs any single downstream write that blocks longer than
 	// this — i.e. the receiver (usually the browser) applying backpressure.
 	proxySlowWrite = 500 * time.Millisecond
@@ -64,6 +71,53 @@ type dirStats struct {
 	bytes         atomic.Int64
 	lastFrameNano atomic.Int64 // UnixNano of the most recent frame, 0 if none yet
 	maxWriteNano  atomic.Int64 // longest single downstream write seen
+}
+
+type upstreamConn interface {
+	Read(context.Context) (websocket.MessageType, []byte, error)
+	Write(context.Context, websocket.MessageType, []byte) error
+	Ping(context.Context) error
+	CloseNow()
+	SetReadLimit(int64)
+}
+
+type gorillaUpstream struct {
+	conn *gws.Conn
+}
+
+func (g *gorillaUpstream) Read(ctx context.Context) (websocket.MessageType, []byte, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = g.conn.SetReadDeadline(deadline)
+	} else {
+		_ = g.conn.SetReadDeadline(time.Time{})
+	}
+	typ, data, err := g.conn.ReadMessage()
+	return websocket.MessageType(typ), data, err
+}
+
+func (g *gorillaUpstream) Write(ctx context.Context, typ websocket.MessageType, data []byte) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = g.conn.SetWriteDeadline(deadline)
+	} else {
+		_ = g.conn.SetWriteDeadline(time.Time{})
+	}
+	return g.conn.WriteMessage(int(typ), data)
+}
+
+func (g *gorillaUpstream) Ping(ctx context.Context) error {
+	deadline := time.Now().Add(proxyPingTimeout)
+	if d, ok := ctx.Deadline(); ok {
+		deadline = d
+	}
+	return g.conn.WriteControl(gws.PingMessage, nil, deadline)
+}
+
+func (g *gorillaUpstream) CloseNow() {
+	_ = g.conn.Close()
+}
+
+func (g *gorillaUpstream) SetReadLimit(limit int64) {
+	g.conn.SetReadLimit(limit)
 }
 
 // quietFor reports how long it has been since the last frame in this direction.
@@ -120,15 +174,17 @@ func (s *Server) proxyPaneWS(w http.ResponseWriter, r *http.Request, peer status
 
 // dialUpstream opens a /ws/pane connection to a peer with the standard dial
 // timeout and read limit applied.
-func (s *Server) dialUpstream(ctx context.Context, upstreamURL string) (*websocket.Conn, error) {
+func (s *Server) dialUpstream(ctx context.Context, upstreamURL string) (upstreamConn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, peerDialTimeout)
 	defer cancel()
-	conn, _, err := websocket.Dial(dialCtx, upstreamURL, nil)
+	d := gws.Dialer{HandshakeTimeout: peerDialTimeout}
+	conn, _, err := d.DialContext(dialCtx, upstreamURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	conn.SetReadLimit(wsReadLimit)
-	return conn, nil
+	upstream := &gorillaUpstream{conn: conn}
+	upstream.SetReadLimit(wsReadLimit)
+	return upstream, nil
 }
 
 // runSwappableBridge shuttles frames between a persistent browser connection
@@ -138,14 +194,15 @@ func (s *Server) dialUpstream(ctx context.Context, upstreamURL string) (*websock
 // browser. It only gives up — closing the browser leg so it reconnects on its
 // own — when the browser itself dies or the peer fails to stay up (circuit
 // breaker), preserving the old worst-case behaviour.
-func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upstreamURL string, client, first *websocket.Conn, started time.Time) {
+func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upstreamURL string, client *websocket.Conn, first upstreamConn, started time.Time) {
 	defer client.CloseNow()
 
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
-	var cur atomic.Pointer[websocket.Conn] // current upstream; nil while re-dialing
-	var down, up dirStats                  // down: peer→client; up: client→peer
+	var curMu sync.RWMutex
+	var cur upstreamConn  // current upstream; nil while re-dialing
+	var down, up dirStats // down: peer→client; up: client→peer
 	var swaps atomic.Int64
 
 	// Input pump (client→peer): persists across upstream swaps. A client Read
@@ -157,7 +214,9 @@ func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upst
 				cancel()
 				return
 			}
-			u := cur.Load()
+			curMu.RLock()
+			u := cur
+			curMu.RUnlock()
 			if u == nil {
 				continue // input typed during a re-dial gap is dropped
 			}
@@ -165,7 +224,10 @@ func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upst
 			up.bytes.Add(int64(len(data)))
 			up.lastFrameNano.Store(time.Now().UnixNano())
 			wctx, wcancel := context.WithTimeout(ctx, inputWriteTimeout)
-			_ = u.Write(wctx, typ, data) // a wedged upstream is handled by the swap loop
+			if err := u.Write(wctx, typ, data); err != nil {
+				s.logf("peer ws %s pane %s client→peer write failed: %v — forcing upstream swap", peerName, pane, err)
+				u.CloseNow()
+			}
 			wcancel()
 		}
 	}()
@@ -195,13 +257,17 @@ func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upst
 	consecutiveShort := 0
 	firstClose := "browser closed"
 	for {
-		cur.Store(upstream)
+		curMu.Lock()
+		cur = upstream
+		curMu.Unlock()
 		epochStart := time.Now()
 		epochCtx, epochCancel := context.WithCancel(ctx)
 		go s.upstreamKeepalive(epochCtx, epochCancel, peerName, pane, upstream)
 
 		clientGone, perr := s.pumpDownstream(epochCtx, upstream, client, peerName, pane, &down)
-		cur.Store(nil)
+		curMu.Lock()
+		cur = nil
+		curMu.Unlock()
 		upstream.CloseNow()
 		epochCancel()
 
@@ -260,18 +326,31 @@ func (s *Server) runSwappableBridge(parent context.Context, peerName, pane, upst
 // closing) or a client Write fails. clientGone reports the latter: a broken
 // browser leg can't be repaired by swapping the upstream, so the caller ends
 // the whole bridge instead of re-dialing.
-func (s *Server) pumpDownstream(ctx context.Context, upstream, client *websocket.Conn, peerName, pane string, st *dirStats) (clientGone bool, err error) {
+func (s *Server) pumpDownstream(ctx context.Context, upstream upstreamConn, client *websocket.Conn, peerName, pane string, st *dirStats) (clientGone bool, err error) {
+	seenFrame := false
 	for {
-		typ, data, rerr := upstream.Read(ctx)
+		readCtx := ctx
+		var readCancel context.CancelFunc
+		if !seenFrame {
+			readCtx, readCancel = context.WithTimeout(ctx, proxyFirstFrameTimeout)
+		}
+		typ, data, rerr := upstream.Read(readCtx)
+		if readCancel != nil {
+			readCancel()
+		}
 		if rerr != nil {
 			return false, rerr
 		}
+		seenFrame = true
 		st.frames.Add(1)
 		st.bytes.Add(int64(len(data)))
 		st.lastFrameNano.Store(time.Now().UnixNano())
 
 		writeStart := time.Now()
-		if werr := client.Write(ctx, typ, data); werr != nil {
+		writeCtx, writeCancel := context.WithTimeout(ctx, wsWriteTimeout)
+		werr := client.Write(writeCtx, typ, data)
+		writeCancel()
+		if werr != nil {
 			return true, werr
 		}
 		wd := time.Since(writeStart)
@@ -287,7 +366,7 @@ func (s *Server) pumpDownstream(ctx context.Context, upstream, client *websocket
 // upstreamKeepalive pings one upstream epoch and cancels it on a failed ping,
 // which surfaces a wedged hub↔peer flow within proxyPingTimeout so the bridge
 // can swap onto a fresh flow. An idle pane still pongs and is never torn down.
-func (s *Server) upstreamKeepalive(ctx context.Context, cancel context.CancelFunc, peerName, pane string, upstream *websocket.Conn) {
+func (s *Server) upstreamKeepalive(ctx context.Context, cancel context.CancelFunc, peerName, pane string, upstream upstreamConn) {
 	t := time.NewTicker(s.proxyPingEvery())
 	defer t.Stop()
 	for {
@@ -295,10 +374,14 @@ func (s *Server) upstreamKeepalive(ctx context.Context, cancel context.CancelFun
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := pingConn(ctx, upstream, s.proxyPingDeadline()); err != nil {
+			pingCtx, pingCancel := context.WithTimeout(ctx, s.proxyPingDeadline())
+			err := upstream.Ping(pingCtx)
+			pingCancel()
+			if err != nil {
 				if ctx.Err() == nil {
 					s.logf("peer ws %s pane %s peer (upstream) keepalive failed: %v — swapping flow", peerName, pane, err)
 				}
+				upstream.CloseNow()
 				cancel()
 				return
 			}

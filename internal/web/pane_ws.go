@@ -103,7 +103,9 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	write := func(m outMsg) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return wsjson.Write(ctx, conn, m)
+		writeCtx, writeCancel := context.WithTimeout(ctx, wsWriteTimeout)
+		defer writeCancel()
+		return wsjson.Write(writeCtx, conn, m)
 	}
 
 	// Reader goroutine: relay browser input into the pane.
@@ -127,7 +129,9 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	last := ""
 	var lastLines []string
 	push := func() bool {
-		content, err := s.capture()(pane, wsCaptureLines)
+		captureCtx, captureCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
+		content, err := s.captureContext()(captureCtx, pane, wsCaptureLines)
+		captureCancel()
 		if err != nil {
 			_ = write(outMsg{T: "error", S: err.Error()})
 			return false
