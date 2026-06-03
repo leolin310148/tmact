@@ -215,6 +215,24 @@ func TestPaneWSPatchOmitsCommonPrefix(t *testing.T) {
 	}
 }
 
+func TestSplitPatchMessagesReconstructsLines(t *testing.T) {
+	lines := []string{"alpha", strings.Repeat("beta", 20), "gamma", "delta"}
+	chunks := splitPatchMessages(7, lines, nil, 20)
+	if len(chunks) < 2 {
+		t.Fatalf("chunks = %d, want split", len(chunks))
+	}
+	var buf []string
+	for _, chunk := range chunks {
+		if chunk.T != "patch" {
+			t.Fatalf("chunk type = %q, want patch", chunk.T)
+		}
+		buf = append(buf[:chunk.From-7], chunk.Lines...)
+	}
+	if strings.Join(buf, "\n") != strings.Join(lines, "\n") {
+		t.Fatalf("reconstructed %q, want %q", strings.Join(buf, "\n"), strings.Join(lines, "\n"))
+	}
+}
+
 func TestPaneWSCaptureTimeoutReportsError(t *testing.T) {
 	srv := httptest.NewServer((&Server{
 		PaneCaptureTimeout: 30 * time.Millisecond,

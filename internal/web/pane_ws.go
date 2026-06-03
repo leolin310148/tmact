@@ -150,12 +150,12 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 		}
 		tail := append([]string(nil), next[p:]...)
 		lastLines = next
-		return write(outMsg{
-			T:     "patch",
-			From:  p,
-			Lines: tail,
-			Q:     prompt.DetectQuestion(content),
-		}) == nil
+		for _, msg := range splitPatchMessages(p, tail, prompt.DetectQuestion(content), wsPatchChunkBytes) {
+			if write(msg) != nil {
+				return false
+			}
+		}
+		return true
 	}
 
 	if !push() {
@@ -171,6 +171,26 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func splitPatchMessages(from int, lines []string, q *prompt.Question, maxBytes int) []outMsg {
+	if maxBytes <= 0 || len(lines) == 0 {
+		return []outMsg{{T: "patch", From: from, Lines: lines, Q: q}}
+	}
+	var out []outMsg
+	start := 0
+	size := 0
+	for i, line := range lines {
+		lineSize := len(line) + 8
+		if i > start && size+lineSize > maxBytes {
+			out = append(out, outMsg{T: "patch", From: from + start, Lines: append([]string(nil), lines[start:i]...)})
+			start = i
+			size = 0
+		}
+		size += lineSize
+	}
+	out = append(out, outMsg{T: "patch", From: from + start, Lines: append([]string(nil), lines[start:]...), Q: q})
+	return out
 }
 
 // applyInput validates and relays one browser input message into the pane.

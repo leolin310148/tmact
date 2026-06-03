@@ -4,6 +4,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"embed"
@@ -43,6 +44,8 @@ const (
 	wsPingInterval    = 25 * time.Second
 	wsPingTimeout     = 10 * time.Second
 	wsWriteTimeout    = 5 * time.Second
+	wsPatchChunkBytes = 900
+	httpChunkBytes    = 900
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
@@ -478,7 +481,29 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(snap)
+	writeChunkedJSON(w, snap)
+}
+
+func writeChunkedJSON(w http.ResponseWriter, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		return
+	}
+	flusher, _ := w.(http.Flusher)
+	data := buf.Bytes()
+	for len(data) > 0 {
+		n := httpChunkBytes
+		if n <= 0 || n > len(data) {
+			n = len(data)
+		}
+		if _, err := w.Write(data[:n]); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		data = data[n:]
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
