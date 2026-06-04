@@ -14,7 +14,7 @@
 // clientHeight are all 0 — so "short pane => no scroll / long pane sticks to
 // bottom" is verifiable only in a real browser (borz E2E / docs/smoke-test.md).
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ContentPane from "./ContentPane";
 
@@ -65,6 +65,17 @@ describe("ContentPane", () => {
     expect(span).not.toBeNull();
     expect(span?.dataset.path).toBe("/abs/shot.png");
     expect(span?.dataset.cwd).toBe("/work");
+  });
+
+  it("opens image preview on Ctrl+click for Windows and Linux browsers", () => {
+    const onPreviewImage = vi.fn();
+    const { pre, rerender } = mount({ text: "", onPreviewImage });
+    rerender({ text: "/abs/shot.png", cwd: "/work", peer: "peer-a", onPreviewImage });
+    const span = pre.querySelector(".image-path") as HTMLElement;
+
+    fireEvent.click(span, { ctrlKey: true });
+
+    expect(onPreviewImage).toHaveBeenCalledWith("/abs/shot.png", "/work", "peer-a");
   });
 
   it("re-renders pane output as a table when markdown flips on", () => {

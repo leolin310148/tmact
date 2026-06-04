@@ -75,6 +75,9 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+sanitizeDownloadFilename(filepath.Base(path))+`"`)
+	}
 	if ext == "svg" {
 		// Belt-and-suspenders: an SVG rendered via <img> never executes scripts,
 		// but a user opening the URL directly would view it as a document. A
@@ -82,6 +85,19 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
 	}
 	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), file)
+}
+
+func sanitizeDownloadFilename(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
+			return '_'
+		}
+		return r
+	}, name)
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "download"
+	}
+	return name
 }
 
 func localImagePathScheme(path string) (string, bool) {

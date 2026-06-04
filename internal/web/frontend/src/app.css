@@ -620,7 +620,21 @@
     border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
     box-shadow: 0 4px 12px rgba(0,0,0,0.45);
   }
+  .image-preview-download {
+    position: absolute; top: -10px; left: -10px;
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+  }
+  .image-preview-close:hover,
+  .image-preview-download:hover {
+    color: var(--direct);
+    border-color: rgba(121,192,255,0.55);
+  }
   .image-preview-close svg { width: 13px; height: 13px; display: block; }
+  .image-preview-download svg { width: 15px; height: 15px; display: block; }
 
   /* Settings — opened from the gear in the status line. */
   .gear-btn {
@@ -917,6 +931,7 @@
     touch-action: manipulation;
   }
   .copyline-btn svg { width: 15px; height: 15px; display: block; }
+  .copyline-btn[hidden] { display: none; }
   .copyline-btn:active { filter: brightness(0.9); }
   .copyline-btn.alt {
     background: rgba(28,35,48,0.82); color: var(--fg);

@@ -28,12 +28,49 @@ import type { RefObject } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 
 const FLASH_MS = 900;
+const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
 
 function joinGlue(text: string): string {
   return text.replace(/[ \t]*\n[ \t]*/g, "");
 }
 function joinSpace(text: string): string {
   return text.replace(/[ \t]*\n[ \t]*/g, " ");
+}
+
+function unquotePath(text: string): string {
+  const t = text.trim();
+  if (!isQuotedPath(t)) return t;
+  return t.slice(1, -1).trim();
+}
+
+function isQuotedPath(t: string): boolean {
+  if (t.length < 2) return false;
+  const first = t[0];
+  const last = t[t.length - 1];
+  return (first === '"' && last === '"') || (first === "'" && last === "'") || (first === "`" && last === "`");
+}
+
+export function selectedDownloadPath(text: string): string {
+  const raw = joinGlue(text).trim();
+  const quoted = isQuotedPath(raw);
+  const path = unquotePath(raw);
+  if (!path || /[\r\n\x00]/.test(path)) return "";
+  const scheme = URL_SCHEME_RE.exec(path);
+  if (scheme && scheme[0].toLowerCase() !== "file://") return "";
+  if (path.startsWith("file://") || path.startsWith("/") || path.startsWith("./") || path.startsWith("../")) {
+    return path;
+  }
+  if (!quoted && /\s/.test(path)) return "";
+  if (path.includes("/")) return path;
+  if (/\.[A-Za-z0-9][A-Za-z0-9._-]*$/.test(path)) return path;
+  return "";
+}
+
+export function buildFileDownloadHref(path: string, cwd?: string | null, peer?: string | null): string {
+  const qs = new URLSearchParams({ path });
+  if (cwd) qs.set("cwd", cwd);
+  if (peer) qs.set("peer", peer);
+  return "/api/file?" + qs.toString();
 }
 
 // copyText writes to the clipboard, falling back to a hidden-textarea
@@ -79,10 +116,16 @@ function paneSelectionText(): string {
   return sel.toString();
 }
 
-export default function CopyLineBar() {
+export interface CopyLineBarProps {
+  cwd?: string | null;
+  peer?: string | null;
+}
+
+export default function CopyLineBar({ cwd, peer }: CopyLineBarProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
   const joinRef = useRef<HTMLButtonElement | null>(null);
   const spaceRef = useRef<HTMLButtonElement | null>(null);
+  const downloadRef = useRef<HTMLAnchorElement | null>(null);
   const copyFlashUntil = useRef(0);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,7 +135,14 @@ export default function CopyLineBar() {
   syncCopyLineBar.current = () => {
     const bar = barRef.current;
     if (!bar) return;
-    const has = paneSelectionText().trim().length > 0 || Date.now() < copyFlashUntil.current;
+    const selection = paneSelectionText();
+    const downloadPath = selectedDownloadPath(selection);
+    if (downloadRef.current) {
+      downloadRef.current.hidden = !downloadPath;
+      if (downloadPath) downloadRef.current.href = buildFileDownloadHref(downloadPath, cwd, peer);
+      else downloadRef.current.removeAttribute("href");
+    }
+    const has = selection.trim().length > 0 || Date.now() < copyFlashUntil.current;
     bar.classList.toggle("visible", has);
     bar.setAttribute("aria-hidden", has ? "false" : "true");
   };
@@ -108,7 +158,7 @@ export default function CopyLineBar() {
       document.removeEventListener("selectionchange", handler);
       if (flashTimer.current) clearTimeout(flashTimer.current);
     };
-  }, []);
+  }, [cwd, peer]);
 
   const run = (btnRef: RefObject<HTMLButtonElement | null>, transform: (t: string) => string) =>
     async (): Promise<void> => {
@@ -167,6 +217,30 @@ export default function CopyLineBar() {
       >
         接空白
       </button>
+      <a
+        className="copyline-btn alt"
+        id="copyline-download"
+        title="下載選取的檔案路徑"
+        aria-label="download selected file"
+        hidden
+        ref={downloadRef}
+        onPointerDown={onPointerDownNoBlur}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 3v12" />
+          <path d="m7 10 5 5 5-5" />
+          <path d="M5 21h14" />
+        </svg>
+        <span>下載</span>
+      </a>
     </div>
   );
 }

@@ -34,16 +34,25 @@ export function buildImageSrc(path: string, cwd: string, peer: string): string {
   return "/api/image?" + qs.toString();
 }
 
+export function buildImageDownloadHref(path: string, cwd: string, peer: string): string {
+  const qs = new URLSearchParams({ path, download: "1" });
+  if (cwd) qs.set("cwd", cwd);
+  if (peer) qs.set("peer", peer);
+  return "/api/image?" + qs.toString();
+}
+
 export interface ImagePreviewProps {
   /** The /api/image src to show, or null when the lightbox is closed. */
   src: string | null;
+  /** The /api/image download href, or null when the lightbox is closed. */
+  downloadHref?: string | null;
   /** Raw image path shown in the .image-preview-path label (parity with app.js). */
   path?: string;
   /** Invoked on backdrop click / close button / Escape — App clears `src`. */
   onClose: () => void;
 }
 
-export default function ImagePreview({ src, path, onClose }: ImagePreviewProps) {
+export default function ImagePreview({ src, downloadHref, path, onClose }: ImagePreviewProps) {
   const hidden = src == null;
 
   // Escape closes only when the overlay is open — the original registered a
@@ -85,6 +94,29 @@ export default function ImagePreview({ src, path, onClose }: ImagePreviewProps) 
             <path d="m6 6 12 12" />
           </svg>
         </button>
+        {downloadHref ? (
+          <a
+            className="image-preview-download"
+            href={downloadHref}
+            title="download"
+            aria-label="download image"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+          </a>
+        ) : null}
         {/* No src attribute when closed mirrors removeAttribute("src"). */}
         {src == null ? <img alt="preview" /> : <img alt="preview" src={src} />}
         <div className="image-preview-path">{path ?? ""}</div>

@@ -59,7 +59,7 @@ import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
 import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
-import ImagePreview, { buildImageSrc } from "./ImagePreview";
+import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePreview";
 import InputBar from "./InputBar";
 import Draft from "./Draft";
 import DirectInput from "./DirectInput";
@@ -149,6 +149,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
   // image-preview lightbox (app.js previewImagePath/close).
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [imageDownloadHref, setImageDownloadHref] = useState<string | null>(null);
   const imagePathRef = useRef<string>("");
 
   // markdown-view toggle — global + persisted (tmact.settings.markdownView),
@@ -608,9 +609,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const previewImagePath = useCallback((path: string, cwd: string, peer: string) => {
     imagePathRef.current = path;
     setImageSrc(buildImageSrc(path, cwd, peer));
+    setImageDownloadHref(buildImageDownloadHref(path, cwd, peer));
   }, []);
   const closeImagePreview = useCallback(() => {
     setImageSrc(null);
+    setImageDownloadHref(null);
   }, []);
 
   // ----- ContentPane focus handlers (mouseup refocus / blur) -----
@@ -964,7 +967,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           onFiles={onFiles}
         />
         <QuickDock quick={quick} />
-        <CopyLineBar />
+        <CopyLineBar cwd={pc.cwd} peer={pc.peer} />
       </div>
 
       <ConnStatus text={connStatusRef.current} />
@@ -1047,7 +1050,12 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
       <SettingsDialog settings={settings} quickEditor={<QuickEditor quick={quick} />} />
 
-      <ImagePreview src={imageSrc} path={imagePathRef.current} onClose={closeImagePreview} />
+      <ImagePreview
+        src={imageSrc}
+        downloadHref={imageDownloadHref}
+        path={imagePathRef.current}
+        onClose={closeImagePreview}
+      />
     </>
   );
 }

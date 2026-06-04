@@ -1,5 +1,5 @@
 // ContentPane — the React port of pre#content plus app.js's #content event
-// wiring (selection mode, image long-press, Cmd+click preview).
+// wiring (selection mode, image long-press, Cmd/Ctrl+click preview).
 //
 // IMPERATIVE HTML RULE (ARCHITECTURE.md §7): React must NEVER reconcile the
 // pane output. The rendered HTML is produced by the PURE terminal renderer and
@@ -47,7 +47,7 @@ export interface ContentPaneProps {
   selectionMode: boolean;
   /**
    * app.js `previewImagePath(path, cwd, peer)` entry point. ImagePreview owner
-   * (App) implements this; Cmd+click and long-press both route through it.
+   * (App) implements this; Cmd/Ctrl+click and long-press both route through it.
    */
   onPreviewImage: (path: string, cwd: string, peer: string) => void;
   /**
@@ -148,7 +148,7 @@ export default function ContentPane({
       return;
     }
     const target = imageTarget(e);
-    if (!target || !e.metaKey) return;
+    if (!target || !(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
     e.stopPropagation();
     openImageTarget(target);

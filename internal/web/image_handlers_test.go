@@ -57,6 +57,52 @@ func TestImageEndpointServesFileURL(t *testing.T) {
 	}
 }
 
+func TestImageEndpointCanDownloadImage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, `sample"quote.png`)
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/image?download=1&path="+url.QueryEscape(path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Disposition"); got != `attachment; filename="sample_quote.png"` {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if rec.Body.String() != png {
+		t.Fatalf("body = %q, want image bytes", rec.Body.String())
+	}
+}
+
+func TestImageEndpointPreviewDoesNotForceDownload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.png")
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(path), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Disposition"); got != "" {
+		t.Fatalf("Content-Disposition = %q, want empty", got)
+	}
+}
+
 func TestImageEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "img"), 0o755); err != nil {

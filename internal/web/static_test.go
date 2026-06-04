@@ -114,7 +114,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	for _, want := range []string{
 		"/api/snapshot", "/api/snapshot/stream", "/api/version",
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
-		"/api/paste-image", "/api/upload-file", "/api/image", "/ws/pane",
+		"/api/paste-image", "/api/upload-file", "/api/image", "/api/file", "/ws/pane",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("bundled app missing endpoint %q", want)
