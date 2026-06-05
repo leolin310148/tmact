@@ -41,7 +41,10 @@ type Config struct {
 
 	// Peers is the list of remote statusd instances whose snapshots are
 	// merged into the local one. Empty disables federation.
-	Peers        []Peer
+	Peers []Peer
+	// CostPeers is the list of remote tmact instances that only contribute
+	// token-spend from /api/agent-usage. They are not merged into snapshots.
+	CostPeers    []Peer
 	PeerInterval time.Duration
 	PeerTimeout  time.Duration
 

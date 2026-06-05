@@ -192,6 +192,37 @@ func TestAddPeerSpendSumsAcrossMachines(t *testing.T) {
 	}
 }
 
+func TestAddPeerSpendIncludesCostPeers(t *testing.T) {
+	panePeer := peerWithSpend(t, 100, 500)
+	costPeer := peerWithSpend(t, 7, 9)
+	s := &Server{
+		Peers:     []statusd.Peer{{Name: "peer-a", URL: panePeer.URL}},
+		CostPeers: []statusd.Peer{{Name: "z13", URL: costPeer.URL}},
+	}
+	out := localSpend(10, 50)
+	s.addPeerSpend(context.Background(), out)
+
+	got := out["claude"]
+	if got.WeekUSD != 117 || got.MonthUSD != 559 {
+		t.Fatalf("claude spend = %+v, want week 117 month 559", got)
+	}
+}
+
+func TestAddPeerSpendDedupesCostPeerByName(t *testing.T) {
+	peer := peerWithSpend(t, 100, 500)
+	s := &Server{
+		Peers:     []statusd.Peer{{Name: "peer-a", URL: peer.URL}},
+		CostPeers: []statusd.Peer{{Name: "peer-a", URL: peer.URL}},
+	}
+	out := localSpend(10, 50)
+	s.addPeerSpend(context.Background(), out)
+
+	got := out["claude"]
+	if got.WeekUSD != 110 || got.MonthUSD != 550 {
+		t.Fatalf("claude spend = %+v, want single peer contribution", got)
+	}
+}
+
 func TestAddPeerSpendFallsBackToCachedWhenPeerDown(t *testing.T) {
 	peer := peerWithSpend(t, 100, 500)
 	s := &Server{Peers: []statusd.Peer{{Name: "peer-a", URL: peer.URL}}}

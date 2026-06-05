@@ -493,7 +493,7 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	switch {
 	case containsAny(text, "openai codex", "codex app"):
 		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
-	case containsAny(text, "claude code", "bypass permissions on", "without interrupting claude"):
+	case containsAny(text, "claude code", "bypass permissions on", "without interrupting claude") || looksLikeClaudeRunningChrome(text):
 		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	case containsAny(text, "gemini"):
 		return RuntimeDetection{Runtime: RuntimeGemini, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
@@ -505,6 +505,10 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceLow, Signals: []string{"shell_prompt"}}
 	}
 	return RuntimeDetection{Runtime: RuntimeUnknown, Confidence: ConfidenceLow}
+}
+
+func looksLikeClaudeRunningChrome(text string) bool {
+	return strings.Contains(text, "auto mode on (shift+tab to cycle)") && strings.Contains(text, "for agents")
 }
 
 func targetName(pane tmux.Pane) string {

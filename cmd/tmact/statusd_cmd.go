@@ -171,6 +171,7 @@ func runStatusdStart(args []string) error {
 		CapturePane:   tmux.CapturePaneANSI,
 		BuildTime:     buildVersionInfo().Time,
 		Peers:         cfg.Peers,
+		CostPeers:     cfg.CostPeers,
 		UsageEnabled:  usageEnabled,
 		SpendEnabled:  spendEnabled,
 		UsageInterval: cfg.UsageInterval,
@@ -225,6 +226,14 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 				continue
 			}
 			cfg.Peers = append(cfg.Peers, statusd.Peer{Name: p.Name, URL: p.URL})
+		}
+	}
+	if len(cfg.CostPeers) == 0 && len(file.CostPeers) > 0 {
+		for _, p := range file.CostPeers {
+			if p.Name == "" || p.URL == "" {
+				continue
+			}
+			cfg.CostPeers = append(cfg.CostPeers, statusd.Peer{Name: p.Name, URL: p.URL})
 		}
 	}
 	if cfg.PeerInterval == 0 {
@@ -401,6 +410,38 @@ func validateStatusdConfig(cfg statusd.Config) error {
 	}
 	if cfg.StaleAfter <= 0 {
 		return errors.New("--stale-after must be positive")
+	}
+	if err := validatePeerNames(cfg.Peers, cfg.CostPeers); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePeerNames(peers, costPeers []statusd.Peer) error {
+	seen := map[string]string{}
+	for _, p := range peers {
+		if p.Name == "" {
+			return errors.New("peer name cannot be empty")
+		}
+		if p.URL == "" {
+			return fmt.Errorf("peer %q URL cannot be empty", p.Name)
+		}
+		if prev, ok := seen[p.Name]; ok && prev != p.URL {
+			return fmt.Errorf("peer %q has conflicting URLs %q and %q", p.Name, prev, p.URL)
+		}
+		seen[p.Name] = p.URL
+	}
+	for _, p := range costPeers {
+		if p.Name == "" {
+			return errors.New("cost peer name cannot be empty")
+		}
+		if p.URL == "" {
+			return fmt.Errorf("cost peer %q URL cannot be empty", p.Name)
+		}
+		if prev, ok := seen[p.Name]; ok && prev != p.URL {
+			return fmt.Errorf("peer %q has conflicting pane/cost URLs %q and %q", p.Name, prev, p.URL)
+		}
+		seen[p.Name] = p.URL
 	}
 	return nil
 }

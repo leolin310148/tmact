@@ -229,13 +229,14 @@ func (c *peerSpendCache) load(peer string) (map[string]agentusage.SpendWindow, b
 // last-known spend (or nothing if never seen). Best-effort: peer errors never
 // fail the computation.
 func (s *Server) addPeerSpend(ctx context.Context, out map[string]agentusage.SpendWindow) {
-	if len(s.Peers) == 0 {
+	peers := s.spendPeers()
+	if len(peers) == 0 {
 		return
 	}
 
 	var wg sync.WaitGroup
-	results := make([]map[string]agentusage.SpendWindow, len(s.Peers))
-	for i, p := range s.Peers {
+	results := make([]map[string]agentusage.SpendWindow, len(peers))
+	for i, p := range peers {
 		wg.Add(1)
 		go func(i int, p statusd.Peer) {
 			defer wg.Done()
@@ -261,6 +262,25 @@ func (s *Server) addPeerSpend(ctx context.Context, out map[string]agentusage.Spe
 			out[prov] = cur
 		}
 	}
+}
+
+func (s *Server) spendPeers() []statusd.Peer {
+	if len(s.Peers) == 0 {
+		return append([]statusd.Peer(nil), s.CostPeers...)
+	}
+	out := append([]statusd.Peer(nil), s.Peers...)
+	seen := make(map[string]struct{}, len(out)+len(s.CostPeers))
+	for _, p := range out {
+		seen[p.Name] = struct{}{}
+	}
+	for _, p := range s.CostPeers {
+		if _, ok := seen[p.Name]; ok {
+			continue
+		}
+		seen[p.Name] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }
 
 // fetchPeerSpend GETs a peer's /api/agent-usage and returns its per-provider

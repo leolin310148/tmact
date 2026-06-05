@@ -5,17 +5,24 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentspend"
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/statusd"
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 func runUsage(args []string) error {
+	if len(args) > 0 && args[0] == "serve" {
+		return runUsageServe(args[1:])
+	}
 	if wantsHelp(args) {
 		fmt.Printf(`Usage:
   tmact usage [--json] [--provider NAME]
+  tmact usage serve [--cost-only] [--web-addr ADDR]
 
 Fetch quota / rate-limit usage for the AI coding agents tmact drives, reading
 each agent's local OAuth credentials and querying the provider's usage endpoint.
@@ -56,6 +63,68 @@ Flags:
 	}
 	printUsageTable(snapshot)
 	return nil
+}
+
+func runUsageServe(args []string) error {
+	if wantsHelp(args) {
+		fmt.Printf(`Usage:
+  tmact usage serve [--cost-only] [--web-addr ADDR]
+
+Serve /api/agent-usage without starting statusd or touching tmux. This is useful
+on machines that should contribute Claude/Codex token spend but do not have tmux,
+such as Windows hosts.
+
+Flags:
+  --web-addr ADDR       TCP address to listen on. Default: %s.
+  --cost-only           Disable quota fetches and serve token-spend only.
+  --agent-usage         Enable quota/rate-limit fetches. Default: true unless --cost-only.
+  --agent-cost          Enable token-spend computation. Default: true.
+  --usage-interval D    Quota refresh interval. Default: web server default.
+  --spend-interval D    Token-spend refresh interval. Default: web server default.
+`, statusd.DefaultWebAddr)
+		return nil
+	}
+
+	fs := flag.NewFlagSet("usage serve", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	webAddr := fs.String("web-addr", statusd.DefaultWebAddr, "serve /api/agent-usage on this address")
+	costOnly := fs.Bool("cost-only", false, "serve token-spend only; do not fetch quota/rate-limit usage")
+	agentUsage := fs.Bool("agent-usage", true, "fetch quota/rate-limit usage")
+	agentCost := fs.Bool("agent-cost", true, "compute token-spend cost")
+	usageInterval := fs.Duration("usage-interval", 0, "quota/rate-limit refresh interval")
+	spendInterval := fs.Duration("spend-interval", 0, "token-spend refresh interval")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+
+	usageEnabled := *agentUsage
+	spendEnabled := *agentCost
+	if *costOnly {
+		usageEnabled = false
+		spendEnabled = true
+	}
+	if !usageEnabled && !spendEnabled {
+		return fmt.Errorf("at least one of --agent-usage or --agent-cost must be enabled")
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	server := &web.Server{
+		Addr:          *webAddr,
+		BuildTime:     buildVersionInfo().Time,
+		UsageEnabled:  usageEnabled,
+		SpendEnabled:  spendEnabled,
+		UsageInterval: *usageInterval,
+		SpendInterval: *spendInterval,
+	}
+	fmt.Fprintf(os.Stderr, "usage server listening on %s\n", *webAddr)
+	if *costOnly {
+		fmt.Fprintln(os.Stderr, "usage server mode: cost-only")
+	}
+	return server.Serve(ctx)
 }
 
 func printUsageTable(snapshot agentusage.Snapshot) {

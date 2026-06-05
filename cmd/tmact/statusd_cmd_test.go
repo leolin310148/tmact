@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 )
 
@@ -34,5 +35,15 @@ func TestSTTSetWritesProviderConfig(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Fatalf("mode = %o, want 600", got)
+	}
+}
+
+func TestValidatePeerNamesRejectsConflictingCostPeer(t *testing.T) {
+	err := validatePeerNames(
+		[]statusd.Peer{{Name: "z13", URL: "http://z13:7890"}},
+		[]statusd.Peer{{Name: "z13", URL: "http://other:7890"}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "conflicting") {
+		t.Fatalf("err = %v, want conflicting URL error", err)
 	}
 }

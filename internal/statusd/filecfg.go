@@ -28,6 +28,7 @@ type FileConfig struct {
 	PaneCols     *int             `json:"pane_cols,omitempty"`
 	PaneRows     *int             `json:"pane_rows,omitempty"`
 	Peers        []PeerFileConfig `json:"peers,omitempty"`
+	CostPeers    []PeerFileConfig `json:"cost_peers,omitempty"`
 	PeerInterval string           `json:"peer_interval,omitempty"`
 	PeerTimeout  string           `json:"peer_timeout,omitempty"`
 	// AgentUsage enables the web UI's agent quota / rate-limit usage panel,

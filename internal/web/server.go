@@ -43,7 +43,8 @@ const (
 	wsPingInterval     = 25 * time.Second
 	wsPingTimeout      = 10 * time.Second
 	wsWriteTimeout     = 5 * time.Second
-	peerRequestTimeout = 2 * time.Second
+	peerRequestTimeout = 10 * time.Second
+	peerSlowRequest    = 1 * time.Second
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
@@ -104,6 +105,9 @@ type Server struct {
 	// access. Pane ids with a "<name>@" prefix matching a peer name are bridged
 	// with short HTTP diff/input requests instead of acted on locally.
 	Peers []statusd.Peer
+	// CostPeers is the set of remote tmact instances that only contribute
+	// token-spend from /api/agent-usage. They are not pane peers.
+	CostPeers []statusd.Peer
 	// UsageEnabled turns on the quota / rate-limit refresher (reads agent OAuth
 	// credentials read-only and hits provider usage endpoints on a slow
 	// ticker). The /api/agent-usage endpoint is served whenever UsageEnabled OR
@@ -266,6 +270,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
 	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
+	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/version", s.handleVersion)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
@@ -352,6 +357,47 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		BuildTime string `json:"build_time"`
 		AssetHash string `json:"asset_hash"`
 	}{BuildTime: s.BuildTime, AssetHash: staticAssetHash()})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.Store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"ok":                 false,
+			"snapshot_available": false,
+			"error":              "snapshot store not configured",
+		})
+		return
+	}
+	snap, ok := s.Store.Latest()
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"ok":                 false,
+			"snapshot_available": false,
+			"error":              "snapshot not yet available",
+		})
+		return
+	}
+
+	now := time.Now()
+	age := now.Sub(snap.Timestamp)
+	if snap.Timestamp.IsZero() {
+		age = 0
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":                 !snap.IsStale(now),
+		"snapshot_available": true,
+		"snapshot_ts":        snap.Timestamp,
+		"snapshot_age_ms":    age.Milliseconds(),
+		"interval_ms":        snap.IntervalMS,
+		"stale_after_ms":     snap.StaleAfterMS,
+		"summary":            snap.Summary,
+		"error_count":        len(snap.Errors),
+	})
 }
 
 // Serve runs the HTTP server until ctx is cancelled, then shuts down

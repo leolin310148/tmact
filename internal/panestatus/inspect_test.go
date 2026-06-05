@@ -51,6 +51,7 @@ func TestClassifyRuntimeDetectsClaudeFromRunningChrome(t *testing.T) {
 	}{
 		{name: "bypass banner", raw: "✻ Crunched for 16s\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt"},
 		{name: "btw tip", raw: "  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work"},
+		{name: "auto mode footer", raw: "d2r-control | Opus 4.8 (1M context) | high | ctx:13% | master\n  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

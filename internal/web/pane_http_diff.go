@@ -52,12 +52,18 @@ func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	started := time.Now()
 	captureCtx, cancel := context.WithTimeout(r.Context(), s.paneCaptureTimeout())
 	content, err := s.captureContext()(captureCtx, pane, wsCaptureLines)
 	cancel()
+	elapsed := time.Since(started)
 	if err != nil {
+		s.logf("pane diff capture error pane=%s duration=%s err=%v", pane, elapsed.Round(time.Millisecond), err)
 		writeJSONError(w, http.StatusBadGateway, err.Error())
 		return
+	}
+	if elapsed >= peerSlowRequest {
+		s.logf("pane diff capture slow pane=%s duration=%s", pane, elapsed.Round(time.Millisecond))
 	}
 
 	cursor := paneDiffCursor(content)
@@ -94,6 +100,7 @@ func (s *Server) handlePaneInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.applyInput(pane, m); err != nil {
+		s.logf("pane input apply error pane=%s type=%s err=%v", pane, m.T, err)
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -140,6 +147,9 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 	if err != nil {
 		return
 	}
+	started := time.Now()
+	s.logf("peer pane stream open peer=%s pane=%s", peer.Name, pane)
+	defer s.logf("peer pane stream closed peer=%s pane=%s duration=%s", peer.Name, pane, time.Since(started).Round(time.Millisecond))
 	defer conn.CloseNow()
 	conn.SetReadLimit(wsReadLimit)
 
@@ -167,6 +177,7 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 				err := conn.Ping(pingCtx)
 				pingCancel()
 				if err != nil {
+					s.logf("peer pane stream ping failed peer=%s pane=%s err=%v", peer.Name, pane, err)
 					cancel()
 					return
 				}
@@ -180,6 +191,7 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 		for {
 			var m inputMsg
 			if err := wsjson.Read(ctx, conn, &m); err != nil {
+				s.logf("peer pane stream browser read ended peer=%s pane=%s err=%v", peer.Name, pane, err)
 				return
 			}
 			if err := s.postPeerPaneInput(ctx, peer, pane, m); err != nil {
@@ -277,17 +289,26 @@ func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, c
 	if err != nil {
 		return paneDiffMsg{}, false, err
 	}
+	started := time.Now()
 	resp, err := s.httpClient().Do(req)
+	elapsed := time.Since(started)
 	if err != nil {
+		if ctx.Err() == nil {
+			s.logf("peer diff error peer=%s pane=%s duration=%s err=%v", peer.Name, pane, elapsed.Round(time.Millisecond), err)
+		}
 		return paneDiffMsg{}, false, fmt.Errorf("peer %s diff request failed: %v", peer.Name, err)
 	}
 	defer resp.Body.Close()
+	if elapsed >= peerSlowRequest {
+		s.logf("peer diff slow peer=%s pane=%s status=%d duration=%s", peer.Name, pane, resp.StatusCode, elapsed.Round(time.Millisecond))
+	}
 	switch resp.StatusCode {
 	case http.StatusNoContent:
 		return paneDiffMsg{}, false, nil
 	case http.StatusOK:
 		var patch paneDiffMsg
 		if err := json.NewDecoder(resp.Body).Decode(&patch); err != nil {
+			s.logf("peer diff decode error peer=%s pane=%s status=%d duration=%s err=%v", peer.Name, pane, resp.StatusCode, elapsed.Round(time.Millisecond), err)
 			return paneDiffMsg{}, false, fmt.Errorf("peer %s diff response invalid: %v", peer.Name, err)
 		}
 		if patch.T == "" {
@@ -295,8 +316,10 @@ func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, c
 		}
 		return patch, true, nil
 	case http.StatusNotFound:
+		s.logf("peer diff unsupported peer=%s pane=%s status=%d duration=%s", peer.Name, pane, resp.StatusCode, elapsed.Round(time.Millisecond))
 		return paneDiffMsg{}, false, fmt.Errorf("peer %s does not support /api/pane/diff; please update the peer tmact", peer.Name)
 	default:
+		s.logf("peer diff bad status peer=%s pane=%s status=%d duration=%s", peer.Name, pane, resp.StatusCode, elapsed.Round(time.Millisecond))
 		return paneDiffMsg{}, false, fmt.Errorf("peer %s diff returned HTTP %d", peer.Name, resp.StatusCode)
 	}
 }
@@ -317,12 +340,21 @@ func (s *Server) postPeerPaneInput(ctx context.Context, peer statusd.Peer, pane 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	started := time.Now()
 	resp, err := s.httpClient().Do(req)
+	elapsed := time.Since(started)
 	if err != nil {
+		if ctx.Err() == nil {
+			s.logf("peer input error peer=%s pane=%s type=%s duration=%s err=%v", peer.Name, pane, m.T, elapsed.Round(time.Millisecond), err)
+		}
 		return fmt.Errorf("peer %s input request failed: %v", peer.Name, err)
 	}
 	defer resp.Body.Close()
+	if elapsed >= peerSlowRequest {
+		s.logf("peer input slow peer=%s pane=%s type=%s status=%d duration=%s", peer.Name, pane, m.T, resp.StatusCode, elapsed.Round(time.Millisecond))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		s.logf("peer input bad status peer=%s pane=%s type=%s status=%d duration=%s", peer.Name, pane, m.T, resp.StatusCode, elapsed.Round(time.Millisecond))
 		if resp.StatusCode == http.StatusNotFound {
 			return fmt.Errorf("peer %s does not support /api/pane/input; please update the peer tmact", peer.Name)
 		}
