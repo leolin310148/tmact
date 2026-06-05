@@ -108,6 +108,29 @@ func TestLoadFileConfig_CostPeers(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfig_DispatchPeers(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	body := `{
+  "dispatch_peers": [
+    { "name": "hub", "url": "http://hub:7890" }
+  ]
+}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig: %v", err)
+	}
+	if len(cfg.DispatchPeers) != 1 {
+		t.Fatalf("DispatchPeers = %d, want 1", len(cfg.DispatchPeers))
+	}
+	if got := cfg.DispatchPeers[0]; got.Name != "hub" || got.URL != "http://hub:7890" {
+		t.Fatalf("DispatchPeers[0] = %+v", got)
+	}
+}
+
 func TestLoadFileConfig_UsageAndSpendIntervals(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "statusd.json")

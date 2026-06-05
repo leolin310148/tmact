@@ -20,17 +20,20 @@ const (
 // fields let us tell "absent" from "explicit zero" so CLI flags can override
 // only the keys the user actually set.
 type FileConfig struct {
-	WebAddr      string           `json:"web_addr,omitempty"`
-	Interval     string           `json:"interval,omitempty"`
-	SocketPath   string           `json:"socket_path,omitempty"`
-	LogPath      string           `json:"log_path,omitempty"`
-	TmuxOptions  *bool            `json:"tmux_options,omitempty"`
-	PaneCols     *int             `json:"pane_cols,omitempty"`
-	PaneRows     *int             `json:"pane_rows,omitempty"`
-	Peers        []PeerFileConfig `json:"peers,omitempty"`
-	CostPeers    []PeerFileConfig `json:"cost_peers,omitempty"`
-	PeerInterval string           `json:"peer_interval,omitempty"`
-	PeerTimeout  string           `json:"peer_timeout,omitempty"`
+	WebAddr     string           `json:"web_addr,omitempty"`
+	Interval    string           `json:"interval,omitempty"`
+	SocketPath  string           `json:"socket_path,omitempty"`
+	LogPath     string           `json:"log_path,omitempty"`
+	TmuxOptions *bool            `json:"tmux_options,omitempty"`
+	PaneCols    *int             `json:"pane_cols,omitempty"`
+	PaneRows    *int             `json:"pane_rows,omitempty"`
+	Peers       []PeerFileConfig `json:"peers,omitempty"`
+	CostPeers   []PeerFileConfig `json:"cost_peers,omitempty"`
+	// DispatchPeers are remote statusd instances that dispatch-work --peer can
+	// call without also merging their snapshots into this daemon.
+	DispatchPeers []PeerFileConfig `json:"dispatch_peers,omitempty"`
+	PeerInterval  string           `json:"peer_interval,omitempty"`
+	PeerTimeout   string           `json:"peer_timeout,omitempty"`
 	// AgentUsage enables the web UI's agent quota / rate-limit usage panel,
 	// which reads each agent's local OAuth credentials read-only and polls the
 	// provider usage endpoints on a slow ticker. Defaults to true when absent.

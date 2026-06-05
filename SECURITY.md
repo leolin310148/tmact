@@ -9,6 +9,9 @@ network service.
 - Run it on machines and networks you trust.
 - Keep the statusd web UI bound to `127.0.0.1:7890` unless you intentionally
   need LAN access.
+- Treat remote dispatch as live remote control: `dispatch-work --peer` asks the
+  peer statusd to create/reuse tmux sessions and send keys on that machine.
+  Only expose statusd TCP binds on trusted networks.
 - Use explicit tmux targets and dry-runs before `--execute`.
 - Keep watcher allowlists narrow.
 

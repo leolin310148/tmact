@@ -43,6 +43,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
 				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--execute] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
@@ -50,12 +51,15 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
+				{Name: "--peer", Value: "NAME", Description: "dispatch through the named statusd dispatch_peer from config"},
+				{Name: "--config", Value: "PATH", Description: "statusd config file containing dispatch_peers"},
 				{Name: "--execute", Description: "actually create, launch, and send; default is dry-run"},
 				{Name: "--json", Description: "print JSON output"},
 			},
 			Examples: []string{
 				`tmact dispatch-work work --dir . --agent claude --prompt "review the diff"`,
 				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --execute`,
+				`tmact dispatch-work work --peer peer-a --dir /repo --agent codex --prompt "run the tests" --execute`,
 			},
 			Safety: []string{
 				"Without --execute this prints the plan and does not touch tmux.",
@@ -66,6 +70,8 @@ func paneCommandHelpCatalog() []commandHelp {
 				"The session name is the first positional argument.",
 				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",
+				"With --peer, --dir is validated on the peer machine, not the host.",
+				"--peer reads dispatch_peers first, then falls back to peers for compatibility.",
 			},
 		},
 		{

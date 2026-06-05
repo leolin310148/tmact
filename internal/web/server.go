@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/dispatch"
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -128,6 +129,8 @@ type Server struct {
 	// FetchUsage fetches agent usage; defaults to agentusage.Fetch (all
 	// providers). Overridable in tests.
 	FetchUsage func(ctx context.Context) agentusage.Snapshot
+	// DispatchRun handles /api/dispatch-work; defaults to dispatch.Run.
+	DispatchRun func(dispatch.Options) (dispatch.Report, error)
 
 	// usage caches the latest quota snapshot the usage refresher produces.
 	usage usageCache
@@ -254,6 +257,13 @@ func (s *Server) logf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "statusd web: "+format+"\n", args...)
 }
 
+func (s *Server) dispatchRun() func(dispatch.Options) (dispatch.Report, error) {
+	if s.DispatchRun != nil {
+		return s.DispatchRun
+	}
+	return dispatch.Run
+}
+
 // Handler builds the HTTP routes without binding a socket; useful for tests.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -278,6 +288,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
 	mux.HandleFunc("/api/image", s.handleImage)
 	mux.HandleFunc("/api/file", s.handleFile)
+	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)

@@ -82,6 +82,44 @@ image previews through that peer's statusd. If a peer goes unreachable, its
 last successful snapshot stays visible as stale while the fetch error is
 reported in `/api/snapshot`.
 
+Remote dispatch is configured separately from snapshot federation. Use
+`dispatch_peers` when a machine should be able to call another machine's
+statusd without also pulling that machine's snapshot:
+
+```sh
+tmact dispatch-work work --peer peer-a --dir /repo --agent codex --prompt "run the tests" --execute
+```
+
+```json
+{
+  "dispatch_peers": [
+    { "name": "peer-a", "url": "http://peer-a.example:7890" }
+  ]
+}
+```
+
+For example, a peer that should dispatch back to the hub without pulling hub
+panes can configure:
+
+```json
+{
+  "dispatch_peers": [
+    { "name": "hub", "url": "http://hub.example:7890" }
+  ]
+}
+```
+
+Then run:
+
+```sh
+tmact dispatch-work work --peer hub --dir /repo --agent codex --prompt "run the tests" --execute
+```
+
+The caller reads `dispatch_peers` from `~/.tmact/statusd.json`; the target
+machine validates `--dir` on its own filesystem and creates or reuses the tmux
+session locally. For compatibility, `dispatch-work --peer` also falls back to
+`peers` when no matching `dispatch_peers` entry exists.
+
 ## Safety
 
 Most commands preview actions first and require `--execute` before pressing

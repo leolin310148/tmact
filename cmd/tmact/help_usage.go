@@ -37,7 +37,7 @@ Usage:
   tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
   tmact workflow stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
+  tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
   tmact version [--json]

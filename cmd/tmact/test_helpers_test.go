@@ -36,6 +36,8 @@ func stubCLIHooks(t *testing.T) func() {
 	oldPasteTmuxText := pasteTmuxText
 	oldSendTmuxKeys := sendTmuxKeys
 	oldTmactNow := tmactNow
+	oldDispatchRun := dispatchRun
+	oldDispatchRemoteRun := dispatchRemoteRun
 
 	return func() {
 		listAllTmuxPanes = oldListAllTmuxPanes
@@ -43,5 +45,7 @@ func stubCLIHooks(t *testing.T) func() {
 		pasteTmuxText = oldPasteTmuxText
 		sendTmuxKeys = oldSendTmuxKeys
 		tmactNow = oldTmactNow
+		dispatchRun = oldDispatchRun
+		dispatchRemoteRun = oldDispatchRemoteRun
 	}
 }

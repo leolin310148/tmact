@@ -14,6 +14,9 @@ func printDispatchReport(report dispatch.Report) {
 		prefix = "dry-run: "
 	}
 	fmt.Printf("%sdispatch-work %s [agent=%s dir=%s]\n", prefix, report.Session, report.Agent, report.Dir)
+	if report.Peer != "" {
+		fmt.Printf("  peer: %s\n", report.Peer)
+	}
 	if report.Target != "" {
 		fmt.Printf("  target: %s\n", report.Target)
 	}

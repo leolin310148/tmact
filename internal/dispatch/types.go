@@ -67,6 +67,7 @@ type Step struct {
 
 // Report is the outcome of a dispatch-work run.
 type Report struct {
+	Peer            string `json:"peer,omitempty"`
 	Session         string `json:"session"`
 	Target          string `json:"target,omitempty"`
 	Dir             string `json:"dir"`
