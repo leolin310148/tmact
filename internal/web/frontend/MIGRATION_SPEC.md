@@ -167,7 +167,7 @@ Query `path` (required, trimmed), `cwd` (required+absolute if `path` is relative
 
 ### 2.12 `GET (WebSocket) /ws/pane?pane=<id|peer@id>`
 
-`pane` required, must match `^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`. Invalid → HTTP 400 `{"error":"invalid 'pane' parameter, expected a tmux pane id like %12 or peer@%12"}`. `peer@`-prefixed ids look up `Peers`; unknown peer → 404 `{"error":"unknown peer '<name>'"}`; peer dial failure → 502; otherwise transparently proxies frames to the peer's `/ws/pane`.
+`pane` required, must match `^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`. Invalid → HTTP 400 `{"error":"invalid 'pane' parameter, expected a tmux pane id like %12 or peer@%12"}`. `peer@`-prefixed ids look up `Peers`; unknown peer → 404 `{"error":"unknown peer '<name>'"}`. Federated panes keep the browser connected to the local hub WebSocket; the hub pulls peer output with short `/api/pane/diff` requests and forwards browser input with short `/api/pane/input` requests. Old peers without those HTTP endpoints surface an update-peer error in the pane stream; there is no peer WebSocket fallback.
 
 Client → server (`inputMsg`):
 ```ts
@@ -186,6 +186,19 @@ type OutMsg =
   | { t: "patch"; from: number; lines: string[]; q?: Question | null }
   | { t: "error"; s: string };
 ```
+
+### 2.13 `GET /api/pane/diff?pane=<id>&cursor=<opaque>`
+
+Peer-only pane stream endpoint. `pane` must be a local tmux pane id (`%12`), not a federated id. Captures the latest 400 lines. First request, missing/stale cursor, or cache mismatch returns a full seed patch (`from: 0`). Matching cursor with changed capture returns only the divergent tail. Matching cursor with unchanged capture returns `204 No Content`.
+
+```ts
+type PaneDiff =
+  { t: "patch"; from: number; lines: string[]; q?: Question | null; cursor: string };
+```
+
+### 2.14 `POST /api/pane/input?pane=<id>`
+
+Peer-only input endpoint. `pane` must be a local tmux pane id (`%12`). Body is the same `InputMsg` used by `/ws/pane`; server-side key allowlist and `applyInput` behavior are identical.
 - Capture cadence 200 ms; buffer 400 lines (`wsCaptureLines`).
 - **Initial patch on connect: `from = 0` with the full lines array** (even when empty → `from:0, lines:[]`). Client replaces entire buffer.
 - Subsequent patches: longest-common-prefix line diff — `from = prefixCount`, `lines` = diverging tail only (string equality per line, NOT ANSI-aware). Empty `lines` with `from = previous length` = "no append".

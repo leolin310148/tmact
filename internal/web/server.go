@@ -36,13 +36,14 @@ import (
 var staticFS embed.FS
 
 const (
-	wsCaptureInterval = 200 * time.Millisecond
-	wsCaptureTimeout  = 2 * time.Second
-	wsCaptureLines    = 400
-	wsReadLimit       = 1 << 20
-	wsPingInterval    = 25 * time.Second
-	wsPingTimeout     = 10 * time.Second
-	wsWriteTimeout    = 5 * time.Second
+	wsCaptureInterval  = 200 * time.Millisecond
+	wsCaptureTimeout   = 2 * time.Second
+	wsCaptureLines     = 400
+	wsReadLimit        = 1 << 20
+	wsPingInterval     = 25 * time.Second
+	wsPingTimeout      = 10 * time.Second
+	wsWriteTimeout     = 5 * time.Second
+	peerRequestTimeout = 2 * time.Second
 
 	maxAudioUploadBytes = 25 << 20
 	maxImageUploadBytes = 25 << 20
@@ -99,9 +100,9 @@ type Server struct {
 	Logf func(format string, args ...any)
 	// BuildTime is the VCS timestamp shown in the settings panel.
 	BuildTime string
-	// Peers is the set of remote statusd instances reachable for /ws/pane
-	// proxying. Pane ids with a "<name>@" prefix matching a peer name are
-	// bridged to that peer's WebSocket instead of acted on locally.
+	// Peers is the set of remote statusd instances reachable for federated pane
+	// access. Pane ids with a "<name>@" prefix matching a peer name are bridged
+	// with short HTTP diff/input requests instead of acted on locally.
 	Peers []statusd.Peer
 	// UsageEnabled turns on the quota / rate-limit refresher (reads agent OAuth
 	// credentials read-only and hits provider usage endpoints on a slow
@@ -136,27 +137,8 @@ type Server struct {
 	// jump. Keyed by peer name.
 	peerSpend peerSpendCache
 
-	// proxyPingIntervalOverride / proxyPingTimeoutOverride let tests drive the
-	// peer-bridge keepalive cadence fast and deterministically. Zero means use
-	// the package defaults (proxyPingInterval / proxyPingTimeout).
-	proxyPingIntervalOverride time.Duration
-	proxyPingTimeoutOverride  time.Duration
-}
-
-// proxyPingEvery / proxyPingDeadline return the peer-bridge keepalive cadence,
-// honoring a test override when set.
-func (s *Server) proxyPingEvery() time.Duration {
-	if s.proxyPingIntervalOverride > 0 {
-		return s.proxyPingIntervalOverride
-	}
-	return proxyPingInterval
-}
-
-func (s *Server) proxyPingDeadline() time.Duration {
-	if s.proxyPingTimeoutOverride > 0 {
-		return s.proxyPingTimeoutOverride
-	}
-	return proxyPingTimeout
+	// paneDiff caches the latest local capture per pane for /api/pane/diff.
+	paneDiff paneDiffCache
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -291,6 +273,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
 	mux.HandleFunc("/api/image", s.handleImage)
 	mux.HandleFunc("/api/file", s.handleFile)
+	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
+	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }

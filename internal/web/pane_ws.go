@@ -63,7 +63,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("unknown peer %q", peerName))
 			return
 		}
-		s.proxyPaneWS(w, r, peer, localPane)
+		s.handleRemotePaneWS(w, r, peer, localPane)
 		return
 	}
 

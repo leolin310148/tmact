@@ -2,11 +2,10 @@ package web
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,34 +13,6 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/leolin310148/tmact/internal/statusd"
 )
-
-func TestPeerWSURLConvertsScheme(t *testing.T) {
-	cases := []struct {
-		base, pane, want string
-	}{
-		{"http://host:7890", "%0", "ws://host:7890/ws/pane?pane=%250"},
-		{"https://host", "%12", "wss://host/ws/pane?pane=%2512"},
-		{"ws://host:1234/", "%3", "ws://host:1234/ws/pane?pane=%253"},
-		{"wss://host", "%4", "wss://host/ws/pane?pane=%254"},
-	}
-	for _, c := range cases {
-		got, err := peerWSURL(c.base, c.pane)
-		if err != nil {
-			t.Fatalf("peerWSURL(%q, %q) error: %v", c.base, c.pane, err)
-		}
-		if got != c.want {
-			t.Fatalf("peerWSURL(%q, %q) = %q, want %q", c.base, c.pane, got, c.want)
-		}
-	}
-}
-
-func TestPeerWSURLRejectsBadScheme(t *testing.T) {
-	for _, base := range []string{"file:///etc/passwd", "ftp://host", "host:7890"} {
-		if _, err := peerWSURL(base, "%0"); err == nil {
-			t.Fatalf("peerWSURL(%q) expected error", base)
-		}
-	}
-}
 
 func TestPaneIDPatternAcceptsFederatedID(t *testing.T) {
 	accepted := []string{"%0", "%2511", "peer-a@%0", "my-host.tail@%99", "z_w@%1"}
@@ -73,30 +44,26 @@ func TestPaneWSProxyUnknownPeer(t *testing.T) {
 	}
 }
 
-func TestPaneWSProxyBridgesFrames(t *testing.T) {
-	// Upstream "peer" that echoes any frame it receives back to the client.
+func TestRemotePaneWSPullsDiffAndPostsInput(t *testing.T) {
 	gotPane := make(chan string, 1)
+	gotInput := make(chan inputMsg, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPane <- r.URL.Query().Get("pane")
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			t.Errorf("upstream accept: %v", err)
-			return
-		}
-		defer conn.CloseNow()
-		ctx := r.Context()
-		// Greet the client so the proxy has data flowing both ways.
-		if err := wsjson.Write(ctx, conn, outMsg{T: "patch", From: 0, Lines: []string{"hello from peer"}}); err != nil {
-			return
-		}
-		for {
-			typ, data, err := conn.Read(ctx)
-			if err != nil {
+		switch r.URL.Path {
+		case "/api/pane/diff":
+			gotPane <- r.URL.Query().Get("pane")
+			writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", From: 0, Lines: []string{"hello from peer"}, Cursor: "c1"})
+		case "/api/pane/input":
+			defer r.Body.Close()
+			var m inputMsg
+			if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+				t.Errorf("decode input: %v", err)
+				writeJSONError(w, http.StatusBadRequest, "bad json")
 				return
 			}
-			if err := conn.Write(ctx, typ, data); err != nil {
-				return
-			}
+			gotInput <- m
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		default:
+			http.NotFound(w, r)
 		}
 	}))
 	defer upstream.Close()
@@ -120,7 +87,7 @@ func TestPaneWSProxyBridgesFrames(t *testing.T) {
 			t.Fatalf("upstream received pane=%q, want %%7", p)
 		}
 	case <-ctx.Done():
-		t.Fatal("upstream never got a connection")
+		t.Fatal("upstream never got a diff request")
 	}
 
 	var greet outMsg
@@ -134,39 +101,77 @@ func TestPaneWSProxyBridgesFrames(t *testing.T) {
 	if err := wsjson.Write(ctx, c, inputMsg{T: "text", S: "ping"}); err != nil {
 		t.Fatalf("client write: %v", err)
 	}
-	var echo inputMsg
-	if err := wsjson.Read(ctx, c, &echo); err != nil {
-		t.Fatalf("read echo: %v", err)
-	}
-	if echo.T != "text" || echo.S != "ping" {
-		t.Fatalf("echo = %+v, want text/ping", echo)
+	select {
+	case got := <-gotInput:
+		if got.T != "text" || got.S != "ping" {
+			t.Fatalf("input = %+v, want text/ping", got)
+		}
+	case <-ctx.Done():
+		t.Fatal("upstream never got input")
 	}
 }
 
-func TestPaneWSProxySwapsUpstreamWithoutDroppingBrowser(t *testing.T) {
-	// Upstream "peer" that closes the WS after greeting on the first
-	// connection (simulating a wedged/closed hub↔peer flow) and stays up on the
-	// second. The browser must receive both greetings on the SAME connection —
-	// proving the bridge re-dialed the upstream instead of dropping the browser.
-	var conns int32
+func TestRemotePaneWSNoDuplicatePatchOnUnchanged(t *testing.T) {
+	var calls int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := atomic.AddInt32(&conns, 1)
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			t.Errorf("upstream accept: %v", err)
+		if r.URL.Path != "/api/pane/diff" {
+			http.NotFound(w, r)
 			return
 		}
-		ctx := r.Context()
-		if err := wsjson.Write(ctx, conn, outMsg{T: "patch", From: 0, Lines: []string{fmt.Sprintf("epoch %d", n)}}); err != nil {
-			conn.CloseNow()
+		calls++
+		if calls == 1 {
+			writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", From: 0, Lines: []string{"same"}, Cursor: "c1"})
 			return
 		}
-		if n == 1 {
-			conn.Close(websocket.StatusNormalClosure, "rotating")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	local := httptest.NewServer((&Server{
+		Peers: []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+	}).Handler())
+	defer local.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%257", nil)
+	if err != nil {
+		t.Fatalf("dial local: %v", err)
+	}
+	defer c.CloseNow()
+
+	var first outMsg
+	if err := wsjson.Read(ctx, c, &first); err != nil {
+		t.Fatalf("read first: %v", err)
+	}
+	if strings.Join(first.Lines, "") != "same" {
+		t.Fatalf("first = %+v, want same", first)
+	}
+
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
+	defer shortCancel()
+	var dup outMsg
+	if err := wsjson.Read(shortCtx, c, &dup); err == nil {
+		t.Fatalf("read duplicate patch %+v, want no message", dup)
+	}
+	if calls < 2 {
+		t.Fatalf("peer diff calls = %d, want at least 2", calls)
+	}
+}
+
+func TestRemotePaneWSHTTPFailureEmitsErrorAndRetries(t *testing.T) {
+	var calls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pane/diff" {
+			http.NotFound(w, r)
 			return
 		}
-		defer conn.CloseNow()
-		<-ctx.Done() // keep the second flow open
+		calls++
+		if calls == 1 {
+			writeJSONError(w, http.StatusInternalServerError, "temporary")
+			return
+		}
+		writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", From: 0, Lines: []string{"recovered"}, Cursor: "c1"})
 	}))
 	defer upstream.Close()
 
@@ -183,74 +188,34 @@ func TestPaneWSProxySwapsUpstreamWithoutDroppingBrowser(t *testing.T) {
 	}
 	defer c.CloseNow()
 
-	var first, second outMsg
+	var first outMsg
 	if err := wsjson.Read(ctx, c, &first); err != nil {
-		t.Fatalf("read first greeting: %v", err)
+		t.Fatalf("read first: %v", err)
 	}
-	if strings.Join(first.Lines, "") != "epoch 1" {
-		t.Fatalf("first greeting = %+v, want epoch 1", first)
+	if first.T != "error" || !strings.Contains(first.S, "HTTP 500") {
+		t.Fatalf("first = %+v, want HTTP 500 error", first)
 	}
-	// Same browser connection should now receive the second epoch's greeting
-	// after the bridge transparently re-dials the upstream.
+	var second outMsg
 	if err := wsjson.Read(ctx, c, &second); err != nil {
-		t.Fatalf("read second greeting (post-swap): %v", err)
+		t.Fatalf("read second: %v", err)
 	}
-	if strings.Join(second.Lines, "") != "epoch 2" {
-		t.Fatalf("second greeting = %+v, want epoch 2", second)
-	}
-	if got := atomic.LoadInt32(&conns); got < 2 {
-		t.Fatalf("upstream saw %d connections, want >= 2 (a swap)", got)
+	if second.T != "patch" || strings.Join(second.Lines, "") != "recovered" {
+		t.Fatalf("second = %+v, want recovered patch", second)
 	}
 }
 
-func TestPaneWSProxySwapsAfterUpstreamWedge(t *testing.T) {
-	// The real z13 failure mode: the hub↔peer flow stalls — sends nothing and
-	// never answers a ping — WITHOUT closing the socket. Here the first upstream
-	// connection greets then stops reading (so coder/websocket never auto-pongs)
-	// while holding the socket open; the second behaves normally. The browser
-	// must ride across the wedge: receive epoch 1, then epoch 2 on the SAME
-	// connection, driven by the keepalive pong timeout, not a clean close.
-	var conns int32
+func TestRemotePaneWSOldPeerShowsUpdateError(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := atomic.AddInt32(&conns, 1)
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			t.Errorf("upstream accept: %v", err)
-			return
-		}
-		ctx := r.Context()
-		if err := wsjson.Write(ctx, conn, outMsg{T: "patch", From: 0, Lines: []string{fmt.Sprintf("epoch %d", n)}}); err != nil {
-			conn.CloseNow()
-			return
-		}
-		if n == 1 {
-			// Wedge: hold the socket open but never Read, so pings go unanswered.
-			select {
-			case <-ctx.Done():
-			case <-time.After(5 * time.Second):
-			}
-			conn.CloseNow()
-			return
-		}
-		// Healthy: keep reading so the library auto-responds to keepalive pings.
-		defer conn.CloseNow()
-		for {
-			if _, _, err := conn.Read(ctx); err != nil {
-				return
-			}
-		}
+		http.NotFound(w, r)
 	}))
 	defer upstream.Close()
 
-	srv := &Server{
-		Peers:                     []statusd.Peer{{Name: "remote", URL: upstream.URL}},
-		proxyPingIntervalOverride: 150 * time.Millisecond,
-		proxyPingTimeoutOverride:  150 * time.Millisecond,
-	}
-	local := httptest.NewServer(srv.Handler())
+	local := httptest.NewServer((&Server{
+		Peers: []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+	}).Handler())
 	defer local.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%250", nil)
 	if err != nil {
@@ -258,40 +223,16 @@ func TestPaneWSProxySwapsAfterUpstreamWedge(t *testing.T) {
 	}
 	defer c.CloseNow()
 
-	// Read continuously so the browser leg always auto-pongs (the same fast
-	// keepalive runs on the browser side and must not false-time-out).
-	msgs := make(chan string, 8)
-	go func() {
-		for {
-			var m outMsg
-			if err := wsjson.Read(ctx, c, &m); err != nil {
-				return
-			}
-			msgs <- strings.Join(m.Lines, "")
-		}
-	}()
-	want := func(exp string) {
-		t.Helper()
-		select {
-		case got := <-msgs:
-			if got != exp {
-				t.Fatalf("got %q, want %q", got, exp)
-			}
-		case <-ctx.Done():
-			t.Fatalf("timed out waiting for %q", exp)
-		}
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatalf("read error: %v", err)
 	}
-
-	want("epoch 1")
-	// After the pong timeout (~interval + timeout) the bridge re-dials upstream
-	// and the SAME browser connection receives the next epoch — no reconnect.
-	want("epoch 2")
-	if got := atomic.LoadInt32(&conns); got < 2 {
-		t.Fatalf("upstream saw %d connections, want >= 2 (a wedge-driven swap)", got)
+	if m.T != "error" || !strings.Contains(m.S, "please update the peer") {
+		t.Fatalf("message = %+v, want update-peer error", m)
 	}
 }
 
-func TestPaneWSProxyUnreachablePeerReturnsBadGateway(t *testing.T) {
+func TestRemotePaneWSUnreachablePeerKeepsBrowserOpenWithError(t *testing.T) {
 	// Closed listener guarantees the dial fails fast.
 	closedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	closedURL := closedSrv.URL
@@ -304,11 +245,16 @@ func TestPaneWSProxyUnreachablePeerReturnsBadGateway(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	_, resp, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%250", nil)
-	if err == nil {
-		t.Fatal("expected dial error")
+	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%250", nil)
+	if err != nil {
+		t.Fatalf("dial local: %v", err)
 	}
-	if resp == nil || resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expected HTTP 502, got resp=%v", resp)
+	defer c.CloseNow()
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+	if m.T != "error" || !strings.Contains(m.S, "diff request failed") {
+		t.Fatalf("message = %+v, want diff request error", m)
 	}
 }
