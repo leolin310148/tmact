@@ -60,6 +60,7 @@ import ContentPane from "./ContentPane";
 import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
 import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePreview";
+import MarkdownPreview, { type MarkdownPreviewTarget } from "./MarkdownPreview";
 import InputBar from "./InputBar";
 import Draft from "./Draft";
 import DirectInput from "./DirectInput";
@@ -88,19 +89,21 @@ import { useInputHistory } from "../hooks/useInputHistory";
 // Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
 const SELECTED_KEY = "tmact.selectedPane";
 
-// Scrollback render cap. The server captures up to wsCaptureLines (400) lines,
-// but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every line) on
-// each repaint, so cost scales with the number of lines rendered. A flooding
-// agent makes that the main-thread bottleneck on phones. We keep the full
-// buffer (paneLines) for patch reconstruction + cache, and only hand the last
-// STREAM_RENDER_LINES lines to the renderer. This trades browser scrollback
-// depth for repaint cost — an intentional deviation from app.js's render-all.
+// Initial scrollback render cap. The server captures up to wsCaptureLines (400)
+// lines, but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every
+// line) on each repaint, so cost scales with the number of lines rendered. A
+// flooding agent makes that the main-thread bottleneck on phones. We keep the
+// full buffer (paneLines) for patch reconstruction + cache, and initially hand
+// only the last STREAM_RENDER_LINES lines to the renderer. When the user scrolls
+// to the top, App lazily reveals more lines from the existing captured buffer.
 const STREAM_RENDER_LINES = 200;
+const STREAM_REVEAL_LINES = 100;
 const PANE_BOTTOM_STICKY_PX = 80;
+const PANE_TOP_REVEAL_PX = 8;
 
-// renderTail joins only the trailing STREAM_RENDER_LINES lines for display.
-function renderTail(lines: string[]): string {
-  return (lines.length > STREAM_RENDER_LINES ? lines.slice(-STREAM_RENDER_LINES) : lines).join("\n");
+// renderTail joins only the trailing visible line window for display.
+function renderTail(lines: string[], visibleLines = STREAM_RENDER_LINES): string {
+  return (lines.length > visibleLines ? lines.slice(-visibleLines) : lines).join("\n");
 }
 
 function contentPaneElement(): HTMLPreElement | null {
@@ -151,6 +154,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageDownloadHref, setImageDownloadHref] = useState<string | null>(null);
   const imagePathRef = useRef<string>("");
+  const [markdownPreviewTarget, setMarkdownPreviewTarget] = useState<MarkdownPreviewTarget | null>(null);
 
   // markdown-view toggle — global + persisted (tmact.settings.markdownView),
   // seeded once at mount. Flipping it re-renders ContentPane (which re-runs
@@ -169,6 +173,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // ----- module-scoped mutable state from app.js → refs -----
   const paneLinesRef = useRef<string[]>([]);
   const paneCacheRef = useRef<Record<string, string[]>>({});
+  const streamVisibleLinesRef = useRef(STREAM_RENDER_LINES);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctrlArmedRef = useRef(false);
 
@@ -199,6 +204,29 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     },
     [renderLocal],
   );
+
+  const revealOlderPaneLines = useCallback(() => {
+    const pre = contentPaneElement();
+    const buf = paneLinesRef.current;
+    const current = streamVisibleLinesRef.current;
+    if (!pre || buf.length <= current || pre.scrollTop > PANE_TOP_REVEAL_PX) return;
+
+    const beforeHeight = pre.scrollHeight;
+    const beforeTop = pre.scrollTop;
+    const next = Math.min(buf.length, current + STREAM_REVEAL_LINES);
+    streamVisibleLinesRef.current = next;
+
+    const p = findPaneIn(state.snapshot, state.selected);
+    setContent(renderTail(buf, next), { cwd: p && p.cwd, peer: panePeer(p) });
+
+    const restore = () => {
+      const el = contentPaneElement();
+      if (!el) return;
+      el.scrollTop = el.scrollHeight - beforeHeight + beforeTop;
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(restore);
+    else setTimeout(restore, 0);
+  }, [setContent, state]);
 
   // ----- option bar (renderOptions) -----
   const renderOptions = useCallback(
@@ -324,8 +352,16 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       const buf = paneLinesRef.current.slice(0, from).concat(lines);
       paneLinesRef.current = buf;
       if (state.selected) paneCacheRef.current[state.selected] = buf;
+      if (contentPaneAtBottom(contentPaneElement())) {
+        streamVisibleLinesRef.current = STREAM_RENDER_LINES;
+      }
       const p = findPaneIn(state.snapshot, state.selected);
-      scheduleStream(renderTail(buf), p && p.cwd ? p.cwd : null, panePeer(p), question);
+      scheduleStream(
+        renderTail(buf, streamVisibleLinesRef.current),
+        p && p.cwd ? p.cwd : null,
+        panePeer(p),
+        question,
+      );
     },
     onQuestion: renderOptions,
     onError: showInputError,
@@ -362,11 +398,15 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       cancelStream();
       // Seed from the cache so a revisited pane shows content immediately; the
       // first patch (from=0) replaces it. A never-seen pane stays empty.
+      streamVisibleLinesRef.current = STREAM_RENDER_LINES;
       const cached = paneCacheRef.current[paneID];
       paneLinesRef.current = cached ? cached.slice() : [];
       if (paneLinesRef.current.length) {
         const p = findPaneIn(state.snapshot, paneID);
-        setContent(renderTail(paneLinesRef.current), { cwd: p && p.cwd, peer: panePeer(p) });
+        setContent(renderTail(paneLinesRef.current, streamVisibleLinesRef.current), {
+          cwd: p && p.cwd,
+          peer: panePeer(p),
+        });
       }
       paneStream.open(paneID);
     },
@@ -614,6 +654,12 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const closeImagePreview = useCallback(() => {
     setImageSrc(null);
     setImageDownloadHref(null);
+  }, []);
+  const previewMarkdownPath = useCallback((path: string, cwd: string, peer: string) => {
+    setMarkdownPreviewTarget({ path, cwd, peer });
+  }, []);
+  const closeMarkdownPreview = useCallback(() => {
+    setMarkdownPreviewTarget(null);
   }, []);
 
   // ----- ContentPane focus handlers (mouseup refocus / blur) -----
@@ -942,6 +988,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           markdown={markdownView}
           selectionMode={state.selectionMode}
           onPreviewImage={previewImagePath}
+          onPreviewMarkdown={previewMarkdownPath}
+          onScrollTop={revealOlderPaneLines}
           onRefocusDirect={onRefocusDirect}
           onBlurDirect={onBlurDirect}
         />
@@ -1056,6 +1104,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         path={imagePathRef.current}
         onClose={closeImagePreview}
       />
+      <MarkdownPreview target={markdownPreviewTarget} onClose={closeMarkdownPreview} />
     </>
   );
 }

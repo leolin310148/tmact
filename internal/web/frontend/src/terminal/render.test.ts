@@ -12,8 +12,10 @@ import {
   extractPipeTables,
   parsePipeBlock,
   previewableImagePath,
+  previewableMarkdownPath,
   markImagePaths,
   IMAGE_PATH_RE,
+  MARKDOWN_PATH_RE,
   __test__,
 } from "./render";
 
@@ -469,6 +471,25 @@ describe("IMAGE_PATH_RE", () => {
   });
 });
 
+describe("previewableMarkdownPath", () => {
+  it("accepts local markdown paths and rejects home-relative or remote URLs", () => {
+    expect(previewableMarkdownPath("/abs/README.md")).toBe(true);
+    expect(previewableMarkdownPath("./docs/guide.markdown")).toBe(true);
+    expect(previewableMarkdownPath("file:///abs/README.md")).toBe(true);
+    expect(previewableMarkdownPath("~/README.md")).toBe(false);
+    expect(previewableMarkdownPath("https://example.com/README.md")).toBe(false);
+  });
+});
+
+describe("MARKDOWN_PATH_RE", () => {
+  it("matches markdown extensions case-insensitively", () => {
+    for (const ext of ["md", "markdown", "MD", "MARKDOWN"]) {
+      MARKDOWN_PATH_RE.lastIndex = 0;
+      expect(MARKDOWN_PATH_RE.test("/x/y." + ext)).toBe(true);
+    }
+  });
+});
+
 describe("markImagePaths", () => {
   it("wraps a previewable image path in an image-path span with data attrs", () => {
     const root = document.createElement("pre");
@@ -478,11 +499,26 @@ describe("markImagePaths", () => {
     expect(span).not.toBeNull();
     expect(span?.textContent).toBe("/home/u/pic.png");
     expect((span as HTMLElement).dataset.path).toBe("/home/u/pic.png");
+    expect((span as HTMLElement).dataset.kind).toBe("image");
     expect((span as HTMLElement).dataset.cwd).toBe("/home/u");
     expect((span as HTMLElement).dataset.peer).toBe("peer-a");
     expect((span as HTMLElement).title).toBe("Command-click to preview image");
     // surrounding text preserved
     expect(root.textContent).toBe("open /home/u/pic.png please");
+  });
+
+  it("wraps a previewable markdown path in a markdown-path span with data attrs", () => {
+    const root = document.createElement("pre");
+    root.textContent = "open /home/u/README.md please";
+    markImagePaths(root, "/home/u", "peer-a");
+    const span = root.querySelector("span.markdown-path");
+    expect(span).not.toBeNull();
+    expect(span?.textContent).toBe("/home/u/README.md");
+    expect((span as HTMLElement).dataset.path).toBe("/home/u/README.md");
+    expect((span as HTMLElement).dataset.kind).toBe("markdown");
+    expect((span as HTMLElement).dataset.cwd).toBe("/home/u");
+    expect((span as HTMLElement).dataset.peer).toBe("peer-a");
+    expect((span as HTMLElement).title).toBe("Command-click to preview markdown");
   });
 
   it("omits data-cwd / data-peer when not provided", () => {

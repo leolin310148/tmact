@@ -30,6 +30,8 @@ function mount(overrides: Partial<Props> = {}) {
     markdown: false,
     selectionMode: false,
     onPreviewImage: vi.fn(),
+    onPreviewMarkdown: vi.fn(),
+    onScrollTop: vi.fn(),
     onRefocusDirect: vi.fn(),
     onBlurDirect: vi.fn(),
     ...overrides,
@@ -76,6 +78,26 @@ describe("ContentPane", () => {
     fireEvent.click(span, { ctrlKey: true });
 
     expect(onPreviewImage).toHaveBeenCalledWith("/abs/shot.png", "/work", "peer-a");
+  });
+
+  it("opens markdown preview on Ctrl+click for Windows and Linux browsers", () => {
+    const onPreviewMarkdown = vi.fn();
+    const { pre, rerender } = mount({ text: "", onPreviewMarkdown });
+    rerender({ text: "/abs/README.md", cwd: "/work", peer: "peer-a", onPreviewMarkdown });
+    const span = pre.querySelector(".markdown-path") as HTMLElement;
+
+    fireEvent.click(span, { ctrlKey: true });
+
+    expect(onPreviewMarkdown).toHaveBeenCalledWith("/abs/README.md", "/work", "peer-a");
+  });
+
+  it("notifies App when the pane scrolls", () => {
+    const onScrollTop = vi.fn();
+    const { pre } = mount({ onScrollTop });
+
+    fireEvent.scroll(pre);
+
+    expect(onScrollTop).toHaveBeenCalledTimes(1);
   });
 
   it("re-renders pane output as a table when markdown flips on", () => {

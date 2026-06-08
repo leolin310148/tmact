@@ -329,7 +329,7 @@
   .tui-table tbody tr:nth-child(even) td {
     background: rgba(255,255,255,0.02);
   }
-  .image-path {
+  .image-path, .markdown-path {
     color: var(--direct);
     text-decoration: underline dotted rgba(121,192,255,0.55);
     text-underline-offset: 2px;
@@ -580,7 +580,7 @@
   .rec-overlay.hotkey-recording .rec-cancel,
   .rec-overlay.hotkey-recording .rec-stop { display: none; }
 
-  .image-preview {
+  .image-preview, .markdown-preview {
     position: fixed; inset: 0; z-index: 70;
     display: flex; align-items: center; justify-content: center;
     padding: calc(16px + env(safe-area-inset-top, 0px))
@@ -590,8 +590,8 @@
     background: rgba(8,10,14,0.86);
     -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
   }
-  .image-preview[hidden] { display: none; }
-  .image-preview-card {
+  .image-preview[hidden], .markdown-preview[hidden] { display: none; }
+  .image-preview-card, .markdown-preview-card {
     position: relative;
     max-width: 96vw; max-height: 92vh;
     display: flex; flex-direction: column; gap: 8px;
@@ -635,6 +635,107 @@
   }
   .image-preview-close svg { width: 13px; height: 13px; display: block; }
   .image-preview-download svg { width: 15px; height: 15px; display: block; }
+  .markdown-preview-card {
+    width: min(920px, 96vw);
+    height: min(820px, 92vh);
+  }
+  .markdown-preview-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 18px 20px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--fg);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    white-space: normal;
+  }
+  .markdown-preview-content h1,
+  .markdown-preview-content h2,
+  .markdown-preview-content h3,
+  .markdown-preview-content h4 {
+    margin: 1.2em 0 0.45em;
+    line-height: 1.25;
+    color: var(--fg);
+  }
+  .markdown-preview-content h1:first-child,
+  .markdown-preview-content h2:first-child,
+  .markdown-preview-content h3:first-child { margin-top: 0; }
+  .markdown-preview-content p,
+  .markdown-preview-content ul,
+  .markdown-preview-content ol,
+  .markdown-preview-content blockquote,
+  .markdown-preview-content pre,
+  .markdown-preview-content table { margin: 0.8em 0; }
+  .markdown-preview-content ul,
+  .markdown-preview-content ol { padding-left: 1.6em; }
+  .markdown-preview-content blockquote {
+    border-left: 3px solid var(--border);
+    padding-left: 12px;
+    color: var(--fg-dim);
+  }
+  .markdown-preview-content code {
+    padding: 1px 4px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel-2);
+    font: 0.92em/1.4 var(--mono);
+  }
+  .markdown-preview-content pre {
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .markdown-preview-content pre code {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .markdown-preview-content table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+  .markdown-preview-content th,
+  .markdown-preview-content td {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  .markdown-preview-content th {
+    background: var(--panel-2);
+    font-weight: 650;
+  }
+  .markdown-preview-content img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0.85em 0;
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .markdown-preview-content a {
+    color: var(--direct);
+    text-decoration-color: rgba(121,192,255,0.55);
+  }
+  .markdown-preview-content a.markdown-preview-disabled-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: text;
+  }
+  .markdown-preview-error,
+  .markdown-preview-loading {
+    color: var(--fg-dim);
+    font: 13px/1.5 var(--mono);
+    overflow-wrap: anywhere;
+  }
 
   /* Settings — opened from the gear in the status line. */
   .gear-btn {

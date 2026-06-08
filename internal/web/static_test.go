@@ -114,7 +114,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	for _, want := range []string{
 		"/api/snapshot", "/api/snapshot/stream", "/api/version",
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
-		"/api/paste-image", "/api/upload-file", "/api/image", "/api/file", "/ws/pane",
+		"/api/paste-image", "/api/upload-file", "/api/image", "/api/markdown", "/api/file", "/ws/pane",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("bundled app missing endpoint %q", want)
@@ -148,7 +148,7 @@ func TestBundledStyleHasRuntimeClasses(t *testing.T) {
 	for _, want := range []string{
 		".agent-icon", "runtime-claude", "runtime-codex", "runtime-copilot",
 		"runtime-gemini", "agent-shine", "agent-rainbow", "--pane-font",
-		"--tmact-vvh", ".image-preview", ".image-path", ".selection-btn",
+		"--tmact-vvh", ".image-preview", ".markdown-preview", ".image-path", ".markdown-path", ".selection-btn",
 		".clear-pane-btn", ".effect-preview",
 	} {
 		if !strings.Contains(css, want) {

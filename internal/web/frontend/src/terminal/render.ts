@@ -10,7 +10,7 @@
 // ContentPane too (see ARCHITECTURE §7). Behavior is byte-for-behavior with the
 // original — same palette, same regexes, same private-use-area placeholder
 // ordering (rules → tables → URLs), same class names (tui-rule / tui-link /
-// image-path / tui-table*).
+// image-path / markdown-path / tui-table*).
 
 import { escapeHTML } from "../lib/dom";
 
@@ -165,12 +165,26 @@ const TRAILING_BLANK_RE = new RegExp(
   "(?:\\r?\\n(?:" + ANSI_STRIP_RE.source + "|[ \\t\\r])*)+$",
 );
 export const IMAGE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
+export const MARKDOWN_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:md|markdown)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
+const PREVIEWABLE_PATH_RE = /(?:file:\/\/)?(?:~\/|\.{1,2}\/|\/)?[A-Za-z0-9_./~:@%+,-][^\s"'`<>]*\.(?:png|jpe?g|gif|webp|bmp|svg|md|markdown)(?=$|[\s"'`<>)\]}.,;:!?])/gi;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
 
 export function previewableImagePath(path: string): boolean {
   if (path.startsWith("~/")) return false;
   const scheme = URL_SCHEME_RE.exec(path);
   return !scheme || scheme[0].toLowerCase() === "file://";
+}
+
+export function previewableMarkdownPath(path: string): boolean {
+  if (path.startsWith("~/")) return false;
+  const scheme = URL_SCHEME_RE.exec(path);
+  return !scheme || scheme[0].toLowerCase() === "file://";
+}
+
+function previewablePathKind(path: string): "image" | "markdown" | null {
+  if (/\.(?:png|jpe?g|gif|webp|bmp|svg)$/i.test(path) && previewableImagePath(path)) return "image";
+  if (/\.(?:md|markdown)$/i.test(path) && previewableMarkdownPath(path)) return "markdown";
+  return null;
 }
 
 // Box-drawing borders we treat as table frames. The top/bottom-corner regexes
@@ -546,16 +560,16 @@ export function render(text: string, opts?: RenderOpts): string {
   return html;
 }
 
-// markImagePaths is the DOM-mutating half of the original setContent. It walks
-// every text node under `root`, wraps each previewable image path in a
-// <span class="image-path" data-path data-cwd data-peer>, and leaves everything
+// markPreviewablePaths is the DOM-mutating half of the original setContent. It
+// walks every text node under `root`, wraps previewable image and markdown paths
+// in spans with data-path/data-cwd/data-peer/data-kind, and leaves everything
 // else untouched. ContentPane runs this in a useLayoutEffect AFTER assigning
 // render()'s HTML to pre#content, so React never reconciles the inner HTML.
 //
 // NB: matches the original ordering — all text nodes are collected first (so
 // replacing one node's content can't perturb the live TreeWalker), then each is
 // rewritten in a second pass.
-export function markImagePaths(root: Node, cwd?: string | null, peer?: string | null): void {
+export function markPreviewablePaths(root: Node, cwd?: string | null, peer?: string | null): void {
   const doc = root.ownerDocument ?? document;
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
@@ -563,29 +577,34 @@ export function markImagePaths(root: Node, cwd?: string | null, peer?: string | 
 
   for (const node of nodes) {
     const text = node.nodeValue ?? "";
-    IMAGE_PATH_RE.lastIndex = 0;
+    PREVIEWABLE_PATH_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     let last = 0;
     const frag = doc.createDocumentFragment();
-    while ((m = IMAGE_PATH_RE.exec(text)) !== null) {
+    while ((m = PREVIEWABLE_PATH_RE.exec(text)) !== null) {
       const match = m[0]; // group 0 of a successful exec is always present
-      if (match === undefined || !previewableImagePath(match)) continue;
+      if (match === undefined) continue;
+      const kind = previewablePathKind(match);
+      if (!kind) continue;
       if (m.index > last) frag.appendChild(doc.createTextNode(text.slice(last, m.index)));
       const span = doc.createElement("span");
-      span.className = "image-path";
+      span.className = kind === "image" ? "image-path" : "markdown-path";
       span.textContent = match;
+      span.dataset.kind = kind;
       span.dataset.path = match;
       if (cwd) span.dataset.cwd = cwd;
       if (peer) span.dataset.peer = peer;
-      span.title = "Command-click to preview image";
+      span.title = kind === "image" ? "Command-click to preview image" : "Command-click to preview markdown";
       frag.appendChild(span);
-      last = IMAGE_PATH_RE.lastIndex;
+      last = PREVIEWABLE_PATH_RE.lastIndex;
     }
     if (last === 0) continue;
     if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
     node.parentNode?.replaceChild(frag, node);
   }
 }
+
+export const markImagePaths = markPreviewablePaths;
 
 // __test__ mirrors the original terminal.js export so the ported unit tests can
 // reach the internal helpers by the same names.

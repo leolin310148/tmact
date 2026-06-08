@@ -287,6 +287,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/paste-image", s.handlePasteImage)
 	mux.HandleFunc("/api/upload-file", s.handleUploadFile)
 	mux.HandleFunc("/api/image", s.handleImage)
+	mux.HandleFunc("/api/markdown", s.handleMarkdown)
 	mux.HandleFunc("/api/file", s.handleFile)
 	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
