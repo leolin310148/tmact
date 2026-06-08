@@ -583,6 +583,12 @@
   .image-preview, .markdown-preview {
     position: fixed; inset: 0; z-index: 70;
     display: flex; align-items: center; justify-content: center;
+    --preview-safe-left: env(safe-area-inset-left, 0px);
+    --preview-safe-right: env(safe-area-inset-right, 0px);
+    --preview-safe-top: env(safe-area-inset-top, 0px);
+    --preview-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --preview-gap-x: calc(32px + var(--preview-safe-left) + var(--preview-safe-right));
+    --preview-gap-y: calc(32px + var(--preview-safe-top) + var(--preview-safe-bottom));
     padding: calc(16px + env(safe-area-inset-top, 0px))
              calc(16px + env(safe-area-inset-right, 0px))
              calc(16px + env(safe-area-inset-bottom, 0px))
@@ -593,7 +599,9 @@
   .image-preview[hidden], .markdown-preview[hidden] { display: none; }
   .image-preview-card, .markdown-preview-card {
     position: relative;
-    max-width: 96vw; max-height: 92vh;
+    max-width: calc(100vw - var(--preview-gap-x));
+    max-height: calc(100vh - var(--preview-gap-y));
+    max-height: calc(100dvh - var(--preview-gap-y));
     display: flex; flex-direction: column; gap: 8px;
     padding: 10px;
     background: var(--panel); border: 1px solid var(--border);
@@ -601,13 +609,14 @@
   }
   .image-preview img {
     display: block;
-    max-width: calc(96vw - 20px);
-    max-height: calc(92vh - 54px);
+    max-width: calc(100vw - var(--preview-gap-x) - 20px);
+    max-height: calc(100vh - var(--preview-gap-y) - 54px);
+    max-height: calc(100dvh - var(--preview-gap-y) - 54px);
     object-fit: contain;
     background: var(--bg);
   }
   .image-preview-path {
-    max-width: calc(96vw - 20px);
+    max-width: calc(100vw - var(--preview-gap-x) - 20px);
     color: var(--fg-dim);
     font: 11px/1.35 var(--mono);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -636,8 +645,9 @@
   .image-preview-close svg { width: 13px; height: 13px; display: block; }
   .image-preview-download svg { width: 15px; height: 15px; display: block; }
   .markdown-preview-card {
-    width: min(920px, 96vw);
-    height: min(820px, 92vh);
+    width: min(920px, calc(100vw - var(--preview-gap-x)));
+    height: min(820px, calc(100vh - var(--preview-gap-y)));
+    height: min(820px, calc(100dvh - var(--preview-gap-y)));
   }
   .markdown-preview-body {
     flex: 1 1 auto;
