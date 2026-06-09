@@ -23,6 +23,8 @@ Use the CLI when you want scriptable tmux control:
   and sends it a prompt.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
+- `tmact commands --json` exposes command metadata for tooling, and
+  `tmact llm instructions` prints an LLM-facing operating guide.
 
 Install the release binary (macOS or Linux/WSL, amd64/arm64):
 

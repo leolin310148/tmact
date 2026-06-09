@@ -15,7 +15,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "top level",
 			args: []string{"--help"},
-			want: []string{"tmact - local tmux automation", "tmact commands --json", "Safety:"},
+			want: []string{"tmact - local tmux automation", "tmact commands --json", "tmact llm instructions", "Safety:"},
 		},
 		{
 			name: "loop",
@@ -52,6 +52,16 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			args: []string{"panels", "--help"},
 			want: []string{"panels", "Subcommands:", "plan", "ensure", "--execute"},
 		},
+		{
+			name: "llm group",
+			args: []string{"llm", "--help"},
+			want: []string{"llm", "LLMs and tools", "instructions", "tmact commands --json"},
+		},
+		{
+			name: "llm instructions",
+			args: []string{"llm", "instructions", "--help"},
+			want: []string{"llm instructions", "LLM-facing operating instructions", "--json", "permission"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -83,6 +93,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	foundLoopStatus := false
 	foundWorkflow := false
+	foundLLM := false
 	for _, command := range manifest.Commands {
 		if command.Command == "loop status" {
 			foundLoopStatus = true
@@ -93,11 +104,44 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 		if command.Command == "workflow" {
 			foundWorkflow = true
 		}
+		if command.Command == "llm instructions" {
+			foundLLM = true
+			if len(command.Safety) == 0 {
+				t.Fatalf("llm instructions help is missing safety notes: %#v", command)
+			}
+		}
 	}
 	if !foundLoopStatus {
 		t.Fatalf("loop status missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundWorkflow {
 		t.Fatalf("workflow missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundLLM {
+		t.Fatalf("llm instructions missing from manifest: %#v", manifest.Commands)
+	}
+}
+
+func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
+	out, err := captureRun(t, "llm", "instructions", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var instructions llmInstructions
+	if err := json.Unmarshal([]byte(out), &instructions); err != nil {
+		t.Fatal(err)
+	}
+	if instructions.Name == "" || len(instructions.SafeDefaults) == 0 || len(instructions.CommandCatalog.Commands) == 0 {
+		t.Fatalf("instructions too sparse: %#v", instructions)
+	}
+	foundUntrusted := false
+	for _, note := range instructions.SafeDefaults {
+		if strings.Contains(note, "untrusted") {
+			foundUntrusted = true
+			break
+		}
+	}
+	if !foundUntrusted {
+		t.Fatalf("instructions missing untrusted-pane warning: %#v", instructions.SafeDefaults)
 	}
 }

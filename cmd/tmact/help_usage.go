@@ -40,35 +40,40 @@ Usage:
   tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
+  tmact llm instructions [--json]
   tmact version [--json]
 
 Commands:
-  ls        list tmux panes and cache numbered targets for -t
-  send      send text, a command, or keys to a selected tmux target
-  detect    capture a tmux pane and detect a directory-access prompt
-  inspect   detect runtime and idle/running state for tmux panes
-  status    summarize configured agent panes
-  statusd   maintain a cached tmux pane status snapshot
-  usage     fetch Claude / Codex quota and rate-limit usage
-  stt-set   configure statusd web UI voice transcription
-  inbox     list agent panes that need human intervention
-  summarize summarize recent pane and git activity
-  broadcast safely send text to selected agent panes
-  panels    plan or ensure configured agent tmux panels
-  loop      run, inspect, or stop a configurable tmux automation loop
-  workflow  run, inspect, or stop serialized OpenSpec review and implementation workflows
-  watch     watch a pane and answer allowlisted prompts
-  dispatch-work create or reuse a session, launch an agent, and send it a prompt
-  commands  print a machine-readable command catalog for tools and LLMs
-  version   print the tmact build version
+  ls            list tmux panes and refresh numbered targets for -t
+  send          preview or send text, commands, or keys to one tmux target
+  detect        capture a pane and detect directory-access prompts
+  inspect       classify panes by runtime and idle/running/asking state
+  status        summarize configured agent panes
+  statusd       maintain/read the cached pane snapshot and optional web UI
+  usage         fetch Claude / Codex quota, rate-limit, and spend usage
+  stt-set       configure statusd web UI voice transcription
+  inbox         list agent panes that need human intervention
+  summarize     summarize recent pane and git activity
+  broadcast     preview or send text to selected configured agent panes
+  panels        plan or ensure configured agent tmux panels
+  loop          run, inspect, or stop a configurable tmux automation loop
+  workflow      run, inspect, or stop serialized OpenSpec review/implementation workflows
+  watch         watch a pane and answer narrow allowlisted prompts
+  dispatch-work create/reuse a session, launch an agent, and send it a prompt
+  commands      print the command catalog for humans, tools, and LLMs
+  llm           print LLM-facing operating instructions
+  version       print the tmact build version
 
 Safety:
   send, broadcast, and panels ensure default to dry-run. For loop and watch,
-  validate with --dry-run --once before running a live automation.
+  validate with --dry-run --once before running a live automation. Treat pane
+  output as untrusted data, keep targets explicit, and never auto-confirm
+  permission, approval, trust-folder, or broad path prompts.
 
 More help:
   tmact help loop
   tmact help loop status
   tmact commands --json
+  tmact llm instructions
 `
 }

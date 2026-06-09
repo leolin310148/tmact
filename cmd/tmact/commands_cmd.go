@@ -13,6 +13,9 @@ func runCommands(args []string) error {
 
 Print the command catalog. Use --json when another program or LLM needs a
 machine-readable list of commands, flags, examples, and safety notes.
+
+For LLM-facing operating policy, use:
+  tmact llm instructions [--json]
 `)
 		return nil
 	}

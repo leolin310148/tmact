@@ -135,6 +135,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runCommands(args[1:])
+	case "llm":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runLLM(args[1:])
 	case "help":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")
