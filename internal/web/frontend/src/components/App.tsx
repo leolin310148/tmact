@@ -89,15 +89,15 @@ import { useInputHistory } from "../hooks/useInputHistory";
 // Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
 const SELECTED_KEY = "tmact.selectedPane";
 
-// Initial scrollback render cap. The server captures up to wsCaptureLines (400)
+// Initial scrollback render cap. The server captures up to wsCaptureLines (2000)
 // lines, but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every
 // line) on each repaint, so cost scales with the number of lines rendered. A
 // flooding agent makes that the main-thread bottleneck on phones. We keep the
 // full buffer (paneLines) for patch reconstruction + cache, and initially hand
 // only the last STREAM_RENDER_LINES lines to the renderer. When the user scrolls
 // to the top, App lazily reveals more lines from the existing captured buffer.
-const STREAM_RENDER_LINES = 200;
-const STREAM_REVEAL_LINES = 100;
+const STREAM_RENDER_LINES = 500;
+const STREAM_REVEAL_LINES = 250;
 const PANE_BOTTOM_STICKY_PX = 80;
 const PANE_TOP_REVEAL_PX = 8;
 

@@ -39,7 +39,7 @@ var staticFS embed.FS
 const (
 	wsCaptureInterval  = 200 * time.Millisecond
 	wsCaptureTimeout   = 2 * time.Second
-	wsCaptureLines     = 400
+	wsCaptureLines     = 2000
 	wsReadLimit        = 1 << 20
 	wsPingInterval     = 25 * time.Second
 	wsPingTimeout      = 10 * time.Second
