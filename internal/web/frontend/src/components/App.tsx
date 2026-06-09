@@ -185,7 +185,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const recordBtnRef = useRef<HTMLButtonElement | null>(null);
   const sendBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // ----- input history (frontend-only; last 20 sent draft messages) -----
+  // ----- input history (frontend-only; last 20 sent draft messages per pane) -----
   const history = useInputHistory();
 
   // ----- setContent (§7) -----
@@ -604,7 +604,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       showInputError("not connected — try again");
       return;
     }
-    history.record(draft.value);
+    history.record(state.selected, draft.value);
     draft.value = "";
     delete state.drafts[state.selected];
     syncDraft();
@@ -696,7 +696,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     if (!draft) return;
     const stickToBottom = contentPaneAtBottom(contentPaneElement());
     if (state.selected) state.drafts[state.selected] = draft.value;
-    history.reset(); // typing leaves history-browsing mode
+    history.reset(state.selected); // typing leaves history-browsing mode
     syncDraft();
     if (stickToBottom) followPaneBottomThroughKeyboard();
   }, [state, syncDraft, followPaneBottomThroughKeyboard, history]);
@@ -724,11 +724,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         const atEnd = caret === draft.value.length;
         const next =
           e.key === "ArrowUp"
-            ? history.navigating() || atStart
-              ? history.recallPrev(draft.value)
+            ? history.navigating(state.selected) || atStart
+              ? history.recallPrev(state.selected, draft.value)
               : null
-            : history.navigating() || atEnd
-              ? history.recallNext(draft.value)
+            : history.navigating(state.selected) || atEnd
+              ? history.recallNext(state.selected, draft.value)
               : null;
         if (next === null) return; // nothing to recall — let the caret move normally
         e.preventDefault();
