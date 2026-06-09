@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./components/App";
 import "./app.css";
+import { initFrontendLogging } from "./lib/frontendLog";
 
 // NOTE: no <StrictMode>. The original vanilla app has no double-invocation, and
 // several hooks own imperative resources (WebSocket, MediaRecorder, timers) via
@@ -8,6 +9,7 @@ import "./app.css";
 // dev behavior identical to production for faithful parity testing.
 const rootEl = document.getElementById("root");
 if (rootEl) {
+  initFrontendLogging();
   createRoot(rootEl).render(<App />);
 }
 

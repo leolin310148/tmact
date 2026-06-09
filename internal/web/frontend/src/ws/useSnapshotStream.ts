@@ -29,6 +29,7 @@
 
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { fetchSnapshot, subscribeSnapshot } from "../api/client";
+import { logFrontend } from "../lib/frontendLog";
 import { useAppState } from "../store/AppStateContext";
 import type { PaneStatus, Snapshot } from "../types/server";
 
@@ -280,6 +281,7 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   // handle) so repeated calls don't stack intervals.
   const startPolling = useCallback((): void => {
     if (snapshotTimer.current === null) {
+      logFrontend("warn", "snapshot_stream", "fallback polling");
       snapshotTimer.current = setInterval(() => {
         void refreshSnapshot();
         bump(); // checkStale()

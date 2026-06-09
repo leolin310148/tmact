@@ -113,6 +113,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	// Every server endpoint the UI speaks to (string literals survive minify).
 	for _, want := range []string{
 		"/api/snapshot", "/api/snapshot/stream", "/api/version",
+		"/api/frontend-logs",
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
 		"/api/paste-image", "/api/upload-file", "/api/image", "/api/markdown", "/api/file", "/ws/pane",
 	} {

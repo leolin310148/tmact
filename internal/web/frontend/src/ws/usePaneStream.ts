@@ -17,6 +17,7 @@
 // (it manages whether to reconnect at all).
 
 import { useCallback, useEffect, useRef } from "react";
+import { logFrontend } from "../lib/frontendLog";
 import type { InputMsg, OutMsg, Question } from "../types/server";
 
 const BACKOFF_MIN_MS = 1000;
@@ -131,12 +132,14 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
       status("connecting");
+      logFrontend("info", "pane_ws", "connecting", { pane: paneID });
       const sock = new WebSocket(
         `${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}`,
       );
       wsRef.current = sock;
       sock.onopen = () => {
         status("open");
+        logFrontend("info", "pane_ws", "open", { pane: paneID });
         // Treat the connection as stable once it has stayed up for STABLE_MS;
         // a flaky network that reconnects every few seconds keeps escalating
         // the backoff so the browser does not hammer the server.
@@ -149,6 +152,7 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
         try {
           m = JSON.parse(ev.data as string) as OutMsg;
         } catch {
+          logFrontend("warn", "pane_ws", "message parse failed", { pane: paneID });
           return;
         }
         if (m.t === "patch") {
@@ -160,6 +164,10 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
             m.q ?? null,
           );
         } else if (m.t === "error") {
+          logFrontend("error", "pane_ws", "server error frame", {
+            pane: paneID,
+            error: m.s,
+          });
           cbRef.current.onError(m.s);
         }
       };
@@ -167,10 +175,15 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
         if (wsRef.current !== sock) return;
         wsRef.current = null;
         cancelStable();
+        logFrontend("warn", "pane_ws", "closed", { pane: paneID });
         if (currentPaneRef.current !== paneID || document.hidden) return;
         const delay = backoffRef.current;
         backoffRef.current = Math.min(backoffRef.current * 2, BACKOFF_MAX_MS);
         status("reconnecting");
+        logFrontend("warn", "pane_ws", "reconnecting", {
+          pane: paneID,
+          delay_ms: delay,
+        });
         wsRetryRef.current = setTimeout(() => {
           wsRetryRef.current = null;
           if (cbRef.current.getSelectedPane() === paneID && !document.hidden) {
@@ -178,7 +191,9 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
           }
         }, delay);
       };
-      sock.onerror = () => {};
+      sock.onerror = () => {
+        logFrontend("error", "pane_ws", "socket error", { pane: paneID });
+      };
     },
     [cancelRetry, cancelStable, status],
   );

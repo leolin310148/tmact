@@ -282,6 +282,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/version", s.handleVersion)
+	mux.HandleFunc("/api/frontend-logs", s.handleFrontendLogs)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/paste-image", s.handlePasteImage)

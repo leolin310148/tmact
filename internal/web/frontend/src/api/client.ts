@@ -15,6 +15,7 @@ import type {
   STTSettingsInput,
   VersionInfo,
 } from "../types/server";
+import { logFrontend } from "../lib/frontendLog";
 
 // Shallow envelope returned by every non-snapshot wrapper: the raw Response plus
 // the parsed JSON body (or {} when the body is absent / not valid JSON).
@@ -27,12 +28,34 @@ async function jsonResponse<T>(
   url: string,
   options?: RequestInit,
 ): Promise<JsonResponse<T>> {
-  const res = await fetch(url, options);
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (e) {
+    logFrontend("error", "api_error", "network request failed", {
+      url,
+      method: options?.method ?? "GET",
+      error: errorSummary(e),
+    });
+    throw e;
+  }
+  if (!res.ok) {
+    logFrontend("warn", "api_error", "HTTP request failed", {
+      url,
+      method: options?.method ?? "GET",
+      status: res.status,
+    });
+  }
   let data = {} as T;
   try {
     data = (await res.json()) as T;
   } catch (e) {
-    /* leave data as {} */
+    logFrontend("warn", "api_error", "JSON response parse failed", {
+      url,
+      method: options?.method ?? "GET",
+      status: res.status,
+      error: errorSummary(e),
+    });
   }
   return { res, data };
 }
@@ -46,15 +69,45 @@ let lastSnapshot: Snapshot | null = null;
 export async function fetchSnapshot(): Promise<Snapshot> {
   const headers: Record<string, string> = {};
   if (snapshotEtag) headers["If-None-Match"] = snapshotEtag;
-  const res = await fetch("api/snapshot", { cache: "no-store", headers });
+  let res: Response;
+  try {
+    res = await fetch("api/snapshot", { cache: "no-store", headers });
+  } catch (e) {
+    logFrontend("error", "api_error", "snapshot request failed", {
+      url: "api/snapshot",
+      error: errorSummary(e),
+    });
+    throw e;
+  }
   if (res.status === 304) {
-    if (!lastSnapshot) throw new Error("HTTP 304 without cached snapshot");
+    if (!lastSnapshot) {
+      logFrontend("warn", "api_error", "snapshot cache miss on 304", {
+        url: "api/snapshot",
+        status: res.status,
+      });
+      throw new Error("HTTP 304 without cached snapshot");
+    }
     return lastSnapshot;
   }
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  if (!res.ok) {
+    logFrontend("warn", "api_error", "snapshot HTTP request failed", {
+      url: "api/snapshot",
+      status: res.status,
+    });
+    throw new Error("HTTP " + res.status);
+  }
   const tag = res.headers.get("ETag");
   if (tag) snapshotEtag = tag;
-  lastSnapshot = (await res.json()) as Snapshot;
+  try {
+    lastSnapshot = (await res.json()) as Snapshot;
+  } catch (e) {
+    logFrontend("warn", "api_error", "snapshot JSON parse failed", {
+      url: "api/snapshot",
+      status: res.status,
+      error: errorSummary(e),
+    });
+    throw e;
+  }
   return lastSnapshot;
 }
 
@@ -66,19 +119,26 @@ export function subscribeSnapshot(
   onError: (err: Error) => void,
 ): () => void {
   if (typeof EventSource === "undefined") {
+    logFrontend("warn", "snapshot_stream", "EventSource unavailable");
     onError(new Error("EventSource not supported"));
     return () => {};
   }
   const es = new EventSource("/api/snapshot/stream");
+  es.onopen = () => {
+    logFrontend("info", "snapshot_stream", "stream open");
+  };
   es.addEventListener("snapshot", (ev: MessageEvent) => {
     try {
       onSnapshot(JSON.parse(ev.data) as Snapshot);
     } catch (e) {
-      /* ignore */
+      logFrontend("warn", "snapshot_stream", "snapshot message parse failed", {
+        error: errorSummary(e),
+      });
     }
   });
   es.onerror = () => {
     es.close();
+    logFrontend("warn", "snapshot_stream", "stream closed");
     onError(new Error("snapshot stream closed"));
   };
   return () => es.close();
@@ -124,4 +184,14 @@ export function saveSTTConfig(payload: STTSettingsInput): Promise<JsonResponse<S
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+function errorSummary(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
