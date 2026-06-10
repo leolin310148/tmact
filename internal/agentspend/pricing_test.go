@@ -50,6 +50,23 @@ func TestClaudeKnownLineCost(t *testing.T) {
 	approx(t, "claude opus-4-8 line", cost, 0.0935045)
 }
 
+func TestClaudeFable5Pricing(t *testing.T) {
+	cost, ok := calculateCost("claude-fable-5", 1_000_000, 1_000_000, 2_000_000, 1_000_000, 0, "standard", 1_000_000)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	// input $10 + output $50 + 5m cache write $12.50 + 1h cache write $20 + read $1.
+	approx(t, "claude fable 5 line", cost, 93.5)
+}
+
+func TestClaudeFable5ProviderPrefixPricing(t *testing.T) {
+	cost, ok := calculateCost("anthropic.claude-fable-5-20260610-v1:0", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	approx(t, "anthropic claude fable 5 input", cost, 10)
+}
+
 // Codex normalizes cached into cacheRead and folds reasoning into output.
 // gpt-5.3-codex = [input 1.75e-6, output 1.4e-5, cacheWrite nil, cacheRead 1.75e-7].
 // uncachedInput=800, output+reasoning=600, cacheRead=200:

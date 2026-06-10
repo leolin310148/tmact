@@ -51,6 +51,25 @@ var fastMultipliers = map[string]float64{
 	"claude-opus-4-6": 6,
 }
 
+// manualPricing contains newly released models that are not yet present in the
+// vendored LiteLLM snapshot. Rates are dollars per token.
+var manualPricing = map[string]modelCosts{
+	"claude-fable-5": {
+		inputPerToken:      10e-6,
+		outputPerToken:     50e-6,
+		cacheWritePerToken: 12.5e-6,
+		cacheReadPerToken:  1e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"anthropic.claude-fable-5": {
+		inputPerToken:      10e-6,
+		outputPerToken:     50e-6,
+		cacheWritePerToken: 12.5e-6,
+		cacheReadPerToken:  1e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+}
+
 // builtinAliases maps the many model-name variants emitted by agent logs onto
 // canonical snapshot keys. Ported from codeburn's BUILTIN_ALIASES, trimmed to
 // the Claude/Codex families tmact scans, plus the fresh entries the vendored
@@ -120,6 +139,9 @@ func loadPricing() {
 				webSearchPerReq:    webSearchCost,
 				fastMultiplier:     fastMultipliers[name], // 0 → treated as 1 below
 			}
+		}
+		for name, costs := range manualPricing {
+			pricing[name] = costs
 		}
 		pricingKeys = make([]string, 0, len(pricing))
 		for k := range pricing {
