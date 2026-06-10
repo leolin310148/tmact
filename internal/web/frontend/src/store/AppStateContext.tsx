@@ -62,6 +62,12 @@ export interface VoiceState {
   canceled: boolean;
   /** setInterval handle for the elapsed-time ticker, or null. */
   timer: ReturnType<typeof setInterval> | null;
+  /** Live Web Audio handles used only to render the recording waveform. */
+  audioContext: AudioContext | null;
+  analyser: AnalyserNode | null;
+  audioSource: MediaStreamAudioSourceNode | null;
+  waveformRAF: number | null;
+  waveformData: Uint8Array<ArrayBuffer> | null;
   startedAt: number;
   confirmOnStop: boolean;
   hotkeyDown: boolean;
@@ -98,6 +104,11 @@ function initialVoice(): VoiceState {
     mimeType: "",
     canceled: false,
     timer: null,
+    audioContext: null,
+    analyser: null,
+    audioSource: null,
+    waveformRAF: null,
+    waveformData: null,
     startedAt: 0,
     confirmOnStop: false,
     hotkeyDown: false,

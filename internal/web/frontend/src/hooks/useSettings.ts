@@ -29,6 +29,7 @@ const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
 interface ClientSettings {
   paneFont?: number;
   runningEffect?: string;
+  voiceInputDeviceId?: string;
   // markdown view toggle (pane output rendered with pipe tables); global,
   // persisted, default off. Owned by App's React state, not the overlay form —
   // it just shares the tmact.settings blob via the read/save helpers below.
@@ -65,6 +66,10 @@ export function saveMarkdownView(on: boolean): void {
   saveClientSettings({ markdownView: on });
 }
 
+export function readVoiceInputDeviceId(): string {
+  return (readClientSettings().voiceInputDeviceId || "").trim();
+}
+
 function clampFont(px: unknown): number {
   const n = parseInt(px as string, 10);
   if (!Number.isFinite(n)) return FONT_DEFAULT;
@@ -83,6 +88,8 @@ export interface SettingsRefs {
   fontRange: HTMLInputElement | null;
   fontVal: HTMLElement | null;
   runningEffect: HTMLSelectElement | null;
+  voiceDevice: HTMLSelectElement | null;
+  voiceDeviceStatus: HTMLElement | null;
   sttModel: HTMLInputElement | null;
   sttEndpoint: HTMLInputElement | null;
   sttKey: HTMLInputElement | null;
@@ -109,17 +116,29 @@ export interface UseSettingsResult {
   onFontDec: () => void;
   onFontInc: () => void;
   onRunningEffectChange: (value: string) => void;
+  onVoiceDeviceChange: (value: string) => void;
+  onRefreshVoiceDevices: () => void;
   onSaveSTT: () => void;
+  voiceDevices: MediaDeviceInfo[];
+  selectedVoiceDeviceId: string;
+  voiceDeviceStatus: string;
   /** Re-sync slider/readout/select from current localStorage (mount/open). */
   syncFormFromSettings: () => void;
 }
 
 export function useSettings(): UseSettingsResult {
   const [visible, setVisible] = useState(false);
+  const [voiceDevices, setVoiceDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVoiceDeviceId, setSelectedVoiceDeviceId] = useState(() =>
+    readVoiceInputDeviceId(),
+  );
+  const [voiceDeviceStatus, setVoiceDeviceStatus] = useState("");
   const refs = useRef<SettingsRefs>({
     fontRange: null,
     fontVal: null,
     runningEffect: null,
+    voiceDevice: null,
+    voiceDeviceStatus: null,
     sttModel: null,
     sttEndpoint: null,
     sttKey: null,
@@ -149,6 +168,51 @@ export function useSettings(): UseSettingsResult {
     saveClientSettings({ runningEffect: e });
   }, []);
 
+  const applyVoiceDevice = useCallback((deviceId: string | undefined) => {
+    const id = (deviceId || "").trim();
+    setSelectedVoiceDeviceId(id);
+    if (refs.current.voiceDevice) refs.current.voiceDevice.value = id;
+    saveClientSettings({ voiceInputDeviceId: id });
+  }, []);
+
+  const loadVoiceDevices = useCallback(async (requestPermission = false) => {
+    if (
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.enumerateDevices !== "function"
+    ) {
+      setVoiceDevices([]);
+      setVoiceDeviceStatus("microphone device selection is not supported");
+      return;
+    }
+    let probe: MediaStream | null = null;
+    try {
+      if (
+        requestPermission &&
+        typeof navigator.mediaDevices.getUserMedia === "function"
+      ) {
+        probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((device) => device.kind === "audioinput");
+      setVoiceDevices(audioInputs);
+      setVoiceDeviceStatus(
+        audioInputs.length === 0
+          ? "no microphones found"
+          : requestPermission
+            ? "microphones refreshed"
+            : "",
+      );
+    } catch (e) {
+      setVoiceDeviceStatus(
+        e instanceof Error && e.name === "NotAllowedError"
+          ? "microphone permission denied"
+          : "failed to load microphones",
+      );
+    } finally {
+      if (probe) probe.getTracks().forEach((track) => track.stop());
+    }
+  }, []);
+
   // loadClientSettings applies the browser-local settings at startup. It runs
   // synchronously before first paint, so saved visual choices take effect before
   // the first snapshot render.
@@ -156,6 +220,7 @@ export function useSettings(): UseSettingsResult {
     const saved = readClientSettings();
     applyPaneFont(saved.paneFont);
     applyRunningEffect(saved.runningEffect);
+    setSelectedVoiceDeviceId((saved.voiceInputDeviceId || "").trim());
   }, [applyPaneFont, applyRunningEffect]);
 
   const currentPaneFont = useCallback((): number => {
@@ -258,9 +323,11 @@ export function useSettings(): UseSettingsResult {
 
   const openSettings = useCallback(() => {
     setVisible(true);
+    setSelectedVoiceDeviceId(readVoiceInputDeviceId());
+    void loadVoiceDevices(false);
     void loadSTTSettings();
     void loadVersionInfo();
-  }, [loadSTTSettings, loadVersionInfo]);
+  }, [loadVoiceDevices, loadSTTSettings, loadVersionInfo]);
 
   const closeSettings = useCallback(() => {
     setVisible(false);
@@ -280,6 +347,14 @@ export function useSettings(): UseSettingsResult {
     (value: string) => applyRunningEffect(value),
     [applyRunningEffect],
   );
+  const onVoiceDeviceChange = useCallback(
+    (value: string) => applyVoiceDevice(value),
+    [applyVoiceDevice],
+  );
+  const onRefreshVoiceDevices = useCallback(
+    () => void loadVoiceDevices(true),
+    [loadVoiceDevices],
+  );
   const onSaveSTT = useCallback(() => void saveSTTSettings(), [saveSTTSettings]);
 
   // syncFormFromSettings re-applies the persisted slider/readout/select values
@@ -293,6 +368,9 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.runningEffect) {
       refs.current.runningEffect.value = normalizeRunningEffect(saved.runningEffect);
     }
+    const voiceID = (saved.voiceInputDeviceId || "").trim();
+    setSelectedVoiceDeviceId(voiceID);
+    if (refs.current.voiceDevice) refs.current.voiceDevice.value = voiceID;
   }, []);
 
   return {
@@ -305,7 +383,12 @@ export function useSettings(): UseSettingsResult {
     onFontDec,
     onFontInc,
     onRunningEffectChange,
+    onVoiceDeviceChange,
+    onRefreshVoiceDevices,
     onSaveSTT,
+    voiceDevices,
+    selectedVoiceDeviceId,
+    voiceDeviceStatus,
     syncFormFromSettings,
   };
 }

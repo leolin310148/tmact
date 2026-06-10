@@ -490,6 +490,17 @@
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
   }
+  @media (max-width: 520px) {
+    .rec-overlay:not(.confirming):not(.hotkey-recording) .rec-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+    .rec-overlay:not(.confirming):not(.hotkey-recording) .rec-waveform {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
   .rec-dot {
     flex: 0 0 auto;
     width: 34px; height: 34px; border-radius: 50%;
@@ -503,6 +514,15 @@
   .rec-info { flex: 1 1 auto; min-width: 0; }
   .rec-label { font-size: 14px; font-weight: 600; }
   .rec-timer { font: 18px/1.3 var(--mono); color: var(--fg-dim); }
+  .rec-waveform {
+    flex: 0 1 220px;
+    width: clamp(120px, 26vw, 220px);
+    height: 46px;
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+  }
   .rec-send,
   .rec-cancel {
     flex: 0 0 auto;
@@ -533,6 +553,7 @@
   }
   @keyframes rec-spin { to { transform: rotate(360deg); } }
   .rec-overlay.transcribing .rec-timer,
+  .rec-overlay.transcribing .rec-waveform,
   .rec-overlay.transcribing .rec-send,
   .rec-overlay.transcribing .rec-cancel,
   .rec-overlay.transcribing .rec-stop { display: none; }
@@ -553,6 +574,10 @@
   }
   .rec-overlay.hotkey-recording .rec-card {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+  .rec-overlay.hotkey-recording .rec-waveform {
+    grid-column: 1 / -1;
+    width: 100%;
   }
   .rec-overlay.confirming .rec-dot,
   .rec-overlay.hotkey-recording .rec-dot {
@@ -575,6 +600,7 @@
     white-space: nowrap;
   }
   .rec-overlay.confirming .rec-send { display: block; }
+  .rec-overlay.confirming .rec-waveform,
   .rec-overlay.confirming .rec-stop,
   .rec-overlay.hotkey-recording .rec-send,
   .rec-overlay.hotkey-recording .rec-cancel,
@@ -817,7 +843,8 @@
     border: 1px solid var(--border); border-radius: 5px;
     padding: 7px 9px; font: 12px/1.4 var(--mono);
   }
-  .settings-field input:focus { outline: none; border-color: var(--accent); }
+  .settings-field input:focus,
+  .settings-field select:focus { outline: none; border-color: var(--accent); }
   .effect-preview {
     display: flex; align-items: center; gap: 9px;
     min-height: 34px; margin-top: 9px; padding: 9px 10px;
@@ -848,6 +875,7 @@
   }
   .settings-note { font-size: 11px; color: var(--fg-dim); margin: -4px 0 12px; }
   .settings-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .voice-device-actions { margin: -4px 0 12px; }
   .settings-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--fg-dim); }
   .settings-status.ok { color: var(--green); }
   .settings-status.err { color: var(--red); }
@@ -874,6 +902,13 @@
     padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   #stt-save:disabled { opacity: 0.5; cursor: not-allowed; }
+  #voice-device-refresh {
+    flex: 0 0 auto;
+    background: var(--panel-2); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  #voice-device-refresh:active { background: var(--border); }
 
   /* Quick-input FAB — a configurable cluster of one-tap shortcuts pinned to
      the pane's bottom-right corner. Phone-only, like the option bar: the dock

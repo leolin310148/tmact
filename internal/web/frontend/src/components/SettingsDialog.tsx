@@ -44,9 +44,17 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontDec,
     onFontInc,
     onRunningEffectChange,
+    onVoiceDeviceChange,
+    onRefreshVoiceDevices,
     onSaveSTT,
+    voiceDevices,
+    selectedVoiceDeviceId,
+    voiceDeviceStatus,
     syncFormFromSettings,
   } = settings;
+  const selectedVoiceDeviceMissing =
+    selectedVoiceDeviceId !== "" &&
+    !voiceDevices.some((device) => device.deviceId === selectedVoiceDeviceId);
 
   // Re-apply persisted slider/readout/select values once the form refs exist
   // (loadClientSettings may have run before this dialog mounted).
@@ -161,6 +169,42 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               <span className="agent-icon runtime-gemini running">g</span>
             </div>
           </label>
+          <label className="settings-field" htmlFor="voice-device">
+            <span>Microphone</span>
+            <select
+              id="voice-device"
+              aria-label="microphone"
+              value={selectedVoiceDeviceId}
+              ref={(el) => {
+                refs.current.voiceDevice = el;
+              }}
+              onChange={(e) => onVoiceDeviceChange(e.currentTarget.value)}
+            >
+              <option value="">System default</option>
+              {selectedVoiceDeviceMissing && (
+                <option value={selectedVoiceDeviceId}>Saved microphone unavailable</option>
+              )}
+              {voiceDevices.map((device, index) => (
+                <option key={device.deviceId || `audioinput-${index}`} value={device.deviceId}>
+                  {device.label || `Microphone ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="settings-actions voice-device-actions">
+            <span
+              className="settings-status"
+              id="voice-device-status"
+              ref={(el) => {
+                refs.current.voiceDeviceStatus = el;
+              }}
+            >
+              {voiceDeviceStatus}
+            </span>
+            <button id="voice-device-refresh" type="button" onClick={onRefreshVoiceDevices}>
+              Refresh microphones
+            </button>
+          </div>
 
           <div className="settings-section">Quick buttons</div>
           <div className="settings-note">

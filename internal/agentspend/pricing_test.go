@@ -12,10 +12,10 @@ func approx(t *testing.T, label string, got, want float64) {
 	}
 }
 
-// Validates the load-bearing alias: claude-opus-4-8 is absent from the
-// snapshot and must resolve to claude-opus-4-6 pricing ($5/$25 per Mtok), NOT
-// the longest-prefix fallback claude-opus-4 ($15/$75).
-func TestOpus48AliasPricing(t *testing.T) {
+// Validates the load-bearing manual entry: claude-opus-4-8 is absent from the
+// snapshot and must price at $5/$25 per Mtok, NOT the longest-prefix fallback
+// claude-opus-4 ($15/$75).
+func TestOpus48ManualPricing(t *testing.T) {
 	c46, ok := getModelCosts("claude-opus-4-6")
 	if !ok {
 		t.Fatal("claude-opus-4-6 missing from snapshot")
@@ -30,6 +30,17 @@ func TestOpus48AliasPricing(t *testing.T) {
 	if c48.inputPerToken != 5e-6 {
 		t.Fatalf("opus-4-8 input rate %.2e, expected 5e-6 (got opus-4 base?)", c48.inputPerToken)
 	}
+	if c48.fastMultiplier != 2 {
+		t.Fatalf("opus-4-8 fast multiplier = %v, want 2", c48.fastMultiplier)
+	}
+}
+
+func TestOpus48ProviderPrefixPricing(t *testing.T) {
+	cost, ok := calculateCost("anthropic.claude-opus-4-8-20260528-v1:0", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	approx(t, "anthropic claude opus 4.8 input", cost, 5)
 }
 
 // Hand-computed from a real Claude assistant usage record:
@@ -80,11 +91,16 @@ func TestCodexKnownLineCost(t *testing.T) {
 	approx(t, "codex gpt-5.3 line", cost, 0.009835)
 }
 
-// fast tier on opus is billed at 6x standard.
+// Opus 4.8 fast tier is billed at 2x standard. Older 4.6/4.7 fast tiers remain
+// at 6x through the vendored codeburn multiplier table.
 func TestFastMultiplier(t *testing.T) {
 	std, _ := calculateCost("claude-opus-4-8", 1000, 0, 0, 0, 0, "standard", 0)
 	fast, _ := calculateCost("claude-opus-4-8", 1000, 0, 0, 0, 0, "fast", 0)
-	approx(t, "fast 6x", fast, std*6)
+	approx(t, "opus 4.8 fast 2x", fast, std*2)
+
+	std46, _ := calculateCost("claude-opus-4-6", 1000, 0, 0, 0, 0, "standard", 0)
+	fast46, _ := calculateCost("claude-opus-4-6", 1000, 0, 0, 0, 0, "fast", 0)
+	approx(t, "opus 4.6 fast 6x", fast46, std46*6)
 }
 
 func TestUnknownModelIsFree(t *testing.T) {

@@ -42,6 +42,13 @@ export function RecOverlay({ onStop, onSend, onCancel }: RecOverlayProps) {
             0:00
           </div>
         </div>
+        <canvas
+          className="rec-waveform"
+          id="rec-waveform"
+          width="220"
+          height="46"
+          aria-label="recording waveform"
+        />
         <button className="rec-send" id="rec-send" type="button" onClick={onSend}>
           Send
         </button>

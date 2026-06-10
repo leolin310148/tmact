@@ -42,11 +42,9 @@ const (
 	oneHourCacheWriteMultiplier = 1.6
 )
 
-// fastMultipliers mirrors codeburn's FAST_MULTIPLIERS, extended with
-// claude-opus-4-8 (the current Opus, not yet in any published snapshot). The
-// "fast" service tier is billed at a higher rate; codeburn prices it at 6x.
+// fastMultipliers mirrors codeburn's FAST_MULTIPLIERS. The "fast" service tier
+// is billed at a higher rate; older Opus 4.x fast tiers are priced at 6x.
 var fastMultipliers = map[string]float64{
-	"claude-opus-4-8": 6,
 	"claude-opus-4-7": 6,
 	"claude-opus-4-6": 6,
 }
@@ -54,6 +52,22 @@ var fastMultipliers = map[string]float64{
 // manualPricing contains newly released models that are not yet present in the
 // vendored LiteLLM snapshot. Rates are dollars per token.
 var manualPricing = map[string]modelCosts{
+	"claude-opus-4-8": {
+		inputPerToken:      5e-6,
+		outputPerToken:     25e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
+	"anthropic.claude-opus-4-8": {
+		inputPerToken:      5e-6,
+		outputPerToken:     25e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
 	"claude-fable-5": {
 		inputPerToken:      10e-6,
 		outputPerToken:     50e-6,
@@ -75,13 +89,10 @@ var manualPricing = map[string]modelCosts{
 // the Claude/Codex families tmact scans, plus the fresh entries the vendored
 // snapshot predates.
 //
-// claude-opus-4-8 is the load-bearing one: it is missing from the snapshot, so
-// without this alias the longest-prefix fallback would resolve it to the
-// `claude-opus-4` base entry ($15/$75 per Mtok — the original Opus 4 price)
-// instead of the correct $5/$25 that 4.5/4.6/4.7/4.8 all share.
+// Claude dotted display names are normalized onto the hyphenated snapshot or
+// manual-pricing keys before longest-prefix fallback runs.
 var builtinAliases = map[string]string{
-	"claude-opus-4-8":   "claude-opus-4-6",
-	"claude-opus-4.8":   "claude-opus-4-6",
+	"claude-opus-4.8":   "claude-opus-4-8",
 	"claude-opus-4.7":   "claude-opus-4-7",
 	"claude-opus-4.6":   "claude-opus-4-6",
 	"claude-opus-4.5":   "claude-opus-4-5",

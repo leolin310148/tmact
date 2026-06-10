@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { isMobile } from "../lib/dom";
 import { transcribeAudio } from "../api/client";
 import { useAppState } from "../store/AppStateContext";
+import { readVoiceInputDeviceId } from "./useSettings";
 
 // $ mirrors dom.js's getElementById helper. Voice's DOM is imperative (overlay
 // state classes, timer text, draft mutation) exactly as in the original, so we
@@ -29,6 +30,11 @@ import { useAppState } from "../store/AppStateContext";
 function $(id: string): HTMLElement | null {
   return document.getElementById(id);
 }
+
+type WindowWithWebKitAudioContext = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
 
 /**
  * Injected-deps contract — mirrors `createVoice({ showInputError, syncDraft })`
@@ -104,6 +110,106 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
     return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   }
 
+  function audioConstraints(): MediaStreamConstraints {
+    const deviceId = readVoiceInputDeviceId();
+    if (!deviceId) return { audio: true };
+    return { audio: { deviceId: { exact: deviceId } } };
+  }
+
+  function clearWaveformCanvas(): void {
+    const canvas = $("rec-waveform") as HTMLCanvasElement | null;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function stopVoiceVisualization(): void {
+    if (voice.waveformRAF !== null) {
+      cancelAnimationFrame(voice.waveformRAF);
+      voice.waveformRAF = null;
+    }
+    voice.audioSource?.disconnect();
+    voice.audioSource = null;
+    voice.analyser?.disconnect();
+    voice.analyser = null;
+    if (voice.audioContext && voice.audioContext.state !== "closed") {
+      void voice.audioContext.close();
+    }
+    voice.audioContext = null;
+    voice.waveformData = null;
+    clearWaveformCanvas();
+  }
+
+  function startVoiceVisualization(stream: MediaStream): void {
+    stopVoiceVisualization();
+    const AudioContextCtor =
+      window.AudioContext || (window as WindowWithWebKitAudioContext).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const canvas = $("rec-waveform") as HTMLCanvasElement | null;
+    const ctx2d = canvas?.getContext("2d");
+    if (!canvas || !ctx2d) return;
+    try {
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
+      voice.audioContext = audioContext;
+      voice.analyser = analyser;
+      voice.audioSource = source;
+      voice.waveformData = new Uint8Array(analyser.fftSize) as Uint8Array<ArrayBuffer>;
+      if (audioContext.state === "suspended") void audioContext.resume();
+    } catch {
+      stopVoiceVisualization();
+      return;
+    }
+
+    const draw = (): void => {
+      const currentCanvas = $("rec-waveform") as HTMLCanvasElement | null;
+      const analyser = voice.analyser;
+      const data = voice.waveformData;
+      const ctx = currentCanvas?.getContext("2d");
+      if (!currentCanvas || !ctx || !analyser || !data) return;
+
+      const rect = currentCanvas.getBoundingClientRect();
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const width = Math.max(1, Math.round(rect.width * dpr));
+      const height = Math.max(1, Math.round(rect.height * dpr));
+      if (currentCanvas.width !== width || currentCanvas.height !== height) {
+        currentCanvas.width = width;
+        currentCanvas.height = height;
+      }
+
+      analyser.getByteTimeDomainData(data);
+      ctx.clearRect(0, 0, width, height);
+      ctx.lineWidth = Math.max(1.5, 2 * dpr);
+      ctx.strokeStyle =
+        getComputedStyle(document.documentElement).getPropertyValue("--green").trim() ||
+        "#7ee787";
+      ctx.beginPath();
+      for (let i = 0; i < data.length; i += 1) {
+        const x = (i / (data.length - 1)) * width;
+        const y = height / 2 + (((data[i] ?? 128) - 128) / 128) * height * 0.42;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.lineWidth = Math.max(1, dpr);
+      ctx.strokeStyle =
+        getComputedStyle(document.documentElement).getPropertyValue("--border").trim() ||
+        "rgba(255,255,255,0.18)";
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+
+      voice.waveformRAF = requestAnimationFrame(draw);
+    };
+    voice.waveformRAF = requestAnimationFrame(draw);
+  }
+
   // positionRecOverlay pins the Stop button right over the mic button (same
   // size, same spot) and the info card just above the input bar, so the finger
   // that tapped Record only has to tap again to stop.
@@ -164,6 +270,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
   }
 
   function recOverlayTranscribing(): void {
+    stopVoiceVisualization();
     const ov = $("rec-overlay");
     if (ov) {
       ov.classList.add("transcribing");
@@ -178,6 +285,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
   }
 
   function hideRecOverlay(): void {
+    stopVoiceVisualization();
     const ov = $("rec-overlay");
     if (ov) {
       (ov as HTMLElement & { hidden: boolean }).hidden = true;
@@ -190,6 +298,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
   }
 
   function showRecordingConfirm(blob: Blob): void {
+    stopVoiceVisualization();
     voice.pendingBlob = blob;
     const ov = $("rec-overlay");
     if (ov) {
@@ -312,7 +421,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
         return false;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia(audioConstraints());
         const type = preferredAudioType();
         const mediaOpts = type ? { mimeType: type } : undefined;
         const recorder = new MediaRecorder(stream, mediaOpts);
@@ -355,6 +464,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
         recorder.start();
         if (voice.confirmOnStop) showHotkeyRecordingOverlay();
         else showRecOverlay();
+        startVoiceVisualization(stream);
         syncRecordButton();
         if (voice.hotkeyStopPending) {
           voice.hotkeyStopPending = false;
@@ -370,6 +480,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
         );
         if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
         voice.stream = null;
+        stopVoiceVisualization();
         voice.recorder = null;
         voice.confirmOnStop = false;
         voice.hotkeyDown = false;
@@ -512,6 +623,7 @@ export function useVoice({ showInputError, syncDraft }: UseVoiceDeps): UseVoice 
         clearInterval(voice.timer);
         voice.timer = null;
       }
+      stopVoiceVisualization();
       if (voice.recorder && voice.recorder.state === "recording") {
         try {
           voice.recorder.stop();
