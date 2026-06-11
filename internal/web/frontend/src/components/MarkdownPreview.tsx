@@ -1,8 +1,9 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { escapeHTML } from "../lib/dom";
+import { escapeAttribute, escapeHTML } from "../lib/dom";
+import { getCachedMermaidSVG, renderCachedMermaidBlock, renderMermaidDiagrams } from "../lib/mermaid";
 import { buildImageSrc } from "./ImagePreview";
 
 export interface MarkdownPreviewTarget {
@@ -34,6 +35,7 @@ export function buildMarkdownDownloadHref(path: string, cwd: string, peer: strin
 
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|bmp|svg)$/i;
+const MERMAID_LANG_RE = /^mermaid(?:\s|$)/i;
 
 function isSafeLinkHref(href: string): boolean {
   return href.startsWith("#") || /^https?:\/\//i.test(href);
@@ -61,6 +63,20 @@ export function renderMarkdownPreview(content: string, baseDir: string, peer: st
     linkify: false,
     typographer: false,
   });
+
+  const defaultFence = md.renderer.rules.fence;
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const info = token?.info.trim() ?? "";
+    if (token && MERMAID_LANG_RE.test(info)) {
+      const cachedSVG = getCachedMermaidSVG(token.content);
+      if (cachedSVG) {
+        return renderCachedMermaidBlock(token.content, cachedSVG);
+      }
+      return `<div class="markdown-preview-mermaid" data-mermaid-state="pending" data-mermaid-source="${escapeAttribute(token.content)}"><div class="markdown-preview-mermaid-loading">Rendering diagram...</div></div>`;
+    }
+    return defaultFence ? defaultFence(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options);
+  };
 
   const defaultLinkOpen = md.renderer.rules.link_open;
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -95,6 +111,7 @@ export interface MarkdownPreviewProps {
 export default function MarkdownPreview({ target, onClose }: MarkdownPreviewProps) {
   const [data, setData] = useState<MarkdownPreviewResponse | null>(null);
   const [error, setError] = useState<string>("");
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const hidden = target == null;
 
   useEffect(() => {
@@ -132,6 +149,12 @@ export default function MarkdownPreview({ target, onClose }: MarkdownPreviewProp
     if (!data) return "";
     return renderMarkdownPreview(data.content, data.baseDir, target?.peer ?? "");
   }, [data, target?.peer]);
+
+  useLayoutEffect(() => {
+    if (!data || error || !contentRef.current) return;
+    contentRef.current.innerHTML = body;
+    void renderMermaidDiagrams(contentRef.current);
+  }, [body, data, error]);
 
   const downloadHref = data
     ? buildMarkdownDownloadHref(data.path, "", target?.peer ?? "")
@@ -173,7 +196,7 @@ export default function MarkdownPreview({ target, onClose }: MarkdownPreviewProp
         <div className="markdown-preview-body">
           {error ? <div className="markdown-preview-error">{error}</div> : null}
           {!error && !data ? <div className="markdown-preview-loading">Loading...</div> : null}
-          {!error && data ? <div className="markdown-preview-content" dangerouslySetInnerHTML={{ __html: body }} /> : null}
+          {!error && data ? <div ref={contentRef} className="markdown-preview-content" /> : null}
         </div>
         <div className="image-preview-path">{label}</div>
       </div>

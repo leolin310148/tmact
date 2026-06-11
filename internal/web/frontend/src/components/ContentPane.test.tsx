@@ -14,11 +14,24 @@
 // clientHeight are all 0 — so "short pane => no scroll / long pane sticks to
 // bottom" is verifiable only in a real browser (borz E2E / docs/smoke-test.md).
 
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ContentPane from "./ContentPane";
 
-afterEach(cleanup);
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (_id: string, source: string) => ({
+      svg: `<svg data-testid="pane-mermaid-svg"><text>${source}</text></svg>`,
+      bindFunctions: vi.fn(),
+    })),
+  },
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 type Props = Parameters<typeof ContentPane>[0];
 
@@ -112,5 +125,15 @@ describe("ContentPane", () => {
     const table = pre.querySelector("table.tui-table");
     expect(table).not.toBeNull();
     expect(pre.querySelector("td")?.textContent).toBe("a");
+  });
+
+  it("renders pane mermaid fences when markdown flips on", async () => {
+    const text = "```mermaid\nflowchart LR\n  A --> B\n```";
+    const { pre, rerender } = mount({ text: "" });
+
+    rerender({ text, markdown: true });
+
+    await waitFor(() => expect(pre.querySelector('[data-testid="pane-mermaid-svg"]')).not.toBeNull());
+    expect(pre.querySelector(".markdown-preview-mermaid")?.getAttribute("data-mermaid-state")).toBe("rendered");
   });
 });

@@ -438,6 +438,36 @@ describe("extractPipeTables / parsePipeBlock", () => {
     expect(md).toContain("color:#cc0000"); // the red prose line stays coloured
     expect(md).toContain('<table class="tui-table">');
   });
+
+  it("render({ markdown: true }) splices mermaid fences into renderable placeholders", () => {
+    const text = ["```mermaid", "flowchart LR", "  A --> B", "```"].join("\n");
+    const md = render(text, { markdown: true });
+
+    expect(md).toContain('class="markdown-preview-mermaid"');
+    expect(md).toContain('data-mermaid-state="pending"');
+    expect(md).toContain('data-mermaid-source=');
+    expect(md).toContain("Rendering diagram");
+    expect(md).toContain("flowchart LR");
+    expect(md).not.toContain("```mermaid");
+  });
+
+  it("does not fold pipe labels inside mermaid fences as markdown tables", () => {
+    const text = ["```mermaid", 'flowchart LR', '  A -->|"label"| B', "```"].join("\n");
+    const md = render(text, { markdown: true });
+
+    expect(md).toContain('class="markdown-preview-mermaid"');
+    expect(md).toContain('--&gt;|&quot;label&quot;| B');
+    expect(md).not.toContain("tui-table");
+    expect(md).not.toContain(TABLE_OPEN);
+  });
+
+  it("raw render() leaves mermaid fences as terminal text", () => {
+    const text = ["```mermaid", "flowchart LR", "  A --> B", "```"].join("\n");
+    const raw = render(text);
+
+    expect(raw).toContain("```mermaid");
+    expect(raw).not.toContain("markdown-preview-mermaid");
+  });
 });
 
 // ---------------------------------------------------------------------------

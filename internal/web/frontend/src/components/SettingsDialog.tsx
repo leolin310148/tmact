@@ -12,7 +12,7 @@
 //  - running-effect select → applyRunningEffect (data-running-effect on <html>,
 //    preview animates 4 agent icons via CSS)
 //  - STT save button → saveSTTSettings (disabled during save)
-//  - build-time / asset-hash filled by loadVersionInfo
+//  - loaded frontend build / build-time / asset-hash filled by loadVersionInfo
 //
 // The form inputs are UNCONTROLLED (refs into the always-mounted DOM), exactly
 // like the original $()-driven imperative form: useSettings blanks then
@@ -284,6 +284,17 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             </button>
           </div>
 
+          <div className="settings-version">
+            <span>Loaded Frontend Build</span>
+            <span
+              id="frontend-build"
+              ref={(el) => {
+                refs.current.frontendBuild = el;
+              }}
+            >
+              unavailable
+            </span>
+          </div>
           <div className="settings-version">
             <span>Build Time</span>
             <span

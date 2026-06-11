@@ -23,6 +23,7 @@ import type {
   UIEvent as ReactUIEvent,
 } from "react";
 import { render, markPreviewablePaths } from "../terminal/render";
+import { preserveRenderedMermaidBlocks, renderMermaidDiagrams } from "../lib/mermaid";
 
 // PREVIEW_LONG_PRESS_MS / _MOVE — verbatim from app.js image preview behavior.
 const PREVIEW_LONG_PRESS_MS = 550;
@@ -107,8 +108,10 @@ export default function ContentPane({
       return;
     }
     const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-    pre.innerHTML = render(text, { cwd: cwd || undefined, peer: peer || undefined, markdown });
+    const html = render(text, { cwd: cwd || undefined, peer: peer || undefined, markdown });
+    pre.innerHTML = markdown ? preserveRenderedMermaidBlocks(pre, html) : html;
     markPreviewablePaths(pre, cwd, peer);
+    if (markdown) void renderMermaidDiagrams(pre);
     if (atBottom) pre.scrollTop = pre.scrollHeight;
   }, [text, cwd, peer, markdown]);
 

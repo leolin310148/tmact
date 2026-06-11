@@ -15,7 +15,19 @@ if (rootEl) {
 
 // PWA service worker — fire-and-forget, errors ignored (parity with original app.js).
 if ("serviceWorker" in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        void registration.update();
+      })
+      .catch(() => {});
   });
 }

@@ -18,6 +18,7 @@
 import { useCallback, useRef, useState, type MutableRefObject } from "react";
 import { clamp } from "../lib/dom";
 import { loadSTTConfig, loadVersion, saveSTTConfig } from "../api/client";
+import { FRONTEND_BUILD } from "../lib/buildInfo";
 
 const SETTINGS_KEY = "tmact.settings";
 const FONT_MIN = 9,
@@ -96,6 +97,7 @@ export interface SettingsRefs {
   sttNote: HTMLElement | null;
   sttStatus: HTMLElement | null;
   sttSave: HTMLButtonElement | null;
+  frontendBuild: HTMLElement | null;
   buildTime: HTMLElement | null;
   assetHash: HTMLElement | null;
 }
@@ -145,6 +147,7 @@ export function useSettings(): UseSettingsResult {
     sttNote: null,
     sttStatus: null,
     sttSave: null,
+    frontendBuild: null,
     buildTime: null,
     assetHash: null,
   });
@@ -277,8 +280,10 @@ export function useSettings(): UseSettingsResult {
   }, [setSTTStatus, applySTTNote]);
 
   const loadVersionInfo = useCallback(async () => {
+    const frontendEl = refs.current.frontendBuild;
     const buildEl = refs.current.buildTime;
     const hashEl = refs.current.assetHash;
+    if (frontendEl) frontendEl.textContent = FRONTEND_BUILD || "unavailable";
     if (buildEl) buildEl.textContent = "loading…";
     if (hashEl) hashEl.textContent = "loading…";
     try {

@@ -757,6 +757,39 @@
     border-radius: 6px;
     background: var(--panel-2);
   }
+  .markdown-preview-mermaid {
+    margin: 0.9em 0;
+    overflow-x: auto;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .markdown-preview-mermaid-loading {
+    min-height: 28px;
+    display: grid;
+    place-items: center;
+    color: var(--fg-dim);
+    font: 12px/1.4 var(--mono);
+  }
+  .markdown-preview-mermaid svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+  .markdown-preview-mermaid-error {
+    color: var(--fg);
+  }
+  .markdown-preview-mermaid-error-label {
+    margin-bottom: 8px;
+    color: var(--danger);
+    font: 12px/1.4 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .markdown-preview-mermaid-error pre {
+    margin: 0;
+  }
   .markdown-preview-content a {
     color: var(--direct);
     text-decoration-color: rgba(121,192,255,0.55);

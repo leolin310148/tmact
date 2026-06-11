@@ -12,7 +12,8 @@
 // ordering (rules → tables → URLs), same class names (tui-rule / tui-link /
 // image-path / markdown-path / tui-table*).
 
-import { escapeHTML } from "../lib/dom";
+import { escapeAttribute, escapeHTML } from "../lib/dom";
+import { getCachedMermaidSVG, renderCachedMermaidBlock } from "../lib/mermaid";
 
 // Tango palette: the 16 base colours, readable on the dark background.
 const ANSI16: readonly string[] = [
@@ -135,6 +136,8 @@ const TABLE_PLACEHOLDER_RE = /(\d+)/g;
 // the pane stays visually faithful to the terminal layout.
 const URL_OPEN = "", URL_SEP = "", URL_CLOSE = "";
 const URL_PLACEHOLDER_RE = /(\d+)([\s\S]*?)/g;
+const MERMAID_OPEN = "", MERMAID_CLOSE = "";
+const MERMAID_PLACEHOLDER_RE = /(\d+)/g;
 // URL detection. The char class is RFC 3986 reserved + unreserved + percent —
 // ASCII only, so CJK punctuation, backslashes, and prose can't be glued onto a
 // URL. ANSI escape sequences are allowed mid-URL: tmux `capture-pane -e -J`
@@ -483,6 +486,40 @@ export function extractURLs(text: string): ExtractedURLs {
   return { text: replaced, urls };
 }
 
+export interface ExtractedMermaidBlocks {
+  text: string;
+  diagrams: string[];
+}
+
+export function extractMermaidBlocks(text: string): ExtractedMermaidBlocks {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  const diagrams: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const visible = (lines[i] ?? "").replace(ANSI_STRIP_RE, "").trim();
+    if (/^```mermaid(?:\s|$)/i.test(visible)) {
+      const body: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length; j++) {
+        const end = (lines[j] ?? "").replace(ANSI_STRIP_RE, "").trim();
+        if (end === "```") break;
+        body.push((lines[j] ?? "").replace(ANSI_STRIP_RE, ""));
+      }
+      if (j < lines.length) {
+        const idx = diagrams.length;
+        diagrams.push(body.join("\n"));
+        out.push(MERMAID_OPEN + idx + MERMAID_CLOSE);
+        i = j + 1;
+        continue;
+      }
+    }
+    out.push(lines[i] ?? "");
+    i++;
+  }
+  return { text: out.join("\n"), diagrams };
+}
+
 export function wrapRuleLines(text: string): string {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -529,7 +566,8 @@ export function render(text: string, opts?: RenderOpts): string {
   // non-blank line keeps its own trailing spaces/SGR, and leading or interior
   // blank lines are left untouched.
   const trimmed = text.replace(TRAILING_BLANK_RE, "");
-  const extracted = extractTables(trimmed);
+  const mermaids = markdown ? extractMermaidBlocks(trimmed) : { text: trimmed, diagrams: [] };
+  const extracted = extractTables(mermaids.text);
   const tables = extracted.tables.slice();
   let tabledText = extracted.text;
   // Markdown view additionally folds pipe tables. Detection strips ANSI per line
@@ -547,6 +585,21 @@ export function render(text: string, opts?: RenderOpts): string {
     .replaceAll(RULE_CLOSE, "</span>");
   if (tables.length) {
     html = html.replace(TABLE_PLACEHOLDER_RE, (_, n: string) => tables[+n] || "");
+  }
+  if (mermaids.diagrams.length) {
+    html = html.replace(MERMAID_PLACEHOLDER_RE, (_, n: string) => {
+      const source = mermaids.diagrams[+n];
+      if (source === undefined) return "";
+      const cachedSVG = getCachedMermaidSVG(source);
+      if (cachedSVG) {
+        return renderCachedMermaidBlock(source, cachedSVG);
+      }
+      return (
+        '<div class="markdown-preview-mermaid" data-mermaid-state="pending" data-mermaid-source="' +
+        escapeAttribute(source) +
+        '"><div class="markdown-preview-mermaid-loading">Rendering diagram...</div></div>'
+      );
+    });
   }
   if (linkified.urls.length) {
     html = html.replace(URL_PLACEHOLDER_RE, (_, n: string, body: string) => {

@@ -1,0 +1,1 @@
+export const FRONTEND_BUILD = __TMACT_FRONTEND_BUILD__;

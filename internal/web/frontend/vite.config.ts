@@ -2,6 +2,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const frontendBuildTime = new Date().toISOString();
+
 // The Go server embeds internal/web/static via go:embed and serves it verbatim
 // with http.FileServer. Vite therefore builds INTO ../static:
 //   - index.html, sw.js, manifest.json, icons/* land at the static root
@@ -12,6 +14,9 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/",
+  define: {
+    __TMACT_FRONTEND_BUILD__: JSON.stringify(frontendBuildTime),
+  },
   build: {
     outDir: "../static",
     emptyOutDir: true,

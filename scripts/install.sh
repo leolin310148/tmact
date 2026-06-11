@@ -46,6 +46,9 @@ done
 
 cd "$REPO_DIR"
 
+echo "==> Building frontend assets"
+make web
+
 echo "==> Building tmact"
 mkdir -p "$BIN_DIR"
 go build -o "$BIN_PATH" ./cmd/tmact

@@ -14,6 +14,23 @@ export function escapeHTML(s: string): string {
   return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
 }
 
+export function escapeAttribute(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
 // clamp mirrors dom.js: when max < min it returns min, otherwise clamps n into
 // [min, max].
 export function clamp(n: number, min: number, max: number): number {
