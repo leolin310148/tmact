@@ -28,11 +28,15 @@ const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
 const PANE_SWITCHER_LAYOUT_DEFAULT = "auto";
 const PANE_SWITCHER_LAYOUTS = ["auto", "side", "bottom"];
+const OFFICE_SCALE_MIN = 60,
+  OFFICE_SCALE_MAX = 120,
+  OFFICE_SCALE_DEFAULT = 100;
 
 interface ClientSettings {
   paneFont?: number;
   runningEffect?: string;
   paneSwitcherLayout?: string;
+  officeScale?: number | "auto";
   voiceInputDeviceId?: string;
   // markdown view toggle (pane output rendered with pipe tables); global,
   // persisted, default off. Owned by App's React state, not the overlay form —
@@ -92,6 +96,13 @@ function normalizePaneSwitcherLayout(layout: string | undefined): string {
     : PANE_SWITCHER_LAYOUT_DEFAULT;
 }
 
+function normalizeOfficeScale(scale: unknown): number | "auto" {
+  if (scale === "auto" || scale === undefined || scale === null || scale === "") return "auto";
+  const n = parseInt(scale as string, 10);
+  if (!Number.isFinite(n)) return "auto";
+  return clamp(n, OFFICE_SCALE_MIN, OFFICE_SCALE_MAX);
+}
+
 // Refs the SettingsDialog attaches to its form elements, so the imperative
 // helpers can touch the live DOM exactly like settings.js did via $().
 export interface SettingsRefs {
@@ -99,6 +110,8 @@ export interface SettingsRefs {
   fontVal: HTMLElement | null;
   runningEffect: HTMLSelectElement | null;
   paneSwitcherLayout: HTMLSelectElement | null;
+  officeScaleRange: HTMLInputElement | null;
+  officeScaleVal: HTMLElement | null;
   voiceDevice: HTMLSelectElement | null;
   voiceDeviceStatus: HTMLElement | null;
   sttModel: HTMLInputElement | null;
@@ -129,6 +142,8 @@ export interface UseSettingsResult {
   onFontInc: () => void;
   onRunningEffectChange: (value: string) => void;
   onPaneSwitcherLayoutChange: (value: string) => void;
+  onOfficeScaleInput: (value: string) => void;
+  onOfficeScaleAuto: () => void;
   onVoiceDeviceChange: (value: string) => void;
   onRefreshVoiceDevices: () => void;
   onSaveSTT: () => void;
@@ -151,6 +166,8 @@ export function useSettings(): UseSettingsResult {
     fontVal: null,
     runningEffect: null,
     paneSwitcherLayout: null,
+    officeScaleRange: null,
+    officeScaleVal: null,
     voiceDevice: null,
     voiceDeviceStatus: null,
     sttModel: null,
@@ -188,6 +205,23 @@ export function useSettings(): UseSettingsResult {
     document.documentElement.dataset.paneSwitcherLayout = v;
     if (refs.current.paneSwitcherLayout) refs.current.paneSwitcherLayout.value = v;
     saveClientSettings({ paneSwitcherLayout: v });
+  }, []);
+
+  const applyOfficeScale = useCallback((scale: unknown) => {
+    const v = normalizeOfficeScale(scale);
+    if (v === "auto") {
+      document.documentElement.dataset.officeScale = "auto";
+      document.documentElement.style.removeProperty("--office-scale");
+      if (refs.current.officeScaleRange) refs.current.officeScaleRange.value = String(OFFICE_SCALE_DEFAULT);
+      if (refs.current.officeScaleVal) refs.current.officeScaleVal.textContent = "Auto";
+      saveClientSettings({ officeScale: "auto" });
+      return;
+    }
+    document.documentElement.dataset.officeScale = "custom";
+    document.documentElement.style.setProperty("--office-scale", String(v / 100));
+    if (refs.current.officeScaleRange) refs.current.officeScaleRange.value = String(v);
+    if (refs.current.officeScaleVal) refs.current.officeScaleVal.textContent = v + "%";
+    saveClientSettings({ officeScale: v });
   }, []);
 
   const applyVoiceDevice = useCallback((deviceId: string | undefined) => {
@@ -243,8 +277,9 @@ export function useSettings(): UseSettingsResult {
     applyPaneFont(saved.paneFont);
     applyRunningEffect(saved.runningEffect);
     applyPaneSwitcherLayout(saved.paneSwitcherLayout);
+    applyOfficeScale(saved.officeScale);
     setSelectedVoiceDeviceId((saved.voiceInputDeviceId || "").trim());
-  }, [applyPaneFont, applyRunningEffect, applyPaneSwitcherLayout]);
+  }, [applyPaneFont, applyRunningEffect, applyPaneSwitcherLayout, applyOfficeScale]);
 
   const currentPaneFont = useCallback((): number => {
     return clampFont(
@@ -376,6 +411,11 @@ export function useSettings(): UseSettingsResult {
     (value: string) => applyPaneSwitcherLayout(value),
     [applyPaneSwitcherLayout],
   );
+  const onOfficeScaleInput = useCallback(
+    (value: string) => applyOfficeScale(value),
+    [applyOfficeScale],
+  );
+  const onOfficeScaleAuto = useCallback(() => applyOfficeScale("auto"), [applyOfficeScale]);
   const onVoiceDeviceChange = useCallback(
     (value: string) => applyVoiceDevice(value),
     [applyVoiceDevice],
@@ -402,6 +442,15 @@ export function useSettings(): UseSettingsResult {
         saved.paneSwitcherLayout,
       );
     }
+    const officeScale = normalizeOfficeScale(saved.officeScale);
+    if (refs.current.officeScaleRange) {
+      refs.current.officeScaleRange.value =
+        officeScale === "auto" ? String(OFFICE_SCALE_DEFAULT) : String(officeScale);
+    }
+    if (refs.current.officeScaleVal) {
+      refs.current.officeScaleVal.textContent =
+        officeScale === "auto" ? "Auto" : officeScale + "%";
+    }
     const voiceID = (saved.voiceInputDeviceId || "").trim();
     setSelectedVoiceDeviceId(voiceID);
     if (refs.current.voiceDevice) refs.current.voiceDevice.value = voiceID;
@@ -418,6 +467,8 @@ export function useSettings(): UseSettingsResult {
     onFontInc,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
+    onOfficeScaleInput,
+    onOfficeScaleAuto,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,

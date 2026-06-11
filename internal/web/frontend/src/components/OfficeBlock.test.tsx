@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OfficeBlock } from "./OfficeBlock";
 import type { PaneStatus } from "../types/server";
@@ -24,12 +24,18 @@ function pane(overrides: Partial<PaneStatus>): PaneStatus {
   };
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+  localStorage.removeItem("tmact.officeCollapsed");
+});
+
 describe("OfficeBlock", () => {
   it("renders an empty state without pane seats", () => {
-    render(<OfficeBlock panes={[]} selected={null} onSelect={vi.fn()} />);
+    const { container } = render(<OfficeBlock panes={[]} selected={null} onSelect={vi.fn()} />);
 
     expect(screen.getByText("No panes")).toBeInTheDocument();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(container.querySelectorAll(".office-seat")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /collapse office layout/i })).toBeInTheDocument();
   });
 
   it("renders mixed pane states in statusline order", () => {
@@ -46,10 +52,13 @@ describe("OfficeBlock", () => {
       />,
     );
 
-    const seats = screen.getAllByRole("button");
+    const seats = Array.from(container.querySelectorAll("button.office-seat")) as HTMLElement[];
     expect(seats).toHaveLength(4);
-    expect(container.querySelector(".office-block")).toHaveStyle({ "--office-scroll-h": "161px" });
+    expect(container.querySelector(".office-block")).toHaveStyle({ "--office-floorplan-base-h": "161px" });
+    expect(container.querySelectorAll(".office-floorplan")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-floorplan-scale")).toHaveLength(1);
     expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-floor-base")).toHaveLength(1);
     expect(container.querySelector(".office-top-wall-edge")).not.toBeNull();
     expect(container.querySelector(".office-top-wall-face")).not.toBeNull();
     expect(container.querySelector(".office-top-decor-floor")).not.toBeNull();
@@ -61,6 +70,7 @@ describe("OfficeBlock", () => {
     const [first, second, third, fourth] = seats as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     expect(first).toHaveClass("office-seat-left", "occupied", "state-running", "selected");
     expect(first.querySelector(".office-label")).toBeNull();
+    expect(first.querySelector(".office-name-tag")).toHaveTextContent("alpha");
     expect(first.querySelector(".office-floor")).not.toBeNull();
     expect(first.querySelector(".office-work-area")).not.toBeNull();
     expect(first.querySelector(".office-shared-walls")).toBeNull();
@@ -93,7 +103,9 @@ describe("OfficeBlock", () => {
       />,
     );
 
-    const [agent, shell, unknown] = screen.getAllByRole("button") as [HTMLElement, HTMLElement, HTMLElement];
+    const [agent, shell, unknown] = Array.from(
+      container.querySelectorAll("button.office-seat"),
+    ) as [HTMLElement, HTMLElement, HTMLElement];
     expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
     expect(container.querySelectorAll(".office-left-wall-face")).toHaveLength(0);
     expect(container.querySelectorAll(".office-right-decor-floor")).toHaveLength(1);
@@ -132,7 +144,7 @@ describe("OfficeBlock", () => {
       />,
     );
 
-    for (const seat of screen.getAllByRole("button")) {
+    for (const seat of document.querySelectorAll("button.office-seat")) {
       expect(seat.querySelector(".office-label")).toBeNull();
       expect(seat.querySelector(".office-monitor .office-label")).toBeNull();
     }
@@ -157,6 +169,7 @@ describe("OfficeBlock", () => {
     expect(seat).toHaveAttribute("title", expect.stringContaining(longLabel));
     expect(seat).toHaveAttribute("aria-label", expect.stringContaining(longLabel));
     expect(seat.querySelector(".office-label")).toBeNull();
+    expect(seat.querySelector(".office-name-tag")).toHaveTextContent(longLabel);
   });
 
   it("selects the clicked pane", async () => {
@@ -172,5 +185,77 @@ describe("OfficeBlock", () => {
     await userEvent.click(screen.getByRole("button", { name: /select pane dev/i }));
 
     expect(onSelect).toHaveBeenCalledWith("%7");
+  });
+
+  it("collapses and expands the office layout from the edge toggle", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <OfficeBlock
+        panes={[pane({ pane_id: "%7", session: "dev", runtime: "gemini" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /collapse office layout/i });
+    expect(container.querySelector(".office-block")).not.toHaveClass("office-collapsed");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggle);
+
+    expect(container.querySelector(".office-block")).toHaveClass("office-collapsed");
+    expect(localStorage.getItem("tmact.officeCollapsed")).toBe("1");
+    expect(screen.getByRole("button", { name: /expand office layout/i })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    await user.click(screen.getByRole("button", { name: /expand office layout/i }));
+
+    expect(container.querySelector(".office-block")).not.toHaveClass("office-collapsed");
+    expect(localStorage.getItem("tmact.officeCollapsed")).toBe("0");
+  });
+
+  it("shows office seat names while holding Option on desktop", () => {
+    const { container } = render(
+      <OfficeBlock
+        panes={[pane({ pane_id: "%7", session: "dev", runtime: "gemini" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const office = container.querySelector(".office-block");
+    expect(office).not.toHaveClass("office-show-labels");
+
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+    expect(office).toHaveClass("office-show-labels");
+
+    fireEvent.keyUp(window, { key: "Alt", altKey: false });
+    expect(office).not.toHaveClass("office-show-labels");
+  });
+
+  it("shows office seat names briefly after mobile pointer interaction", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <OfficeBlock
+        panes={[pane({ pane_id: "%7", session: "dev", runtime: "gemini" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const office = container.querySelector(".office-block");
+    const floorplan = container.querySelector(".office-floorplan")!;
+    fireEvent.pointerDown(floorplan, { pointerType: "touch" });
+    expect(office).toHaveClass("office-show-labels");
+
+    fireEvent.pointerUp(floorplan, { pointerType: "touch" });
+    act(() => vi.advanceTimersByTime(1999));
+    expect(office).toHaveClass("office-show-labels");
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(office).not.toHaveClass("office-show-labels");
+    vi.useRealTimers();
   });
 });
