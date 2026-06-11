@@ -1362,10 +1362,12 @@
   .office-block {
     --office-wall-top-h: 36px;
     --office-grid: 25px;
+    --office-side-floor-w: 12.5px;
+    --office-seat-cell: 50px;
     --office-seat-start-y: calc(var(--office-wall-top-h) + var(--office-grid));
-    flex-basis: 75px;
-    width: 75px;
-    min-width: 75px;
+    flex-basis: 125px;
+    width: 125px;
+    min-width: 125px;
     background: #151722;
   }
   .office-rail,
@@ -1375,11 +1377,15 @@
   .office-seats {
     z-index: auto;
     padding-top: var(--office-seat-start-y);
+    padding-left: var(--office-side-floor-w);
     flex: 0 0 auto;
     min-height: auto;
+    display: grid;
+    grid-template-columns: repeat(2, var(--office-seat-cell));
+    grid-auto-rows: var(--office-seat-cell);
   }
   .office-seat {
-    width: 75px;
+    width: var(--office-seat-cell);
     height: 50px;
     min-height: 50px;
     flex-basis: 50px;
@@ -1398,8 +1404,12 @@
     background: rgba(122,162,247,0.075);
     box-shadow: inset -2px 0 0 rgba(122,162,247,0.68);
   }
+  .office-seat-filler {
+    pointer-events: none;
+    cursor: default;
+  }
   .office-scene {
-    width: 75px;
+    width: var(--office-seat-cell);
     height: 50px;
     flex: 0 0 50px;
     overflow: visible;
@@ -1408,11 +1418,17 @@
   }
   .office-work-area {
     position: absolute;
-    left: 25px;
+    left: 0;
     top: 0;
     width: 50px;
     height: 50px;
     display: block;
+  }
+  .office-seat-right .office-work-area {
+    transform: scaleX(-1);
+  }
+  .office-seat-right .office-floor {
+    transform: scaleX(-1);
   }
   .office-wall {
     display: none;
@@ -1449,7 +1465,7 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 75px;
+    width: 125px;
     height: max(100%, var(--office-scroll-h, 100%));
     z-index: 1;
     display: block;
@@ -1462,7 +1478,7 @@
   .office-top-wall-edge {
     left: 0;
     top: 0;
-    width: 75px;
+    width: 125px;
     height: 5px;
     background: #05070d;
     box-shadow: inset 0 -1px 0 rgba(122,162,247,0.18);
@@ -1470,11 +1486,9 @@
   .office-top-wall-face {
     left: 0;
     top: 5px;
-    width: 75px;
+    width: 125px;
     height: calc(var(--office-wall-top-h) - 5px);
-    background:
-      linear-gradient(90deg, rgba(8,11,20,0.92) 0 8px, transparent 8px),
-      linear-gradient(180deg, #2a3045 0, #343b55 100%);
+    background: linear-gradient(180deg, #2a3045 0, #343b55 100%);
     box-shadow:
       inset 0 -1px 0 rgba(10,12,20,0.78),
       inset 0 1px 0 rgba(192,202,245,0.08);
@@ -1482,7 +1496,7 @@
   .office-left-decor-floor {
     left: 0;
     top: var(--office-wall-top-h);
-    width: var(--office-grid);
+    width: var(--office-side-floor-w);
     height: calc(100% - var(--office-wall-top-h));
     z-index: 0;
     background:
@@ -1492,10 +1506,23 @@
       linear-gradient(90deg, #2f354d 2px, transparent 2px) 0 0 / 25px 25px,
       #1f2335;
   }
-  .office-top-decor-floor {
-    left: var(--office-grid);
+  .office-right-decor-floor {
+    right: 0;
     top: var(--office-wall-top-h);
-    width: 50px;
+    width: var(--office-side-floor-w);
+    height: calc(100% - var(--office-wall-top-h));
+    z-index: 0;
+    background:
+      radial-gradient(circle at 8px 11px, rgba(122,162,247,0.16) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      radial-gradient(circle at 15px 11px, rgba(187,154,247,0.1) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(#2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(90deg, transparent calc(100% - 2px), #2f354d 0) 0 0 / 25px 25px,
+      #1f2335;
+  }
+  .office-top-decor-floor {
+    left: var(--office-side-floor-w);
+    top: var(--office-wall-top-h);
+    width: 100px;
     height: var(--office-grid);
     z-index: 0;
     background:
@@ -1504,37 +1531,6 @@
       linear-gradient(#2f354d 2px, transparent 2px) 0 0 / 25px 25px,
       linear-gradient(90deg, #2f354d 2px, transparent 2px) 0 0 / 25px 25px,
       #1f2335;
-  }
-  .office-left-wall-edge {
-    left: 0;
-    top: 0;
-    width: 3px;
-    height: 100%;
-    z-index: 2;
-    background:
-      linear-gradient(180deg, #05070d 0 calc(100% - 40px), #2b3449 calc(100% - 40px) 100%);
-    box-shadow: inset -1px 0 0 rgba(192,202,245,0.1);
-  }
-  .office-left-wall-face {
-    left: 3px;
-    top: var(--office-wall-top-h);
-    width: 5px;
-    height: calc(100% - var(--office-wall-top-h));
-    z-index: 2;
-    background:
-      linear-gradient(180deg, #121725 0 calc(100% - 40px), #38425d calc(100% - 40px) 100%);
-    box-shadow:
-      inset -1px 0 0 rgba(10,12,20,0.72),
-      inset 1px 0 0 rgba(192,202,245,0.08);
-  }
-  .office-left-wall-cap {
-    left: 3px;
-    top: var(--office-wall-top-h);
-    width: 5px;
-    height: 4px;
-    z-index: 3;
-    background: linear-gradient(180deg, #070a12, #121725);
-    box-shadow: 0 1px 0 rgba(192,202,245,0.08);
   }
   .office-small-table-side {
     position: absolute;

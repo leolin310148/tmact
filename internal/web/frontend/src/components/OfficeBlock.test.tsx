@@ -48,17 +48,18 @@ describe("OfficeBlock", () => {
 
     const seats = screen.getAllByRole("button");
     expect(seats).toHaveLength(4);
-    expect(container.querySelector(".office-block")).toHaveStyle({ "--office-scroll-h": "261px" });
+    expect(container.querySelector(".office-block")).toHaveStyle({ "--office-scroll-h": "161px" });
     expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
     expect(container.querySelector(".office-top-wall-edge")).not.toBeNull();
     expect(container.querySelector(".office-top-wall-face")).not.toBeNull();
     expect(container.querySelector(".office-top-decor-floor")).not.toBeNull();
     expect(container.querySelector(".office-left-decor-floor")).not.toBeNull();
-    expect(container.querySelector(".office-left-wall-edge")).not.toBeNull();
-    expect(container.querySelector(".office-left-wall-face")).not.toBeNull();
-    expect(container.querySelector(".office-left-wall-cap")).not.toBeNull();
+    expect(container.querySelector(".office-right-decor-floor")).not.toBeNull();
+    expect(container.querySelector(".office-left-wall-edge")).toBeNull();
+    expect(container.querySelector(".office-left-wall-face")).toBeNull();
+    expect(container.querySelector(".office-left-wall-cap")).toBeNull();
     const [first, second, third, fourth] = seats as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
-    expect(first).toHaveClass("occupied", "state-running", "selected");
+    expect(first).toHaveClass("office-seat-left", "occupied", "state-running", "selected");
     expect(first.querySelector(".office-label")).toBeNull();
     expect(first.querySelector(".office-floor")).not.toBeNull();
     expect(first.querySelector(".office-work-area")).not.toBeNull();
@@ -70,12 +71,12 @@ describe("OfficeBlock", () => {
     expect(first.querySelector(".office-person")).toBeNull();
     expect(first.querySelector(".office-sprite-desk")).toBeNull();
     expect(first.querySelector(".office-sprite-monitor")).toBeNull();
-    expect(second).toHaveClass("empty-seat", "asking");
+    expect(second).toHaveClass("office-seat-right", "empty-seat", "asking");
     expect(second.querySelector(".office-label")).toBeNull();
     expect(second.querySelector(".office-alert")).toBeNull();
-    expect(third).toHaveClass("occupied", "state-stale", "stale");
+    expect(third).toHaveClass("office-seat-left", "occupied", "state-stale", "stale");
     expect(third.querySelector(".office-person")).toBeNull();
-    expect(fourth).toHaveClass("empty-seat");
+    expect(fourth).toHaveClass("office-seat-right", "empty-seat");
     expect(fourth.querySelector(".office-person")).toBeNull();
   });
 
@@ -94,8 +95,11 @@ describe("OfficeBlock", () => {
 
     const [agent, shell, unknown] = screen.getAllByRole("button") as [HTMLElement, HTMLElement, HTMLElement];
     expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
-    expect(container.querySelectorAll(".office-left-wall-face")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-left-wall-face")).toHaveLength(0);
+    expect(container.querySelectorAll(".office-right-decor-floor")).toHaveLength(1);
     expect(container.querySelectorAll(".office-top-decor-floor")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-seat-filler")).toHaveLength(1);
+    expect(container.querySelector(".office-seat-filler .office-floor")).not.toBeNull();
     expect(agent).toHaveClass("occupied");
     expect(shell).toHaveClass("empty-seat");
     expect(unknown).toHaveClass("empty-seat");

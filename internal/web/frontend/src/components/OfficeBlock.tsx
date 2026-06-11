@@ -40,7 +40,8 @@ function runtimeClass(runtime: string): string {
 
 export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
   const items = paneListItems(panes);
-  const officeStyle = { "--office-scroll-h": 61 + items.length * 50 + "px" } as CSSProperties;
+  const officeRows = Math.ceil(items.length / 2);
+  const officeStyle = { "--office-scroll-h": 61 + officeRows * 50 + "px" } as CSSProperties;
 
   return (
     <aside className="office-block" style={officeStyle} aria-label="Office block pane switcher">
@@ -48,12 +49,10 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
       <div className="office-wall-glow" aria-hidden="true" />
       <div className="office-shared-walls" aria-hidden="true">
         <span className="office-left-decor-floor" />
+        <span className="office-right-decor-floor" />
         <span className="office-top-decor-floor" />
         <span className="office-top-wall-face" />
         <span className="office-top-wall-edge" />
-        <span className="office-left-wall-face" />
-        <span className="office-left-wall-edge" />
-        <span className="office-left-wall-cap" />
       </div>
       {items.length === 0 ? (
         <div className="office-empty">No panes</div>
@@ -67,6 +66,7 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
             const peer = panePeer(pane);
             const seatClass = [
               "office-seat",
+              i % 2 === 0 ? "office-seat-left" : "office-seat-right",
               hasAgent ? "occupied" : "empty-seat",
               "state-" + stateClass,
               selected === paneID ? "selected" : "",
@@ -120,6 +120,15 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
               </button>
             );
           })}
+          {items.length % 2 === 1 ? (
+            <span className="office-seat office-seat-filler office-seat-right" aria-hidden="true">
+              <span className="office-scene">
+                <span className="office-work-area">
+                  <span className="office-floor" />
+                </span>
+              </span>
+            </span>
+          ) : null}
         </div>
       )}
     </aside>
