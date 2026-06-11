@@ -18,6 +18,7 @@ import {
   MARKDOWN_PATH_RE,
   __test__,
 } from "./render";
+import ndtMxcpAPIGatewayTable from "./fixtures/ndt_mxcp_api_gateway_table.txt?raw";
 
 // Private-use-area placeholder markers, kept byte-identical to terminal.js so
 // the tests assert the same internal contract the renderer relies on.
@@ -334,6 +335,27 @@ describe("parseTableBlock / renderTable / extractTables", () => {
     expect(out).toContain('<table class="tui-table">');
     expect(out).toContain("<td>a</td>");
     expect(out).not.toContain(TABLE_OPEN);
+  });
+
+  it("keeps tmux multi-line rows as one HTML row in separated box tables", () => {
+    const parsed = parseTableBlock(ndtMxcpAPIGatewayTable.trimEnd().split("\n"));
+
+    expect(parsed.headerEnd).toBe(1);
+    expect(parsed.rows).toHaveLength(4);
+    expect(parsed.rows[1]).toEqual([
+      "1.1",
+      "章節頁：API Gateway\n是什麼？",
+      "大字 + 一句「先看沒有它的世界」",
+      "無",
+    ]);
+    expect(parsed.rows[2]?.[0]).toBe("1.2");
+    expect(parsed.rows[2]?.[2]).toContain("出事沒 log → 互相推諉");
+    expect(parsed.rows[2]?.[3]).toContain("痛點補齊〕一張 mermaid 蜘蛛網圖");
+
+    const html = renderTable(parsed);
+    expect(html.match(/<tr>/g)).toHaveLength(4);
+    expect(html).toContain("<td>章節頁：API Gateway\n是什麼？</td>");
+    expect(html).not.toContain("<td></td><td>是什麼？</td>");
   });
 });
 

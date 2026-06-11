@@ -229,54 +229,96 @@ export interface ParsedTable {
 }
 
 // parseTableBlock joins terminal-wrapped continuation lines into logical rows.
-// The column count comes from the top frame's ┬/╦ markers; each row segment
-// (delimited by ├─┤ or the top/bottom frame) is concatenated then split by
-// │/║. A row whose cell count doesn't match `cols` invalidates the whole
+// The column count comes from the top frame's ┬/╦ markers. When a table uses
+// row separators, each segment between separators is one logical row; multiple
+// physical `│ ... │` lines in that segment are continuation lines for wrapped
+// cells. A row whose cell count doesn't match `cols` invalidates the whole
 // block — better to fall back to raw text than render a misaligned table.
 export function parseTableBlock(blockLines: string[]): ParsedTable {
   let cols = 0;
+  let sepCount = 0;
   for (const raw of blockLines) {
     const v = raw.replace(ANSI_STRIP_RE, "");
     if (TABLE_TOP_RE.test(v)) {
       const m = v.match(/[┬╦]/g);
       cols = (m ? m.length : 0) + 1;
-      break;
     }
+    if (TABLE_SEP_RE.test(v)) sepCount++;
   }
   if (cols < 1) return { rows: [], headerEnd: -1 };
 
   const rows: string[][] = [];
   let headerEnd = -1;
-  let buf = "";
+  let segment: string[] = [];
   let invalid = false;
 
-  const flush = (): void => {
-    if (!buf) return;
+  const appendCell = (a: string, b: string): string => {
+    if (!a) return b;
+    if (!b) return a;
+    return a + "\n" + b;
+  };
+
+  const splitRow = (line: string): string[] | null => {
     // Strip leading/trailing edge bars (and the surrounding whitespace that
     // terminal padding may have inserted), then split on inner bars.
-    const trimmed = buf.replace(/^[ \t]*[│║]/, "").replace(/[│║][ \t]*$/, "");
+    const trimmed = line.replace(/^[ \t]*[│║]/, "").replace(/[│║][ \t]*$/, "");
+    if (trimmed === line) return null;
     const cells = trimmed.split(/[│║]/).map((c) => c.trim());
-    if (cells.length !== cols) { invalid = true; }
-    else rows.push(cells);
-    buf = "";
+    if (cells.length !== cols) return null;
+    return cells;
+  };
+
+  const flushSegment = (combinePhysicalRows: boolean): void => {
+    if (!segment.length) return;
+    const physicalRows: string[][] = [];
+    for (const raw of segment) {
+      const v = raw.replace(ANSI_STRIP_RE, "");
+      const cells = splitRow(v);
+      if (cells) {
+        physicalRows.push(cells);
+        continue;
+      }
+      const cont = v.trim();
+      if (!cont) continue;
+      const last = physicalRows[physicalRows.length - 1];
+      if (!last) {
+        invalid = true;
+        break;
+      }
+      last[last.length - 1] = appendCell(last[last.length - 1] ?? "", cont);
+    }
+    if (!invalid && combinePhysicalRows && physicalRows.length > 0) {
+      const combined = Array.from<string>({ length: cols }).fill("");
+      for (const cells of physicalRows) {
+        for (let i = 0; i < cols; i++) {
+          combined[i] = appendCell(combined[i] ?? "", cells[i] ?? "");
+        }
+      }
+      rows.push(combined);
+    } else if (!invalid) {
+      rows.push(...physicalRows);
+    }
+    segment = [];
   };
 
   for (const raw of blockLines) {
     const v = raw.replace(ANSI_STRIP_RE, "");
-    if (TABLE_TOP_RE.test(v) || TABLE_BOT_RE.test(v)) { flush(); continue; }
+    if (TABLE_TOP_RE.test(v)) {
+      flushSegment(false);
+      continue;
+    }
+    if (TABLE_BOT_RE.test(v)) {
+      flushSegment(sepCount > 1);
+      continue;
+    }
     if (TABLE_SEP_RE.test(v)) {
-      flush();
+      flushSegment(headerEnd === -1 || sepCount > 1);
       if (!invalid && headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
       continue;
     }
-    // A continuation line may have no bars (wrap mid-cell). Always append; a
-    // complete row is signalled by accumulating exactly cols+1 bars total —
-    // anything beyond that means we glued two rows together and need to flush.
-    buf += v;
-    const bars = (buf.match(/[│║]/g) || []).length;
-    if (bars >= cols + 1) flush();
+    segment.push(raw);
   }
-  flush();
+  flushSegment(sepCount > 1);
 
   if (invalid) return { rows: [], headerEnd: -1 };
   return { rows, headerEnd };
