@@ -48,6 +48,7 @@ describe("OfficeBlock", () => {
 
     const seats = screen.getAllByRole("button");
     expect(seats).toHaveLength(4);
+    expect(container.querySelector(".office-block")).toHaveStyle({ "--office-scroll-h": "261px" });
     expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
     expect(container.querySelector(".office-top-wall-edge")).not.toBeNull();
     expect(container.querySelector(".office-top-wall-face")).not.toBeNull();

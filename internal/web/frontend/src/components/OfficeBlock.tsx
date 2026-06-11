@@ -1,4 +1,5 @@
 import { onPointerDownNoBlur } from "../lib/dom";
+import type { CSSProperties } from "react";
 import type { PaneStatus } from "../types/server";
 import smallTableSideUrl from "../assets/pixel-agents/furniture/SMALL_TABLE/SMALL_TABLE_SIDE.png";
 import pcSideUrl from "../assets/pixel-agents/furniture/PC/PC_SIDE.png";
@@ -39,9 +40,10 @@ function runtimeClass(runtime: string): string {
 
 export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
   const items = paneListItems(panes);
+  const officeStyle = { "--office-scroll-h": 61 + items.length * 50 + "px" } as CSSProperties;
 
   return (
-    <aside className="office-block" aria-label="Office block pane switcher">
+    <aside className="office-block" style={officeStyle} aria-label="Office block pane switcher">
       <div className="office-rail" aria-hidden="true" />
       <div className="office-wall-glow" aria-hidden="true" />
       <div className="office-shared-walls" aria-hidden="true">

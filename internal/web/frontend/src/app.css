@@ -66,7 +66,9 @@
       #121922;
     border-right: 1px solid var(--border);
     box-shadow: inset -7px 0 13px rgba(0,0,0,0.26);
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
   }
   .office-rail {
     position: absolute;
@@ -97,10 +99,8 @@
     z-index: 1;
     flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: visible;
     padding: 0;
-    scrollbar-width: thin;
   }
   .office-empty {
     position: relative;
@@ -1375,6 +1375,8 @@
   .office-seats {
     z-index: auto;
     padding-top: var(--office-seat-start-y);
+    flex: 0 0 auto;
+    min-height: auto;
   }
   .office-seat {
     width: 75px;
@@ -1445,7 +1447,10 @@
   }
   .office-shared-walls {
     position: absolute;
-    inset: 0;
+    left: 0;
+    top: 0;
+    width: 75px;
+    height: max(100%, var(--office-scroll-h, 100%));
     z-index: 1;
     display: block;
     pointer-events: none;
