@@ -6,7 +6,7 @@
 //     [<span class="chip-key">KEY</span>]      // only when a hotkey is assigned
 //     [<span class="peer-badge">PEER</span>]   // only when peer present
 //     [indicator]                              // agent-icon OR dot OR nothing
-//     <span>LABEL</span>
+//     <span class="chip-label">LABEL</span>
 //   </div>
 //
 // title = (peer ? peer + " — " : "") + (cwd || session) + " — " + stateLabel
@@ -94,7 +94,7 @@ export function Chip({ pane, label, hotkey, selected, onSelect }: ChipProps) {
       {hotkey ? <span className="chip-key">{hotkey}</span> : null}
       {peer ? <span className="peer-badge">{peer}</span> : null}
       <PaneIndicator pane={pane} />
-      <span>{label}</span>
+      <span className="chip-label">{label}</span>
     </div>
   );
 }

@@ -26,6 +26,7 @@ function renderControls() {
     onSelection: vi.fn(),
     onClear: vi.fn(),
     onHelp: vi.fn(),
+    onSettings: vi.fn(),
     onFiles: vi.fn(),
   };
   render(<UploadControls {...handlers} />);
@@ -76,6 +77,12 @@ describe("UploadControls", () => {
     const handlers = renderControls();
     fireEvent.click(document.getElementById("help-btn") as HTMLButtonElement);
     expect(handlers.onHelp).toHaveBeenCalledTimes(1);
+  });
+
+  it("#gear-btn fires onSettings on click", () => {
+    const handlers = renderControls();
+    fireEvent.click(document.getElementById("gear-btn") as HTMLButtonElement);
+    expect(handlers.onSettings).toHaveBeenCalledTimes(1);
   });
 
   it("#file-upload change forwards the selected files then clears its value", () => {

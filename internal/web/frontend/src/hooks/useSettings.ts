@@ -26,10 +26,13 @@ const FONT_MIN = 9,
   FONT_DEFAULT = 13;
 const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
+const PANE_SWITCHER_LAYOUT_DEFAULT = "auto";
+const PANE_SWITCHER_LAYOUTS = ["auto", "side", "bottom"];
 
 interface ClientSettings {
   paneFont?: number;
   runningEffect?: string;
+  paneSwitcherLayout?: string;
   voiceInputDeviceId?: string;
   // markdown view toggle (pane output rendered with pipe tables); global,
   // persisted, default off. Owned by App's React state, not the overlay form —
@@ -83,12 +86,19 @@ function normalizeRunningEffect(effect: string | undefined): string {
     : RUNNING_EFFECT_DEFAULT;
 }
 
+function normalizePaneSwitcherLayout(layout: string | undefined): string {
+  return layout !== undefined && PANE_SWITCHER_LAYOUTS.includes(layout)
+    ? layout
+    : PANE_SWITCHER_LAYOUT_DEFAULT;
+}
+
 // Refs the SettingsDialog attaches to its form elements, so the imperative
 // helpers can touch the live DOM exactly like settings.js did via $().
 export interface SettingsRefs {
   fontRange: HTMLInputElement | null;
   fontVal: HTMLElement | null;
   runningEffect: HTMLSelectElement | null;
+  paneSwitcherLayout: HTMLSelectElement | null;
   voiceDevice: HTMLSelectElement | null;
   voiceDeviceStatus: HTMLElement | null;
   sttModel: HTMLInputElement | null;
@@ -118,6 +128,7 @@ export interface UseSettingsResult {
   onFontDec: () => void;
   onFontInc: () => void;
   onRunningEffectChange: (value: string) => void;
+  onPaneSwitcherLayoutChange: (value: string) => void;
   onVoiceDeviceChange: (value: string) => void;
   onRefreshVoiceDevices: () => void;
   onSaveSTT: () => void;
@@ -139,6 +150,7 @@ export function useSettings(): UseSettingsResult {
     fontRange: null,
     fontVal: null,
     runningEffect: null,
+    paneSwitcherLayout: null,
     voiceDevice: null,
     voiceDeviceStatus: null,
     sttModel: null,
@@ -169,6 +181,13 @@ export function useSettings(): UseSettingsResult {
     document.documentElement.dataset.runningEffect = e;
     if (refs.current.runningEffect) refs.current.runningEffect.value = e;
     saveClientSettings({ runningEffect: e });
+  }, []);
+
+  const applyPaneSwitcherLayout = useCallback((layout: string | undefined) => {
+    const v = normalizePaneSwitcherLayout(layout);
+    document.documentElement.dataset.paneSwitcherLayout = v;
+    if (refs.current.paneSwitcherLayout) refs.current.paneSwitcherLayout.value = v;
+    saveClientSettings({ paneSwitcherLayout: v });
   }, []);
 
   const applyVoiceDevice = useCallback((deviceId: string | undefined) => {
@@ -223,8 +242,9 @@ export function useSettings(): UseSettingsResult {
     const saved = readClientSettings();
     applyPaneFont(saved.paneFont);
     applyRunningEffect(saved.runningEffect);
+    applyPaneSwitcherLayout(saved.paneSwitcherLayout);
     setSelectedVoiceDeviceId((saved.voiceInputDeviceId || "").trim());
-  }, [applyPaneFont, applyRunningEffect]);
+  }, [applyPaneFont, applyRunningEffect, applyPaneSwitcherLayout]);
 
   const currentPaneFont = useCallback((): number => {
     return clampFont(
@@ -352,6 +372,10 @@ export function useSettings(): UseSettingsResult {
     (value: string) => applyRunningEffect(value),
     [applyRunningEffect],
   );
+  const onPaneSwitcherLayoutChange = useCallback(
+    (value: string) => applyPaneSwitcherLayout(value),
+    [applyPaneSwitcherLayout],
+  );
   const onVoiceDeviceChange = useCallback(
     (value: string) => applyVoiceDevice(value),
     [applyVoiceDevice],
@@ -373,6 +397,11 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.runningEffect) {
       refs.current.runningEffect.value = normalizeRunningEffect(saved.runningEffect);
     }
+    if (refs.current.paneSwitcherLayout) {
+      refs.current.paneSwitcherLayout.value = normalizePaneSwitcherLayout(
+        saved.paneSwitcherLayout,
+      );
+    }
     const voiceID = (saved.voiceInputDeviceId || "").trim();
     setSelectedVoiceDeviceId(voiceID);
     if (refs.current.voiceDevice) refs.current.voiceDevice.value = voiceID;
@@ -388,6 +417,7 @@ export function useSettings(): UseSettingsResult {
     onFontDec,
     onFontInc,
     onRunningEffectChange,
+    onPaneSwitcherLayoutChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,

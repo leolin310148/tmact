@@ -44,6 +44,15 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
     <aside className="office-block" aria-label="Office block pane switcher">
       <div className="office-rail" aria-hidden="true" />
       <div className="office-wall-glow" aria-hidden="true" />
+      <div className="office-shared-walls" aria-hidden="true">
+        <span className="office-left-decor-floor" />
+        <span className="office-top-decor-floor" />
+        <span className="office-top-wall-face" />
+        <span className="office-top-wall-edge" />
+        <span className="office-left-wall-face" />
+        <span className="office-left-wall-edge" />
+        <span className="office-left-wall-cap" />
+      </div>
       {items.length === 0 ? (
         <div className="office-empty">No panes</div>
       ) : (
@@ -86,23 +95,25 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
               >
                 <span className="office-scene" aria-hidden="true">
                   <span className="office-wall" />
-                  <span className="office-floor" />
-                  <span className="office-partition-shadow" />
-                  <span className="office-small-table-side">
-                    <img src={smallTableSideUrl} alt="" draggable={false} />
+                  <span className="office-work-area">
+                    <span className="office-floor" />
+                    <span className="office-partition-shadow" />
+                    <span className="office-small-table-side">
+                      <img src={smallTableSideUrl} alt="" draggable={false} />
+                    </span>
+                    <span className="office-pc-side">
+                      <img src={pcSideUrl} alt="" draggable={false} />
+                    </span>
+                    <span className="office-wooden-chair-side">
+                      <img src={woodenChairSideUrl} alt="" draggable={false} />
+                    </span>
+                    {hasAgent ? (
+                      <span
+                        className="office-seated-agent"
+                        style={{ backgroundImage: `url(${characterUrls[i % characterUrls.length]})` }}
+                      />
+                    ) : null}
                   </span>
-                  <span className="office-pc-side">
-                    <img src={pcSideUrl} alt="" draggable={false} />
-                  </span>
-                  <span className="office-wooden-chair-side">
-                    <img src={woodenChairSideUrl} alt="" draggable={false} />
-                  </span>
-                  {hasAgent ? (
-                    <span
-                      className="office-seated-agent"
-                      style={{ backgroundImage: `url(${characterUrls[i % characterUrls.length]})` }}
-                    />
-                  ) : null}
                 </span>
               </button>
             );

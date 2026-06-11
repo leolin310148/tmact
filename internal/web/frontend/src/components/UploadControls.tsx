@@ -1,4 +1,4 @@
-// The small content-wrap action buttons (help / upload / selection / clear)
+// The small content-wrap action buttons (help / settings / upload / selection / clear)
 // plus the hidden file input. 1:1 markup port of the buttons in
 // static/index.html that app.js / quick.js / help.js wire by id.
 //
@@ -40,6 +40,8 @@ export interface UploadControlsProps {
   onClear: () => void;
   /** #help-btn click → toggleHelp (preceded by stopPropagation, per help.js). */
   onHelp: () => void;
+  /** #gear-btn click → open settings. */
+  onSettings: () => void;
   /** #file-upload change → uploadFilesToPane(files); input cleared after read. */
   onFiles: (files: File[]) => void;
 }
@@ -49,6 +51,7 @@ export function UploadControls({
   onSelection,
   onClear,
   onHelp,
+  onSettings,
   onFiles,
 }: UploadControlsProps) {
   return (
@@ -66,6 +69,28 @@ export function UploadControls({
         }}
       >
         ?
+      </button>
+      <button
+        className="gear-btn"
+        id="gear-btn"
+        type="button"
+        title="settings"
+        aria-label="settings"
+        onPointerDown={onPointerDownNoBlur}
+        onClick={onSettings}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
       </button>
       <button
         className="upload-btn"

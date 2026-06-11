@@ -44,6 +44,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontDec,
     onFontInc,
     onRunningEffectChange,
+    onPaneSwitcherLayoutChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,
@@ -168,6 +169,21 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               <span className="agent-icon runtime-copilot running">cp</span>
               <span className="agent-icon runtime-gemini running">g</span>
             </div>
+          </label>
+          <label className="settings-field" htmlFor="pane-switcher-layout">
+            <span>Pane switcher layout</span>
+            <select
+              id="pane-switcher-layout"
+              aria-label="pane switcher layout"
+              ref={(el) => {
+                refs.current.paneSwitcherLayout = el;
+              }}
+              onChange={(e) => onPaneSwitcherLayoutChange(e.currentTarget.value)}
+            >
+              <option value="auto">Auto: side on desktop, bottom on mobile</option>
+              <option value="side">Side office layout</option>
+              <option value="bottom">Bottom panel layout</option>
+            </select>
           </label>
           <label className="settings-field" htmlFor="voice-device">
             <span>Microphone</span>

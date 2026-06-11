@@ -33,7 +33,7 @@ describe("OfficeBlock", () => {
   });
 
   it("renders mixed pane states in statusline order", () => {
-    render(
+    const { container } = render(
       <OfficeBlock
         panes={[
           pane({ pane_id: "%2", session: "zeta", pane_index: 0, runtime: "", asking: true }),
@@ -48,10 +48,20 @@ describe("OfficeBlock", () => {
 
     const seats = screen.getAllByRole("button");
     expect(seats).toHaveLength(4);
+    expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
+    expect(container.querySelector(".office-top-wall-edge")).not.toBeNull();
+    expect(container.querySelector(".office-top-wall-face")).not.toBeNull();
+    expect(container.querySelector(".office-top-decor-floor")).not.toBeNull();
+    expect(container.querySelector(".office-left-decor-floor")).not.toBeNull();
+    expect(container.querySelector(".office-left-wall-edge")).not.toBeNull();
+    expect(container.querySelector(".office-left-wall-face")).not.toBeNull();
+    expect(container.querySelector(".office-left-wall-cap")).not.toBeNull();
     const [first, second, third, fourth] = seats as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     expect(first).toHaveClass("occupied", "state-running", "selected");
     expect(first.querySelector(".office-label")).toBeNull();
     expect(first.querySelector(".office-floor")).not.toBeNull();
+    expect(first.querySelector(".office-work-area")).not.toBeNull();
+    expect(first.querySelector(".office-shared-walls")).toBeNull();
     expect(first.querySelector(".office-small-table-side")).not.toBeNull();
     expect(first.querySelector(".office-pc-side")).not.toBeNull();
     expect(first.querySelector(".office-wooden-chair-side")).not.toBeNull();
@@ -69,7 +79,7 @@ describe("OfficeBlock", () => {
   });
 
   it("renders the floor base with a compact side table and without people or monitors", () => {
-    render(
+    const { container } = render(
       <OfficeBlock
         panes={[
           pane({ pane_id: "%1", session: "agent", runtime: "codex" }),
@@ -82,11 +92,16 @@ describe("OfficeBlock", () => {
     );
 
     const [agent, shell, unknown] = screen.getAllByRole("button") as [HTMLElement, HTMLElement, HTMLElement];
+    expect(container.querySelectorAll(".office-shared-walls")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-left-wall-face")).toHaveLength(1);
+    expect(container.querySelectorAll(".office-top-decor-floor")).toHaveLength(1);
     expect(agent).toHaveClass("occupied");
     expect(shell).toHaveClass("empty-seat");
     expect(unknown).toHaveClass("empty-seat");
     for (const seat of [agent, shell, unknown]) {
       expect(seat.querySelector(".office-floor")).not.toBeNull();
+      expect(seat.querySelector(".office-work-area")).not.toBeNull();
+      expect(seat.querySelector(".office-shared-walls")).toBeNull();
       expect(seat.querySelector(".office-small-table-side")).not.toBeNull();
       expect(seat.querySelector(".office-pc-side")).not.toBeNull();
       expect(seat.querySelector(".office-wooden-chair-side")).not.toBeNull();

@@ -12,7 +12,7 @@
     /* Direct-mode accent: a calm light blue, not an alarming red. */
     --direct: #79c0ff;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --office-block-w: 50px;
+    --office-block-w: 75px;
     --office-seat-h: 50px;
     /* Pane output font size — the default; the settings panel overrides it
        with an inline value on <html>, persisted in localStorage. */
@@ -38,6 +38,7 @@
   #root {
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
   }
@@ -45,6 +46,7 @@
   .app-main {
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     display: flex;
     background: var(--bg);
   }
@@ -619,7 +621,7 @@
   .office-sprite {
     position: absolute;
     display: block;
-    background-image: url("./assets/pixel-life/desk-essentials.png");
+    background-image: none;
     background-repeat: no-repeat;
     background-size: 288px 64px;
     image-rendering: pixelated;
@@ -1358,17 +1360,24 @@
 
   /* Phase reset: rebuild the office block from a clean 200px floor base. */
   .office-block {
-    flex-basis: 50px;
-    width: 50px;
-    min-width: 50px;
+    --office-wall-top-h: 36px;
+    --office-grid: 25px;
+    --office-seat-start-y: calc(var(--office-wall-top-h) + var(--office-grid));
+    flex-basis: 75px;
+    width: 75px;
+    min-width: 75px;
     background: #151722;
   }
   .office-rail,
   .office-wall-glow {
     display: none;
   }
+  .office-seats {
+    z-index: auto;
+    padding-top: var(--office-seat-start-y);
+  }
   .office-seat {
-    width: 50px;
+    width: 75px;
     height: 50px;
     min-height: 50px;
     flex-basis: 50px;
@@ -1388,11 +1397,20 @@
     box-shadow: inset -2px 0 0 rgba(122,162,247,0.68);
   }
   .office-scene {
-    width: 50px;
+    width: 75px;
     height: 50px;
     flex: 0 0 50px;
     overflow: visible;
-    background: #1f2335;
+    background: transparent;
+    z-index: auto;
+  }
+  .office-work-area {
+    position: absolute;
+    left: 25px;
+    top: 0;
+    width: 50px;
+    height: 50px;
+    display: block;
   }
   .office-wall {
     display: none;
@@ -1401,6 +1419,7 @@
     inset: 0;
     width: 50px;
     height: 50px;
+    z-index: 0;
     opacity: 1;
     background:
       radial-gradient(circle at 8px 11px, rgba(122,162,247,0.18) 0 1px, transparent 2px) 0 0 / 25px 25px,
@@ -1419,9 +1438,98 @@
       #222842;
   }
   .office-partition-shadow {
+    z-index: 2;
     background:
       linear-gradient(180deg, rgba(192,202,245,0.06), transparent 36px),
       linear-gradient(90deg, rgba(9,11,20,0.32), transparent 8px 52px, rgba(9,11,20,0.38));
+  }
+  .office-shared-walls {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    pointer-events: none;
+  }
+  .office-shared-walls > span {
+    position: absolute;
+    display: block;
+  }
+  .office-top-wall-edge {
+    left: 0;
+    top: 0;
+    width: 75px;
+    height: 5px;
+    background: #05070d;
+    box-shadow: inset 0 -1px 0 rgba(122,162,247,0.18);
+  }
+  .office-top-wall-face {
+    left: 0;
+    top: 5px;
+    width: 75px;
+    height: calc(var(--office-wall-top-h) - 5px);
+    background:
+      linear-gradient(90deg, rgba(8,11,20,0.92) 0 8px, transparent 8px),
+      linear-gradient(180deg, #2a3045 0, #343b55 100%);
+    box-shadow:
+      inset 0 -1px 0 rgba(10,12,20,0.78),
+      inset 0 1px 0 rgba(192,202,245,0.08);
+  }
+  .office-left-decor-floor {
+    left: 0;
+    top: var(--office-wall-top-h);
+    width: var(--office-grid);
+    height: calc(100% - var(--office-wall-top-h));
+    z-index: 0;
+    background:
+      radial-gradient(circle at 8px 11px, rgba(122,162,247,0.16) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      radial-gradient(circle at 15px 11px, rgba(187,154,247,0.1) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(#2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(90deg, #2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      #1f2335;
+  }
+  .office-top-decor-floor {
+    left: var(--office-grid);
+    top: var(--office-wall-top-h);
+    width: 50px;
+    height: var(--office-grid);
+    z-index: 0;
+    background:
+      radial-gradient(circle at 8px 11px, rgba(122,162,247,0.16) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      radial-gradient(circle at 15px 11px, rgba(187,154,247,0.1) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(#2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(90deg, #2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      #1f2335;
+  }
+  .office-left-wall-edge {
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    z-index: 2;
+    background:
+      linear-gradient(180deg, #05070d 0 calc(100% - 40px), #2b3449 calc(100% - 40px) 100%);
+    box-shadow: inset -1px 0 0 rgba(192,202,245,0.1);
+  }
+  .office-left-wall-face {
+    left: 3px;
+    top: var(--office-wall-top-h);
+    width: 5px;
+    height: calc(100% - var(--office-wall-top-h));
+    z-index: 2;
+    background:
+      linear-gradient(180deg, #121725 0 calc(100% - 40px), #38425d calc(100% - 40px) 100%);
+    box-shadow:
+      inset -1px 0 0 rgba(10,12,20,0.72),
+      inset 1px 0 0 rgba(192,202,245,0.08);
+  }
+  .office-left-wall-cap {
+    left: 3px;
+    top: var(--office-wall-top-h);
+    width: 5px;
+    height: 4px;
+    z-index: 3;
+    background: linear-gradient(180deg, #070a12, #121725);
+    box-shadow: 0 1px 0 rgba(192,202,245,0.08);
   }
   .office-small-table-side {
     position: absolute;
@@ -1555,6 +1663,8 @@
   .statusline {
     flex: 0 0 auto;
     display: flex; align-items: center;
+    min-width: 0;
+    max-width: 100%;
     padding: 0 8px;
     background: var(--panel);
     border-top: 1px solid var(--border);
@@ -1566,6 +1676,8 @@
   }
   .chip {
     flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
     display: flex; align-items: center; gap: 6px;
     padding: 5px 9px;
     border-radius: 5px;
@@ -1573,6 +1685,12 @@
     border: 1px solid var(--border);
     cursor: pointer;
     font: 12px/1 var(--mono);
+    white-space: nowrap;
+  }
+  .chip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .chip:hover { border-color: var(--fg-dim); }
@@ -1710,7 +1828,14 @@
     display: none;
   }
 
-  .content-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+  .content-wrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+  }
   .content-wrap.direct::after {
     content: ""; position: absolute; inset: 0; pointer-events: none;
     box-shadow: inset 0 0 0 0.5px rgba(121, 192, 255, 0.2);
@@ -2318,14 +2443,35 @@
 
   /* Settings — opened from the gear in the status line. */
   .gear-btn {
-    flex: 0 0 auto;
+    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    width: 34px; height: 34px; padding: 0;
     display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px; margin-left: 8px; padding: 0;
-    background: transparent; color: var(--fg-dim);
-    border: 0; border-radius: 5px; cursor: pointer;
+    border-radius: 50%; cursor: pointer;
+    background: rgba(28,35,48,0.82); color: var(--fg-dim);
+    border: 1px solid var(--fg-dim);
+    opacity: 0.45;
+    transition: opacity 0.15s ease;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
   }
-  .gear-btn:hover { color: var(--fg); background: var(--panel-2); }
+  .gear-btn:hover, .gear-btn:active { opacity: 1; color: var(--fg); border-color: var(--fg); }
   .gear-btn svg { width: 16px; height: 16px; display: block; }
+
+  html:not([data-pane-switcher-layout]) .statusline,
+  html[data-pane-switcher-layout="auto"] .statusline,
+  html[data-pane-switcher-layout="side"] .statusline {
+    display: none;
+  }
+  html[data-pane-switcher-layout="bottom"] .office-block {
+    display: none;
+  }
+  html[data-pane-switcher-layout="bottom"] .statusline {
+    display: flex;
+  }
 
   /* Settings modal — a panel over the whole app with two sections: Client
      (this browser, localStorage) and Server (statusd host, /api/settings). */
@@ -2633,7 +2779,7 @@
   /* Help button — always visible (the desktop Option+key hotkeys benefit from
      hints too). On phones it sits above Upload and the lightning FAB. */
   .help-btn {
-    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    position: absolute; right: 12px; bottom: 60px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
@@ -2650,7 +2796,8 @@
     opacity: 1;
     background: var(--amber); color: #1a1100; border-color: var(--amber);
   }
-  .content-wrap.upload-ready .help-btn { bottom: 204px; }
+  .content-wrap.upload-ready .gear-btn { bottom: 204px; }
+  .content-wrap.upload-ready .help-btn { bottom: 252px; }
 
   /* Coachmark overlay: heavy dim + amber dashed rings around target controls,
      each paired with a label showing the relevant hotkey. The amber/dashed
@@ -2750,6 +2897,11 @@
 
   @media (max-width: 760px) {
     .office-block { display: none; }
+    html[data-pane-switcher-layout="side"] .office-block { display: flex; }
+    html:not([data-pane-switcher-layout]) .statusline,
+    html[data-pane-switcher-layout="auto"] .statusline,
+    html[data-pane-switcher-layout="bottom"] .statusline { display: flex; }
+    html[data-pane-switcher-layout="side"] .statusline { display: none; }
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
@@ -2757,8 +2909,10 @@
     .markdown-btn { bottom: 108px; }
     .selection-btn { bottom: 156px; }
     .clear-pane-btn { bottom: 204px; }
-    .help-btn { bottom: 252px; }
-    .content-wrap.upload-ready .help-btn { bottom: 252px; }
+    .gear-btn { bottom: 252px; }
+    .help-btn { bottom: 300px; }
+    .content-wrap.upload-ready .gear-btn { bottom: 252px; }
+    .content-wrap.upload-ready .help-btn { bottom: 300px; }
     .qb-backdrop.open { display: block; }
     /* Quick-answer buttons exist for phones: shown only here, and only while
        a question is actually up (the bar holds buttons). */
@@ -2769,8 +2923,8 @@
        can still be composed there even while direct mode is active. */
     .input-bar.direct .input-row { display: none; }
     /* No horizontal scroll on phones — wrap chips onto a few short lines. */
-    .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; }
-    .chip { padding: 3px 6px; font-size: 10px; gap: 4px; }
+    .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; min-width: 0; }
+    .chip { flex: 0 1 auto; padding: 3px 6px; font-size: 10px; gap: 4px; }
     /* The Option+key hotkeys are a hardware-keyboard feature — no badge on
        phones, where panes are reached by tapping. */
     .chip-key { display: none; }
