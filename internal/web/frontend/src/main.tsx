@@ -13,8 +13,9 @@ if (rootEl) {
   createRoot(rootEl).render(<App />);
 }
 
-// PWA service worker — fire-and-forget, errors ignored (parity with original app.js).
-if ("serviceWorker" in navigator) {
+// PWA service worker — production only. In Vite dev, a service worker can
+// control the page and interfere with HMR/module updates.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (refreshing) return;
@@ -27,6 +28,18 @@ if ("serviceWorker" in navigator) {
       .register("/sw.js")
       .then((registration) => {
         void registration.update();
+      })
+      .catch(() => {});
+  });
+} else if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then(() => {
+        if (navigator.serviceWorker.controller) {
+          window.location.reload();
+        }
       })
       .catch(() => {});
   });

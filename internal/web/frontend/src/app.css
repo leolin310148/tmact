@@ -12,6 +12,8 @@
     /* Direct-mode accent: a calm light blue, not an alarming red. */
     --direct: #79c0ff;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --office-block-w: 50px;
+    --office-seat-h: 50px;
     /* Pane output font size — the default; the settings panel overrides it
        with an inline value on <html>, persisted in localStorage. */
     --pane-font: 13px;
@@ -38,6 +40,1514 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  .app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    background: var(--bg);
+  }
+
+  .office-block {
+    position: relative;
+    flex: 0 0 var(--office-block-w);
+    width: var(--office-block-w);
+    min-width: var(--office-block-w);
+    display: flex;
+    flex-direction: column;
+    background:
+      linear-gradient(90deg, #0c1017 0 5px, transparent 5px 94px, rgba(0,0,0,0.42) 94px 100%),
+      linear-gradient(180deg, rgba(255,220,164,0.045) 0 1px, transparent 1px 50px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px) 0 0 / 10px 10px,
+      linear-gradient(0deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 10px 10px,
+      #121922;
+    border-right: 1px solid var(--border);
+    box-shadow: inset -7px 0 13px rgba(0,0,0,0.26);
+    overflow: hidden;
+  }
+  .office-rail {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 100%;
+    background:
+      linear-gradient(90deg,
+        transparent 0 4px,
+        rgba(255,220,164,0.16) 4px 5px,
+        transparent 5px 92px,
+        rgba(0,0,0,0.34) 92px 96px,
+        rgba(121,192,255,0.12) 96px 97px,
+        transparent 97px);
+    pointer-events: none;
+  }
+  .office-wall-glow {
+    position: absolute;
+    top: 0; bottom: 0; left: 5px;
+    width: 89px;
+    background:
+      radial-gradient(circle at 18px 24px, rgba(255,209,128,0.14), transparent 20px),
+      radial-gradient(circle at 78px 174px, rgba(121,192,255,0.08), transparent 22px),
+      radial-gradient(circle at 22px 324px, rgba(126,231,135,0.06), transparent 18px);
+    pointer-events: none;
+  }
+  .office-seats {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    scrollbar-width: thin;
+  }
+  .office-empty {
+    position: relative;
+    z-index: 1;
+    margin: auto 4px;
+    padding: 8px 5px;
+    color: var(--fg-dim);
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    background: rgba(14,17,22,0.7);
+    font: 10px/1.3 var(--mono);
+    text-align: center;
+  }
+  .office-seat {
+    position: relative;
+    width: var(--office-block-w);
+    height: var(--office-seat-h);
+    min-height: var(--office-seat-h);
+    flex: 0 0 var(--office-seat-h);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    margin: 0;
+    padding: 2px 2px 1px;
+    border: 0;
+    border-radius: 0;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.025), rgba(0,0,0,0.04)),
+      transparent;
+    color: var(--fg-dim);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .office-seat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      linear-gradient(180deg, rgba(255,222,171,0.1) 0 1px, transparent 1px 31px, rgba(0,0,0,0.5) 31px 32px, rgba(255,222,171,0.08) 32px 33px, transparent 33px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 6px, rgba(83,63,44,0.42) 6px 8px, transparent 8px 90px, rgba(0,0,0,0.34) 90px 94px, rgba(255,255,255,0.025) 94px),
+      repeating-linear-gradient(90deg, rgba(255,229,184,0.055) 0 3px, transparent 3px 10px) 8px 0 / 82px 31px no-repeat,
+      repeating-linear-gradient(90deg, rgba(118,78,45,0.18) 0 8px, rgba(34,47,42,0.18) 8px 16px) 0 32px / 100px 18px no-repeat,
+      linear-gradient(180deg, #17212b 0 32px, #222f2b 32px 100%);
+  }
+  .office-floor,
+  .office-label {
+    position: relative;
+    z-index: 1;
+  }
+  .office-seat:hover {
+    background:
+      linear-gradient(180deg, rgba(121,192,255,0.06), rgba(0,0,0,0.03)),
+      transparent;
+  }
+  .office-seat.selected {
+    background:
+      linear-gradient(180deg, rgba(121,192,255,0.09), rgba(68,147,248,0.03)),
+      transparent;
+    box-shadow:
+      inset 3px 0 0 rgba(121,192,255,0.7),
+      inset 0 -3px 0 rgba(121,192,255,0.12);
+  }
+  .office-seat.selected::after {
+    content: "";
+    position: absolute;
+    left: 55px; top: 29px;
+    width: 32px; height: 8px;
+    z-index: 0;
+    background: rgba(68,147,248,0.36);
+    border: 1px solid rgba(121,192,255,0.55);
+    box-shadow: 0 0 10px rgba(121,192,255,0.2);
+  }
+  .office-seat.stale {
+    filter: grayscale(0.82);
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.075) 0 2px, transparent 2px 6px),
+      rgba(0,0,0,0.12);
+  }
+  .office-seat.stale::before {
+    opacity: 0.55;
+  }
+  .office-seat.asking::before {
+    background:
+      linear-gradient(180deg, rgba(210,153,34,0.2) 0 2px, transparent 2px 31px, rgba(0,0,0,0.5) 31px 32px, rgba(210,153,34,0.14) 32px 33px, transparent 33px),
+      linear-gradient(90deg, rgba(210,153,34,0.13) 0 8px, transparent 8px 90px, rgba(0,0,0,0.34) 90px 94px, rgba(255,255,255,0.025) 94px),
+      repeating-linear-gradient(90deg, rgba(255,211,128,0.08) 0 3px, transparent 3px 10px) 8px 0 / 82px 31px no-repeat,
+      repeating-linear-gradient(90deg, rgba(118,78,45,0.18) 0 8px, rgba(58,60,31,0.24) 8px 16px) 0 32px / 100px 18px no-repeat,
+      linear-gradient(180deg, #1e252d 0 32px, #222f21 32px 100%);
+  }
+  .office-cubicle-decor {
+    position: absolute;
+    left: 58px; top: 5px;
+    width: 28px; height: 13px;
+    z-index: 1;
+    opacity: 0.52;
+    pointer-events: none;
+  }
+  .office-seat:nth-child(4n + 1) .office-cubicle-decor {
+    background:
+      linear-gradient(90deg, rgba(121,192,255,0.36) 0 1px, transparent 1px 100%),
+      linear-gradient(0deg, rgba(121,192,255,0.3) 0 1px, transparent 1px 100%),
+      #152c38;
+    border: 2px solid #0a1218;
+    box-shadow: inset 0 -3px 0 rgba(121,192,255,0.1);
+  }
+  .office-seat:nth-child(5n + 2) .office-cubicle-decor {
+    left: 69px; top: 6px;
+    width: 9px; height: 14px;
+    background: #e0b45f;
+    border: 2px solid #3c2b14;
+    box-shadow: 0 0 10px rgba(210,153,34,0.2);
+  }
+  .office-seat:nth-child(6n + 3) .office-cubicle-decor {
+    left: 64px; top: 4px;
+    width: 20px; height: 12px;
+    background:
+      linear-gradient(90deg, #2f5f4d 0 5px, transparent 5px 8px, #9a7445 8px 100%);
+    border: 2px solid #332414;
+  }
+  .office-seat:nth-child(7n + 4) .office-cubicle-decor {
+    left: 62px; top: 5px;
+    width: 24px; height: 12px;
+    background:
+      linear-gradient(90deg, #d29922 0 4px, transparent 4px 7px, #79c0ff 7px 11px, transparent 11px 14px, #7ee787 14px 18px, transparent 18px),
+      #4b3821;
+    border: 2px solid #1d1510;
+  }
+  .office-floor {
+    position: relative;
+    width: 100px;
+    height: 39px;
+    flex: 0 0 39px;
+    display: block;
+    image-rendering: pixelated;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  .office-seat.selected .office-floor {
+    background:
+      radial-gradient(ellipse at 72px 31px, rgba(121,192,255,0.32) 0 17px, transparent 18px);
+  }
+  .office-desk {
+    position: absolute;
+    left: 5px; top: 27px;
+    width: 49px; height: 8px;
+    background: #8d6844;
+    border: 2px solid #2d2118;
+    border-radius: 0;
+    box-shadow:
+      inset 0 -2px 0 #5f442d,
+      0 3px 0 #241912;
+  }
+  .office-seat.selected .office-desk::after {
+    content: "";
+    position: absolute;
+    right: 3px; top: -9px;
+    width: 6px; height: 7px;
+    background: #79c0ff;
+    border: 2px solid #102438;
+    box-shadow: 0 0 8px rgba(121,192,255,0.72);
+  }
+  .office-monitor {
+    position: absolute;
+    left: 7px; top: 4px;
+    width: 34px; height: 23px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    background: #4a5668;
+    border: 3px solid #1c2530;
+    color: #b8f3d0;
+    font: 800 6px/1 var(--mono);
+    text-transform: none;
+    box-shadow: inset 0 -3px 0 #14202a;
+  }
+  .office-monitor::after {
+    content: "";
+    position: absolute;
+    left: 12px; bottom: -8px;
+    width: 9px; height: 5px;
+    background: #303a48;
+    border-left: 2px solid #1c2530;
+    border-right: 2px solid #1c2530;
+  }
+  .office-screen-glow {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background:
+      linear-gradient(0deg, rgba(184,243,208,0.11) 1px, transparent 1px) 0 0 / 100% 4px,
+      linear-gradient(90deg, transparent 0 42%, rgba(184,243,208,0.24) 42% 58%, transparent 58%),
+      #10251d;
+    border: 1px solid #07110d;
+    box-shadow: inset 0 0 0 1px rgba(184,243,208,0.08), inset 0 0 8px rgba(126,231,135,0.16);
+  }
+  .office-tower {
+    position: absolute;
+    left: 41px; top: 8px;
+    width: 9px; height: 22px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 3px;
+    background: #3b4655;
+    border: 2px solid #1c2530;
+    box-shadow: inset 0 -4px 0 #263241;
+  }
+  .office-tower::after {
+    content: "";
+    position: absolute;
+    left: 3px; bottom: 4px;
+    width: 3px; height: 3px;
+    background: #7ee787;
+  }
+  .office-runtime {
+    color: #c9d1d9;
+    font: 800 4px/1 var(--mono);
+    writing-mode: vertical-rl;
+    text-transform: uppercase;
+  }
+  .office-keyboard {
+    position: absolute;
+    left: 10px; bottom: 2px;
+    width: 30px; height: 5px;
+    background: #233140;
+    border-top: 1px solid #6d7f91;
+  }
+  .office-chair {
+    position: absolute;
+    left: 61px; top: 26px;
+    width: 24px; height: 8px;
+    background: #3a4a5d;
+    border: 2px solid #1d2734;
+    border-radius: 0;
+    box-shadow:
+      4px -10px 0 -2px #3a4a5d,
+      4px -10px 0 0 #1d2734;
+  }
+  .office-person {
+    position: absolute;
+    left: 67px; top: 12px;
+    width: 22px; height: 25px;
+  }
+  .office-head {
+    position: absolute;
+    left: 5px; top: 0;
+    width: 12px; height: 12px;
+    background: #d8aa77;
+    border: 2px solid #3b291b;
+    border-radius: 0;
+    box-shadow: inset 0 -2px 0 #bd855a;
+  }
+  .office-body {
+    position: absolute;
+    left: 4px; top: 13px;
+    width: 14px; height: 11px;
+    background: #4d8f7a;
+    border: 2px solid #1d4d42;
+    border-radius: 0;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.18);
+  }
+  .runtime-codex .office-body { background: #346fa6; border-color: #17456f; }
+  .runtime-claude .office-body { background: #b3793d; border-color: #6d421d; }
+  .runtime-copilot .office-body { background: #4d8f4f; border-color: #215528; }
+  .runtime-gemini .office-body { background: #8064bd; border-color: #493473; }
+  .office-arm {
+    position: absolute;
+    top: 14px;
+    width: 5px; height: 11px;
+    background: #d8aa77;
+    border: 1px solid #3b291b;
+    transform-origin: top center;
+  }
+  .arm-left { left: 0; transform: rotate(42deg); }
+  .arm-right { right: 0; transform: rotate(-12deg); }
+  .office-seat.state-running .office-monitor {
+    border-color: var(--green);
+    color: #7ee787;
+    box-shadow:
+      inset 0 -3px 0 #15351f,
+      0 0 0 1px rgba(126,231,135,0.4);
+    animation: office-monitor-glow 1s steps(2, end) infinite;
+  }
+  .office-seat.state-running .arm-left {
+    animation: office-type-left 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-running .arm-right {
+    animation: office-type-right 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-running .office-keyboard {
+    animation: office-keyboard-tap 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-idle .office-person {
+    transform: translateY(1px) rotate(3deg);
+  }
+  .office-seat.state-idle .office-screen-glow {
+    opacity: 0.68;
+  }
+  .office-seat.empty-seat .office-monitor {
+    color: transparent;
+    opacity: 0.55;
+  }
+  .office-seat.empty-seat .office-chair {
+    opacity: 0.7;
+  }
+  .office-seat.empty-seat .office-tower::after {
+    background: #354152;
+  }
+  .office-seat.stale .office-monitor,
+  .office-seat.stale .office-keyboard,
+  .office-seat.stale .office-person,
+  .office-seat.stale .office-alert,
+  .office-seat.stale .office-sleep {
+    animation: none;
+  }
+  .office-sleep {
+    position: absolute;
+    right: 7px; top: 4px;
+    color: #79c0ff;
+    font: 900 8px/1 var(--mono);
+    text-shadow: 5px -4px 0 rgba(121,192,255,0.5);
+    animation: office-sleep 1.5s steps(3, end) infinite;
+  }
+  .office-alert {
+    position: absolute;
+    right: 4px; top: 3px;
+    width: 14px; height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--amber);
+    color: #1a1100;
+    border: 2px solid #1a1100;
+    border-radius: 0;
+    font: 900 10px/1 var(--mono);
+    animation: office-alert 0.8s steps(2, end) infinite;
+  }
+  .office-label {
+    width: 94px;
+    height: 9px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(201,209,217,0.74);
+    background: rgba(9,13,18,0.5);
+    border-top: 1px solid rgba(255,236,198,0.08);
+    font: 8px/9px var(--mono);
+    text-align: center;
+  }
+  .office-seat.selected .office-label {
+    color: var(--fg);
+  }
+  @keyframes office-monitor-glow {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.35); }
+  }
+  @keyframes office-type-left {
+    0%, 100% { transform: rotate(28deg) translateY(0); }
+    50% { transform: rotate(8deg) translateY(2px); }
+  }
+  @keyframes office-type-right {
+    0%, 100% { transform: rotate(-8deg) translateY(2px); }
+    50% { transform: rotate(-28deg) translateY(0); }
+  }
+  @keyframes office-keyboard-tap {
+    0%, 100% { border-top-color: #7ee787; }
+    50% { border-top-color: #d2a8ff; }
+  }
+  @keyframes office-sleep {
+    0% { transform: translate(0, 0); opacity: 0.25; }
+    50% { transform: translate(1px, -4px); opacity: 1; }
+    100% { transform: translate(2px, -8px); opacity: 0.25; }
+  }
+  @keyframes office-alert {
+    0%, 100% { box-shadow: 0 0 0 rgba(210,153,34,0); }
+    50% { box-shadow: 0 0 10px rgba(210,153,34,0.75); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .office-seat.state-running .office-monitor,
+    .office-seat.state-running .arm-left,
+    .office-seat.state-running .arm-right,
+    .office-seat.state-running .office-keyboard,
+    .office-sleep,
+    .office-alert {
+      animation: none;
+    }
+  }
+
+  /* Asset-backed workstation tiles. These rules intentionally sit after the
+     earlier CSS-only office art so the phase-3 sprite layout wins cleanly. */
+  .office-block {
+    flex-basis: var(--office-block-w);
+    width: var(--office-block-w);
+    min-width: var(--office-block-w);
+    background:
+      linear-gradient(90deg, #080b0e 0 4px, transparent 4px 108px, rgba(0,0,0,0.5) 108px 100%),
+      linear-gradient(180deg, rgba(255,230,184,0.06) 0 1px, transparent 1px 64px),
+      #101820;
+    border-right: 1px solid #242f38;
+    box-shadow: inset -8px 0 14px rgba(0,0,0,0.3);
+  }
+  .office-rail {
+    background:
+      linear-gradient(90deg,
+        transparent 0 4px,
+        rgba(230,190,128,0.22) 4px 5px,
+        transparent 5px 106px,
+        rgba(0,0,0,0.35) 106px 109px,
+        rgba(121,192,255,0.16) 109px 110px,
+        transparent 110px);
+  }
+  .office-wall-glow {
+    left: 5px;
+    width: 102px;
+    background:
+      radial-gradient(circle at 25px 28px, rgba(255,208,139,0.12), transparent 22px),
+      radial-gradient(circle at 84px 182px, rgba(108,198,172,0.08), transparent 20px),
+      radial-gradient(circle at 27px 372px, rgba(121,192,255,0.08), transparent 22px);
+  }
+  .office-seat {
+    width: var(--office-block-w);
+    height: var(--office-seat-h);
+    min-height: var(--office-seat-h);
+    flex-basis: var(--office-seat-h);
+    gap: 0;
+    padding: 0;
+    color: #a7b0ba;
+    background: transparent;
+    image-rendering: pixelated;
+  }
+  .office-seat::before {
+    background:
+      repeating-linear-gradient(90deg, rgba(232,190,142,0.06) 0 5px, rgba(91,64,47,0.05) 5px 10px) 5px 0 / 102px 34px no-repeat,
+      linear-gradient(180deg, #17212a 0 34px, #1f2c30 34px 53px, #0d1116 53px 100%);
+  }
+  .office-seat::after,
+  .office-seat.selected::after,
+  .office-seat.selected .office-desk::after,
+  .office-monitor::after {
+    content: none;
+  }
+  .office-seat:hover {
+    background: linear-gradient(180deg, rgba(160,207,255,0.06), rgba(0,0,0,0.02));
+  }
+  .office-seat.selected {
+    background: linear-gradient(180deg, rgba(121,192,255,0.08), rgba(68,147,248,0.03));
+    box-shadow: inset 0 -1px 0 rgba(121,192,255,0.35);
+  }
+  .office-seat.asking::before {
+    background:
+      repeating-linear-gradient(90deg, rgba(232,190,142,0.08) 0 5px, rgba(91,64,47,0.06) 5px 10px) 5px 0 / 102px 34px no-repeat,
+      linear-gradient(180deg, rgba(210,153,34,0.18) 0 2px, transparent 2px 34px, rgba(87,67,31,0.25) 34px 53px, transparent 53px),
+      linear-gradient(180deg, #1a232b 0 34px, #23302f 34px 53px, #0d1116 53px 100%);
+  }
+  .office-seat.stale {
+    filter: grayscale(0.88);
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 6px),
+      rgba(0,0,0,0.12);
+  }
+  .office-seat.stale::before,
+  .office-seat.stale .office-scene {
+    opacity: 0.58;
+  }
+  .office-scene {
+    position: relative;
+    z-index: 1;
+    width: 112px;
+    height: 53px;
+    flex: 0 0 53px;
+    display: block;
+    overflow: hidden;
+  }
+  .office-wall,
+  .office-floor,
+  .office-partition-shadow,
+  .office-furniture,
+  .office-status {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+  .office-wall {
+    height: 34px;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 9px, rgba(55,39,31,0.35) 9px 11px, transparent 11px 101px, rgba(0,0,0,0.34) 101px 104px, transparent 104px),
+      repeating-linear-gradient(0deg, rgba(255,235,204,0.04) 0 1px, transparent 1px 8px),
+      #17212a;
+  }
+  .office-floor {
+    top: 34px;
+    width: 112px;
+    height: 19px;
+    flex: none;
+    background:
+      radial-gradient(ellipse at 72px 12px, rgba(40,25,18,0.3), transparent 22px),
+      repeating-linear-gradient(90deg, #7d8b86 0 8px, #46555a 8px 16px, #b8b0a1 16px 24px, #536866 24px 32px);
+    opacity: 0.82;
+  }
+  .office-seat.selected .office-floor {
+    background:
+      radial-gradient(ellipse at 72px 11px, rgba(121,192,255,0.38) 0 19px, transparent 20px),
+      repeating-linear-gradient(90deg, #6d8b92 0 8px, #415966 8px 16px, #9ea9a7 16px 24px, #4c686c 24px 32px);
+  }
+  .office-partition-shadow {
+    background:
+      linear-gradient(180deg, transparent 0 33px, rgba(0,0,0,0.46) 33px 35px, transparent 35px),
+      linear-gradient(90deg, rgba(0,0,0,0.18), transparent 10px 100px, rgba(0,0,0,0.32));
+  }
+  .office-sprite {
+    position: absolute;
+    display: block;
+    background-image: url("./assets/pixel-life/desk-essentials.png");
+    background-repeat: no-repeat;
+    background-size: 288px 64px;
+    image-rendering: pixelated;
+  }
+  .office-seat .office-sprite.office-cubicle-decor {
+    left: 76px;
+    top: 6px;
+    width: 24px;
+    height: 16px;
+    opacity: 0.86;
+    background-position: -257px -38px;
+    border: 0;
+    box-shadow: none;
+  }
+  .office-sprite-desk,
+  .office-desk {
+    left: 7px;
+    top: 18px;
+    width: 32px;
+    height: 31px;
+    background-position: 0 0;
+    transform: scale(1.36);
+    transform-origin: left bottom;
+    background-color: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+  .office-sprite-chair,
+  .office-chair {
+    left: 67px;
+    top: 29px;
+    width: 23px;
+    height: 12px;
+    background-position: -68px -43px;
+    transform: scale(1.25);
+    transform-origin: left bottom;
+    opacity: 1;
+    background-color: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+  .office-sprite-monitor,
+  .office-monitor {
+    left: 24px;
+    top: 28px;
+    width: 34px;
+    height: 22px;
+    display: block;
+    padding: 0;
+    background-position: -104px -41px;
+    background-color: transparent;
+    border: 0;
+    box-shadow: none;
+    color: transparent;
+  }
+  .office-screen-glow {
+    position: absolute;
+    left: 6px;
+    top: 5px;
+    width: 21px;
+    height: 10px;
+    background:
+      linear-gradient(0deg, rgba(184,243,208,0.16) 1px, transparent 1px) 0 0 / 100% 3px,
+      #0c2b20;
+    border: 0;
+    opacity: 0.75;
+    box-shadow: 0 0 7px rgba(126,231,135,0.24);
+  }
+  .office-sprite-lamp,
+  .office-lamp {
+    left: 68px;
+    top: 12px;
+    width: 5px;
+    height: 14px;
+    background-position: -78px -12px;
+    transform: scale(1.65);
+    transform-origin: left bottom;
+    opacity: 0.82;
+  }
+  .office-sprite-item,
+  .office-desktop-item {
+    left: 56px;
+    top: 34px;
+    width: 10px;
+    height: 19px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background-position: -140px -42px;
+  }
+  .office-runtime {
+    position: absolute;
+    left: -1px;
+    top: 1px;
+    writing-mode: horizontal-tb;
+    text-transform: uppercase;
+    color: #e8f0f4;
+    font: 800 4px/1 var(--mono);
+    text-shadow: 0 1px 0 #091017;
+  }
+  .office-keyboard {
+    left: 31px;
+    top: 48px;
+    width: 24px;
+    height: 3px;
+    background: #1b2531;
+    border-top: 1px solid #6b7786;
+    opacity: 0.9;
+  }
+  .office-person {
+    left: 72px;
+    top: 16px;
+    width: 20px;
+    height: 29px;
+  }
+  .office-head {
+    left: 5px;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    background: #d6a06c;
+    border: 1px solid #362317;
+    box-shadow: inset 0 -2px 0 #b87a4e, 2px 1px 0 #2b1b13;
+  }
+  .office-body {
+    left: 4px;
+    top: 10px;
+    width: 12px;
+    height: 13px;
+    background: #4d8f7a;
+    border: 1px solid #183d35;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.22), 0 2px 0 rgba(0,0,0,0.28);
+  }
+  .runtime-codex .office-body { background: #3472a4; border-color: #163f64; }
+  .runtime-claude .office-body { background: #b8793c; border-color: #623a1a; }
+  .runtime-copilot .office-body { background: #4a8b4d; border-color: #1f4a25; }
+  .runtime-gemini .office-body { background: #7b61b5; border-color: #43306e; }
+  .office-arm {
+    top: 12px;
+    width: 4px;
+    height: 11px;
+    background: #d6a06c;
+    border: 1px solid #362317;
+  }
+  .arm-left { left: 1px; transform: rotate(36deg); }
+  .arm-right { right: 1px; transform: rotate(-14deg); }
+  .office-seat.state-running .office-monitor {
+    filter: drop-shadow(0 0 4px rgba(126,231,135,0.6));
+    animation: office-monitor-glow 1s steps(2, end) infinite;
+  }
+  .office-seat.state-running .office-screen-glow {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(126,231,135,0.5);
+  }
+  .office-seat.state-running .arm-left {
+    animation: office-type-left 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-running .arm-right {
+    animation: office-type-right 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-running .office-keyboard {
+    animation: office-keyboard-tap 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-idle .office-person {
+    transform: translateY(1px) rotate(2deg);
+  }
+  .office-seat.state-idle .office-screen-glow {
+    opacity: 0.5;
+  }
+  .office-seat.empty-seat .office-monitor {
+    opacity: 1;
+    filter: saturate(0.78);
+  }
+  .office-seat.empty-seat .office-screen-glow {
+    opacity: 0.32;
+    box-shadow: none;
+  }
+  .office-seat.empty-seat .office-chair {
+    opacity: 1;
+  }
+  .office-seat.empty-seat .office-desktop-item {
+    opacity: 1;
+  }
+  .office-seat.stale .office-monitor,
+  .office-seat.stale .office-keyboard,
+  .office-seat.stale .office-person,
+  .office-seat.stale .office-alert,
+  .office-seat.stale .office-sleep {
+    animation: none;
+  }
+  .office-seat.selected .office-lamp {
+    filter: drop-shadow(0 0 5px rgba(121,192,255,0.9));
+  }
+  .office-sleep {
+    right: 11px;
+    top: 7px;
+    color: #79c0ff;
+    font: 900 8px/1 var(--mono);
+    text-shadow: 5px -4px 0 rgba(121,192,255,0.45);
+    animation: office-sleep 1.5s steps(3, end) infinite;
+  }
+  .office-alert {
+    right: 9px;
+    top: 5px;
+    width: 13px;
+    height: 13px;
+    background: #ffd166;
+    color: #211300;
+    border: 2px solid #211300;
+    font: 900 9px/1 var(--mono);
+    animation: office-alert 0.8s steps(2, end) infinite;
+  }
+  .office-label {
+    position: relative;
+    z-index: 1;
+    width: 106px;
+    height: 11px;
+    flex: 0 0 11px;
+    margin: 0 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(213,221,228,0.78);
+    background: rgba(8,12,17,0.72);
+    border-top: 1px solid rgba(255,236,198,0.08);
+    font: 8px/11px var(--mono);
+    text-align: center;
+  }
+  .office-seat.selected .office-label {
+    color: #e7f4ff;
+    background: rgba(19,32,45,0.82);
+  }
+
+  /* Presentation-first workstation pass: keep the full desk sprite intact and
+     give the office scene enough room before tightening dimensions again. */
+  .office-block {
+    background:
+      linear-gradient(90deg, #07090d 0 4px, transparent 4px calc(100% - 5px), rgba(0,0,0,0.45) calc(100% - 5px) 100%),
+      #101820;
+  }
+  .office-rail {
+    background:
+      linear-gradient(90deg,
+        transparent 0 4px,
+        rgba(230,190,128,0.22) 4px 5px,
+        transparent 5px calc(100% - 8px),
+        rgba(0,0,0,0.35) calc(100% - 8px) calc(100% - 5px),
+        rgba(121,192,255,0.16) calc(100% - 5px) calc(100% - 4px),
+        transparent calc(100% - 4px));
+  }
+  .office-wall-glow {
+    width: calc(100% - 10px);
+  }
+  .office-seat {
+    width: var(--office-block-w);
+    height: var(--office-seat-h);
+    min-height: var(--office-seat-h);
+    flex-basis: var(--office-seat-h);
+  }
+  .office-seat::before,
+  .office-seat.asking::before {
+    background:
+      linear-gradient(180deg, rgba(255,224,159,0.1), rgba(58,35,16,0.1)),
+      #9b6630;
+  }
+  .office-scene {
+    width: 320px;
+    height: 318px;
+    flex-basis: 318px;
+  }
+  .office-wall {
+    height: 318px;
+    background:
+      radial-gradient(circle at 16px 19px, rgba(72,41,17,0.24) 0 2px, transparent 2px) 0 0 / 48px 48px,
+      linear-gradient(#805123 3px, transparent 3px) 0 0 / 48px 48px,
+      linear-gradient(90deg, #805123 3px, transparent 3px) 0 0 / 48px 48px,
+      #a06a32;
+  }
+  .office-floor {
+    top: 0;
+    width: 320px;
+    height: 318px;
+    background:
+      radial-gradient(circle at 15px 18px, rgba(94,54,21,0.38) 0 2px, transparent 2px) 0 0 / 48px 48px,
+      radial-gradient(circle at 27px 18px, rgba(94,54,21,0.22) 0 2px, transparent 2px) 0 0 / 48px 48px,
+      linear-gradient(#805123 3px, transparent 3px) 0 0 / 48px 48px,
+      linear-gradient(90deg, #805123 3px, transparent 3px) 0 0 / 48px 48px,
+      #a06a32;
+    opacity: 1;
+  }
+  .office-seat.selected .office-floor {
+    background:
+      radial-gradient(ellipse at 120px 159px, rgba(94,178,255,0.26) 0 72px, transparent 74px),
+      radial-gradient(circle at 15px 18px, rgba(94,54,21,0.38) 0 2px, transparent 2px) 0 0 / 48px 48px,
+      radial-gradient(circle at 27px 18px, rgba(94,54,21,0.22) 0 2px, transparent 2px) 0 0 / 48px 48px,
+      linear-gradient(#805123 3px, transparent 3px) 0 0 / 48px 48px,
+      linear-gradient(90deg, #805123 3px, transparent 3px) 0 0 / 48px 48px,
+      #a06a32;
+  }
+  .office-partition-shadow {
+    background:
+      radial-gradient(ellipse at 123px 178px, rgba(42,23,11,0.34), transparent 82px),
+      linear-gradient(180deg, rgba(255,213,127,0.08), transparent 54px);
+  }
+  .office-sprite-desk,
+  .office-desk {
+    left: 36px;
+    top: 98px;
+    width: 168px;
+    height: 72px;
+    background-image: none;
+    background:
+      linear-gradient(180deg, #f5dfad 0 52px, #bd7a4d 52px 64px, #74462f 64px 100%),
+      #f1d9a8;
+    border: 5px solid #3d2b26;
+    transform: none;
+    box-shadow:
+      inset -7px 0 0 rgba(255,255,255,0.35),
+      inset 0 -9px 0 rgba(73,42,31,0.16);
+    z-index: 3;
+  }
+  .office-desk::before,
+  .office-desk::after {
+    content: "";
+    position: absolute;
+    display: block;
+  }
+  .office-desk::before {
+    left: 7px;
+    right: 42px;
+    bottom: -38px;
+    height: 36px;
+    background:
+      linear-gradient(90deg, #8c5739 0 8px, transparent 8px calc(100% - 8px), #8c5739 calc(100% - 8px) 100%);
+  }
+  .office-desk::after {
+    right: -5px;
+    bottom: -50px;
+    width: 48px;
+    height: 52px;
+    background:
+      linear-gradient(180deg, #d59a63 0 20px, #bd7c4f 20px 100%);
+    border: 5px solid #3d2b26;
+    box-shadow:
+      inset 0 5px 0 rgba(255,255,255,0.25),
+      inset 0 -6px 0 rgba(92,50,36,0.18);
+  }
+  .office-seat.selected .office-desk::after {
+    content: "";
+  }
+  .office-sprite-chair,
+  .office-chair {
+    left: 76px;
+    top: 166px;
+    width: 70px;
+    height: 50px;
+    background-image: none;
+    background: #62718e;
+    border: 4px solid #1b2230;
+    border-radius: 4px 4px 10px 10px;
+    transform: none;
+    box-shadow:
+      inset 0 -8px 0 #4f5d78,
+      -9px 20px 0 -10px #1b2230,
+      9px 20px 0 -10px #1b2230;
+    z-index: 4;
+  }
+  .office-chair::before,
+  .office-chair::after {
+    content: "";
+    position: absolute;
+    display: block;
+    background: inherit;
+    border: inherit;
+  }
+  .office-chair::before {
+    left: 8px;
+    top: -36px;
+    width: 46px;
+    height: 42px;
+    border-radius: 8px 8px 3px 3px;
+    box-shadow: inset 0 -6px 0 #53627e;
+  }
+  .office-chair::after {
+    left: 21px;
+    bottom: -16px;
+    width: 18px;
+    height: 12px;
+    border-top: 0;
+    background: #4a5870;
+  }
+  .office-sprite-monitor,
+  .office-monitor {
+    left: 108px;
+    top: 48px;
+    width: 88px;
+    height: 62px;
+    background-image: none;
+    background:
+      linear-gradient(180deg, #263447 0 7px, #111821 7px 100%);
+    border: 5px solid #202837;
+    transform: none;
+    box-shadow:
+      inset 0 0 0 4px #31415a,
+      0 10px 0 -3px #1c2330;
+    z-index: 5;
+  }
+  .office-monitor::before {
+    content: "";
+    position: absolute;
+    left: 34px;
+    bottom: -15px;
+    width: 20px;
+    height: 13px;
+    background: #202837;
+    box-shadow: -11px 9px 0 -3px #202837, 11px 9px 0 -3px #202837;
+  }
+  .office-screen-glow {
+    left: 10px;
+    top: 10px;
+    width: 58px;
+    height: 34px;
+    background:
+      linear-gradient(90deg, transparent 0 30%, rgba(255,255,255,0.18) 30% 36%, transparent 36%),
+      linear-gradient(0deg, rgba(196,255,192,0.24) 2px, transparent 2px) 0 0 / 100% 7px,
+      linear-gradient(90deg, #1d5d3d 0 38%, #2c713f 38% 58%, #174428 58% 100%);
+    box-shadow: 0 0 10px rgba(126,231,135,0.32);
+  }
+  .office-sprite-lamp,
+  .office-lamp {
+    left: 43px;
+    top: 111px;
+    width: 5px;
+    height: 14px;
+    background-position: -78px -12px;
+    transform: scale(3);
+    transform-origin: left top;
+    z-index: 5;
+  }
+  .office-sprite-item,
+  .office-desktop-item {
+    left: 53px;
+    top: 112px;
+    width: 47px;
+    height: 35px;
+    background-image: none;
+    background:
+      linear-gradient(180deg, #69b6d7 0 16px, #d5e3ec 16px 100%);
+    border: 4px solid #2b3443;
+    transform: none;
+    box-shadow:
+      inset 0 -6px 0 rgba(28,37,49,0.22),
+      0 9px 0 -3px #2b3443;
+    z-index: 5;
+  }
+  .office-desktop-item::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    width: 4px;
+    height: 4px;
+    background: #1a6f95;
+    box-shadow: 10px 0 0 #1a6f95, 20px 0 0 #1a6f95;
+  }
+  .office-desktop-item::after {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 19px;
+    width: 26px;
+    height: 8px;
+    background:
+      linear-gradient(135deg, #8793a5 25%, transparent 25%) 0 0 / 8px 8px,
+      linear-gradient(225deg, #8793a5 25%, transparent 25%) 0 0 / 8px 8px,
+      #d5e3ec;
+  }
+  .office-seat .office-sprite.office-cubicle-decor {
+    left: 93px;
+    top: 130px;
+    width: 24px;
+    height: 16px;
+    background-position: -257px -38px;
+    transform: scale(1.75);
+    transform-origin: left top;
+    z-index: 5;
+  }
+  .office-keyboard {
+    left: 122px;
+    top: 129px;
+    width: 52px;
+    height: 7px;
+    border: 2px solid #1d2530;
+    background:
+      repeating-linear-gradient(90deg, #657083 0 4px, #2a3440 4px 6px);
+    z-index: 6;
+  }
+  .office-person {
+    left: 94px;
+    top: 88px;
+    width: 34px;
+    height: 58px;
+    z-index: 2;
+  }
+  .office-head {
+    left: 9px;
+    width: 15px;
+    height: 15px;
+    border-width: 2px;
+  }
+  .office-body {
+    left: 7px;
+    top: 16px;
+    width: 18px;
+    height: 24px;
+    border-width: 2px;
+  }
+  .office-arm {
+    top: 19px;
+    width: 6px;
+    height: 19px;
+    border-width: 1px;
+  }
+  .arm-left { left: 2px; }
+  .arm-right { right: 2px; }
+  .office-sleep {
+    right: 30px;
+    top: 22px;
+    font-size: 15px;
+  }
+  .office-alert {
+    right: 24px;
+    top: 18px;
+    width: 22px;
+    height: 22px;
+    font-size: 14px;
+  }
+  .office-label {
+    width: 312px;
+    height: 18px;
+    flex-basis: 18px;
+    margin: 0 4px;
+    font: 12px/18px var(--mono);
+  }
+
+  /* pixel-agents asset layer: real tile sprites replace hand-built furniture. */
+  .office-pixel-agent-layer {
+    position: absolute;
+    inset: auto;
+    left: -104px;
+    top: -696px;
+    width: 160px;
+    height: 272px;
+    transform: scale(4);
+    transform-origin: left top;
+    z-index: 4;
+  }
+  .office-asset {
+    position: absolute;
+    display: block;
+    image-rendering: pixelated;
+  }
+  .office-asset img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+    image-rendering: pixelated;
+    pointer-events: none;
+    user-select: none;
+  }
+  .office-pixel-agent-layer .office-desk,
+  .office-pixel-agent-layer .office-sprite-desk {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+    z-index: 4;
+  }
+  .office-pixel-agent-layer .office-desk::before,
+  .office-pixel-agent-layer .office-desk::after {
+    content: none;
+  }
+  .office-pixel-agent-layer .office-monitor,
+  .office-pixel-agent-layer .office-sprite-monitor {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+    z-index: 7;
+    filter: none;
+    opacity: 1;
+  }
+  .office-pixel-agent-layer .office-monitor::before,
+  .office-pixel-agent-layer .office-monitor::after {
+    content: none;
+  }
+  .office-pixel-agent-layer .office-chair {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+    z-index: 5;
+    opacity: 1;
+  }
+  .office-pixel-agent-layer .office-chair::before,
+  .office-pixel-agent-layer .office-chair::after {
+    content: none;
+  }
+  .office-pixel-agent-layer .office-chair img {
+    filter: sepia(0.95) saturate(0.85) hue-rotate(14deg) brightness(1.22) contrast(0.95);
+  }
+  .office-runtime {
+    left: 55px;
+    top: 200px;
+    z-index: 8;
+    color: #cde9ff;
+    font: 800 3px/1 var(--mono);
+    text-shadow: 0 1px 0 #0b1118, 0 0 4px rgba(121,192,255,0.5);
+    writing-mode: horizontal-tb;
+  }
+  .office-keyboard {
+    left: 49px;
+    top: 207px;
+    width: 15px;
+    height: 6px;
+    border: 1px solid #563728;
+    background:
+      linear-gradient(45deg, rgba(130,146,160,0.55) 25%, transparent 25%) 0 0 / 3px 3px,
+      linear-gradient(-45deg, rgba(130,146,160,0.55) 25%, transparent 25%) 0 0 / 3px 3px,
+      #e3edf1;
+    box-shadow:
+      inset 0 -1px 0 rgba(88,58,45,0.2),
+      0 1px 0 rgba(56,34,24,0.24);
+    z-index: 8;
+  }
+  .office-mouse {
+    position: absolute;
+    left: 71px;
+    top: 208px;
+    width: 5px;
+    height: 8px;
+    border: 1px solid #563728;
+    border-radius: 3px;
+    background:
+      linear-gradient(90deg, transparent 0 2px, #563728 2px 3px, transparent 3px),
+      #d9e7eb;
+    box-shadow: 0 1px 0 rgba(56,34,24,0.2);
+    z-index: 8;
+  }
+  .office-agent-sprite,
+  .office-person.office-agent-sprite {
+    left: 100px;
+    top: 111px;
+    width: 16px;
+    height: 24px;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    background-size: 112px 96px;
+    border: 0;
+    box-shadow: none;
+    transform: scale(3);
+    transform-origin: left top;
+    image-rendering: pixelated;
+    z-index: 6;
+  }
+  .office-desk-lamp {
+    position: absolute;
+    left: 78px;
+    top: 196px;
+    width: 9px;
+    height: 12px;
+    z-index: 8;
+    image-rendering: pixelated;
+    background:
+      linear-gradient(90deg, transparent 0 2px, #3b2520 2px 3px, transparent 3px 100%) 4px 5px / 5px 5px no-repeat,
+      radial-gradient(circle at 6px 6px, #fff8dc 0 2px, #d68c35 2px 4px, #4d3023 4px 5px, transparent 5px),
+      linear-gradient(180deg, transparent 0 9px, #4d3023 9px 10px, transparent 10px);
+    filter: drop-shadow(0 1px 0 rgba(43,26,18,0.28));
+  }
+  .office-desk-lamp::before,
+  .office-desk-lamp::after {
+    content: "";
+    position: absolute;
+    display: block;
+    image-rendering: pixelated;
+  }
+  .office-desk-lamp::before {
+    left: 4px;
+    top: 9px;
+    width: 4px;
+    height: 2px;
+    background: #e1f0f2;
+    border: 1px solid #4d3023;
+    box-shadow: inset -1px 0 0 rgba(54,34,25,0.16);
+  }
+  .office-desk-lamp::after {
+    left: 0;
+    top: 8px;
+    width: 5px;
+    height: 3px;
+    border: 1px solid #4d3023;
+    border-top: 0;
+    background: #e8eef1;
+  }
+  .office-seat.state-running .office-agent-sprite {
+    animation: office-agent-bob 0.42s steps(2, end) infinite;
+  }
+  .office-seat.state-idle .office-agent-sprite {
+    transform: scale(3) translateY(1px);
+  }
+  .office-pc-frame {
+    opacity: 0;
+    animation: office-pc-frame 0.72s steps(1, end) infinite;
+  }
+  .office-pc-frame.frame-1 { animation-delay: 0s; }
+  .office-pc-frame.frame-2 { animation-delay: -0.48s; }
+  .office-pc-frame.frame-3 { animation-delay: -0.24s; }
+  .office-seat.empty-seat .office-pixel-agent-layer .office-monitor,
+  .office-seat.empty-seat .office-pixel-agent-layer .office-chair,
+  .office-seat.empty-seat .office-pixel-agent-layer .office-desk {
+    opacity: 1;
+  }
+  .office-seat.empty-seat .office-pixel-agent-layer .office-monitor {
+    filter: saturate(0.78) brightness(0.78);
+  }
+  .office-seat.stale .office-pixel-agent-layer .office-monitor,
+  .office-seat.stale .office-pixel-agent-layer .office-chair,
+  .office-seat.stale .office-pixel-agent-layer .office-desk,
+  .office-seat.stale .office-agent-sprite {
+    animation: none;
+  }
+
+  /* Phase reset: rebuild the office block from a clean 200px floor base. */
+  .office-block {
+    flex-basis: 50px;
+    width: 50px;
+    min-width: 50px;
+    background: #151722;
+  }
+  .office-rail,
+  .office-wall-glow {
+    display: none;
+  }
+  .office-seat {
+    width: 50px;
+    height: 50px;
+    min-height: 50px;
+    flex-basis: 50px;
+    padding: 0;
+    background: transparent;
+    filter: none;
+  }
+  .office-seat::before,
+  .office-seat.asking::before {
+    content: none;
+  }
+  .office-seat:hover {
+    background: rgba(122,162,247,0.035);
+  }
+  .office-seat.selected {
+    background: rgba(122,162,247,0.075);
+    box-shadow: inset -2px 0 0 rgba(122,162,247,0.68);
+  }
+  .office-scene {
+    width: 50px;
+    height: 50px;
+    flex: 0 0 50px;
+    overflow: visible;
+    background: #1f2335;
+  }
+  .office-wall {
+    display: none;
+  }
+  .office-floor {
+    inset: 0;
+    width: 50px;
+    height: 50px;
+    opacity: 1;
+    background:
+      radial-gradient(circle at 8px 11px, rgba(122,162,247,0.18) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      radial-gradient(circle at 15px 11px, rgba(187,154,247,0.12) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(#2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(90deg, #2f354d 2px, transparent 2px) 0 0 / 25px 25px,
+      #1f2335;
+  }
+  .office-seat.selected .office-floor {
+    background:
+      radial-gradient(ellipse at 25px 25px, rgba(122,162,247,0.18) 0 21px, transparent 23px),
+      radial-gradient(circle at 8px 11px, rgba(122,162,247,0.2) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      radial-gradient(circle at 15px 11px, rgba(187,154,247,0.14) 0 1px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(#39405c 2px, transparent 2px) 0 0 / 25px 25px,
+      linear-gradient(90deg, #39405c 2px, transparent 2px) 0 0 / 25px 25px,
+      #222842;
+  }
+  .office-partition-shadow {
+    background:
+      linear-gradient(180deg, rgba(192,202,245,0.06), transparent 36px),
+      linear-gradient(90deg, rgba(9,11,20,0.32), transparent 8px 52px, rgba(9,11,20,0.38));
+  }
+  .office-small-table-side {
+    position: absolute;
+    left: 29px;
+    top: 0;
+    z-index: 4;
+    width: 20px;
+    height: 60px;
+    display: block;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+  .office-small-table-side img {
+    position: absolute;
+    left: 0;
+    top: -12px;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+    image-rendering: pixelated;
+    user-select: none;
+  }
+  .office-pc-side {
+    position: absolute;
+    left: 29px;
+    top: 1px;
+    z-index: 5;
+    width: 20px;
+    height: 40px;
+    display: block;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+  .office-pc-side img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+    image-rendering: pixelated;
+    user-select: none;
+  }
+  .office-wooden-chair-side {
+    position: absolute;
+    left: 13px;
+    top: -2px;
+    z-index: 5;
+    width: 20px;
+    height: 40px;
+    display: block;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+  .office-wooden-chair-side img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+    image-rendering: pixelated;
+    user-select: none;
+  }
+  .office-seated-agent {
+    position: absolute;
+    left: 13px;
+    top: -7px;
+    z-index: 6;
+    width: 20px;
+    height: 40px;
+    display: block;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    background-size: 140px 120px;
+    background-position: -60px -80px;
+    image-rendering: pixelated;
+  }
+  .office-seat.state-running .office-seated-agent {
+    animation: office-seated-agent-type 0.6s steps(1, end) infinite;
+  }
+  .office-furniture,
+  .office-status,
+  .office-person,
+  .office-alert,
+  .office-sleep,
+  .office-runtime,
+  .office-keyboard,
+  .office-mouse,
+  .office-desk-lamp {
+    display: none;
+  }
+  .office-seat.stale .office-scene {
+    opacity: 1;
+  }
+  .office-label {
+    display: none;
+  }
+
+  @keyframes office-pc-frame {
+    0%, 32% { opacity: 1; }
+    33%, 100% { opacity: 0; }
+  }
+  @keyframes office-agent-bob {
+    0%, 100% { transform: scale(3) translateY(0); }
+    50% { transform: scale(3) translateY(-1px); }
+  }
+  @keyframes office-seated-agent-type {
+    0%, 49% { background-position: -60px -80px; }
+    50%, 100% { background-position: -80px -80px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .office-seat.state-running .office-monitor,
+    .office-seat.state-running .office-screen-glow,
+    .office-seat.state-running .arm-left,
+    .office-seat.state-running .arm-right,
+    .office-seat.state-running .office-keyboard,
+    .office-seat.state-running .office-agent-sprite,
+    .office-seat.state-running .office-seated-agent,
+    .office-pc-frame,
+    .office-sleep,
+    .office-alert {
+      animation: none;
+    }
   }
 
   /* tmux-style status line: one strip of every pane, fixed at the bottom
@@ -1239,6 +2749,7 @@
   }
 
   @media (max-width: 760px) {
+    .office-block { display: none; }
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }

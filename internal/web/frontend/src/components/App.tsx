@@ -53,6 +53,7 @@ import { isMobile } from "../lib/dom";
 import { translateKey } from "../lib/keymap";
 
 import { StatusLine, panePeer } from "./StatusLine";
+import { OfficeBlock } from "./OfficeBlock";
 import { ConnStatus } from "./ConnStatus";
 import { StaleDot } from "./StaleDot";
 import { OptionBar } from "./OptionBar";
@@ -974,48 +975,59 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
   // ===== render the full DOM tree (index.html order) =====
   const pc = paneContentRef.current;
+  const officePanes = state.snapshot && state.snapshot.panes
+    ? Object.values(state.snapshot.panes)
+    : [];
 
   return (
     <>
-      {/* #content-wrap — uncontrolled className base; .direct/.selection-mode/
-          .upload-ready toggled imperatively (layout effect + useQuick). */}
-      <div className="content-wrap" id="content-wrap" ref={contentWrapRef}>
-        <UsagePanel />
-        <ContentPane
-          text={pc.text}
-          cwd={pc.cwd}
-          peer={pc.peer}
-          markdown={markdownView}
-          selectionMode={state.selectionMode}
-          onPreviewImage={previewImagePath}
-          onPreviewMarkdown={previewMarkdownPath}
-          onScrollTop={revealOlderPaneLines}
-          onRefocusDirect={onRefocusDirect}
-          onBlurDirect={onBlurDirect}
+      <div className="app-main">
+        <OfficeBlock
+          panes={officePanes}
+          selected={state.selected}
+          onSelect={callbacks.selectPane}
         />
-        <MarkdownToggle
-          visible={!!state.selected}
-          active={markdownView}
-          onToggle={toggleMarkdownView}
-        />
-        <DirectInput
-          directRef={directRef}
-          onDirectKeyDown={onDirectKeyDown}
-          onDirectComposition={onDirectComposition}
-          onDirectPaste={onDirectPaste}
-          onDirectInput={onDirectInput}
-        />
-        {/* #help-btn lives inside #content-wrap (index.html). UploadControls
-            emits it; HelpOverlay renders only the overlay (renderButton={false}). */}
-        <UploadControls
-          onUpload={openFileUploadPicker}
-          onSelection={toggleSelectionMode}
-          onClear={clearPaneOutput}
-          onHelp={help.toggle}
-          onFiles={onFiles}
-        />
-        <QuickDock quick={quick} />
-        <CopyLineBar cwd={pc.cwd} peer={pc.peer} />
+
+        {/* #content-wrap — uncontrolled className base; .direct/.selection-mode/
+            .upload-ready toggled imperatively (layout effect + useQuick). */}
+        <div className="content-wrap" id="content-wrap" ref={contentWrapRef}>
+          <UsagePanel />
+          <ContentPane
+            text={pc.text}
+            cwd={pc.cwd}
+            peer={pc.peer}
+            markdown={markdownView}
+            selectionMode={state.selectionMode}
+            onPreviewImage={previewImagePath}
+            onPreviewMarkdown={previewMarkdownPath}
+            onScrollTop={revealOlderPaneLines}
+            onRefocusDirect={onRefocusDirect}
+            onBlurDirect={onBlurDirect}
+          />
+          <MarkdownToggle
+            visible={!!state.selected}
+            active={markdownView}
+            onToggle={toggleMarkdownView}
+          />
+          <DirectInput
+            directRef={directRef}
+            onDirectKeyDown={onDirectKeyDown}
+            onDirectComposition={onDirectComposition}
+            onDirectPaste={onDirectPaste}
+            onDirectInput={onDirectInput}
+          />
+          {/* #help-btn lives inside #content-wrap (index.html). UploadControls
+              emits it; HelpOverlay renders only the overlay (renderButton={false}). */}
+          <UploadControls
+            onUpload={openFileUploadPicker}
+            onSelection={toggleSelectionMode}
+            onClear={clearPaneOutput}
+            onHelp={help.toggle}
+            onFiles={onFiles}
+          />
+          <QuickDock quick={quick} />
+          <CopyLineBar cwd={pc.cwd} peer={pc.peer} />
+        </div>
       </div>
 
       <ConnStatus text={connStatusRef.current} />

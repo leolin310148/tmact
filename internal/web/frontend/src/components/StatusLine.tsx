@@ -61,6 +61,38 @@ export function sessionLabel(p: PaneStatus): string {
   return session;
 }
 
+export interface PaneListItem {
+  pane: PaneStatus;
+  label: string;
+}
+
+export function sortedPaneList(panes: PaneStatus[]): PaneStatus[] {
+  return panes.slice().sort((a, b) =>
+    panePeer(a).localeCompare(panePeer(b)) ||
+    sessionLabel(a).localeCompare(sessionLabel(b)) ||
+    a.window_index - b.window_index ||
+    a.pane_index - b.pane_index);
+}
+
+export function paneListItems(panes: PaneStatus[]): PaneListItem[] {
+  const sorted = sortedPaneList(panes);
+  const perSession: Record<string, number> = {};
+  for (const p of sorted) {
+    const k = panePeer(p) + "\0" + sessionLabel(p);
+    perSession[k] = (perSession[k] || 0) + 1;
+  }
+
+  return sorted.map((p) => {
+    const peer = panePeer(p);
+    const baseLabel = sessionLabel(p);
+    const labelKey = peer + "\0" + baseLabel;
+    const label = (perSession[labelKey] ?? 0) > 1
+      ? baseLabel + ":" + p.window_index
+      : baseLabel;
+    return { pane: p, label };
+  });
+}
+
 export function StatusLine() {
   const { state, callbacks } = useAppState();
   const snap = state.snapshot;
@@ -77,34 +109,17 @@ export function StatusLine() {
     );
   }
 
-  // Sort: peer → sessionLabel → window_index → pane_index (verbatim).
-  panes.sort((a, b) =>
-    panePeer(a).localeCompare(panePeer(b)) ||
-    sessionLabel(a).localeCompare(sessionLabel(b)) ||
-    a.window_index - b.window_index ||
-    a.pane_index - b.pane_index);
-
-  // Count occurrences of each peer\0baseLabel so we can disambiguate dupes.
-  const perSession: Record<string, number> = {};
-  for (const p of panes) {
-    const k = panePeer(p) + "\0" + sessionLabel(p);
-    perSession[k] = (perSession[k] || 0) + 1;
-  }
+  const items = paneListItems(panes);
 
   // Freeze the rendered order so Option+key hotkeys map to the same chips, in
   // the same left-to-right sequence. Mutate state.paneOrder by reference,
   // exactly like app.js (no bump — App reads it through state).
-  state.paneOrder = panes.map((p) => p.pane_id ?? "");
+  state.paneOrder = items.map(({ pane }) => pane.pane_id ?? "");
 
   return (
     <div className="chips" id="chips">
-      {panes.map((p, i) => {
+      {items.map(({ pane: p, label }, i) => {
         const peer = panePeer(p);
-        const baseLabel = sessionLabel(p);
-        const labelKey = peer + "\0" + baseLabel;
-        const label = (perSession[labelKey] ?? 0) > 1
-          ? baseLabel + ":" + p.window_index
-          : baseLabel;
         const key = PANE_HOTKEYS[i];
         const paneID = p.pane_id ?? "";
         return (
