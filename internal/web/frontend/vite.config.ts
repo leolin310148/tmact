@@ -22,6 +22,11 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "assets",
     sourcemap: false,
+    // The only chunks over 500 kB are mermaid's lazy diagram bundles
+    // (mermaid-parser ~600 kB, cytoscape ~435 kB), loaded on demand behind
+    // import("mermaid") — never on first paint. Raise the limit so the build
+    // warning flags real first-paint regressions, not mermaid's heft.
+    chunkSizeWarningLimit: 700,
   },
   server: {
     port: 5234,

@@ -28,6 +28,8 @@
 //     their value/disabled state — identical to app.js.
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -61,7 +63,9 @@ import ContentPane from "./ContentPane";
 import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
 import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePreview";
-import MarkdownPreview, { type MarkdownPreviewTarget } from "./MarkdownPreview";
+import type { MarkdownPreviewTarget } from "./MarkdownPreview";
+// markdown-it (~30-40 kB gzip) only loads when a preview is actually opened.
+const MarkdownPreview = lazy(() => import("./MarkdownPreview"));
 import InputBar from "./InputBar";
 import Draft from "./Draft";
 import DirectInput from "./DirectInput";
@@ -1096,7 +1100,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         path={imagePathRef.current}
         onClose={closeImagePreview}
       />
-      <MarkdownPreview target={markdownPreviewTarget} onClose={closeMarkdownPreview} />
+      {markdownPreviewTarget ? (
+        <Suspense fallback={null}>
+          <MarkdownPreview target={markdownPreviewTarget} onClose={closeMarkdownPreview} />
+        </Suspense>
+      ) : null}
     </>
   );
 }
