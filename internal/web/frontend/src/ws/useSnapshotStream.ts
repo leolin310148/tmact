@@ -19,7 +19,7 @@
 //   this hook — re-renders are driven by `bump()` from the store, called exactly
 //   where the original re-ran its imperative render functions
 //   (renderStatusline / renderMode / checkStale write to the DOM in the
-//   original; in the port `bump()` re-renders the chips / mode / StaleDot
+//   original; in the port `bump()` re-renders the chips / mode / ConnStatus
 //   components, which read live `state`).
 //
 //   `state.snapshot` / `state.selected` / `state.paneOrder` / `state.drafts`
@@ -113,7 +113,7 @@ export interface SnapshotStreamDeps {
 }
 
 /**
- * What App needs to drive the chips, the stale dot, and the WS reopen. The hook
+ * What App needs to drive the chips, connection summary, and the WS reopen. The hook
  * owns the SSE/poll resources and the snapshot apply path; App calls
  * `refreshSnapshot` once on startup and starts the stream, exactly like the
  * original's bottom block.
@@ -137,9 +137,9 @@ export interface SnapshotStream {
    * app.js `checkStale()` as a pure predicate: `true` when no fresh snapshot has
    * landed within STALE_MS (the daemon stalled or the connection dropped).
    * `Invalid Date` (missing/garbage `ts`) is treated as stale and never throws.
-   * The StaleDot component calls this each render (and on its own 1 s timer) to
-   * decide `#stale-dot` visibility, mirroring the original's
-   * `style.display = fresh ? "none" : "block"`.
+   * ConnStatus calls this same predicate logic each render (and on its own
+   * 1 s timer) so stale snapshot delivery is surfaced in the unified
+   * connection strip.
    */
   checkStale: () => boolean;
 }
@@ -243,7 +243,7 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   //   4. restoreSelection()      → may call selectPane (which itself re-renders)
   //   5. syncQuickDock()
   //   6. pruneCache(snap)
-  //   7. checkStale()            → StaleDot recomputes on the bump()
+  //   7. checkStale()            → ConnStatus recomputes on the bump()
   //
   // The paneOrder freeze (app.js renderStatusline: `state.paneOrder =
   // panes.map(p => p.pane_id)`) lives in the StatusLine component's render in
@@ -258,14 +258,14 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
       restoreSelection();
       depsRef.current.syncQuickDock();
       pruneCache(snap);
-      bump(); // checkStale() — re-render StaleDot from the (possibly) new ts
+      bump(); // checkStale() — re-render ConnStatus from the (possibly) new ts
     },
     [state, bump, restoreSelection, pruneCache],
   );
 
   // refreshSnapshot — port of app.js `refreshSnapshot()`. On success apply; on
   // failure keep the last snapshot and re-evaluate staleness via a bump (the
-  // original called checkStale(); here StaleDot recomputes on the bump). Never
+  // original called checkStale(); here ConnStatus recomputes on the bump). Never
   // throws — every error is swallowed exactly like the original try/catch.
   const refreshSnapshot = useCallback(async (): Promise<void> => {
     try {

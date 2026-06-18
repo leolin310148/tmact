@@ -1916,17 +1916,6 @@
     display: flex; align-items: center; justify-content: center;
     font: 700 9px/1 var(--mono); color: #1a1100;
   }
-  /* Connection indicator: only visible after 10s+ without a fresh snapshot. */
-  .stale-dot {
-    flex: 0 0 auto;
-    width: 11px; height: 11px;
-    margin-left: 8px;
-    border-radius: 50%;
-    background: var(--red);
-    box-shadow: 0 0 6px var(--red);
-    display: none;
-  }
-
   .content-wrap {
     position: relative;
     flex: 1 1 auto;
@@ -2122,17 +2111,27 @@
   /* Shown only when the keys overflow a single row (JS sets .overflowing). */
   .key-toggle { display: none; padding: 5px 10px; }
   .key-area.overflowing .key-toggle { display: inline-block; }
-  /* Connection-status strip — sits directly above the pane-list chips so
-     "connecting…" / "reconnecting…" never reflows the chip row below it
-     (only the pane output shrinks). Shown via JS by toggling .show. */
+  /* Connection-status strip — the single status-area indicator for pane stream
+     reconnects and stale snapshot delivery. */
   .conn-status {
     flex: 0 0 auto; display: none;
+    align-items: center; gap: 8px;
     padding: 5px 10px;
     background: var(--panel);
     border-top: 1px solid var(--border);
-    font: 11px/1.4 var(--mono); letter-spacing: 0.3px; color: var(--fg-dim);
+    font: 11px/1.4 var(--mono); color: var(--fg-dim);
   }
-  .conn-status.show { display: block; }
+  .conn-status.show { display: flex; }
+  .conn-status-dot {
+    flex: 0 0 auto;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .conn-status-connecting { color: var(--fg-dim); }
+  .conn-status-reconnecting { color: var(--amber); }
+  .conn-status-stale { color: var(--red); }
   /* Quick-answer buttons for a detected menu prompt — one per numbered
      option. Lives above the chips (not in the input bar) so showing/hiding it
      reflows only the pane output, never the chip row. Hidden by default; the

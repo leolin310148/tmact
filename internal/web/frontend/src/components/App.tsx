@@ -57,7 +57,6 @@ import { translateKey } from "../lib/keymap";
 import { StatusLine, panePeer } from "./StatusLine";
 import { OfficeBlock } from "./OfficeBlock";
 import { ConnStatus } from "./ConnStatus";
-import { StaleDot } from "./StaleDot";
 import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
 import MarkdownToggle from "./MarkdownToggle";
@@ -374,11 +373,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       // Surface the connection state in the strip above the chips; the input-bar
       // error/upload slot is independent and stays put (app.js onStatus block).
       if (s === "connecting") {
-        setConnStatus("connecting…");
-        if (paneLinesRef.current.length === 0) setContent("Connecting…");
+        setConnStatus("pane stream connecting...");
       } else if (s === "reconnecting") {
-        setConnStatus("reconnecting…");
-        if (paneLinesRef.current.length === 0) setContent("Reconnecting…");
+        setConnStatus("pane stream reconnecting...");
       } else if (s === "open") {
         setConnStatus("");
       }
@@ -1047,7 +1044,6 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
       <nav className="statusline">
         <StatusLine />
-        <StaleDot />
       </nav>
 
       <InputBar

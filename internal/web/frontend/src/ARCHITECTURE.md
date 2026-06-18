@@ -130,7 +130,7 @@ src/
   terminal/render.ts       — pure render(text, opts) + markImagePaths (Unit 6)
   hooks/                   — useVoice, useUpload, useUsage, useViewport, useSettings,
                              useQuick, useHotkeys, useHelp
-  components/              — App, StatusLine, Chip, ConnStatus, StaleDot, OptionBar,
+  components/              — App, StatusLine, Chip, ConnStatus, OptionBar,
                              ContentPane, CopyLineBar, ImagePreview, InputBar, Draft,
                              DirectInput, KeyBar, ModeIndicator, QuickDock, QuickEditor,
                              UsagePanel, SettingsDialog, RecOverlay, HelpOverlay
@@ -344,7 +344,7 @@ then `markImagePaths(pre, cwd, peer)` then auto-scroll. In React:
 ## 8. DOM ids / class names (keep verbatim — CSS depends on them)
 
 Element ids referenced by the original (and thus by ports): `root`, `chips`,
-`stale-dot`, `conn-status`, `option-bar`, `mode-indicator`, `mode-text`,
+`conn-status`, `option-bar`, `mode-indicator`, `mode-text`,
 `input-error`, `input-bar`, `content-wrap`, `content`, `direct-input`, `draft`,
 `draft-wrap`, `draft-clear`, `send-btn`, `record-btn`, `clear-pane-btn`,
 `upload-btn`, `selection-btn`, `file-upload`, `rec-overlay`, `rec-stop`,
@@ -426,7 +426,7 @@ those become React renders triggered by `bump()`:
 | `renderStatusline(snap)` | mutate `state.snapshot`/`state.selected`/`state.paneOrder`, `bump()`; `StatusLine` re-renders chips from `state.snapshot`. |
 | `renderMode()` / `syncIndicator()` | `bump()`; `ModeIndicator`/`InputBar`/`ContentWrap` recompute `.direct`/`.selection-mode` classes from `state` + `document.activeElement`. |
 | `syncDraft()` | imperative (`useLayoutEffect` on Draft) — synchronous scrollHeight; may also `bump()` for `.has-text`. |
-| `checkStale()` | `StaleDot` recomputes freshness from `state.snapshot.ts` on each render / a 1 s timer; show/hide `#stale-dot`. |
+| `checkStale()` | `ConnStatus` recomputes freshness from `state.snapshot.ts` on each render / a 1 s timer; stale snapshot delivery is shown in the same connection strip as pane stream reconnects. |
 | `setContent(...)` | App updates ContentPane's text/opts; ContentPane's layout effect rewrites innerHTML imperatively. |
 | `renderOptions(q)` | App stores latest question (ref/state); `OptionBar` renders buttons from it. |
 | `setConnStatus` / `showInputError` / `setInputStatus` | App holds the strings in refs/state and `bump()`; `ConnStatus` / `ModeIndicator` render them (toggling `.show`). |
