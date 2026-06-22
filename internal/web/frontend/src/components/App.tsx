@@ -55,7 +55,7 @@ import { isMobile } from "../lib/dom";
 import { translateKey } from "../lib/keymap";
 
 import { StatusLine, panePeer } from "./StatusLine";
-import { OfficeBlock } from "./OfficeBlock";
+import { OfficeDesks } from "./OfficeDesks";
 import { ConnStatus } from "./ConnStatus";
 import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
@@ -983,12 +983,6 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   return (
     <>
       <div className="app-main">
-        <OfficeBlock
-          panes={officePanes}
-          selected={state.selected}
-          onSelect={callbacks.selectPane}
-        />
-
         {/* #content-wrap — uncontrolled className base; .direct/.selection-mode/
             .upload-ready toggled imperatively (layout effect + useQuick). */}
         <div className="content-wrap" id="content-wrap" ref={contentWrapRef}>
@@ -1045,6 +1039,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       <nav className="statusline">
         <StatusLine />
       </nav>
+      <OfficeDesks
+        panes={officePanes}
+        selected={state.selected}
+        onSelect={callbacks.selectPane}
+      />
 
       <InputBar
         keyBar={

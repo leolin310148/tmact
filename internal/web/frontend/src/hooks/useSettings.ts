@@ -26,8 +26,8 @@ const FONT_MIN = 9,
   FONT_DEFAULT = 13;
 const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
-const PANE_SWITCHER_LAYOUT_DEFAULT = "auto";
-const PANE_SWITCHER_LAYOUTS = ["auto", "side", "bottom"];
+const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
+const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
 const OFFICE_SCALE_MIN = 60,
   OFFICE_SCALE_MAX = 120,
   OFFICE_SCALE_DEFAULT = 100;
@@ -128,6 +128,9 @@ export interface SettingsRefs {
 export interface UseSettingsResult {
   /** True when the overlay is shown; SettingsDialog renders hidden={!visible}. */
   visible: boolean;
+  /** Current pane switcher layout ("bottom" | "office") — drives which
+   *  layout-specific settings fields the dialog shows. */
+  paneSwitcherLayout: string;
   /** Apply localStorage settings before first paint (App calls synchronously). */
   loadClientSettings: () => void;
   /** Show overlay + reload STT and version (callbacks.openSettings). */
@@ -161,6 +164,9 @@ export function useSettings(): UseSettingsResult {
     readVoiceInputDeviceId(),
   );
   const [voiceDeviceStatus, setVoiceDeviceStatus] = useState("");
+  const [paneSwitcherLayout, setPaneSwitcherLayout] = useState(() =>
+    normalizePaneSwitcherLayout(readClientSettings().paneSwitcherLayout),
+  );
   const refs = useRef<SettingsRefs>({
     fontRange: null,
     fontVal: null,
@@ -205,6 +211,7 @@ export function useSettings(): UseSettingsResult {
     document.documentElement.dataset.paneSwitcherLayout = v;
     if (refs.current.paneSwitcherLayout) refs.current.paneSwitcherLayout.value = v;
     saveClientSettings({ paneSwitcherLayout: v });
+    setPaneSwitcherLayout(v);
   }, []);
 
   const applyOfficeScale = useCallback((scale: unknown) => {
@@ -458,6 +465,7 @@ export function useSettings(): UseSettingsResult {
 
   return {
     visible,
+    paneSwitcherLayout,
     loadClientSettings,
     openSettings,
     closeSettings,

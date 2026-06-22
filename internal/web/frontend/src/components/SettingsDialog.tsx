@@ -45,6 +45,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontInc,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
+    paneSwitcherLayout,
     onOfficeScaleInput,
     onOfficeScaleAuto,
     onVoiceDeviceChange,
@@ -182,11 +183,11 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               }}
               onChange={(e) => onPaneSwitcherLayoutChange(e.currentTarget.value)}
             >
-              <option value="auto">Auto: side on desktop, bottom on mobile</option>
-              <option value="side">Side office layout</option>
-              <option value="bottom">Bottom panel layout</option>
+              <option value="bottom">Panel list (chips)</option>
+              <option value="office">Office layout</option>
             </select>
           </label>
+          {paneSwitcherLayout === "office" && (
           <div className="settings-field">
             <span>Virtual office scale</span>
             <div className="scale-row">
@@ -216,6 +217,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               </span>
             </div>
           </div>
+          )}
           <label className="settings-field" htmlFor="voice-device">
             <span>Microphone</span>
             <select

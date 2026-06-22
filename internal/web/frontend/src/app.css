@@ -2633,17 +2633,10 @@
   .gear-btn:hover, .gear-btn:active { opacity: 1; color: var(--fg); border-color: var(--fg); }
   .gear-btn svg { width: 16px; height: 16px; display: block; }
 
-  html:not([data-pane-switcher-layout]) .statusline,
-  html[data-pane-switcher-layout="auto"] .statusline,
-  html[data-pane-switcher-layout="side"] .statusline {
-    display: none;
-  }
-  html[data-pane-switcher-layout="bottom"] .office-block {
-    display: none;
-  }
-  html[data-pane-switcher-layout="bottom"] .statusline {
-    display: flex;
-  }
+  /* Bottom pane switcher: chips by default, the desk row in office mode. */
+  .office-desks { display: none; }
+  html[data-pane-switcher-layout="office"] .statusline { display: none; }
+  html[data-pane-switcher-layout="office"] .office-desks { display: flex; }
 
   /* Settings modal — a panel over the whole app with two sections: Client
      (this browser, localStorage) and Server (statusd host, /api/settings). */
@@ -3082,35 +3075,8 @@
   }
 
   @media (max-width: 760px) {
-    html:not([data-office-scale="custom"]) {
-      --office-scale: 0.8;
-    }
-    .office-block { display: none; }
-    html[data-pane-switcher-layout="side"] .office-block { display: flex; }
-    .office-collapse-toggle { display: flex; }
-    .office-block.office-collapsed {
-      flex-basis: 0;
-      width: 0;
-      min-width: 0;
-      overflow: visible;
-    }
-    .office-block.office-collapsed .office-floorplan {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
-    .office-block.office-collapsed .office-collapse-toggle {
-      left: 0;
-      right: auto;
-      border: 1px solid rgba(122,162,247,0.58);
-      border-left: 0;
-      border-color: rgba(122,162,247,0.58);
-      border-radius: 0 8px 8px 0;
-    }
-    html:not([data-pane-switcher-layout]) .statusline,
-    html[data-pane-switcher-layout="auto"] .statusline,
-    html[data-pane-switcher-layout="bottom"] .statusline { display: flex; }
-    html[data-pane-switcher-layout="side"] .statusline { display: none; }
+    /* Office desks shrink a touch on phones; chips/office toggle is global. */
+    .office-desks { --ds: 1.5; }
     .key-area { display: flex; }
     /* The quick-input FAB is a phone-only convenience — reveal it here only. */
     .qb-dock.ready { display: flex; }
@@ -3157,4 +3123,293 @@
       width: 260px;
       max-width: calc(100vw - 96px);
     }
+  }
+
+  /* ===== OfficeDesks (redesigned office-block, prototype) =================
+     One front-facing desk per active pane. --ds is the pixel-art scale; all
+     sprite metrics derive from it so the whole block scales together. */
+  .office-desks {
+    --ds: 1.7;
+    position: relative;
+    flex: 0 0 auto;
+    /* Hidden by default; the office layout toggle below switches it on and
+       hides the chip statusline in its place. */
+    display: none;
+    flex-direction: row;
+    width: 100%;
+    max-width: 100%;
+    background:
+      linear-gradient(0deg, rgba(255,220,164,0.05) 0 1px, transparent 1px 60px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px) 0 0 / 12px 12px,
+      linear-gradient(0deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 12px 12px,
+      #121922;
+    border-top: 1px solid var(--border);
+    box-shadow: inset 0 7px 13px rgba(0,0,0,0.26);
+  }
+  /* Office layout: show the desk row, hide the chip statusline (and vice
+     versa — the default above hides the desks so only chips render). */
+  html[data-pane-switcher-layout="office"] .office-desks { display: flex; }
+  html[data-pane-switcher-layout="office"] .statusline { display: none; }
+  .office-desks-floor {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 10px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .office-desks-empty {
+    color: var(--fg-dim);
+    font: 11px/1.4 var(--mono);
+    padding: 16px 6px;
+  }
+  .desk-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0;
+    width: max-content;
+  }
+
+  /* One desk per session — the whole desk is the selectable button. */
+  .desk {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: auto;
+    padding: 4px 0 2px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--fg-dim);
+  }
+  /* standing_desk.png is 256x192 (4:3) → 48x36 at --ds 1; the chair (256x256,
+     1:1) sits in front, so the stage is a bit taller than the desk alone. */
+  .desk-stage {
+    position: relative;
+    width: calc(var(--ds) * 48px);
+    height: calc(var(--ds) * 50px);
+    image-rendering: pixelated;
+  }
+  .desk-stage img { image-rendering: pixelated; }
+  .desk-top {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--ds) * 8px);
+    transform: translateX(-50%);
+    width: calc(var(--ds) * 48px);
+    height: calc(var(--ds) * 36px);
+    /* Seat layers live at 100+ so z 1-99 stays free for future scene layers
+       (floor, walls, furniture) that render behind the seats. */
+    z-index: 102;
+  }
+  /* MacBook + external monitor on the desktop (256x154, ~1.66:1). Sits on the
+     desk surface, behind the chair. */
+  .desk-computer {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--ds) * 28px);
+    transform: translateX(-50%);
+    width: calc(var(--ds) * 40px);
+    height: calc(var(--ds) * 24px);
+    z-index: 103;
+  }
+  /* Left external monitor "screen": shows the runtime badge (cc/cx/cp/g) and
+     reuses the chip's .agent-icon running effect. Positioned over the screen
+     area of the left monitor in macbook_setup.png. The .desk-screen overrides
+     here win over .agent-icon's box look (equal specificity, later in source);
+     the html[data-running-effect] animation rules stay more specific so the
+     running effect still applies. */
+  .desk-screen {
+    position: absolute;
+    left: calc(var(--ds) * 9px);
+    bottom: calc(var(--ds) * 39px);
+    width: calc(var(--ds) * 13px);
+    height: calc(var(--ds) * 10px);
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 1px;
+    background: rgba(4,7,11,0.9);
+    color: var(--fg-dim);
+    font: 800 calc(var(--ds) * 5px)/1 var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0;
+    z-index: 103;
+  }
+  /* Seated character, back to the viewer (facing the computer). The char sheet
+     is a 7x3 grid of 16x32 frames; the back-facing row is the middle one, so
+     the crop is col 3 / row 1 → -48 / -32 at --ds 1. Sits behind the chair so
+     only the head + shoulders poke above the backrest. */
+  .desk-person {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--ds) * 14px);
+    transform: translateX(-50%);
+    width: calc(var(--ds) * 16px);
+    height: calc(var(--ds) * 32px);
+    background-repeat: no-repeat;
+    background-size: calc(var(--ds) * 112px) calc(var(--ds) * 96px);
+    background-position: calc(var(--ds) * -48px) calc(var(--ds) * -32px);
+    image-rendering: pixelated;
+    z-index: 103;
+  }
+  /* Asking alert: a "?" floating at the upper-right of the seated character's
+     head (office-only; the chip's own asking indicator is unchanged). */
+  .desk-ask {
+    position: absolute;
+    left: calc(50% + var(--ds) * 6px);
+    bottom: calc(var(--ds) * 40px);
+    transform: translateX(-50%);
+    z-index: 106;
+    width: calc(var(--ds) * 9px);
+    height: calc(var(--ds) * 9px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--amber);
+    color: #1a1100;
+    font: 800 calc(var(--ds) * 6px)/1 var(--mono);
+    box-shadow: 0 0 6px rgba(210,153,34,0.8);
+    animation: desk-ask-pulse 1s ease-in-out infinite;
+  }
+  @keyframes desk-ask-pulse {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.18); }
+  }
+  /* Back-of-chair in front of the desk (someone seated, facing it). */
+  .desk-chair {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--ds) * 4px);
+    transform: translateX(-50%);
+    width: calc(var(--ds) * 28px);
+    height: calc(var(--ds) * 28px);
+    z-index: 104;
+  }
+  /* The session label overlays the chair's wheelbase at the bottom of the
+     stage (z above the chair) so it doesn't add a row under each desk. */
+  .desk-name {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--ds) * 1px);
+    transform: translateX(-50%);
+    z-index: 105;
+    max-width: calc(var(--ds) * 52px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 10px/1.2 var(--mono);
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(12,17,24,0.72);
+  }
+  .desk:hover .desk-name { color: var(--fg); }
+  .desk.state-running .desk-name { color: var(--green); }
+  .desk.state-asking .desk-name { color: var(--amber); }
+  .desk.selected { color: #fff; }
+  .desk.selected .desk-name {
+    color: #fff;
+    background: rgba(68,147,248,0.22);
+    border: 1px solid var(--accent);
+  }
+  .desk.stale { opacity: 0.55; filter: grayscale(0.6); }
+
+  /* "more" overflow door + popover */
+  .desk-more-wrap { position: relative; display: flex; align-items: flex-end; align-self: stretch; }
+  .desk-more {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 100%;
+    padding: 8px 8px;
+    border: 1px dashed var(--border);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--fg-dim);
+    cursor: pointer;
+  }
+  .desk-more.open, .desk-more:hover { border-color: var(--accent); color: var(--fg); }
+  .desk-more-icon {
+    width: calc(var(--ds) * 14px);
+    height: calc(var(--ds) * 18px);
+    background: linear-gradient(180deg, #2a3342, #1b2230);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    position: relative;
+  }
+  .desk-more-icon::after {
+    content: "";
+    position: absolute;
+    top: 45%; right: 3px;
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+  .desk-more-count { font: 700 10px/1 var(--mono); }
+  .desk-more-pop {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(100% + 8px);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 150px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .desk-more-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--fg);
+    font: 11px/1 var(--mono);
+    cursor: pointer;
+    text-align: left;
+  }
+  .desk-more-row:hover { background: var(--panel-2); }
+  .desk-more-dot {
+    flex: 0 0 auto;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--fg-dim);
+  }
+  .desk-more-row.state-running .desk-more-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .desk-more-row.state-asking .desk-more-dot { background: var(--amber); }
+  .desk-more-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .desk-more-rt {
+    flex: 0 0 auto;
+    font: 700 8px/1 var(--mono);
+    color: var(--fg-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desk.state-running .desk-pc-on img,
+    .desk.state-running .desk-person,
+    .desk-alert { animation: none; }
+    .desk.state-running .desk-pc-on img:nth-child(1) { opacity: 1; }
   }

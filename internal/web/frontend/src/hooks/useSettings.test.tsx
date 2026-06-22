@@ -16,15 +16,15 @@ describe("useSettings pane switcher layout", () => {
   it("applies and persists the selected pane switcher layout", () => {
     const { result } = renderHook(() => useSettings());
 
-    act(() => result.current.onPaneSwitcherLayoutChange("bottom"));
+    act(() => result.current.onPaneSwitcherLayoutChange("office"));
 
-    expect(document.documentElement.dataset.paneSwitcherLayout).toBe("bottom");
+    expect(document.documentElement.dataset.paneSwitcherLayout).toBe("office");
     expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toMatchObject({
-      paneSwitcherLayout: "bottom",
+      paneSwitcherLayout: "office",
     });
   });
 
-  it("falls back to auto for an invalid saved pane switcher layout", () => {
+  it("falls back to the default for an invalid saved pane switcher layout", () => {
     localStorage.setItem(
       SETTINGS_KEY,
       JSON.stringify({ paneSwitcherLayout: "floating" }),
@@ -33,9 +33,9 @@ describe("useSettings pane switcher layout", () => {
 
     act(() => result.current.loadClientSettings());
 
-    expect(document.documentElement.dataset.paneSwitcherLayout).toBe("auto");
+    expect(document.documentElement.dataset.paneSwitcherLayout).toBe("bottom");
     expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toMatchObject({
-      paneSwitcherLayout: "auto",
+      paneSwitcherLayout: "bottom",
     });
   });
 });
