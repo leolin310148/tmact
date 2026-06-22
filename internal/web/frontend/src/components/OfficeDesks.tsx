@@ -3,8 +3,8 @@
 // Now that the statusline only keeps the "pinned" panes visible (agents, the
 // selection, panes asking for input — see StatusLine.splitPaneItems), the
 // office renders the same set as a row of desks — one desk per visible pane.
-// The rest collapse into a "+N" door that opens a popover list, mirroring the
-// statusline's "more" chip.
+// The rest collapse behind the leading floor lamp: clicking it opens a popover
+// list, mirroring the statusline's "more" chip.
 //
 // Art (current pass): standing_desk only — characters and monitors were removed
 // so we can re-stage the office from scratch.
@@ -152,7 +152,11 @@ function Desk({
   );
 }
 
-function MoreDoor({
+// LampMore — the leading floor lamp at the far left doubles as the overflow
+// trigger. Clicking it opens the same "more" popover the old far-right "+N"
+// door used to (the door art is gone, and so is the +N count badge). When there
+// is no overflow the caller renders a plain decorative lamp instead.
+function LampMore({
   items,
   onSelect,
 }: {
@@ -162,25 +166,26 @@ function MoreDoor({
   const [open, setOpen] = useState(false);
   // The popover is portaled to <body> with fixed coords because the office bar
   // (.office-desks-floor) is an overflow scroll container that would otherwise
-  // clip a popover popping up out of it. Anchored above the door button.
+  // clip a popover popping up out of it. Anchored above the lamp button.
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
-    setPos({ left: r.left + r.width / 2, bottom: window.innerHeight - r.top + 8 });
+    // Left-anchor to the lamp (it lives at the far left, so centering would push
+    // the popover off-screen), clamped to an 8px gutter.
+    setPos({ left: Math.max(8, r.left), bottom: window.innerHeight - r.top + 8 });
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDocPointerDown = (e: Event) => {
       const t = e.target as Node;
-      const inWrap = wrapRef.current?.contains(t);
+      const inBtn = btnRef.current?.contains(t);
       const inPop = popRef.current?.contains(t);
-      if (!inWrap && !inPop) setOpen(false);
+      if (!inBtn && !inPop) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -197,20 +202,21 @@ function MoreDoor({
     if (items.length === 0) setOpen(false);
   }, [items.length]);
 
+  const moreLabel = items.length + " more pane" + (items.length === 1 ? "" : "s");
   return (
-    <div className="desk-more-wrap" ref={wrapRef}>
+    <>
       <button
         ref={btnRef}
         type="button"
-        className={"desk-more" + (open ? " open" : "")}
-        title={items.length + " more pane" + (items.length === 1 ? "" : "s")}
+        className={"office-lamp office-lamp--more" + (open ? " open" : "")}
+        title={moreLabel}
+        aria-label={"Show " + moreLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         onPointerDown={onPointerDownNoBlur}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="desk-more-icon" aria-hidden="true" />
-        <span className="desk-more-count">+{items.length}</span>
+        <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
       </button>
       {open && pos
         ? createPortal(
@@ -218,7 +224,7 @@ function MoreDoor({
               ref={popRef}
               className="desk-more-pop"
               role="menu"
-              style={{ position: "fixed", left: pos.left, bottom: pos.bottom }}
+              style={{ position: "fixed", left: pos.left, bottom: pos.bottom, transform: "none" }}
             >
               {items.map(({ pane, label }, i) => {
                 const runtime = paneRuntime(pane);
@@ -246,7 +252,7 @@ function MoreDoor({
             document.body,
           )
         : null}
-    </div>
+    </>
   );
 }
 
@@ -329,24 +335,32 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           <div className="office-desks-empty">No panes</div>
         ) : (
           <div className="desk-row">
+            {/* The leading floor lamp at the far left doubles as the overflow
+                trigger: when panes spill past the visible desks, clicking it
+                opens the "+N" menu (replacing the old far-right door). With no
+                overflow it stays plain decor. It lives outside the group loop so
+                it still appears (as the lone entry point) when nothing is pinned
+                and everything sits in overflow. */}
+            {overflow.length > 0 ? (
+              <LampMore items={overflow} onSelect={onSelect} />
+            ) : (
+              <span className="office-lamp" aria-hidden="true">
+                <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
+              </span>
+            )}
             {deskGroups.map((group, gi) => {
               const startIdx = gi * 3; // global index of this group's first desk
-              // A floor lamp stands in front of the desks every six desks (groups
-              // are size three, so every second group starts on a multiple of
-              // six), rendered before the group as a row sibling. The first lamp
-              // takes its own slot at the far left; the later ones share the first
-              // lamp's look and glow but are a zero-width overlay (office-lamp--overlay)
-              // centered on the desk boundary, so they don't widen the gap between
+              // A floor lamp also stands every six desks (groups are size three,
+              // so every second group starts on a multiple of six). The leading
+              // lamp above already covers the first slot, so the loop only emits
+              // the later ones — zero-width overlays (office-lamp--overlay)
+              // centered on the desk boundary so they don't widen the gap between
               // the two desks they stand between.
-              const lamp = startIdx % 6 === 0;
-              const lampOverlay = lamp && startIdx !== 0;
+              const lampOverlay = startIdx !== 0 && startIdx % 6 === 0;
               return (
                 <Fragment key={gi}>
-                  {lamp ? (
-                    <span
-                      className={"office-lamp" + (lampOverlay ? " office-lamp--overlay" : "")}
-                      aria-hidden="true"
-                    >
+                  {lampOverlay ? (
+                    <span className="office-lamp office-lamp--overlay" aria-hidden="true">
                       <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
                     </span>
                   ) : null}
@@ -387,9 +401,6 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           </div>
         )}
       </div>
-      {/* Overflow "+N" door is parked at the far right of the wall (outside the
-          scrolling desk floor) for now — to be redone with proper art later. */}
-      {overflow.length > 0 ? <MoreDoor items={overflow} onSelect={onSelect} /> : null}
     </aside>
   );
 }
