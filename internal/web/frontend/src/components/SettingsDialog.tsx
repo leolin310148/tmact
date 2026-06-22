@@ -45,9 +45,6 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontInc,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
-    paneSwitcherLayout,
-    onOfficeScaleInput,
-    onOfficeScaleAuto,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,
@@ -187,37 +184,6 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               <option value="office">Office layout</option>
             </select>
           </label>
-          {paneSwitcherLayout === "office" && (
-          <div className="settings-field">
-            <span>Virtual office scale</span>
-            <div className="scale-row">
-              <button id="office-scale-auto" type="button" onClick={onOfficeScaleAuto}>
-                Auto
-              </button>
-              <input
-                type="range"
-                id="office-scale-range"
-                min="60"
-                max="120"
-                step="5"
-                aria-label="virtual office scale"
-                ref={(el) => {
-                  refs.current.officeScaleRange = el;
-                }}
-                onInput={(e) => onOfficeScaleInput(e.currentTarget.value)}
-              />
-              <span
-                className="scale-val"
-                id="office-scale-val"
-                ref={(el) => {
-                  refs.current.officeScaleVal = el;
-                }}
-              >
-                Auto
-              </span>
-            </div>
-          </div>
-          )}
           <label className="settings-field" htmlFor="voice-device">
             <span>Microphone</span>
             <select

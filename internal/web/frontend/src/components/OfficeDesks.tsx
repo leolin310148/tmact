@@ -20,6 +20,7 @@ import {
 import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
+import "./OfficeDesks.css";
 import standingDeskUrl from "../assets/pixel-agents/furniture/DESK/standing_desk.png";
 import chairBackUrl from "../assets/pixel-agents/furniture/CHAIR/aeron_chair_back.png";
 import computerUrl from "../assets/pixel-agents/furniture/PC/macbook_setup.png";

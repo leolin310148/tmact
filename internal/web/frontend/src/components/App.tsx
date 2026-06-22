@@ -55,7 +55,6 @@ import { isMobile } from "../lib/dom";
 import { translateKey } from "../lib/keymap";
 
 import { StatusLine, panePeer } from "./StatusLine";
-import { OfficeDesks } from "./OfficeDesks";
 import { ConnStatus } from "./ConnStatus";
 import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
@@ -65,6 +64,12 @@ import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePrev
 import type { MarkdownPreviewTarget } from "./MarkdownPreview";
 // markdown-it (~30-40 kB gzip) only loads when a preview is actually opened.
 const MarkdownPreview = lazy(() => import("./MarkdownPreview"));
+// The office layout (component JS + its CSS + desk/chair/person sprites) is only
+// fetched when the "office" pane-switcher layout is active — keeps it out of the
+// default chip-layout bundle. Named export, so adapt it to lazy's default shape.
+const OfficeDesks = lazy(() =>
+  import("./OfficeDesks").then((m) => ({ default: m.OfficeDesks })),
+);
 import InputBar from "./InputBar";
 import Draft from "./Draft";
 import DirectInput from "./DirectInput";
@@ -1039,11 +1044,15 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       <nav className="statusline">
         <StatusLine />
       </nav>
-      <OfficeDesks
-        panes={officePanes}
-        selected={state.selected}
-        onSelect={callbacks.selectPane}
-      />
+      {settings.paneSwitcherLayout === "office" ? (
+        <Suspense fallback={null}>
+          <OfficeDesks
+            panes={officePanes}
+            selected={state.selected}
+            onSelect={callbacks.selectPane}
+          />
+        </Suspense>
+      ) : null}
 
       <InputBar
         keyBar={
