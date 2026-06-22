@@ -36,6 +36,13 @@
   --pendant-w: calc(var(--ds) * 51.2px);
   --pendant-h: calc(var(--ds) * 28.8px);
   position: relative;
+  /* Contain the scene's internal z-index scale (desks/lamps/pendants sit at
+     100+ so 1–99 stays free for future layers). Without a stacking context here
+     those 100+ values leak into the root and paint over the app's fixed modals
+     (settings z60, preview z70, help z100, …); isolate keeps them local so the
+     office bar stacks as one unit at its normal flow level and every overlay
+     renders above it. */
+  isolation: isolate;
   flex: 0 0 auto;
   /* Hidden by default; the office layout toggle below switches it on and
      hides the chip statusline in its place. */
