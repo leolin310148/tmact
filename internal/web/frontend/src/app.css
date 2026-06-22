@@ -177,11 +177,35 @@
     border-color: currentColor;
     animation: agent-shine 1.4s ease-in-out infinite;
   }
+  /* Pulsing glow halo. The box-shadow lives on this transparent overlay so it is
+     painted ONCE into a compositor layer and the pulse animates `opacity` only —
+     a GPU-composited property — instead of animating box-shadow on the icon
+     itself, which forces a full repaint every frame (the old hot path: N running
+     agents each repainting at ~60fps). The icon's own keyframes now carry only
+     transform/filter (also compositable), so nothing repaints per frame. The
+     halo is transparent with an outset shadow, so the badge text shows through
+     and pointer events pass to the button. */
+  .agent-icon.running:not(.stale)::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 10px currentColor;
+    opacity: 0.5;
+    pointer-events: none;
+    animation: agent-glow 1.4s ease-in-out infinite;
+  }
   html[data-running-effect="pulse"] .agent-icon.running {
     animation: agent-pulse 1.1s ease-in-out infinite;
   }
+  html[data-running-effect="pulse"] .agent-icon.running:not(.stale)::before {
+    animation-duration: 1.1s;
+  }
   html[data-running-effect="rainbow"] .agent-icon.running {
     animation: agent-rainbow 1.8s linear infinite;
+  }
+  html[data-running-effect="rainbow"] .agent-icon.running:not(.stale)::before {
+    animation-duration: 1.8s;
   }
   html[data-running-effect="scan"] .agent-icon.running {
     background-image: linear-gradient(110deg,
@@ -192,11 +216,17 @@
       rgba(255,255,255,0) 100%);
     background-size: 260% 100%;
     animation: agent-scan 1.2s linear infinite;
+  }
+  /* scan/none keep a steady (unanimated) halo — the original used a static
+     box-shadow here, so the overlay just holds full opacity with no pulse. */
+  html[data-running-effect="scan"] .agent-icon.running:not(.stale)::before,
+  html[data-running-effect="none"] .agent-icon.running:not(.stale)::before {
     box-shadow: 0 0 6px currentColor;
+    opacity: 1;
+    animation: none;
   }
   html[data-running-effect="none"] .agent-icon.running {
     animation: none;
-    box-shadow: 0 0 6px currentColor;
   }
   .agent-icon.asking {
     color: #1a1100;
@@ -216,25 +246,37 @@
     font: 800 8px/1 var(--mono);
   }
   @keyframes agent-shine {
-    0%, 100% { box-shadow: 0 0 3px currentColor; filter: brightness(1); }
-    50% { box-shadow: 0 0 10px currentColor; filter: brightness(1.35); }
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.35); }
   }
   @keyframes agent-pulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 3px currentColor; }
-    50% { transform: scale(1.08); box-shadow: 0 0 12px currentColor; }
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
   }
   @keyframes agent-rainbow {
-    0% { filter: hue-rotate(0deg) brightness(1.1); box-shadow: 0 0 4px currentColor; }
-    50% { filter: hue-rotate(180deg) brightness(1.35); box-shadow: 0 0 11px currentColor; }
-    100% { filter: hue-rotate(360deg) brightness(1.1); box-shadow: 0 0 4px currentColor; }
+    0% { filter: hue-rotate(0deg) brightness(1.1); }
+    50% { filter: hue-rotate(180deg) brightness(1.35); }
+    100% { filter: hue-rotate(360deg) brightness(1.1); }
   }
   @keyframes agent-scan {
     0% { background-position: 140% 0; filter: brightness(1); }
     50% { filter: brightness(1.25); }
     100% { background-position: -140% 0; filter: brightness(1); }
   }
+  /* Halo pulse — animates opacity only (compositor-friendly); see the
+     .agent-icon.running::before overlay above for why box-shadow moved off the
+     icon's own keyframes. */
+  @keyframes agent-glow {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .agent-icon.running { animation: none; box-shadow: 0 0 6px currentColor; }
+    .agent-icon.running { animation: none; }
+    .agent-icon.running:not(.stale)::before {
+      animation: none;
+      box-shadow: 0 0 6px currentColor;
+      opacity: 1;
+    }
   }
   /* Asking panes need a question prompt resolved — the dot carries a "?". */
   .dot.asking {
