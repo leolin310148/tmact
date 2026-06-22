@@ -22,6 +22,19 @@
   --window-x: calc(var(--ds) * 36px);
   /* Floor strip left visible in front of the wall, below the desks' feet. */
   --floor-apron: calc(var(--ds) * 38px);
+  /* Shared wall-decor geometry (sideboard + appliances on top + bookcase to
+     its right). --decor-base is the floor line the lamps/decor stand on. */
+  /* +10px holds the wall decor in place against the taller min-height (which
+     drops the desks 10px); without it the bottom-anchored decor would drop too. */
+  --decor-base: calc(var(--floor-apron) - var(--ds) * 8px - 1px + 10px);
+  /* Sideboard (and the appliances riding on it) sit a touch below the base line. */
+  --sideboard-y: calc(var(--decor-base) - 8px);
+  --sideboard-x: calc(var(--window-x) + var(--wall-h) + 52px);
+  --sideboard-w: calc(var(--ds) * 57.6px);
+  --sideboard-h: calc(var(--ds) * 38.4px);
+  /* Ceiling pendant light fixture (128x72 source, ~1.78:1), at 80% scale. */
+  --pendant-w: calc(var(--ds) * 51.2px);
+  --pendant-h: calc(var(--ds) * 28.8px);
   position: relative;
   flex: 0 0 auto;
   /* Hidden by default; the office layout toggle below switches it on and
@@ -30,8 +43,11 @@
   flex-direction: row;
   width: 100%;
   max-width: 100%;
-  /* Tall enough for the full wall plus the floor apron the desks stand on. */
-  min-height: calc(var(--wall-h) + var(--floor-apron));
+  /* Tall enough for the full wall plus the floor apron the desks stand on.
+     +10px of extra floor at the bottom drops the (bottom-anchored) desk row
+     10px lower against the wall; the wall decor below compensates with +10px
+     so only the desks move, not the sideboard/bookcase. */
+  min-height: calc(var(--wall-h) + var(--floor-apron) + 10px);
   background:
     linear-gradient(180deg, rgba(10,14,20,0.30), rgba(8,11,17,0.52)),
     url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
@@ -59,6 +75,55 @@
     inset 0 9px 14px rgba(0,0,0,0.30),
     inset 0 -6px 10px rgba(0,0,0,0.30);
   z-index: 0;
+}
+/* Wall-decor layer: static furniture pinned against the back wall, behind the
+   desks (z 1 < seats at 100+) and non-interactive. An absolutely-positioned
+   overlay so it never disturbs the flex desk row. The night window is square
+   (256x256) shown at full wall height, so its right edge sits at
+   --window-x + --wall-h; the decor's base lines up with the floor lamps' base. */
+.office-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.office-decor span {
+  position: absolute;
+  display: block;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+}
+/* White sideboard credenza, ~52px right of the floor-to-ceiling window. */
+.decor-sideboard {
+  left: var(--sideboard-x);
+  bottom: var(--sideboard-y);
+  width: var(--sideboard-w);
+  height: var(--sideboard-h);
+  background-image: url(../assets/pixel-agents/decor/sideboard.png);
+  background-position: 0 100%;
+  background-size: contain;
+}
+/* Printer / coffee-machine appliances sitting on the sideboard's top surface
+   (96x48, 2:1). Same width/left as the sideboard; nestled a touch into its top. */
+.decor-appliances {
+  left: calc(var(--sideboard-x) + var(--sideboard-w) * 0.22);
+  bottom: calc(var(--sideboard-y) + var(--sideboard-h) - var(--ds) * 2px - 22px);
+  width: calc(var(--sideboard-w) * 0.56);
+  height: calc(var(--sideboard-w) * 0.28);
+  background-image: url(../assets/pixel-agents/decor/sideboard_appliances.png);
+  background-position: 0 100%;
+  background-size: contain;
+}
+/* Large white bookcase to the right of the sideboard (128x128, 1:1), standing
+   on the same floor line and rising taller than the credenza. */
+.decor-bookcase {
+  left: calc(var(--sideboard-x) + var(--sideboard-w) + var(--ds) * 6px);
+  bottom: var(--decor-base);
+  width: calc(var(--ds) * 60px);
+  height: calc(var(--ds) * 60px);
+  background-image: url(../assets/pixel-agents/decor/bookcase_cat.png);
+  background-position: 0 100%;
+  background-size: contain;
 }
 /* Office layout: show the desk row, hide the chip statusline (and vice
    versa — the default above hides the desks so only chips render). */
@@ -89,6 +154,17 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   gap: 0;
   width: max-content;
 }
+/* Desks are chunked into groups of four so one ceiling pendant can hang
+   centered over each group (a partial trailing group still gets its own). The
+   group is a transparent flex wrapper — desks stay visually contiguous across
+   group boundaries (no gaps/margins) and it just provides the positioning
+   context the pendant centers in (left: 50%). */
+.desk-group {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+}
 
 /* Floor lamp decoration standing on the floor in front of the wall. Source is
    pre-trimmed (132x364) so the footprint is tight; taller than the desks so it
@@ -102,7 +178,9 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   height: calc(0.7 * var(--wall-h));
   /* Tucked against the wall: base sits a touch below the wall's bottom edge,
      with a tight left/right gap to its neighbours. */
-  margin: 0 calc(var(--ds) * 1px) calc(var(--floor-apron) - var(--ds) * 8px - 5px);
+  /* +10px keeps the lamp grounded with the wall decor while the desk row it
+     lives in drops 10px (see .office-desks min-height). */
+  margin: 0 calc(var(--ds) * 1px) calc(var(--floor-apron) - var(--ds) * 8px - 5px + 10px);
   pointer-events: none;
   user-select: none;
   position: relative;
@@ -133,6 +211,75 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
     rgba(255, 184, 86, 0) 72%
   );
   filter: blur(1.5px);
+  z-index: 0;
+}
+
+/* Background floor lamps (every 6 desks, after the first): unlike the first
+   lamp they take no row space — a zero-width marker whose image is absolutely
+   positioned and sits BEHIND the desks (z 1 < seats at 100+), peeking out like
+   the sideboard/bookcase. Bottom matches the first lamp's base so they share a
+   floor line; no shade glow since the desks cover them. */
+.office-lamp-bg {
+  position: relative;
+  flex: 0 0 0px;
+  width: 0;
+  align-self: flex-end;
+  height: 0;
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+.office-lamp-bg .office-lamp-img {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--floor-apron) - var(--ds) * 8px - 5px + 10px);
+  height: calc(0.7 * var(--wall-h));
+  width: auto;
+}
+
+/* Linear pendant light hanging from the ceiling, centered over each group of
+   four desks (see .desk-group). The marker is absolutely centered in its group
+   (left: 50%) with its bottom on the desk row's baseline, so it scrolls with
+   the desks; the fixture is then lifted so its TOP edge meets the wall's top
+   edge. The row bottom sits a constant 4px (floor padding-bottom) above the
+   office bottom and the wall top is at the office top, so the row-bottom→
+   wall-top distance is officeH - 4 = --wall-h + --floor-apron + 6px (officeH
+   bakes in the +10px desk drop) — independent of the row's own height. */
+.office-pendant {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+  user-select: none;
+  z-index: 101;
+}
+.office-pendant-img {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--wall-h) + var(--floor-apron) + 6px - var(--pendant-h));
+  width: var(--pendant-w);
+  height: var(--pendant-h);
+  image-rendering: pixelated;
+  z-index: 1;
+}
+/* Warm pool of light spilling down from the fixture's lower edge. */
+.office-pendant-glow {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--wall-h) + var(--floor-apron) + 6px - var(--pendant-h) - var(--ds) * 54px);
+  width: calc(var(--ds) * 100px);
+  height: calc(var(--ds) * 60px);
+  background: radial-gradient(
+    ellipse at top,
+    rgba(255, 228, 162, 0.5) 0%,
+    rgba(255, 206, 120, 0.28) 36%,
+    rgba(255, 196, 104, 0) 72%
+  );
+  filter: blur(2px);
   z-index: 0;
 }
 

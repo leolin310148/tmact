@@ -23,6 +23,7 @@ import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
 import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
+import pendantUrl from "../assets/pixel-agents/decor/pendant_light.png";
 import workDeskUrl from "../assets/pixel-agents/furniture/DESK/work_desk_thin_legs.png";
 import chairBackUrl from "../assets/pixel-agents/furniture/CHAIR/aeron_chair_back.png";
 import computerUrl from "../assets/pixel-agents/furniture/PC/macbook_setup.png";
@@ -242,6 +243,10 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
 
   const items = paneListItems(panes);
   const { visible, overflow } = splitPaneItems(items, selected);
+  // Chunk the visible desks into groups of three so one ceiling pendant hangs
+  // centered over each group (ceil(n/3) pendants — the middle desk of each).
+  const deskGroups: PaneListItem[][] = [];
+  for (let i = 0; i < visible.length; i += 3) deskGroups.push(visible.slice(i, i + 3));
 
   const rootClass = ["office-desks", labelsVisible ? "show-labels" : ""].filter(Boolean).join(" ");
   // Expose the count so CSS can keep desks centered / sized for small sets.
@@ -269,6 +274,13 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
 
   return (
     <aside className={rootClass} style={rootStyle} aria-label="Office desks pane switcher">
+      {/* Static wall decor (sideboard + appliances + bookcase), pinned against
+          the back wall behind the desks. CSS-driven backgrounds; non-interactive. */}
+      <div className="office-decor" aria-hidden="true">
+        <span className="decor-sideboard" />
+        <span className="decor-appliances" />
+        <span className="decor-bookcase" />
+      </div>
       <div
         className="office-desks-floor"
         onPointerDownCapture={showMobileLabels}
@@ -280,28 +292,62 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           <div className="office-desks-empty">No panes</div>
         ) : (
           <div className="desk-row">
-            {visible.map((item, i) => (
-              <Fragment key={item.pane.pane_id || item.pane.target}>
-                {/* A floor lamp in front of the wall: one at the far left, then
-                    one every 6 desks. The rest of the wall stays open for more
-                    decor later. */}
-                {i % 6 === 0 ? (
-                  <span className="office-lamp" aria-hidden="true">
-                    <img
-                      className="office-lamp-img"
-                      src={floorLampUrl}
-                      alt=""
-                      draggable={false}
-                    />
-                  </span>
-                ) : null}
-                <Desk
-                  item={item}
-                  selected={(item.pane.pane_id ?? "") === selected}
-                  onSelect={onSelect}
-                />
-              </Fragment>
-            ))}
+            {deskGroups.map((group, gi) => {
+              const startIdx = gi * 3; // global index of this group's first desk
+              // Only the very first floor lamp keeps its own slot at the far
+              // left, in front of the desks. Rendered before the group so it
+              // doesn't bias the pendant's centering over the group's desks.
+              const firstLamp = startIdx === 0;
+              return (
+                <Fragment key={gi}>
+                  {firstLamp ? (
+                    <span className="office-lamp" aria-hidden="true">
+                      <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
+                    </span>
+                  ) : null}
+                  <div className="desk-group">
+                    {/* One ceiling pendant centered over each group of three
+                        desks (a partial trailing group still gets its own), its
+                        top edge meeting the wall top and a warm glow below. */}
+                    <span className="office-pendant" aria-hidden="true">
+                      <span className="office-pendant-glow" />
+                      <img
+                        className="office-pendant-img"
+                        src={pendantUrl}
+                        alt=""
+                        draggable={false}
+                      />
+                    </span>
+                    {group.map((item, j) => {
+                      const i = startIdx + j;
+                      // Subsequent floor lamps (every 6 desks) sit BEHIND the
+                      // desks like the sideboard/bookcase — a zero-width marker
+                      // that takes no row space and is covered by the desks.
+                      const bgLamp = i % 6 === 0 && i !== 0;
+                      return (
+                        <Fragment key={item.pane.pane_id || item.pane.target}>
+                          {bgLamp ? (
+                            <span className="office-lamp-bg" aria-hidden="true">
+                              <img
+                                className="office-lamp-img"
+                                src={floorLampUrl}
+                                alt=""
+                                draggable={false}
+                              />
+                            </span>
+                          ) : null}
+                          <Desk
+                            item={item}
+                            selected={(item.pane.pane_id ?? "") === selected}
+                            onSelect={onSelect}
+                          />
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              );
+            })}
           </div>
         )}
       </div>
