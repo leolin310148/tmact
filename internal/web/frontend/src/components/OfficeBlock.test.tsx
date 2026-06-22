@@ -53,7 +53,10 @@ describe("OfficeBlock", () => {
     );
 
     const seats = Array.from(container.querySelectorAll("button.office-seat")) as HTMLElement[];
+    const selectedOverlay = container.querySelector(".office-selected-overlay");
     expect(seats).toHaveLength(4);
+    expect(selectedOverlay).toHaveTextContent("alpha");
+    expect(selectedOverlay).toHaveAttribute("title", "alpha — working");
     expect(container.querySelector(".office-block")).toHaveStyle({ "--office-floorplan-base-h": "161px" });
     expect(container.querySelectorAll(".office-floorplan")).toHaveLength(1);
     expect(container.querySelectorAll(".office-floorplan-scale")).toHaveLength(1);
@@ -88,6 +91,38 @@ describe("OfficeBlock", () => {
     expect(third.querySelector(".office-person")).toBeNull();
     expect(fourth).toHaveClass("office-seat-right", "empty-seat");
     expect(fourth.querySelector(".office-person")).toBeNull();
+  });
+
+  it("renders a bottom overlay for the selected pane name", () => {
+    const { container } = render(
+      <OfficeBlock
+        panes={[
+          pane({ pane_id: "%1", session: "hub@remote-work", peer: "hub", runtime: "codex" }),
+          pane({ pane_id: "%2", session: "local-work", runtime: "claude" }),
+        ]}
+        selected="%1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const overlay = container.querySelector(".office-selected-overlay");
+    expect(overlay).toHaveTextContent("hub · remote-work");
+    expect(overlay).toHaveAttribute("title", "hub · remote-work — idle");
+    expect(overlay).not.toHaveClass("office-selected-overlay-empty");
+  });
+
+  it("keeps the bottom overlay visible even before a pane is selected", () => {
+    const { container } = render(
+      <OfficeBlock
+        panes={[pane({ pane_id: "%1", session: "dev", runtime: "codex" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const overlay = container.querySelector(".office-selected-overlay");
+    expect(overlay).toHaveTextContent("No pane selected");
+    expect(overlay).toHaveClass("office-selected-overlay-empty");
   });
 
   it("renders the floor base with a compact side table and without people or monitors", () => {

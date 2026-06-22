@@ -52,6 +52,14 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
     }
   });
   const items = paneListItems(panes);
+  const selectedItem = items.find(({ pane }) => pane.pane_id === selected) ?? null;
+  const selectedPeer = selectedItem ? panePeer(selectedItem.pane) : "";
+  const selectedLabel = selectedItem
+    ? (selectedPeer ? selectedPeer + " · " : "") + selectedItem.label
+    : "No pane selected";
+  const selectedTitle = selectedItem
+    ? selectedLabel + " — " + paneStateLabel(selectedItem.pane)
+    : selectedLabel;
   const officeRows = Math.ceil(items.length / 2);
   const officeStyle = { "--office-floorplan-base-h": 61 + officeRows * 50 + "px" } as CSSProperties;
   const officeClass = [
@@ -239,6 +247,15 @@ export function OfficeBlock({ panes, selected, onSelect }: OfficeBlockProps) {
             </div>
           )}
         </div>
+      </div>
+      <div
+        className={
+          "office-selected-overlay" + (selectedItem ? "" : " office-selected-overlay-empty")
+        }
+        aria-live="polite"
+        title={selectedTitle}
+      >
+        {selectedLabel}
       </div>
       <button
         className="office-collapse-toggle"
