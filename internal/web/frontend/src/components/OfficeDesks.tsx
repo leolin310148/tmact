@@ -10,6 +10,7 @@
 // so we can re-stage the office from scratch.
 
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,7 +22,8 @@ import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
-import standingDeskUrl from "../assets/pixel-agents/furniture/DESK/standing_desk.png";
+import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
+import workDeskUrl from "../assets/pixel-agents/furniture/DESK/work_desk_thin_legs.png";
 import chairBackUrl from "../assets/pixel-agents/furniture/CHAIR/aeron_chair_back.png";
 import computerUrl from "../assets/pixel-agents/furniture/PC/macbook_setup.png";
 import character0Url from "../assets/pixel-agents/characters/char_0.png";
@@ -117,7 +119,7 @@ function Desk({
       onClick={() => onSelect(paneID)}
     >
       <span className="desk-stage" aria-hidden="true">
-        <img className="desk-top" src={standingDeskUrl} alt="" draggable={false} />
+        <img className="desk-top" src={workDeskUrl} alt="" draggable={false} />
         <img className="desk-computer" src={computerUrl} alt="" draggable={false} />
         <span className={screenCls.join(" ")}>{icon ?? ""}</span>
         <span
@@ -278,18 +280,34 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           <div className="office-desks-empty">No panes</div>
         ) : (
           <div className="desk-row">
-            {visible.map((item) => (
-              <Desk
-                key={item.pane.pane_id || item.pane.target}
-                item={item}
-                selected={(item.pane.pane_id ?? "") === selected}
-                onSelect={onSelect}
-              />
+            {visible.map((item, i) => (
+              <Fragment key={item.pane.pane_id || item.pane.target}>
+                {/* A floor lamp in front of the wall: one at the far left, then
+                    one every 6 desks. The rest of the wall stays open for more
+                    decor later. */}
+                {i % 6 === 0 ? (
+                  <span className="office-lamp" aria-hidden="true">
+                    <img
+                      className="office-lamp-img"
+                      src={floorLampUrl}
+                      alt=""
+                      draggable={false}
+                    />
+                  </span>
+                ) : null}
+                <Desk
+                  item={item}
+                  selected={(item.pane.pane_id ?? "") === selected}
+                  onSelect={onSelect}
+                />
+              </Fragment>
             ))}
-            {overflow.length > 0 ? <MoreDoor items={overflow} onSelect={onSelect} /> : null}
           </div>
         )}
       </div>
+      {/* Overflow "+N" door is parked at the far right of the wall (outside the
+          scrolling desk floor) for now — to be redone with proper art later. */}
+      {overflow.length > 0 ? <MoreDoor items={overflow} onSelect={onSelect} /> : null}
     </aside>
   );
 }

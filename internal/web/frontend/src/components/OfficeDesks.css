@@ -8,6 +8,20 @@
    sprite metrics derive from it so the whole block scales together. */
 .office-desks {
   --ds: 1.7;
+  /* Wood plank floor tile + walnut slat wall tile (both 128x128 source),
+     displayed scaled to --ds so the pixel grids track the desk sprites.
+     45° top-down scene: the wall (::before) rises at the back, the floor is
+     the apron in front where the desks stand. --wall-h is two tiles tall. */
+  --floor-tile: calc(var(--ds) * 64px);
+  --wall-tile: calc(var(--ds) * 46px);
+  /* Wall height ~70% of the old two-tile height; slat width (--wall-tile) is
+     unchanged, the vertical slats just tile to a fractional height seamlessly. */
+  --wall-h: calc(1.4 * var(--wall-tile));
+  /* A single floor-to-ceiling window parked on the left of the wall; the rest
+     of the wall stays open for other decor later. */
+  --window-x: calc(var(--ds) * 36px);
+  /* Floor strip left visible in front of the wall, below the desks' feet. */
+  --floor-apron: calc(var(--ds) * 38px);
   position: relative;
   flex: 0 0 auto;
   /* Hidden by default; the office layout toggle below switches it on and
@@ -16,13 +30,35 @@
   flex-direction: row;
   width: 100%;
   max-width: 100%;
+  /* Tall enough for the full wall plus the floor apron the desks stand on. */
+  min-height: calc(var(--wall-h) + var(--floor-apron));
   background:
-    linear-gradient(0deg, rgba(255,220,164,0.05) 0 1px, transparent 1px 60px),
-    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px) 0 0 / 12px 12px,
-    linear-gradient(0deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 12px 12px,
-    #121922;
+    linear-gradient(180deg, rgba(10,14,20,0.30), rgba(8,11,17,0.52)),
+    url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
+    #1a1512;
+  image-rendering: pixelated;
   border-top: 1px solid var(--border);
   box-shadow: inset 0 7px 13px rgba(0,0,0,0.26);
+}
+/* Back wall: walnut slats tiled across the top, two tiles tall, sitting behind
+   the desks (z 0 < the seat layers at 100+). The inset shadow at its base reads
+   as the wall/floor seam; the desks overlap it so the wall "starts" behind them. */
+.office-desks::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--wall-h);
+  /* One floor-to-ceiling night window, sized to the full wall height and
+     bottom-anchored so it reads as a full-height window; the walnut slats fill
+     the rest of the wall, leaving room for other decor. */
+  background:
+    url(../assets/pixel-agents/walls/window_night_256.png) var(--window-x) 100% / auto 100% no-repeat,
+    url(../assets/pixel-agents/walls/walnut_wall_128.png) 0 0 / var(--wall-tile) var(--wall-tile) repeat;
+  image-rendering: pixelated;
+  box-shadow:
+    inset 0 9px 14px rgba(0,0,0,0.30),
+    inset 0 -6px 10px rgba(0,0,0,0.30);
+  z-index: 0;
 }
 /* Office layout: show the desk row, hide the chip statusline (and vice
    versa — the default above hides the desks so only chips render). */
@@ -31,6 +67,11 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
 .office-desks-floor {
   flex: 1 1 auto;
   min-width: 0;
+  /* Column so the desk row anchors to the floor (bottom); the wall fills the
+     empty space above the desks. */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   padding: 6px 10px 4px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -49,6 +90,52 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   width: max-content;
 }
 
+/* Floor lamp decoration standing on the floor in front of the wall. Source is
+   pre-trimmed (132x364) so the footprint is tight; taller than the desks so it
+   rises against the wall. In front of the wall (z 0) but behind the desk
+   furniture (z 100+) and non-interactive. */
+.office-lamp {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  display: flex;
+  /* ~70% of the floor-to-ceiling window (wall) height, same aspect ratio. */
+  height: calc(0.7 * var(--wall-h));
+  /* Tucked against the wall: base sits a touch below the wall's bottom edge,
+     with a tight left/right gap to its neighbours. */
+  margin: 0 calc(var(--ds) * 1px) calc(var(--floor-apron) - var(--ds) * 8px - 5px);
+  pointer-events: none;
+  user-select: none;
+  position: relative;
+  z-index: 101;
+}
+.office-lamp-img {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  width: auto;
+  display: block;
+  image-rendering: pixelated;
+}
+/* Warm light halo emanating from the shade (top of the lamp), behind the
+   sprite so it reads as glow spilling around the lampshade. */
+.office-lamp::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(var(--ds) * 11px);
+  width: calc(var(--ds) * 44px);
+  height: calc(var(--ds) * 40px);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 222, 150, 0.62) 0%,
+    rgba(255, 196, 104, 0.34) 38%,
+    rgba(255, 184, 86, 0) 72%
+  );
+  filter: blur(1.5px);
+  z-index: 0;
+}
+
 /* One desk per session — the whole desk is the selectable button. */
 .desk {
   position: relative;
@@ -63,8 +150,8 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   cursor: pointer;
   color: var(--fg-dim);
 }
-/* standing_desk.png is 256x192 (4:3) → 48x36 at --ds 1; the chair (256x256,
-   1:1) sits in front, so the stage is a bit taller than the desk alone. */
+/* work_desk_thin_legs.png is 128x78 (~1.64:1) → 48x29 at --ds 1; the chair
+   (256x256, 1:1) sits in front, so the stage is a bit taller than the desk. */
 .desk-stage {
   position: relative;
   width: calc(var(--ds) * 48px);
@@ -75,10 +162,10 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
 .desk-top {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--ds) * 8px);
+  bottom: calc(var(--ds) * 8px + 6px);
   transform: translateX(-50%);
   width: calc(var(--ds) * 48px);
-  height: calc(var(--ds) * 36px);
+  height: calc(var(--ds) * 29px);
   /* Seat layers live at 100+ so z 1-99 stays free for future scene layers
      (floor, walls, furniture) that render behind the seats. */
   z-index: 102;
@@ -87,7 +174,7 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
    desk surface, behind the chair. */
 .desk-computer {
   position: absolute;
-  left: 50%;
+  left: calc(50% - 2px);
   bottom: calc(var(--ds) * 28px);
   transform: translateX(-50%);
   width: calc(var(--ds) * 40px);
@@ -102,7 +189,7 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
    running effect still applies. */
 .desk-screen {
   position: absolute;
-  left: calc(var(--ds) * 9px);
+  left: calc(var(--ds) * 9px - 2px);
   bottom: calc(var(--ds) * 39px);
   width: calc(var(--ds) * 13px);
   height: calc(var(--ds) * 10px);
@@ -199,15 +286,27 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
 }
 .desk.stale { opacity: 0.55; filter: grayscale(0.6); }
 
-/* "more" overflow door + popover */
-.desk-more-wrap { position: relative; display: flex; align-items: flex-end; align-self: stretch; }
+/* "more" overflow door + popover. Parked outside the scrolling desk floor and
+   pinned to the far-right of the wall; sits on the floor (align-end) at a
+   desk-ish height rather than stretching the full bar. Placeholder art. */
+.desk-more-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+  /* Lift the door off the floor apron so it sits ON the wall, its base flush
+     with the wall's bottom edge (the wall/floor seam). */
+  margin-bottom: var(--floor-apron);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 10px 0 6px;
+}
 .desk-more {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  height: 100%;
+  min-height: calc(var(--ds) * 42px);
   padding: 8px 8px;
   border: 1px dashed var(--border);
   border-radius: 7px;
