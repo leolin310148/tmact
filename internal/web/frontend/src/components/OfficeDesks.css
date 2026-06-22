@@ -48,10 +48,13 @@
      10px lower against the wall; the wall decor below compensates with +10px
      so only the desks move, not the sideboard/bookcase. */
   min-height: calc(var(--wall-h) + var(--floor-apron) + 10px);
-  background:
-    linear-gradient(180deg, rgba(10,14,20,0.30), rgba(8,11,17,0.52)),
-    url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
-    #1a1512;
+  /* Scroll viewport only. The room (floor + wall + decor + desks) lives in
+     .office-desks-floor at width:max-content, so the whole scene pans together
+     here instead of the desks sliding over a frozen wall/floor. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  background: #1a1512;
   image-rendering: pixelated;
   border-top: 1px solid var(--border);
   box-shadow: inset 0 7px 13px rgba(0,0,0,0.26);
@@ -59,7 +62,7 @@
 /* Back wall: walnut slats tiled across the top, two tiles tall, sitting behind
    the desks (z 0 < the seat layers at 100+). The inset shadow at its base reads
    as the wall/floor seam; the desks overlap it so the wall "starts" behind them. */
-.office-desks::before {
+.office-desks-floor::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
@@ -79,14 +82,14 @@
 /* Daytime (06:00–18:00, set as .is-day in TSX): swap the night window for the
    daytime one — blue sky / skyline — keeping the same position/size/repeat and
    the walnut slats behind it. */
-.office-desks.is-day::before {
+.office-desks.is-day .office-desks-floor::before {
   background:
     url(../assets/pixel-agents/walls/window_day_128.png) var(--window-x) 100% / auto 100% no-repeat,
     url(../assets/pixel-agents/walls/walnut_wall_128.png) 0 0 / var(--wall-tile) var(--wall-tile) repeat;
 }
 /* Sunset (17:00–18:30): the dusk window. Lamps stay lit (only .is-day drops the
    glow), so the room reads as warm evening. */
-.office-desks.is-sunset::before {
+.office-desks.is-sunset .office-desks-floor::before {
   background:
     url(../assets/pixel-agents/walls/window_sunset_128.png) var(--window-x) 100% / auto 100% no-repeat,
     url(../assets/pixel-agents/walls/walnut_wall_128.png) 0 0 / var(--wall-tile) var(--wall-tile) repeat;
@@ -96,8 +99,8 @@
    lifts the midtones without blowing out the grain; z-index 0 keeps it at the
    wall layer — the desks (z 100+) and decor (z 1) paint above it untouched.
    Sunset uses the same wash at half strength (opacity below). */
-.office-desks.is-day::after,
-.office-desks.is-sunset::after {
+.office-desks.is-day .office-desks-floor::after,
+.office-desks.is-sunset .office-desks-floor::after {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
@@ -112,12 +115,12 @@
   pointer-events: none;
   z-index: 0;
 }
-.office-desks.is-sunset::after { opacity: 0.5; }
+.office-desks.is-sunset .office-desks-floor::after { opacity: 0.5; }
 /* Daytime floor: lift the wood the same way the wall sheen lifts the slats —
    ease off the night room's heavy dark wash (and warm/lighten the base) so the
    floor reads as sunlit too. Same three layers as the base .office-desks
    background, only the top darkening gradient and base colour change. */
-.office-desks.is-day {
+.office-desks.is-day .office-desks-floor {
   background:
     linear-gradient(180deg, rgba(255, 248, 230, 0.08), rgba(18, 22, 28, 0.22) 55%, rgba(12, 16, 22, 0.38)),
     url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
@@ -125,7 +128,7 @@
 }
 /* Sunset floor: about halfway between the night floor and the day floor — the
    dark wash eased partway off, matching the half-bright wall/lamps. */
-.office-desks.is-sunset {
+.office-desks.is-sunset .office-desks-floor {
   background:
     linear-gradient(180deg, rgba(255, 246, 226, 0.04), rgba(14, 18, 24, 0.36) 55%, rgba(10, 14, 20, 0.45)),
     url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
@@ -138,7 +141,9 @@
    --window-x + --wall-h; the decor's base lines up with the floor lamps' base. */
 .office-decor {
   position: absolute;
-  inset: 0;
+  /* Bottom cancels the floor's bottom padding so the furniture keeps its
+     original true-floor anchoring now that decor lives inside the padded scene. */
+  inset: 0 0 calc(-1 * var(--floor-pad-b)) 0;
   pointer-events: none;
   z-index: 1;
 }
@@ -202,17 +207,28 @@
 html[data-pane-switcher-layout="office"] .office-desks { display: flex; }
 html[data-pane-switcher-layout="office"] .statusline { display: none; }
 .office-desks-floor {
-  flex: 1 1 auto;
-  min-width: 0;
+  --floor-pad-b: 4px;
+  position: relative;
+  /* The full scene: as wide as the desk row (but never narrower than the
+     viewport), so it — and the floor/wall/decor painted on it — pans under the
+     scroll viewport (.office-desks) as one piece. */
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 100%;
   /* Column so the desk row anchors to the floor (bottom); the wall fills the
      empty space above the desks. */
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 6px 10px 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  /* Only the bottom padding is load-bearing (the pendant math counts on the desk
+     row sitting --floor-pad-b above the floor bottom); horizontal breathing room
+     lives on .desk-row so the wall/floor/decor stay flush to the scene edges. */
+  padding: 0 0 var(--floor-pad-b);
+  background:
+    linear-gradient(180deg, rgba(10,14,20,0.30), rgba(8,11,17,0.52)),
+    url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
+    #1a1512;
+  image-rendering: pixelated;
 }
 .office-desks-empty {
   color: var(--fg-dim);
@@ -225,6 +241,17 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   align-items: flex-end;
   gap: 0;
   width: max-content;
+  /* Horizontal breathing room lives here (not on the floor) so the floor/wall/
+     decor backgrounds stay flush to the scene edges while the desks sit inset. */
+  padding: 0 10px;
+}
+/* Zero-height tail that widens the scene so the trailing pendant glow (which can
+   spill right of a short last group) still has floor/wall beneath it rather than
+   the bare scroll backdrop. --tail-units is set per render in TSX; clamped to 0
+   for a full last group. */
+.desk-row-tail {
+  flex: 0 0 auto;
+  width: max(0px, calc(var(--ds) * var(--tail-units, 0) * 1px));
 }
 /* Desks are chunked into groups of four so one ceiling pendant can hang
    centered over each group (a partial trailing group still gets its own). The
@@ -639,7 +666,18 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   .desk.state-running .desk-pc-on img:nth-child(1) { opacity: 1; }
 }
 
-/* Phone: shrink the desks a touch. */
+/* Phone: less width to work with — shrink the whole room to ~80% of the desktop
+   scale, and split the desk labels into two alternating rows so they don't
+   collide in the tight horizontal space. */
 @media (max-width: 760px) {
-  .office-desks { --ds: 1.5; }
+  .office-desks { --ds: 1.36; }
+  /* Each label only has to clear its same-row neighbour (two desks away, since
+     they alternate up/down), so it can run wider before truncating. */
+  .desk-name { max-width: calc(var(--ds) * 80px); }
+  /* Both rows stay low over the chair — the "down" row keeps the default spot at
+     the wheelbase, the "up" row just lifts a label-height higher so the two
+     interleave without overlapping, without climbing into the wall above. */
+  .desk--label-top .desk-name {
+    bottom: calc(var(--ds) * 1px + 16px);
+  }
 }

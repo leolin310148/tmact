@@ -85,10 +85,14 @@ function Desk({
   item,
   selected,
   onSelect,
+  labelSide,
 }: {
   item: PaneListItem;
   selected: boolean;
   onSelect: (paneID: string) => void;
+  // Phone-only: alternating desks render their name above vs below so two rows
+  // of labels don't collide in the tight horizontal space (no-op on desktop).
+  labelSide: "top" | "bottom";
 }) {
   const { pane, label } = item;
   const paneID = pane.pane_id ?? "";
@@ -97,6 +101,7 @@ function Desk({
   const cls = [
     "desk",
     "state-" + paneStateClass(pane),
+    labelSide === "top" ? "desk--label-top" : "desk--label-bottom",
     selected ? "selected" : "",
     pane.asking ? "asking" : "",
     pane.stale ? "stale" : "",
@@ -270,6 +275,18 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
   // centered over each group (ceil(n/3) pendants — the middle desk of each).
   const deskGroups: PaneListItem[][] = [];
   for (let i = 0; i < visible.length; i += 3) deskGroups.push(visible.slice(i, i + 3));
+  // The trailing (possibly partial) group keeps its pendant — and the warm glow
+  // under it — at the notional middle slot of a full group of three, so for a
+  // short last group the glow spills to the RIGHT of the last desk into empty
+  // room. A tail spacer reserves exactly that spill width so the floor/wall scene
+  // extends under the glow instead of ending at the last desk (leaving the lamp
+  // floating over the bare scroll backdrop). Width (in --ds px): the pendant
+  // centre sits 1.5 desks (48px each) from the group's left, the glow reaches a
+  // half-width (100/2 px) past that, minus the lastCount desks actually present;
+  // clamps to 0 for a full last group.
+  const lastGroupCount =
+    visible.length === 0 ? 0 : visible.length - 3 * (deskGroups.length - 1);
+  const tailUnits = 48 * (1.5 - lastGroupCount) + 50;
 
   // The wall window tracks the time of day (day swaps in the sunlit art and
   // drops the lamp glow; sunset/night keep the lamps lit). Recomputed each
@@ -304,26 +321,6 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
 
   return (
     <aside className={rootClass} style={rootStyle} aria-label="Office desks pane switcher">
-      {/* Static wall decor (sideboard + appliances + bookcase), pinned against
-          the back wall behind the desks. CSS-driven backgrounds; non-interactive. */}
-      <div className="office-decor" aria-hidden="true">
-        <span className="decor-sideboard" />
-        <span className="decor-appliances" />
-        <span className="decor-bookcase" />
-      </div>
-      {/* Easter egg: a transparent hotspot over the floor-to-ceiling window that
-          cycles the office through day → sunset → night (sits above the wall but
-          below the desks, so desk selection is unaffected). */}
-      <button
-        type="button"
-        className="office-window-toggle"
-        aria-label="Cycle office lighting (day / sunset / night)"
-        title="Cycle day / sunset / night"
-        onPointerDown={onPointerDownNoBlur}
-        onClick={() =>
-          setModeOverride(SCENE_MODES[(SCENE_MODES.indexOf(mode) + 1) % SCENE_MODES.length]!)
-        }
-      />
       <div
         className="office-desks-floor"
         onPointerDownCapture={showMobileLabels}
@@ -331,6 +328,28 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
         onPointerCancel={scheduleHide}
         onPointerLeave={scheduleHide}
       >
+        {/* Static wall decor (sideboard + appliances + bookcase), pinned against
+            the back wall behind the desks. It lives inside the scrolling scene so
+            it pans together with the desks instead of staying frozen as they
+            slide past (the whole room scrolls as one). */}
+        <div className="office-decor" aria-hidden="true">
+          <span className="decor-sideboard" />
+          <span className="decor-appliances" />
+          <span className="decor-bookcase" />
+        </div>
+        {/* Easter egg: a transparent hotspot over the floor-to-ceiling window that
+            cycles the office through day → sunset → night (sits above the wall but
+            below the desks, so desk selection is unaffected). */}
+        <button
+          type="button"
+          className="office-window-toggle"
+          aria-label="Cycle office lighting (day / sunset / night)"
+          title="Cycle day / sunset / night"
+          onPointerDown={onPointerDownNoBlur}
+          onClick={() =>
+            setModeOverride(SCENE_MODES[(SCENE_MODES.indexOf(mode) + 1) % SCENE_MODES.length]!)
+          }
+        />
         {visible.length === 0 && overflow.length === 0 ? (
           <div className="office-desks-empty">No panes</div>
         ) : (
@@ -386,18 +405,28 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
                         draggable={false}
                       />
                     </span>
-                    {group.map((item) => (
+                    {group.map((item, li) => (
                       <Desk
                         key={item.pane.pane_id || item.pane.target}
                         item={item}
                         selected={(item.pane.pane_id ?? "") === selected}
                         onSelect={onSelect}
+                        labelSide={(startIdx + li) % 2 === 0 ? "bottom" : "top"}
                       />
                     ))}
                   </div>
                 </Fragment>
               );
             })}
+            {/* Reserve the trailing pendant glow's rightward spill so the scene
+                (floor + wall) extends under it — see tailUnits above. */}
+            {visible.length > 0 ? (
+              <span
+                className="desk-row-tail"
+                aria-hidden="true"
+                style={{ "--tail-units": tailUnits } as CSSProperties}
+              />
+            ) : null}
           </div>
         )}
       </div>
