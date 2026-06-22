@@ -50,6 +50,19 @@ interface OfficeDesksProps {
   onSelect: (paneID: string) => void;
 }
 
+// The office wall window has three time-of-day looks. The clock picks one
+// (06:00–17:00 day · 17:00–18:30 sunset · otherwise night); the window easter
+// egg cycles through them in this order.
+type SceneMode = "day" | "sunset" | "night";
+const SCENE_MODES: SceneMode[] = ["day", "sunset", "night"];
+
+function clockSceneMode(now: Date): SceneMode {
+  const mins = now.getHours() * 60 + now.getMinutes();
+  if (mins >= 17 * 60 && mins < 18 * 60 + 30) return "sunset";
+  if (mins >= 6 * 60 && mins < 17 * 60) return "day";
+  return "night";
+}
+
 const characterUrls = [
   character0Url,
   character1Url,
@@ -240,6 +253,10 @@ function MoreDoor({
 export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
   const labelHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [labelsVisible, setLabelsVisible] = useState(false);
+  // Easter egg: clicking the floor-to-ceiling window forces a scene mode, an
+  // in-memory override of the clock (null = follow the clock). Not persisted —
+  // it resets on reload.
+  const [modeOverride, setModeOverride] = useState<SceneMode | null>(null);
 
   const items = paneListItems(panes);
   const { visible, overflow } = splitPaneItems(items, selected);
@@ -248,7 +265,14 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
   const deskGroups: PaneListItem[][] = [];
   for (let i = 0; i < visible.length; i += 3) deskGroups.push(visible.slice(i, i + 3));
 
-  const rootClass = ["office-desks", labelsVisible ? "show-labels" : ""].filter(Boolean).join(" ");
+  // The wall window tracks the time of day (day swaps in the sunlit art and
+  // drops the lamp glow; sunset/night keep the lamps lit). Recomputed each
+  // render (the office re-renders on every pane poll, so it flips across the
+  // boundaries on its own) unless the window easter egg has pinned a mode.
+  const mode = modeOverride ?? clockSceneMode(new Date());
+  const rootClass = ["office-desks", `is-${mode}`, labelsVisible ? "show-labels" : ""]
+    .filter(Boolean)
+    .join(" ");
   // Expose the count so CSS can keep desks centered / sized for small sets.
   const rootStyle = { "--desk-count": visible.length } as CSSProperties;
 
@@ -281,6 +305,19 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
         <span className="decor-appliances" />
         <span className="decor-bookcase" />
       </div>
+      {/* Easter egg: a transparent hotspot over the floor-to-ceiling window that
+          cycles the office through day → sunset → night (sits above the wall but
+          below the desks, so desk selection is unaffected). */}
+      <button
+        type="button"
+        className="office-window-toggle"
+        aria-label="Cycle office lighting (day / sunset / night)"
+        title="Cycle day / sunset / night"
+        onPointerDown={onPointerDownNoBlur}
+        onClick={() =>
+          setModeOverride(SCENE_MODES[(SCENE_MODES.indexOf(mode) + 1) % SCENE_MODES.length]!)
+        }
+      />
       <div
         className="office-desks-floor"
         onPointerDownCapture={showMobileLabels}
@@ -294,22 +331,39 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           <div className="desk-row">
             {deskGroups.map((group, gi) => {
               const startIdx = gi * 3; // global index of this group's first desk
-              // Only the very first floor lamp keeps its own slot at the far
-              // left, in front of the desks. Rendered before the group so it
-              // doesn't bias the pendant's centering over the group's desks.
-              const firstLamp = startIdx === 0;
+              // A floor lamp stands in front of the desks every six desks (groups
+              // are size three, so every second group starts on a multiple of
+              // six), rendered before the group as a row sibling. The first lamp
+              // takes its own slot at the far left; the later ones share the first
+              // lamp's look and glow but are a zero-width overlay (office-lamp--overlay)
+              // centered on the desk boundary, so they don't widen the gap between
+              // the two desks they stand between.
+              const lamp = startIdx % 6 === 0;
+              const lampOverlay = lamp && startIdx !== 0;
               return (
                 <Fragment key={gi}>
-                  {firstLamp ? (
-                    <span className="office-lamp" aria-hidden="true">
+                  {lamp ? (
+                    <span
+                      className={"office-lamp" + (lampOverlay ? " office-lamp--overlay" : "")}
+                      aria-hidden="true"
+                    >
                       <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
                     </span>
                   ) : null}
                   <div className="desk-group">
                     {/* One ceiling pendant centered over each group of three
                         desks (a partial trailing group still gets its own), its
-                        top edge meeting the wall top and a warm glow below. */}
-                    <span className="office-pendant" aria-hidden="true">
+                        top edge meeting the wall top and a warm glow below. For a
+                        partial trailing group the pendant is nudged right by
+                        (3 - count)/2 desk-widths so it still lands on the middle
+                        slot of a notional full group (e.g. a lone 7th desk keeps
+                        the pendant at the 8th-desk position) rather than drifting
+                        off-center over the few desks present. */}
+                    <span
+                      className="office-pendant"
+                      aria-hidden="true"
+                      style={{ "--pendant-shift": (3 - group.length) / 2 } as CSSProperties}
+                    >
                       <span className="office-pendant-glow" />
                       <img
                         className="office-pendant-img"
@@ -318,32 +372,14 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
                         draggable={false}
                       />
                     </span>
-                    {group.map((item, j) => {
-                      const i = startIdx + j;
-                      // Subsequent floor lamps (every 6 desks) sit BEHIND the
-                      // desks like the sideboard/bookcase — a zero-width marker
-                      // that takes no row space and is covered by the desks.
-                      const bgLamp = i % 6 === 0 && i !== 0;
-                      return (
-                        <Fragment key={item.pane.pane_id || item.pane.target}>
-                          {bgLamp ? (
-                            <span className="office-lamp-bg" aria-hidden="true">
-                              <img
-                                className="office-lamp-img"
-                                src={floorLampUrl}
-                                alt=""
-                                draggable={false}
-                              />
-                            </span>
-                          ) : null}
-                          <Desk
-                            item={item}
-                            selected={(item.pane.pane_id ?? "") === selected}
-                            onSelect={onSelect}
-                          />
-                        </Fragment>
-                      );
-                    })}
+                    {group.map((item) => (
+                      <Desk
+                        key={item.pane.pane_id || item.pane.target}
+                        item={item}
+                        selected={(item.pane.pane_id ?? "") === selected}
+                        onSelect={onSelect}
+                      />
+                    ))}
                   </div>
                 </Fragment>
               );

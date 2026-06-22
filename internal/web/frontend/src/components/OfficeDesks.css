@@ -29,7 +29,7 @@
   --decor-base: calc(var(--floor-apron) - var(--ds) * 8px - 1px + 10px);
   /* Sideboard (and the appliances riding on it) sit a touch below the base line. */
   --sideboard-y: calc(var(--decor-base) - 8px);
-  --sideboard-x: calc(var(--window-x) + var(--wall-h) + 52px);
+  --sideboard-x: calc(var(--window-x) + var(--wall-h) + 47px);
   --sideboard-w: calc(var(--ds) * 57.6px);
   --sideboard-h: calc(var(--ds) * 38.4px);
   /* Ceiling pendant light fixture (128x72 source, ~1.78:1), at 80% scale. */
@@ -76,6 +76,61 @@
     inset 0 -6px 10px rgba(0,0,0,0.30);
   z-index: 0;
 }
+/* Daytime (06:00–18:00, set as .is-day in TSX): swap the night window for the
+   daytime one — blue sky / skyline — keeping the same position/size/repeat and
+   the walnut slats behind it. */
+.office-desks.is-day::before {
+  background:
+    url(../assets/pixel-agents/walls/window_day_128.png) var(--window-x) 100% / auto 100% no-repeat,
+    url(../assets/pixel-agents/walls/walnut_wall_128.png) 0 0 / var(--wall-tile) var(--wall-tile) repeat;
+}
+/* Sunset (17:00–18:30): the dusk window. Lamps stay lit (only .is-day drops the
+   glow), so the room reads as warm evening. */
+.office-desks.is-sunset::before {
+  background:
+    url(../assets/pixel-agents/walls/window_sunset_128.png) var(--window-x) 100% / auto 100% no-repeat,
+    url(../assets/pixel-agents/walls/walnut_wall_128.png) 0 0 / var(--wall-tile) var(--wall-tile) repeat;
+}
+/* Daytime sheen: a soft daylight wash over the wall band only (height --wall-h),
+   so the walnut reads as sunlit rather than the night room's dim wood. soft-light
+   lifts the midtones without blowing out the grain; z-index 0 keeps it at the
+   wall layer — the desks (z 100+) and decor (z 1) paint above it untouched.
+   Sunset uses the same wash at half strength (opacity below). */
+.office-desks.is-day::after,
+.office-desks.is-sunset::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--wall-h);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 248, 230, 0.40),
+    rgba(255, 245, 224, 0.20) 60%,
+    rgba(255, 245, 224, 0.06) 100%
+  );
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+  z-index: 0;
+}
+.office-desks.is-sunset::after { opacity: 0.5; }
+/* Daytime floor: lift the wood the same way the wall sheen lifts the slats —
+   ease off the night room's heavy dark wash (and warm/lighten the base) so the
+   floor reads as sunlit too. Same three layers as the base .office-desks
+   background, only the top darkening gradient and base colour change. */
+.office-desks.is-day {
+  background:
+    linear-gradient(180deg, rgba(255, 248, 230, 0.08), rgba(18, 22, 28, 0.22) 55%, rgba(12, 16, 22, 0.38)),
+    url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
+    #221a14;
+}
+/* Sunset floor: about halfway between the night floor and the day floor — the
+   dark wash eased partway off, matching the half-bright wall/lamps. */
+.office-desks.is-sunset {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 226, 0.04), rgba(14, 18, 24, 0.36) 55%, rgba(10, 14, 20, 0.45)),
+    url(../assets/pixel-agents/floors/wood_floor_128.png) 0 100% / var(--floor-tile) var(--floor-tile) repeat,
+    #1d1611;
+}
 /* Wall-decor layer: static furniture pinned against the back wall, behind the
    desks (z 1 < seats at 100+) and non-interactive. An absolutely-positioned
    overlay so it never disturbs the flex desk row. The night window is square
@@ -117,13 +172,30 @@
 /* Large white bookcase to the right of the sideboard (128x128, 1:1), standing
    on the same floor line and rising taller than the credenza. */
 .decor-bookcase {
-  left: calc(var(--sideboard-x) + var(--sideboard-w) + var(--ds) * 6px);
+  left: calc(var(--sideboard-x) + var(--sideboard-w) + var(--ds) * 6px - 20px);
   bottom: var(--decor-base);
   width: calc(var(--ds) * 60px);
   height: calc(var(--ds) * 60px);
   background-image: url(../assets/pixel-agents/decor/bookcase_cat.png);
   background-position: 0 100%;
   background-size: contain;
+}
+/* Easter-egg hotspot over the floor-to-ceiling window (drawn on ::before at
+   --window-x, full wall height, 4:3 so its width is --wall-h * 4/3). Transparent
+   and click-only; z 2 sits above the wall (z 0) and decor (z 1) but below the
+   desks (z 100+), so it never steals a desk click. */
+.office-window-toggle {
+  position: absolute;
+  top: 0;
+  left: var(--window-x);
+  width: calc(var(--wall-h) * 4 / 3);
+  height: var(--wall-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 2;
 }
 /* Office layout: show the desk row, hide the chip statusline (and vice
    versa — the default above hides the desks so only chips render). */
@@ -213,28 +285,36 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   filter: blur(1.5px);
   z-index: 0;
 }
+/* Daytime: the floor lamp is unlit — drop its shade halo (the lamp sprite
+   itself stays, just without the warm glow). */
+.office-desks.is-day .office-lamp::before { display: none; }
 
-/* Background floor lamps (every 6 desks, after the first): unlike the first
-   lamp they take no row space — a zero-width marker whose image is absolutely
-   positioned and sits BEHIND the desks (z 1 < seats at 100+), peeking out like
-   the sideboard/bookcase. Bottom matches the first lamp's base so they share a
-   floor line; no shade glow since the desks cover them. */
-.office-lamp-bg {
-  position: relative;
-  flex: 0 0 0px;
-  width: 0;
-  align-self: flex-end;
-  height: 0;
-  pointer-events: none;
-  user-select: none;
-  z-index: 1;
+/* Sunset: the lamps are only just coming on against the lingering daylight —
+   run both the floor-lamp halos and the pendant glow at half their night
+   brightness. */
+.office-desks.is-sunset .office-lamp::before,
+.office-desks.is-sunset .office-pendant-glow {
+  opacity: 0.5;
 }
-.office-lamp-bg .office-lamp-img {
+
+/* Every-6-desks lamp: same sprite/height/glow as the first lamp, but a
+   zero-width overlay so it doesn't push the two desks it stands between apart.
+   The box keeps its height (so the inherited shade-glow ::before still lines up)
+   while collapsing to no row width; the sprite is absolutely centered on the
+   group boundary it sits at. */
+.office-lamp.office-lamp--overlay {
+  flex: 0 0 0;
+  width: 0;
+  margin-left: 0;
+  margin-right: 0;
+  overflow: visible;
+}
+.office-lamp--overlay .office-lamp-img {
   position: absolute;
-  left: 50%;
+  left: 0;
+  bottom: 0;
   transform: translateX(-50%);
-  bottom: calc(var(--floor-apron) - var(--ds) * 8px - 5px + 10px);
-  height: calc(0.7 * var(--wall-h));
+  height: 100%;
   width: auto;
 }
 
@@ -248,7 +328,11 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
    bakes in the +10px desk drop) — independent of the row's own height. */
 .office-pendant {
   position: absolute;
-  left: 50%;
+  /* left: 50% centers over the group's actual desks; --pendant-shift (set per
+     group in TSX) nudges a partial trailing group's pendant right by
+     (3 - count)/2 desk-widths (each desk is --ds * 48px, .desk-group gap: 0) so
+     it lands on the middle slot of a notional full group of three. */
+  left: calc(50% + var(--pendant-shift, 0) * var(--ds) * 48px);
   bottom: 0;
   width: 0;
   pointer-events: none;
@@ -265,22 +349,56 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   image-rendering: pixelated;
   z-index: 1;
 }
-/* Warm pool of light spilling down from the fixture's lower edge. */
+/* Warm light spilling down from the fixture — a downward cone: a trapezoid
+   narrow at the fixture (~its width) and widening toward the floor, filled with
+   a vertical warm gradient that fades out before the bottom so there's no hard
+   lower edge. The generous blur diffuses the clipped sides so it reads as soft
+   spill rather than a sharp wedge. */
 .office-pendant-glow {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--wall-h) + var(--floor-apron) + 6px - var(--pendant-h) - var(--ds) * 54px);
+  bottom: calc(var(--wall-h) + var(--floor-apron) + 6px - var(--pendant-h) - var(--ds) * 62px);
   width: calc(var(--ds) * 100px);
-  height: calc(var(--ds) * 60px);
-  background: radial-gradient(
-    ellipse at top,
-    rgba(255, 228, 162, 0.5) 0%,
-    rgba(255, 206, 120, 0.28) 36%,
-    rgba(255, 196, 104, 0) 72%
-  );
-  filter: blur(2px);
+  height: calc(var(--ds) * 68px);
+  /* The blur lives on this wrapper while the trapezoid (clip-path) lives on the
+     ::before below. On a single element clip-path is applied AFTER filter, so a
+     blurred-then-clipped shape keeps hard slanted edges; splitting them lets the
+     wrapper's blur soften the child's already-clipped edges into soft spill. */
+  filter: blur(10px);
   z-index: 0;
+}
+.office-pendant-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Fades to transparent toward the sides/bottom (radial from the fixture at
+     top-center) so even before blur the clipped edges sit in faint territory. */
+  background: radial-gradient(
+    ellipse 72% 116% at 50% 0%,
+    rgba(255, 226, 158, 0.55) 0%,
+    rgba(255, 208, 124, 0.28) 42%,
+    rgba(255, 198, 108, 0.09) 66%,
+    rgba(255, 196, 104, 0) 82%
+  );
+  clip-path: polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%);
+}
+/* Daytime: the pendant still glows but more subtly against the sunlit room —
+   shrink the pool to ~60% (keeping its bright top anchored just under the
+   fixture) and ease the opacity down. */
+.office-desks.is-day .office-pendant-glow {
+  width: calc(var(--ds) * 60px);
+  height: calc(var(--ds) * 44px);
+  bottom: calc(var(--wall-h) + var(--floor-apron) + 6px - var(--pendant-h) - var(--ds) * 38px);
+}
+.office-desks.is-day .office-pendant-glow::before {
+  background: radial-gradient(
+    ellipse 72% 116% at 50% 0%,
+    rgba(255, 226, 158, 0.32) 0%,
+    rgba(255, 208, 124, 0.16) 42%,
+    rgba(255, 198, 108, 0.05) 66%,
+    rgba(255, 196, 104, 0) 82%
+  );
 }
 
 /* One desk per session — the whole desk is the selectable button. */
