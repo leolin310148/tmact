@@ -17,6 +17,7 @@ import { useAppState } from "../store/AppStateContext";
 import { PANE_HOTKEYS } from "../lib/keymap";
 import type { PaneStatus } from "../types/server";
 import { Chip } from "./Chip";
+import { MoreChip } from "./MoreChip";
 
 // PANE_HOTKEYS is the single source of truth in lib/keymap (it also drives
 // HOTKEY_INDEX for the keydown handler). The chip badge shows these labels.
@@ -74,6 +75,36 @@ export function sortedPaneList(panes: PaneStatus[]): PaneStatus[] {
     a.pane_index - b.pane_index);
 }
 
+// shouldPinPane decides which panes stay as always-visible chips vs. collapse
+// into the "more" overflow popover. A pane is pinned when it carries an agent
+// runtime, is the currently-selected pane (so the selection never vanishes into
+// the overflow), or needs the user's attention (asking / has a prompt menu).
+// Everything else — idle, agent-less panes — collapses.
+export function shouldPinPane(pane: PaneStatus, selectedId: string | null): boolean {
+  if (RUNTIME_ICON[paneRuntime(pane)]) return true;
+  if (selectedId && pane.pane_id === selectedId) return true;
+  if (pane.asking || pane.prompt) return true;
+  return false;
+}
+
+export interface PaneSplit {
+  visible: PaneListItem[];
+  overflow: PaneListItem[];
+}
+
+// splitPaneItems partitions the (already sorted/labeled) pane list into the
+// chips shown inline and the ones tucked behind the "more" chip, preserving the
+// input order within each group.
+export function splitPaneItems(items: PaneListItem[], selectedId: string | null): PaneSplit {
+  const visible: PaneListItem[] = [];
+  const overflow: PaneListItem[] = [];
+  for (const item of items) {
+    if (shouldPinPane(item.pane, selectedId)) visible.push(item);
+    else overflow.push(item);
+  }
+  return { visible, overflow };
+}
+
 export function paneListItems(panes: PaneStatus[]): PaneListItem[] {
   const sorted = sortedPaneList(panes);
   const perSession: Record<string, number> = {};
@@ -110,16 +141,19 @@ export function StatusLine() {
   }
 
   const items = paneListItems(panes);
+  const { visible, overflow } = splitPaneItems(items, state.selected);
 
   // Freeze the rendered order so Option+key hotkeys map to the same chips, in
-  // the same left-to-right sequence. Mutate state.paneOrder by reference,
-  // exactly like app.js (no bump — App reads it through state).
-  state.paneOrder = items.map(({ pane }) => pane.pane_id ?? "");
+  // the same left-to-right sequence. Only the inline (visible) chips get a slot;
+  // overflow panes are reachable by clicking through the "more" popover, not by
+  // hotkey, so the visible chips keep stable hotkey indices. Mutate
+  // state.paneOrder by reference, exactly like app.js (no bump — App reads it
+  // through state).
+  state.paneOrder = visible.map(({ pane }) => pane.pane_id ?? "");
 
   return (
     <div className="chips" id="chips">
-      {items.map(({ pane: p, label }, i) => {
-        const peer = panePeer(p);
+      {visible.map(({ pane: p, label }, i) => {
         const key = PANE_HOTKEYS[i];
         const paneID = p.pane_id ?? "";
         return (
@@ -135,6 +169,9 @@ export function StatusLine() {
           />
         );
       })}
+      {overflow.length > 0 ? (
+        <MoreChip items={overflow} onSelect={callbacks.selectPane} />
+      ) : null}
     </div>
   );
 }

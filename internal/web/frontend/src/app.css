@@ -1795,6 +1795,41 @@
   .chip:hover { border-color: var(--fg-dim); }
   .chip.sel { border-color: var(--accent); background: rgba(68,147,248,0.18); color: #fff; }
   .chip.stale { border-style: dashed; opacity: 0.72; }
+
+  /* "more" overflow chip + its click-to-open popover list. The wrapper is the
+     positioning context; the popover floats above the statusline (bottom:100%)
+     and is never clipped — .chips/.statusline have no overflow:hidden. */
+  .more-chip-wrap { position: relative; flex: 0 0 auto; display: inline-flex; }
+  /* color:inherit — it's a <button>, so the UA stylesheet would otherwise
+     reset the label to black and hide "more" against the dark chip. */
+  .more-chip { background: var(--bg); border-style: dashed; color: inherit; }
+  .more-chip.open { border-color: var(--accent); border-style: solid; }
+  .more-count {
+    flex: 0 0 auto;
+    font: 700 9px/1 var(--mono);
+    color: var(--fg-dim);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 4px;
+    min-width: 8px; text-align: center;
+  }
+  .more-chip.open .more-count { color: #fff; border-color: var(--accent); }
+  .chip-overflow-pop {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    z-index: 40;
+    display: flex; flex-direction: column; gap: 4px;
+    max-height: 50vh; overflow-y: auto;
+    min-width: 160px; max-width: min(320px, 90vw);
+    padding: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .chip-overflow-pop .chip { max-width: 100%; }
   .peer-badge {
     flex: 0 0 auto;
     font: 700 9px/1 var(--mono);
