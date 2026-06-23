@@ -22,14 +22,18 @@
   --window-x: calc(var(--ds) * 36px);
   /* Floor strip left visible in front of the wall, below the desks' feet. */
   --floor-apron: calc(var(--ds) * 38px);
-  /* Shared wall-decor geometry (sideboard + appliances on top + bookcase to
-     its right). --decor-base is the floor line the lamps/decor stand on. */
+  /* Shared wall-decor geometry (bookcase + sideboard with appliances to its
+     right). --decor-base is the floor line the lamps/decor stand on. */
   /* +10px holds the wall decor in place against the taller min-height (which
      drops the desks 10px); without it the bottom-anchored decor would drop too. */
   --decor-base: calc(var(--floor-apron) - var(--ds) * 8px - 1px + 10px);
+  /* The left/right anchors keep the furniture swap explicit: bookcase on the
+     left, sideboard (and the appliances riding on it) on the right. */
+  --decor-left-x: calc(var(--window-x) + var(--wall-h) + 47px);
+  --decor-right-x: calc(var(--decor-left-x) + var(--sideboard-w) + var(--ds) * 6px - 20px);
   /* Sideboard (and the appliances riding on it) sit a touch below the base line. */
   --sideboard-y: calc(var(--decor-base) - 8px);
-  --sideboard-x: calc(var(--window-x) + var(--wall-h) + 47px);
+  --sideboard-x: var(--decor-right-x);
   --sideboard-w: calc(var(--ds) * 57.6px);
   --sideboard-h: calc(var(--ds) * 38.4px);
   /* Ceiling pendant light fixture (128x72 source, ~1.78:1), at 80% scale. */
@@ -160,7 +164,7 @@
   image-rendering: pixelated;
   background-repeat: no-repeat;
 }
-/* White sideboard credenza, ~52px right of the floor-to-ceiling window. */
+/* White sideboard credenza, now to the right of the bookcase. */
 .decor-sideboard {
   left: var(--sideboard-x);
   bottom: var(--sideboard-y);
@@ -181,10 +185,10 @@
   background-position: 0 100%;
   background-size: contain;
 }
-/* Large white bookcase to the right of the sideboard (128x128, 1:1), standing
+/* Large white bookcase to the left of the sideboard (128x128, 1:1), standing
    on the same floor line and rising taller than the credenza. */
 .decor-bookcase {
-  left: calc(var(--sideboard-x) + var(--sideboard-w) + var(--ds) * 6px - 20px);
+  left: var(--decor-left-x);
   bottom: var(--decor-base);
   width: calc(var(--ds) * 60px);
   height: calc(var(--ds) * 60px);
