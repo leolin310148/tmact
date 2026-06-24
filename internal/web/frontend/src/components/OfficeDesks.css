@@ -8,11 +8,12 @@
    sprite metrics derive from it so the whole block scales together. */
 .office-desks {
   --ds: 1.7;
-  /* Wood plank floor tile + walnut slat wall tile (both 128x128 source),
-     displayed scaled to --ds so the pixel grids track the desk sprites.
+  /* Wood plank floor tile + walnut slat wall tile (both 128x128 source).
+     The floor tile uses integer CSS pixels at each room scale; fractional
+     repeated background sizes can show browser sampling seams.
      45° top-down scene: the wall (::before) rises at the back, the floor is
      the apron in front where the desks stand. --wall-h is two tiles tall. */
-  --floor-tile: calc(var(--ds) * 64px);
+  --floor-tile: 109px;
   --wall-tile: calc(var(--ds) * 46px);
   /* Wall height ~70% of the old two-tile height; slat width (--wall-tile) is
      unchanged, the vertical slats just tile to a fractional height seamlessly. */
@@ -36,6 +37,12 @@
   --sideboard-x: var(--decor-right-x);
   --sideboard-w: calc(var(--ds) * 57.6px);
   --sideboard-h: calc(var(--ds) * 38.4px);
+  /* Fixed wall art centered between the 7th and 8th desk slots. */
+  --desk-slot-w: calc(var(--ds) * 48px);
+  --leading-lamp-slot-w: calc(var(--ds) * 18.4px);
+  --wall-art-center-x: calc(10px + var(--leading-lamp-slot-w) + var(--desk-slot-w) * 7);
+  --wall-art-w: calc(var(--ds) * 41.6px);
+  --wall-art-h: calc(var(--wall-art-w) * 0.625);
   /* Ceiling pendant light fixture (128x72 source, ~1.78:1), at 80% scale. */
   --pendant-w: calc(var(--ds) * 51.2px);
   --pendant-h: calc(var(--ds) * 28.8px);
@@ -194,6 +201,15 @@
   height: calc(var(--ds) * 60px);
   background-image: url(../assets/pixel-agents/decor/bookcase_cat.png);
   background-position: 0 100%;
+  background-size: contain;
+}
+.decor-wall-art {
+  left: calc(var(--wall-art-center-x) - var(--wall-art-w) / 2);
+  top: calc(var(--ds) * 14px + 20px);
+  width: var(--wall-art-w);
+  height: var(--wall-art-h);
+  background-image: url(../assets/pixel-agents/decor/pixel_gleaners_wall_art_128.png);
+  background-position: 50% 50%;
   background-size: contain;
 }
 /* Easter-egg hotspot over the floor-to-ceiling window (drawn on ::before at
@@ -681,7 +697,10 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
    scale, and split the desk labels into two alternating rows so they don't
    collide in the tight horizontal space. */
 @media (max-width: 760px) {
-  .office-desks { --ds: 1.36; }
+  .office-desks {
+    --ds: 1.36;
+    --floor-tile: 87px;
+  }
   /* Each label only has to clear its same-row neighbour (two desks away, since
      they alternate up/down), so it can run wider before truncating. */
   .desk-name { max-width: calc(var(--ds) * 80px); }

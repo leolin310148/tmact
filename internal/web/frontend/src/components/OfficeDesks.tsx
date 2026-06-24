@@ -328,7 +328,7 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
         onPointerCancel={scheduleHide}
         onPointerLeave={scheduleHide}
       >
-        {/* Static wall decor (sideboard + appliances + bookcase), pinned against
+        {/* Static wall decor (sideboard + appliances + bookcase + wall art), pinned against
             the back wall behind the desks. It lives inside the scrolling scene so
             it pans together with the desks instead of staying frozen as they
             slide past (the whole room scrolls as one). */}
@@ -336,6 +336,7 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           <span className="decor-sideboard" />
           <span className="decor-appliances" />
           <span className="decor-bookcase" />
+          <span className="decor-wall-art" />
         </div>
         {/* Easter egg: a transparent hotspot over the floor-to-ceiling window that
             cycles the office through day → sunset → night (sits above the wall but
