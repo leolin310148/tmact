@@ -392,6 +392,201 @@ export function extractTables(text: string): ExtractedTables {
   return { text: out.join("\n"), tables };
 }
 
+// ---- ruler tables (Claude-style borderless tables) ----
+//
+// Claude often prints tables without vertical bars:
+//
+//   Header A    Header B
+//   ━━━━━━━━    ━━━━━━━━
+//   value       wrapped value
+//               continuation
+//   ────────    ─────────────
+//
+// There are no `|` or box corners, so the box/pipe extractors cannot see them.
+// The ruler line defines visual column spans. We cut data rows by display width
+// (CJK/full-width text counts as two columns) and combine physical lines until a
+// row separator appears.
+interface RulerSegment {
+  start: number;
+  end: number;
+}
+
+const RULER_CHARS_RE = /^[ \t━─]+$/;
+
+function charDisplayWidth(ch: string): number {
+  const cp = ch.codePointAt(0) ?? 0;
+  if (cp === 0) return 0;
+  if (cp < 0x20 || (cp >= 0x7f && cp < 0xa0)) return 0;
+  // Practical wcwidth subset for terminal output: CJK, Hangul, full-width
+  // forms, and emoji/symbol ranges are double-width in the panes we render.
+  if (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    cp === 0x2329 ||
+    cp === 0x232a ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe10 && cp <= 0xfe19) ||
+    (cp >= 0xfe30 && cp <= 0xfe6f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1faff)
+  ) return 2;
+  return 1;
+}
+
+function rulerSegments(line: string): RulerSegment[] | null {
+  const visible = line.replace(ANSI_STRIP_RE, "");
+  if (!RULER_CHARS_RE.test(visible.trim())) return null;
+  const segments: RulerSegment[] = [];
+  let visual = 0;
+  let runStart = -1;
+  let runEnd = -1;
+  for (const ch of visible) {
+    const w = charDisplayWidth(ch);
+    if (ch === "━" || ch === "─") {
+      if (runStart < 0) runStart = visual;
+      runEnd = visual + w;
+    } else if (runStart >= 0) {
+      if (runEnd - runStart >= 3) segments.push({ start: runStart, end: runEnd });
+      runStart = -1;
+      runEnd = -1;
+    }
+    visual += w;
+  }
+  if (runStart >= 0 && runEnd - runStart >= 3) segments.push({ start: runStart, end: runEnd });
+  return segments.length >= 2 ? segments : null;
+}
+
+function sameRulerSegments(a: RulerSegment[], b: RulerSegment[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (!left || !right) return false;
+    // ANSI/non-joined captures can shift by a cell; keep the guard strict
+    // enough to avoid swallowing unrelated horizontal rules.
+    if (Math.abs(left.start - right.start) > 1 || Math.abs(left.end - right.end) > 1) return false;
+  }
+  return true;
+}
+
+function visualSlice(line: string, start: number, end: number): string {
+  const visible = line.replace(ANSI_STRIP_RE, "");
+  let out = "";
+  let visual = 0;
+  for (const ch of visible) {
+    const w = charDisplayWidth(ch);
+    const next = visual + w;
+    if (next > start && visual < end) out += ch;
+    visual = next;
+    if (visual >= end) break;
+  }
+  return out.trim();
+}
+
+function rulerRowCells(line: string, segments: RulerSegment[]): string[] {
+  return segments.map((seg, idx) => {
+    const next = segments[idx + 1];
+    const end = next ? next.start : seg.end;
+    return visualSlice(line, seg.start, end);
+  });
+}
+
+function appendRulerCell(a: string, b: string): string {
+  if (!a) return b;
+  if (!b) return a;
+  return a + "\n" + b;
+}
+
+function parseRulerBlock(block: string[], segments: RulerSegment[]): ParsedTable {
+  const rows: string[][] = [];
+  let headerEnd = -1;
+  let segment: string[] = [];
+  let invalid = false;
+
+  const flush = (): void => {
+    if (!segment.length) return;
+    const combined = Array.from<string>({ length: segments.length }).fill("");
+    let sawText = false;
+    for (const raw of segment) {
+      const cells = rulerRowCells(raw, segments);
+      if (cells.length !== segments.length) {
+        invalid = true;
+        break;
+      }
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i] ?? "";
+        if (cell) sawText = true;
+        combined[i] = appendRulerCell(combined[i] ?? "", cell);
+      }
+    }
+    if (sawText && !invalid) rows.push(combined);
+    segment = [];
+  };
+
+  for (const line of block) {
+    const lineSegments = rulerSegments(line);
+    if (lineSegments && sameRulerSegments(lineSegments, segments)) {
+      flush();
+      if (!invalid && headerEnd === -1 && rows.length > 0) headerEnd = rows.length;
+      continue;
+    }
+    segment.push(line);
+  }
+  flush();
+
+  if (invalid || rows.length < 2 || headerEnd !== 1) return { rows: [], headerEnd: -1 };
+  return { rows, headerEnd };
+}
+
+export function extractRulerTables(text: string, startIdx = 0): ExtractedTables {
+  const lines = text.split("\n");
+  const tables: string[] = [];
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const header = lines[i] ?? "";
+    const underline = lines[i + 1] ?? "";
+    const segments = rulerSegments(underline);
+    if (segments && header.trim() && !rulerSegments(header)) {
+      const headerCells = rulerRowCells(header, segments);
+      const headerTextCells = headerCells.filter(Boolean).length;
+      const nextLine = lines[i + 2] ?? "";
+      const nextSegments = rulerSegments(nextLine);
+      const nextCells = rulerRowCells(nextLine, segments);
+      const nextTextCells = nextCells.filter(Boolean).length;
+      if (!nextSegments && headerTextCells >= 2 && nextTextCells > 0) {
+        let j = i + 2;
+        while (j < lines.length) {
+          const line = lines[j] ?? "";
+          const lineSegments = rulerSegments(line);
+          if (lineSegments) {
+            if (!sameRulerSegments(lineSegments, segments)) break;
+            j++;
+            continue;
+          }
+          if (!line.trim()) break;
+          const cells = rulerRowCells(line, segments);
+          if (!cells.some(Boolean)) break;
+          j++;
+        }
+        const parsed = parseRulerBlock(lines.slice(i, j), segments);
+        if (parsed.rows.length > 0) {
+          const idx = startIdx + tables.length;
+          tables.push(renderTable(parsed));
+          out.push(TABLE_OPEN + idx + TABLE_CLOSE);
+          i = j;
+          continue;
+        }
+      }
+    }
+    out.push(header);
+    i++;
+  }
+  return { text: out.join("\n"), tables };
+}
+
 // ---- markdown pipe tables (opt-in "markdown view" only) ----
 //
 // hc-api-style tools print aligned `a | b | c` tables WITHOUT box-drawing
@@ -612,6 +807,9 @@ export function render(text: string, opts?: RenderOpts): string {
   const extracted = extractTables(mermaids.text);
   const tables = extracted.tables.slice();
   let tabledText = extracted.text;
+  const ruled = extractRulerTables(tabledText, tables.length);
+  tables.push(...ruled.tables);
+  tabledText = ruled.text;
   // Markdown view additionally folds pipe tables. Detection strips ANSI per line
   // internally (pipeCells/isPipeRow/isPipeSepLine), but only the matched table
   // lines are swapped for placeholders — every other line keeps its ANSI, so the

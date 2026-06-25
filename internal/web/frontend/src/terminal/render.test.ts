@@ -9,6 +9,7 @@ import {
   joinWrappedFrames,
   parseTableBlock,
   renderTable,
+  extractRulerTables,
   extractPipeTables,
   parsePipeBlock,
   previewableImagePath,
@@ -356,6 +357,55 @@ describe("parseTableBlock / renderTable / extractTables", () => {
     expect(html.match(/<tr>/g)).toHaveLength(4);
     expect(html).toContain("<td>章節頁：API Gateway\n是什麼？</td>");
     expect(html).not.toContain("<td></td><td>是什麼？</td>");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ruler tables (Claude-style borderless tables)
+// ---------------------------------------------------------------------------
+describe("extractRulerTables", () => {
+  it("folds Claude-style tables that use ruler rows instead of borders", () => {
+    const text = [
+      " 人員       6 月 commits            Lines    Files    建議區間    建議採用",
+      "━━━━━━━━━  ━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━  ━━━━━━━  ━━━━━━━━━━  ━━━━━━━━━━",
+      " Alice                42     +12345/-6789      321    120-180h        150h",
+      "─────────  ──────────────  ───────────────  ───────  ──────────  ──────────",
+      " Bob                  57    +23456/-78901      456    160-220h        190h",
+    ].join("\n");
+
+    const { text: outText, tables } = extractRulerTables(text);
+    expect(tables).toHaveLength(1);
+    expect(outText).toBe(TABLE_OPEN + "0" + TABLE_CLOSE);
+    expect(tables[0]).toContain("<thead>");
+    expect(tables[0]).toContain("<th>人員</th>");
+    expect(tables[0]).toContain("<td>Alice</td>");
+    expect(tables[0]).toContain("<td>+23456/-78901</td>");
+  });
+
+  it("combines wrapped physical lines within ruler-table cells", () => {
+    const text = [
+      " 主題                                          內容                                           觀察",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      " PX-742 UI demo                                demo-portal UX 虛構設定頁入口與互動            大型 UI feature，48 files，這是純虛構範例A",
+      "                                                                                              僅供換行用",
+      "────────────────────────────────────────────  ─────────────────────────────────────────────  ─────────────────────────────────────────────",
+      " APP 測試範例                                  demo_port component hooks unit tests Stage     這是虛構案例，供 wrap；偏測試覆蓋，約 12",
+      "                                               2a batch 4-6、scenario gaps、error path、      commits",
+      "                                               review fixes",
+    ].join("\n");
+
+    const html = render(text);
+    expect(html).toContain('<table class="tui-table">');
+    expect(html).toContain("<th>主題</th>");
+    expect(html).toContain("大型 UI feature，48 files，這是純虛構範例A\n僅供換行用");
+    expect(html).toContain("demo_port component hooks unit tests Stage\n3b batch 1-3");
+  });
+
+  it("does not fold a standalone horizontal rule", () => {
+    const text = "before\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nafter";
+    const { tables, text: outText } = extractRulerTables(text);
+    expect(tables).toHaveLength(0);
+    expect(outText).toBe(text);
   });
 });
 
