@@ -9,6 +9,7 @@ import {
   joinWrappedFrames,
   parseTableBlock,
   renderTable,
+  extractRulerTables,
   extractPipeTables,
   parsePipeBlock,
   previewableImagePath,
@@ -356,6 +357,55 @@ describe("parseTableBlock / renderTable / extractTables", () => {
     expect(html.match(/<tr>/g)).toHaveLength(4);
     expect(html).toContain("<td>章節頁：API Gateway\n是什麼？</td>");
     expect(html).not.toContain("<td></td><td>是什麼？</td>");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ruler tables (Claude-style borderless tables)
+// ---------------------------------------------------------------------------
+describe("extractRulerTables", () => {
+  it("folds Claude-style tables that use ruler rows instead of borders", () => {
+    const text = [
+      " 人員       6 月 commits            Lines    Files    建議區間    建議採用",
+      "━━━━━━━━━  ━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━  ━━━━━━━  ━━━━━━━━━━  ━━━━━━━━━━",
+      " Carol                90     +37838/-8699      545    190-255h        220h",
+      "─────────  ──────────────  ───────────────  ───────  ──────────  ──────────",
+      " Peter               102    +91105/-16682     1133    280-350h        315h",
+    ].join("\n");
+
+    const { text: outText, tables } = extractRulerTables(text);
+    expect(tables).toHaveLength(1);
+    expect(outText).toBe(TABLE_OPEN + "0" + TABLE_CLOSE);
+    expect(tables[0]).toContain("<thead>");
+    expect(tables[0]).toContain("<th>人員</th>");
+    expect(tables[0]).toContain("<td>Carol</td>");
+    expect(tables[0]).toContain("<td>+91105/-16682</td>");
+  });
+
+  it("combines wrapped physical lines within ruler-table cells", () => {
+    const text = [
+      " 主題                                          內容                                           觀察",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      " HC-196 AI menu                                hotcake-app AI 服務價目表入口與互動            大型 FE feature，52 files，這是 6 月最大單",
+      "                                                                                              一產品功能",
+      "────────────────────────────────────────────  ─────────────────────────────────────────────  ─────────────────────────────────────────────",
+      " CMS 測試建設                                  hotcake_cms feature hooks unit tests Phase     這塊很實質，不是 sync；偏品質建設，約 10",
+      "                                               3b batch 1-3、coverage gaps、error path、      commits",
+      "                                               review fixes",
+    ].join("\n");
+
+    const html = render(text);
+    expect(html).toContain('<table class="tui-table">');
+    expect(html).toContain("<th>主題</th>");
+    expect(html).toContain("大型 FE feature，52 files，這是 6 月最大單\n一產品功能");
+    expect(html).toContain("hotcake_cms feature hooks unit tests Phase\n3b batch 1-3");
+  });
+
+  it("does not fold a standalone horizontal rule", () => {
+    const text = "before\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nafter";
+    const { tables, text: outText } = extractRulerTables(text);
+    expect(tables).toHaveLength(0);
+    expect(outText).toBe(text);
   });
 });
 
