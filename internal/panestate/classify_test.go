@@ -102,6 +102,34 @@ project $
 	}
 }
 
+func TestClassifyPrefersClaudePromptAboveIdleFooterOverStaleWorkingScrollback(t *testing.T) {
+	cases := []struct {
+		name      string
+		statusBar string
+	}{
+		{name: "model status", statusBar: "guru-scp-web | Opus 4.8 (1M context) | high | ctx:13% | master"},
+		{name: "cwd status", statusBar: "/Users/puni/w/ndt/guru-scp-web | main | ctx:13%"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := Classify(`
+I am working on the synthesis now.
+用戶目前無待辦。
+❯
+` + tc.statusBar + `
+⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+`)
+
+			if result.State != StateWaitingInput {
+				t.Fatalf("state = %q", result.State)
+			}
+			if result.Asking {
+				t.Fatal("idle Claude prompt should not be asking")
+			}
+		})
+	}
+}
+
 func TestClassifyDetectsWorkingText(t *testing.T) {
 	result := Classify("Codex\nWorking\nEsc to interrupt")
 

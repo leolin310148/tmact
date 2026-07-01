@@ -289,6 +289,47 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 	}
 }
 
+func TestExistingSessionReuseClaudePromptAboveIdleFooter(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) >= 2 {
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+		return `
+I am working on the synthesis now.
+用戶目前無待辦。
+❯
+guru-scp-web | Opus 4.8 (1M context) | high | ctx:13% | master
+⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+`, nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if !report.AgentWasRunning {
+		t.Fatal("agent_was_running should be true")
+	}
+	want := []paste{{"%1", "/clear", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	for i := range want {
+		if rec.pastes[i] != want[i] {
+			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
+		}
+	}
+}
+
 func TestExistingSessionAgentBusy(t *testing.T) {
 	_, deps := baseDeps()
 	deps.ListLayout = func() (tmux.Layout, error) {

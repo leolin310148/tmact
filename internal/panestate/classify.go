@@ -160,6 +160,9 @@ func isAgentChromeLine(text string) bool {
 	if text == "" {
 		return true
 	}
+	if looksLikeClaudeIdleFooter(text) || looksLikeClaudeStatusBar(text) {
+		return true
+	}
 	return containsAny(text,
 		"welcome back",
 		"tips for getting",
@@ -176,6 +179,17 @@ func isAgentChromeLine(text string) bool {
 		"context ",
 		"cost:",
 	)
+}
+
+func looksLikeClaudeIdleFooter(text string) bool {
+	return strings.Contains(text, "auto mode on (shift+tab to cycle)") && strings.Contains(text, "for agents")
+}
+
+func looksLikeClaudeStatusBar(text string) bool {
+	if !strings.Contains(text, " | ") {
+		return false
+	}
+	return containsAny(text, "ctx:", " context)", "opus", "sonnet", "haiku")
 }
 
 func looksLikeAgentPrompt(text string) bool {
