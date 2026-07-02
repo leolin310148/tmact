@@ -675,6 +675,18 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
 }
 .desk-more-row.state-running .desk-more-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .desk-more-row.state-asking .desk-more-dot { background: var(--amber); }
+.desk-more-peer {
+  flex: 0 0 auto;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 4px;
+  border: 1px solid rgba(210,153,34,0.45);
+  border-radius: 3px;
+  background: rgba(210,153,34,0.12);
+  color: var(--amber);
+  font: 700 9px/1 var(--mono);
+}
 .desk-more-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desk-more-rt {
   flex: 0 0 auto;

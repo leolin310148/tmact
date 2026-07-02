@@ -233,12 +233,22 @@ function LampMore({
             >
               {items.map(({ pane, label }, i) => {
                 const runtime = paneRuntime(pane);
+                const peer = panePeer(pane);
+                const title =
+                  (peer ? peer + " — " : "") +
+                  label +
+                  " — " +
+                  (runtime || "idle") +
+                  " — " +
+                  paneStateLabel(pane);
                 return (
                   <button
                     key={pane.pane_id || "overflow-" + i}
                     type="button"
                     className={"desk-more-row state-" + paneStateClass(pane)}
                     role="menuitem"
+                    title={title}
+                    aria-label={"Select pane " + (peer ? peer + " " : "") + label}
                     onPointerDown={onPointerDownNoBlur}
                     onClick={() => {
                       onSelect(pane.pane_id ?? "");
@@ -246,6 +256,7 @@ function LampMore({
                     }}
                   >
                     <span className="desk-more-dot" aria-hidden="true" />
+                    {peer ? <span className="desk-more-peer">{peer}</span> : null}
                     <span className="desk-more-label">{label}</span>
                     {RUNTIME_ICON[runtime] ? (
                       <span className="desk-more-rt">{RUNTIME_ICON[runtime]}</span>
