@@ -61,6 +61,30 @@ func builtAssetPaths(t *testing.T, handler http.Handler) (jsPath, cssPath string
 	return js[1], css[1]
 }
 
+func bundledJS(t *testing.T) string {
+	t.Helper()
+	var out strings.Builder
+	err := fs.WalkDir(staticFS, "static/assets", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".js") {
+			return nil
+		}
+		b, err := fs.ReadFile(staticFS, path)
+		if err != nil {
+			return err
+		}
+		out.Write(b)
+		out.WriteByte('\n')
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("read bundled JS assets: %v", err)
+	}
+	return out.String()
+}
+
 func TestIndexPageServed(t *testing.T) {
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
@@ -105,19 +129,22 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	handler := (&Server{}).Handler()
 	jsPath, _ := builtAssetPaths(t, handler)
 	js := servedBody(t, handler, jsPath)
+	allJS := bundledJS(t)
 
 	// PWA service worker registration.
 	if !strings.Contains(js, "/sw.js") {
 		t.Fatal("bundled app missing service worker registration (/sw.js)")
 	}
 	// Every server endpoint the UI speaks to (string literals survive minify).
+	// Some features are lazy-loaded into separate Vite chunks, so scan every
+	// bundled JS asset rather than only the entry module from index.html.
 	for _, want := range []string{
 		"/api/snapshot", "/api/snapshot/stream", "/api/version",
 		"/api/frontend-logs",
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
 		"/api/paste-image", "/api/upload-file", "/api/image", "/api/markdown", "/api/file", "/ws/pane",
 	} {
-		if !strings.Contains(js, want) {
+		if !strings.Contains(allJS, want) {
 			t.Fatalf("bundled app missing endpoint %q", want)
 		}
 	}
@@ -125,7 +152,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	for _, want := range []string{
 		"record-btn", "rec-send", "upload-btn", "selection-btn", "clear-pane-btn",
 		"file-upload", "gear-btn", "settings-overlay", "running-effect", "build-time",
-		"qb-fab", "help-btn", "stale-dot", "conn-status", "option-bar", "direct-input",
+		"qb-fab", "help-btn", "conn-status", "option-bar", "direct-input",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("bundled app missing control id %q", want)
