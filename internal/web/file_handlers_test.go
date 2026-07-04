@@ -94,6 +94,20 @@ func TestFileEndpointRejectsRemoteURL(t *testing.T) {
 	}
 }
 
+func TestFileEndpointMethodNotAllowedSetsAllowHeader(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/file", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+	if got := rec.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("Allow = %q, want %q", got, http.MethodGet)
+	}
+}
+
 func escapedFileURL(path string) string {
 	return (&url.URL{Scheme: "file", Path: path}).String()
 }
