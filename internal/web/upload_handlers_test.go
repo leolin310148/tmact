@@ -321,6 +321,7 @@ func TestSanitizeUploadFilename(t *testing.T) {
 		want string
 	}{
 		{"../notes?.txt", "notes.txt"},
+		{`C:\Users\alice\Desktop\notes?.txt`, "notes.txt"},
 		{"  .hidden  ", "hidden"},
 		{"", "file"},
 		{"résumé 2026.pdf", "résumé-2026.pdf"},
