@@ -129,5 +129,11 @@ keys. Watchers keep allowlist checks, and loops stop on known permission,
 approval, trust-folder, and confirmation prompts instead of auto-confirming
 them.
 
+A loop can also back off on quota: an optional `quota` block (see
+[`examples/quota-aware-loop.yaml`](examples/quota-aware-loop.yaml)) reads the
+target agent's real rate-limit usage and skips a cycle when the weekly window is
+reached or the session window has little left, so an unattended loop never burns
+a weekly limit. It fails open (keeps running) when quota can't be read.
+
 For source builds, tests, examples, and release notes, see
 [`docs/development.md`](docs/development.md).
