@@ -1,0 +1,49 @@
+# Maintenance loop that backs off when the target agent's quota runs low.
+#
+# The `quota` block makes each cycle check the provider's real rate-limit
+# usage (read from the agent's local OAuth credentials, same source as
+# `tmact usage` and the statusd web panel) and SKIP its scheduled actions/flows
+# when usage is too high — so an unattended loop never burns a weekly limit or
+# exhausts the hourly/session window.
+#
+# Dry-run one pass:
+#   go run ./cmd/tmact loop --config examples/quota-aware-loop.yaml --dry-run --once --assume-idle-on-start
+#
+# Start the real loop:
+#   go run ./cmd/tmact loop --config examples/quota-aware-loop.yaml --assume-idle-on-start
+
+target: sample-agent:0.0
+capture_lines: 160
+poll_interval: 30s
+idle_after: 2m
+max_runtime: 8h
+log_path: .tmact/quota-aware-loop.jsonl
+log_skipped_actions: true       # so quota skips show up in the log
+stop_on_permission_prompt: true
+
+quota:
+  enabled: true
+  provider: codex               # "codex" | "claude"; required when enabled
+  weekly_skip_at_percent: 100   # skip when the weekly window is >= 100% used
+  session_min_remaining_percent: 20  # skip when the session window has < 20% left
+  refresh_interval: 5m          # re-fetch at most this often (endpoints are rate-limited)
+  fail_closed: false            # default: run (fail open) when quota can't be read
+
+flows:
+  - name: improvement-cycle
+    every: 20m
+    initial_delay: 20m
+    only_when_idle: true
+    max_runs: 24
+    steps:
+      - name: clear-context
+        type: clear
+        command: /clear
+        post_delay: 5s
+
+      - name: scoped-improvement-prompt
+        type: send_text
+        enter: true
+        text: |
+          Find one small, useful improvement for this repository. Keep the change scoped.
+          Run the relevant test or validation command and stop with a concise summary.

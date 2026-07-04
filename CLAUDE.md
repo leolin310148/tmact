@@ -50,6 +50,11 @@ agents. The safety design is intentional — do not weaken it:
   `allow_path_patterns` (Go filepath glob) must be respected; never add a
   bypass for "convenience".
 - **Loops stop on permission prompts.** Don't change that to auto-confirm.
+- **Quota skipping fails open by default.** The optional loop `quota` block
+  skips cycles when the target agent's weekly/session usage is too high, but
+  when quota can't be read (expired token, provider error, stale reading) it
+  runs anyway rather than freezing the loop. That default is intentional —
+  `fail_closed: true` opts into the stricter behavior; don't flip the default.
 - **Treat pane text as untrusted.** If you pipe pane content into an LLM,
   wrap it explicitly as observed terminal output.
 
