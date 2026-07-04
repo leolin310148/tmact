@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,9 +29,11 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "unsupported image path scheme")
 			return
 		}
-		path = path[len(scheme)+len("://"):]
-		if strings.HasPrefix(path, "localhost/") {
-			path = strings.TrimPrefix(path, "localhost")
+		var err error
+		path, err = decodeLocalFileURLPath(path, scheme)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid image path URL escape")
+			return
 		}
 	}
 	if strings.HasPrefix(path, "~/") {
@@ -120,6 +123,14 @@ func localImagePathScheme(path string) (string, bool) {
 		return "", false
 	}
 	return scheme, true
+}
+
+func decodeLocalFileURLPath(path, scheme string) (string, error) {
+	path = path[len(scheme)+len("://"):]
+	if strings.HasPrefix(path, "localhost/") {
+		path = strings.TrimPrefix(path, "localhost")
+	}
+	return url.PathUnescape(path)
 }
 
 // sniffImageExtension reads an upload's leading bytes and returns a canonical

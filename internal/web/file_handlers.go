@@ -59,9 +59,10 @@ func resolveLocalDownloadPath(r *http.Request) (string, string, int) {
 		if !strings.EqualFold(scheme, "file") {
 			return "", "unsupported file path scheme", http.StatusBadRequest
 		}
-		path = path[len(scheme)+len("://"):]
-		if strings.HasPrefix(path, "localhost/") {
-			path = strings.TrimPrefix(path, "localhost")
+		var err error
+		path, err = decodeLocalFileURLPath(path, scheme)
+		if err != nil {
+			return "", "invalid file path URL escape", http.StatusBadRequest
 		}
 	}
 	if strings.HasPrefix(path, "~/") {

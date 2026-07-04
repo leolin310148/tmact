@@ -38,7 +38,7 @@ func TestImageEndpointServesAnyReadableImagePath(t *testing.T) {
 
 func TestImageEndpointServesFileURL(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "sample.png")
+	path := filepath.Join(dir, "sample image.png")
 	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
 	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestImageEndpointServesFileURL(t *testing.T) {
 
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape("file://"+path), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(escapedFileURL(path)), nil)
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
