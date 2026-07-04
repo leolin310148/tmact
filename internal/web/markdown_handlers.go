@@ -71,9 +71,10 @@ func resolveLocalMarkdownPath(r *http.Request) (string, string, int) {
 		if !strings.EqualFold(scheme, "file") {
 			return "", "unsupported markdown path scheme", http.StatusBadRequest
 		}
-		path = path[len(scheme)+len("://"):]
-		if strings.HasPrefix(path, "localhost/") {
-			path = strings.TrimPrefix(path, "localhost")
+		var err error
+		path, err = decodeLocalFileURLPath(path, scheme)
+		if err != nil {
+			return "", "invalid markdown path URL escape", http.StatusBadRequest
 		}
 	}
 	if strings.HasPrefix(path, "~/") {

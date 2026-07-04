@@ -39,6 +39,31 @@ func TestMarkdownEndpointReadsAbsoluteMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdownEndpointReadsEscapedFileURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "release notes.md")
+	body := "# Notes\n\nhello"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/markdown?path="+url.QueryEscape(escapedFileURL(path)), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	var got markdownPreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != body || got.Path != path || got.BaseDir != dir || got.Filename != "release notes.md" {
+		t.Fatalf("response = %+v", got)
+	}
+}
+
 func TestMarkdownEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	dir := t.TempDir()
 	docs := filepath.Join(dir, "docs")
