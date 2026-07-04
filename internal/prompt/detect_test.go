@@ -123,6 +123,22 @@ func TestDetectTrustFolderPrompt(t *testing.T) {
 	}
 }
 
+func TestDetectWaitingApprovalPromptWithoutOptions(t *testing.T) {
+	detected := Detect("Waiting for approval\n")
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeWaitingApproval {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.Title != "Waiting for approval" {
+		t.Fatalf("title = %q", detected.Title)
+	}
+	if len(detected.Options) != 0 {
+		t.Fatalf("options = %#v", detected.Options)
+	}
+}
+
 func TestDetectTrailingChoicePrompt(t *testing.T) {
 	raw := `
 Skill 位置
