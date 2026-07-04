@@ -57,6 +57,28 @@ func TestImageEndpointServesFileURL(t *testing.T) {
 	}
 }
 
+func TestImageEndpointRejectsFileURLWithRemoteHost(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "example.test"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "example.test", "sample.png")
+	png := "\x89PNG\r\n\x1a\n" + "preview bytes"
+	if err := os.WriteFile(path, []byte(png), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/image?path="+url.QueryEscape("file://example.test/sample.png")+"&cwd="+url.QueryEscape(dir), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
 func TestImageEndpointCanDownloadImage(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, `sample"quote.png`)
