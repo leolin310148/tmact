@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentusage"
 	"github.com/leolin310148/tmact/internal/prompt"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
@@ -26,7 +27,15 @@ type Runner struct {
 	options            Options
 	now                func() time.Time
 	capturePane        func(string, int) (string, error)
+	fetchUsage         func(context.Context, ...string) agentusage.Snapshot
 	idleIgnorePatterns []*regexp.Regexp
+
+	// Cached quota snapshot. The provider endpoints are rate-limited, so
+	// fetchUsage runs at most once per Quota.RefreshInterval and the last
+	// snapshot is reused in between.
+	quotaSnap    agentusage.Snapshot
+	quotaHave    bool
+	quotaFetched time.Time
 }
 
 type actionState struct {
@@ -70,6 +79,7 @@ func NewRunner(cfg Config, options Options) *Runner {
 		options:            options,
 		now:                time.Now,
 		capturePane:        tmux.CapturePane,
+		fetchUsage:         agentusage.Fetch,
 		idleIgnorePatterns: compiled,
 	}
 }
@@ -125,12 +135,17 @@ func (r *Runner) Run(ctx context.Context) error {
 			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "permission_prompt", Details: state.InteractivePrompt})
 		}
 
+		quotaSkip, quotaReason, err := r.evaluateQuota(ctx, now)
+		if err != nil {
+			return err
+		}
+
 		for i := range actions {
 			if r.cfg.MaxActions > 0 && actionCount >= r.cfg.MaxActions {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
-			executed, err := r.maybeRunAction(now, state, &actions[i])
+			executed, err := r.maybeRunAction(now, state, &actions[i], quotaSkip, quotaReason)
 			if err != nil {
 				return err
 			}
@@ -143,7 +158,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
-			executed, err := r.maybeRunFlow(now, state, &flows[i])
+			executed, err := r.maybeRunFlow(now, state, &flows[i], quotaSkip, quotaReason)
 			if err != nil {
 				return err
 			}
@@ -204,11 +219,23 @@ func (r *Runner) idleText(raw string) string {
 	return strings.Join(kept, "\n")
 }
 
-func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionState) (bool, error) {
+func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionState, quotaSkip bool, quotaReason string) (bool, error) {
 	if now.Before(action.nextRun) {
 		return false, nil
 	}
 	if action.config.MaxRuns > 0 && action.runs >= action.config.MaxRuns {
+		return false, nil
+	}
+	if quotaSkip {
+		if r.cfg.LogSkippedActions {
+			return false, r.emit(event{
+				Timestamp: now.Format(time.RFC3339),
+				Type:      "skip",
+				Target:    r.cfg.Target,
+				Action:    action.config.Name,
+				Status:    quotaReason,
+			})
+		}
 		return false, nil
 	}
 	if action.config.OnlyWhenIdle && !state.Idle {
@@ -239,11 +266,23 @@ func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionSt
 	return true, nil
 }
 
-func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState) (int, error) {
+func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState, quotaSkip bool, quotaReason string) (int, error) {
 	if now.Before(flow.nextRun) {
 		return 0, nil
 	}
 	if flow.config.MaxRuns > 0 && flow.runs >= flow.config.MaxRuns {
+		return 0, nil
+	}
+	if quotaSkip {
+		if r.cfg.LogSkippedActions {
+			return 0, r.emit(event{
+				Timestamp: now.Format(time.RFC3339),
+				Type:      "skip",
+				Target:    r.cfg.Target,
+				Action:    flow.config.Name,
+				Status:    quotaReason,
+			})
+		}
 		return 0, nil
 	}
 	if flow.config.OnlyWhenIdle && !state.Idle {
@@ -305,6 +344,105 @@ func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState) (
 		flow.config.MaxRuns = flow.runs
 	}
 	return executed, nil
+}
+
+// evaluateQuota decides whether this cycle should be skipped because the target
+// agent's provider usage is too high. It refreshes the cached snapshot at most
+// once per Quota.RefreshInterval (the endpoints are rate-limited) and reuses the
+// last reading in between. When quota can't be determined (missing/expired
+// token, provider error, stale reading, or no windows) it fails open — runs
+// anyway and logs once per refresh — unless FailClosed is set. Returns
+// (skip, reason); reason is "quota_weekly", "quota_session_low", or (fail-closed
+// only) "quota_unavailable".
+func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string, error) {
+	q := r.cfg.Quota
+	if q == nil || !q.Enabled {
+		return false, "", nil
+	}
+
+	interval := q.RefreshInterval.Duration
+	if interval <= 0 {
+		interval = defaultQuotaRefreshInterval
+	}
+	fetched := false
+	if !r.quotaHave || now.Sub(r.quotaFetched) >= interval {
+		r.quotaSnap = r.fetchUsage(ctx, q.Provider)
+		r.quotaHave = true
+		r.quotaFetched = now
+		fetched = true
+	}
+
+	pu, ok := providerUsage(r.quotaSnap, q.Provider)
+	if !ok || pu.Error != "" || pu.Stale || len(pu.Windows) == 0 {
+		if fetched {
+			// Log the fail-open/fail-closed decision once per refresh so a broken
+			// token is visible rather than silently changing loop behavior.
+			reason := "no usage data"
+			if !ok {
+				reason = "provider not found in snapshot"
+			} else if pu.Error != "" {
+				reason = pu.Error
+			} else if pu.Stale {
+				reason = "stale reading"
+			}
+			policy := "fail_open_run"
+			if q.FailClosed {
+				policy = "fail_closed_skip"
+			}
+			if err := r.emit(event{
+				Timestamp: now.Format(time.RFC3339),
+				Type:      "quota",
+				Target:    r.cfg.Target,
+				Status:    "unavailable",
+				Reason:    reason,
+				Details:   map[string]interface{}{"provider": q.Provider, "policy": policy},
+			}); err != nil {
+				return false, "", err
+			}
+		}
+		if q.FailClosed {
+			return true, "quota_unavailable", nil
+		}
+		return false, "", nil
+	}
+
+	weeklyAt := q.WeeklySkipAtPercent
+	if weeklyAt <= 0 {
+		weeklyAt = defaultWeeklySkipAtPercent
+	}
+	minRemaining := q.SessionMinRemainingPercent
+	if minRemaining <= 0 {
+		minRemaining = defaultSessionMinRemainingPercent
+	}
+
+	var weekly, session *agentusage.RateWindow
+	for i := range pu.Windows {
+		switch pu.Windows[i].Name {
+		case "weekly":
+			weekly = &pu.Windows[i]
+		case "session":
+			session = &pu.Windows[i]
+		}
+	}
+
+	// Weekly exhaustion is the more severe condition, so it wins the reason.
+	if weekly != nil && weekly.UsedPercent >= weeklyAt {
+		return true, "quota_weekly", nil
+	}
+	if session != nil && 100-session.UsedPercent < minRemaining {
+		return true, "quota_session_low", nil
+	}
+	return false, "", nil
+}
+
+// providerUsage returns the ProviderUsage for name from a snapshot.
+func providerUsage(snap agentusage.Snapshot, name string) (agentusage.ProviderUsage, bool) {
+	for _, p := range snap.Providers {
+		if p.Provider == name {
+			return p, true
+		}
+	}
+	return agentusage.ProviderUsage{}, false
 }
 
 func (r *Runner) runAction(now time.Time, name string, action ActionConfig) error {
