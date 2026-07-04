@@ -153,6 +153,7 @@ func TestLoadExampleConfigs(t *testing.T) {
 		"night-loop.yaml",
 		"maintenance-loop.yaml",
 		"frontend-review-loop.yaml",
+		"quota-aware-loop.yaml",
 	}
 
 	for _, name := range examples {
