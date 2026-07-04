@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentusage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,9 +41,43 @@ type Config struct {
 	LogPath                string         `yaml:"log_path"`
 	LogSkippedActions      bool           `yaml:"log_skipped_actions"`
 	StopOnPermissionPrompt bool           `yaml:"stop_on_permission_prompt"`
+	Quota                  *QuotaConfig   `yaml:"quota"`
 	Actions                []ActionConfig `yaml:"actions"`
 	Flows                  []FlowConfig   `yaml:"flows"`
 }
+
+// QuotaConfig makes the loop skip its scheduled actions/flows when the target
+// agent's provider usage is too high, so an unattended loop never burns through
+// a weekly limit or exhausts the hourly/session window. Absent (or enabled:
+// false) means quota is never consulted and the loop behaves exactly as before.
+type QuotaConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Provider selects which agent's quota to read: "codex" or "claude". It must
+	// be set when enabled (there is no meaningful default — a loop drives one
+	// agent, so the operator names it explicitly).
+	Provider string `yaml:"provider"`
+	// WeeklySkipAtPercent skips the cycle when the weekly window's used-percent
+	// is >= this. Default 100 (skip only once the weekly limit is fully reached).
+	WeeklySkipAtPercent float64 `yaml:"weekly_skip_at_percent"`
+	// SessionMinRemainingPercent skips the cycle when the session (hourly/5h)
+	// window has less than this percent remaining (used-percent > 100-this).
+	// Default 20.
+	SessionMinRemainingPercent float64 `yaml:"session_min_remaining_percent"`
+	// RefreshInterval bounds how often the rate-limited provider endpoint is
+	// queried; the last snapshot is reused between refreshes. Default 5m.
+	RefreshInterval Duration `yaml:"refresh_interval"`
+	// FailClosed inverts the default fail-open behavior: when quota can't be
+	// determined (missing/expired token, provider error, stale reading) the loop
+	// skips instead of running. Default false — a broken token never silently
+	// freezes the loop.
+	FailClosed bool `yaml:"fail_closed"`
+}
+
+const (
+	defaultWeeklySkipAtPercent        = 100
+	defaultSessionMinRemainingPercent = 20
+	defaultQuotaRefreshInterval       = 5 * time.Minute
+)
 
 type ActionConfig struct {
 	Name         string   `yaml:"name"`
@@ -99,6 +134,17 @@ func applyDefaults(cfg *Config) {
 			cfg.Actions[i].Name = fmt.Sprintf("action-%d", i+1)
 		}
 	}
+	if cfg.Quota != nil && cfg.Quota.Enabled {
+		if cfg.Quota.WeeklySkipAtPercent == 0 {
+			cfg.Quota.WeeklySkipAtPercent = defaultWeeklySkipAtPercent
+		}
+		if cfg.Quota.SessionMinRemainingPercent == 0 {
+			cfg.Quota.SessionMinRemainingPercent = defaultSessionMinRemainingPercent
+		}
+		if cfg.Quota.RefreshInterval.Duration <= 0 {
+			cfg.Quota.RefreshInterval.Duration = defaultQuotaRefreshInterval
+		}
+	}
 	for i := range cfg.Flows {
 		if cfg.Flows[i].Name == "" {
 			cfg.Flows[i].Name = fmt.Sprintf("flow-%d", i+1)
@@ -145,7 +191,39 @@ func validateConfig(cfg Config) error {
 			return fmt.Errorf("invalid idle_ignore_patterns entry %q: %w", pattern, err)
 		}
 	}
+	if err := validateQuota(cfg.Quota); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+func validateQuota(q *QuotaConfig) error {
+	if q == nil || !q.Enabled {
+		return nil
+	}
+	if q.Provider == "" {
+		return errors.New("quota: provider is required when quota.enabled")
+	}
+	known := false
+	for _, name := range agentusage.Providers() {
+		if name == q.Provider {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return fmt.Errorf("quota: unknown provider %q (want one of %v)", q.Provider, agentusage.Providers())
+	}
+	if q.WeeklySkipAtPercent < 0 || q.WeeklySkipAtPercent > 100 {
+		return fmt.Errorf("quota: weekly_skip_at_percent must be between 0 and 100, got %v", q.WeeklySkipAtPercent)
+	}
+	if q.SessionMinRemainingPercent < 0 || q.SessionMinRemainingPercent > 100 {
+		return fmt.Errorf("quota: session_min_remaining_percent must be between 0 and 100, got %v", q.SessionMinRemainingPercent)
+	}
+	if q.RefreshInterval.Duration < 0 {
+		return errors.New("quota: refresh_interval cannot be negative")
+	}
 	return nil
 }
 
