@@ -154,6 +154,25 @@ func TestLoadFileConfig_UsageAndSpendIntervals(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfig_PeerIntervals(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	body := `{"peer_interval": "15s", "peer_timeout": "2s"}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig: %v", err)
+	}
+	if d := cfg.PeerIntervalDuration(); d != 15*time.Second {
+		t.Errorf("PeerInterval = %v, want 15s", d)
+	}
+	if d := cfg.PeerTimeoutDuration(); d != 2*time.Second {
+		t.Errorf("PeerTimeout = %v, want 2s", d)
+	}
+}
+
 func TestLoadFileConfig_AgentCostToggle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "statusd.json")
