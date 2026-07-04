@@ -121,18 +121,14 @@ func ParsePanes(output string) ([]Pane, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.Split(line, "|")
-		if len(parts) == 1 {
-			parts = strings.Split(line, "\t")
-		}
+		parts := splitPaneRow(line)
 		if len(parts) != 10 && len(parts) != 11 && len(parts) != 12 {
 			return nil, fmt.Errorf("invalid tmux pane row %q", line)
 		}
 		sessionID := ""
-		offset := 0
-		if len(parts) == 12 {
+		offset := paneRowOffset(parts)
+		if offset == 1 {
 			sessionID = parts[1]
-			offset = 1
 		}
 		windowIndex, err := strconv.Atoi(parts[1+offset])
 		if err != nil {
@@ -166,6 +162,61 @@ func ParsePanes(output string) ([]Pane, error) {
 		})
 	}
 	return panes, nil
+}
+
+func splitPaneRow(line string) []string {
+	parts := strings.Split(line, "|")
+	delimiter := "|"
+	if len(parts) == 1 {
+		parts = strings.Split(line, "\t")
+		delimiter = "\t"
+	}
+	return normalizePaneRowFields(parts, delimiter)
+}
+
+func normalizePaneRowFields(parts []string, delimiter string) []string {
+	offset := paneRowOffset(parts)
+	pathIndex := 7 + offset
+	if len(parts) <= pathIndex {
+		return parts
+	}
+
+	suffixCount := 2
+	if len(parts)-pathIndex >= 4 &&
+		isPaneRowFlag(parts[len(parts)-1]) &&
+		isPaneRowFlag(parts[len(parts)-2]) &&
+		isPaneRowFlag(parts[len(parts)-3]) {
+		suffixCount = 3
+	}
+	expected := pathIndex + 1 + suffixCount
+	if len(parts) <= expected {
+		return parts
+	}
+
+	normalized := make([]string, 0, expected)
+	normalized = append(normalized, parts[:pathIndex]...)
+	normalized = append(normalized, strings.Join(parts[pathIndex:len(parts)-suffixCount], delimiter))
+	normalized = append(normalized, parts[len(parts)-suffixCount:]...)
+	return normalized
+}
+
+func paneRowOffset(parts []string) int {
+	if len(parts) > 2 && !isPaneRowInt(parts[1]) {
+		return 1
+	}
+	return 0
+}
+
+func isPaneRowInt(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.Atoi(value)
+	return err == nil
+}
+
+func isPaneRowFlag(value string) bool {
+	return value == "0" || value == "1"
 }
 
 // CapturePane returns the pane's text with escape sequences stripped — the
