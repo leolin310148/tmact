@@ -192,7 +192,7 @@ func createUploadFile(dir, name string) (*os.File, error) {
 }
 
 func sanitizeUploadFilename(name string) string {
-	name = filepath.Base(strings.TrimSpace(name))
+	name = filepath.Base(strings.ReplaceAll(strings.TrimSpace(name), `\`, "/"))
 	if name == "." || name == string(filepath.Separator) {
 		name = ""
 	}
