@@ -54,6 +54,24 @@ func TestParsePanesAcceptsLegacyFormat(t *testing.T) {
 	}
 }
 
+func TestParsePanesAllowsPipeInCurrentPath(t *testing.T) {
+	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/with|pipe|1|0|1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	if panes[0].CurrentPath != "/tmp/tmact-sample/with|pipe" {
+		t.Fatalf("current path = %q", panes[0].CurrentPath)
+	}
+	if !panes[0].WindowActive {
+		t.Fatal("window should be active")
+	}
+}
+
 func TestParsePanesRejectsMalformedRow(t *testing.T) {
 	_, err := ParsePanes("too\tfew\n")
 	if err == nil {
