@@ -113,6 +113,25 @@ Allow this command?
 	}
 }
 
+func TestDetectGenericCommandApprovalPromptWithCodexCursor(t *testing.T) {
+	raw := `
+Allow this command?
+  1. Yes
+› 2. No
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeCommandApproval {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 2 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+}
+
 func TestDetectGenericPromptIgnoresOSCTitleSequence(t *testing.T) {
 	raw := "\x1b]0;tmact\aAllow this command?\n  1. Yes\n❯ 2. No\n"
 
