@@ -52,6 +52,15 @@ func TestParsePanesAcceptsLegacyFormat(t *testing.T) {
 	if panes[0].SessionID != "" {
 		t.Fatalf("legacy session id = %q", panes[0].SessionID)
 	}
+	if panes[0].CurrentPath != "/tmp/tmact-sample/project" {
+		t.Fatalf("legacy current path = %q", panes[0].CurrentPath)
+	}
+	if !panes[0].Active {
+		t.Fatal("legacy pane should be active")
+	}
+	if !panes[0].WindowActive {
+		t.Fatal("legacy window should be active")
+	}
 }
 
 func TestParsePanesAllowsPipeInCurrentPath(t *testing.T) {
@@ -69,6 +78,24 @@ func TestParsePanesAllowsPipeInCurrentPath(t *testing.T) {
 	}
 	if !panes[0].WindowActive {
 		t.Fatal("window should be active")
+	}
+}
+
+func TestParsePanesAllowsPipeInWindowName(t *testing.T) {
+	raw := "sample|$1|0|codex|aarch64|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	if panes[0].WindowName != "codex|aarch64" {
+		t.Fatalf("window name = %q", panes[0].WindowName)
+	}
+	if panes[0].CurrentPath != "/tmp/tmact-sample/project" {
+		t.Fatalf("current path = %q", panes[0].CurrentPath)
 	}
 }
 

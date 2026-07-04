@@ -175,29 +175,80 @@ func splitPaneRow(line string) []string {
 }
 
 func normalizePaneRowFields(parts []string, delimiter string) []string {
-	offset := paneRowOffset(parts)
-	pathIndex := 7 + offset
-	if len(parts) <= pathIndex {
+	suffixCount := paneRowSuffixCount(parts)
+	if suffixCount == 0 {
+		return parts
+	}
+	body := parts[:len(parts)-suffixCount]
+	suffix := parts[len(parts)-suffixCount:]
+
+	sessionEnd := paneRowSessionEnd(body)
+	if sessionEnd < 0 {
+		return parts
+	}
+	windowIndex := sessionEnd
+	if isPaneRowSessionID(body[sessionEnd]) {
+		windowIndex = sessionEnd + 1
+	}
+	paneIndex := paneRowPaneIndex(body, windowIndex+2)
+	if paneIndex < 0 {
 		return parts
 	}
 
-	suffixCount := 2
-	if len(parts)-pathIndex >= 4 &&
+	normalized := make([]string, 0, 9+suffixCount)
+	normalized = append(normalized, strings.Join(body[:sessionEnd], delimiter))
+	if isPaneRowSessionID(body[sessionEnd]) {
+		normalized = append(normalized, body[sessionEnd])
+	}
+	normalized = append(normalized,
+		body[windowIndex],
+		strings.Join(body[windowIndex+1:paneIndex], delimiter),
+		body[paneIndex],
+		body[paneIndex+1],
+		body[paneIndex+2],
+		body[paneIndex+3],
+		strings.Join(body[paneIndex+4:], delimiter),
+	)
+	normalized = append(normalized, suffix...)
+	return normalized
+}
+
+func paneRowSuffixCount(parts []string) int {
+	if len(parts) >= 11 &&
 		isPaneRowFlag(parts[len(parts)-1]) &&
 		isPaneRowFlag(parts[len(parts)-2]) &&
 		isPaneRowFlag(parts[len(parts)-3]) {
-		suffixCount = 3
+		return 3
 	}
-	expected := pathIndex + 1 + suffixCount
-	if len(parts) <= expected {
-		return parts
+	if len(parts) >= 10 &&
+		isPaneRowFlag(parts[len(parts)-1]) &&
+		isPaneRowFlag(parts[len(parts)-2]) {
+		return 2
 	}
+	return 0
+}
 
-	normalized := make([]string, 0, expected)
-	normalized = append(normalized, parts[:pathIndex]...)
-	normalized = append(normalized, strings.Join(parts[pathIndex:len(parts)-suffixCount], delimiter))
-	normalized = append(normalized, parts[len(parts)-suffixCount:]...)
-	return normalized
+func paneRowSessionEnd(parts []string) int {
+	for i := 1; i+1 < len(parts); i++ {
+		if isPaneRowSessionID(parts[i]) && isPaneRowInt(parts[i+1]) {
+			return i
+		}
+	}
+	for i := 1; i < len(parts); i++ {
+		if isPaneRowInt(parts[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+func paneRowPaneIndex(parts []string, start int) int {
+	for i := start; i+4 < len(parts); i++ {
+		if isPaneRowInt(parts[i]) && isPaneRowID(parts[i+1]) && isPaneRowInt(parts[i+2]) {
+			return i
+		}
+	}
+	return -1
 }
 
 func paneRowOffset(parts []string) int {
@@ -205,6 +256,20 @@ func paneRowOffset(parts []string) int {
 		return 1
 	}
 	return 0
+}
+
+func isPaneRowSessionID(value string) bool {
+	if !strings.HasPrefix(value, "$") {
+		return false
+	}
+	return isPaneRowInt(strings.TrimPrefix(value, "$"))
+}
+
+func isPaneRowID(value string) bool {
+	if !strings.HasPrefix(value, "%") {
+		return false
+	}
+	return isPaneRowInt(strings.TrimPrefix(value, "%"))
 }
 
 func isPaneRowInt(value string) bool {
