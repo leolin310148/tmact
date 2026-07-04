@@ -340,20 +340,41 @@ func isBoxBorder(r rune) bool {
 
 func stripANSI(text string) string {
 	var b strings.Builder
-	inEscape := false
 	for i := 0; i < len(text); i++ {
 		c := text[i]
-		if inEscape {
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-				inEscape = false
+		if c != 0x1b {
+			b.WriteByte(c)
+			continue
+		}
+
+		i++
+		if i >= len(text) {
+			break
+		}
+		switch text[i] {
+		case '[':
+			for i+1 < len(text) {
+				i++
+				if text[i] >= 0x40 && text[i] <= 0x7e {
+					break
+				}
 			}
-			continue
+		case ']':
+			for i+1 < len(text) {
+				i++
+				if text[i] == 0x07 {
+					break
+				}
+				if text[i] == 0x1b && i+1 < len(text) && text[i+1] == '\\' {
+					i++
+					break
+				}
+			}
+		case '(', ')', '*', '+', '-', '.', '/', '#':
+			if i+1 < len(text) {
+				i++
+			}
 		}
-		if c == 0x1b {
-			inEscape = true
-			continue
-		}
-		b.WriteByte(c)
 	}
 	return b.String()
 }
