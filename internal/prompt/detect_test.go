@@ -50,6 +50,50 @@ func TestDetectDirectoryAccessPrompt(t *testing.T) {
 	}
 }
 
+func TestDirectoryAccessPromptConversionsCloneMutableFields(t *testing.T) {
+	access := &DirectoryAccess{
+		Title: "Allow directory access",
+		Path:  "/tmp/project",
+		Paths: []string{"/tmp/project"},
+		SelectedOption: &Option{
+			Number:   1,
+			Label:    "Yes",
+			Selected: true,
+		},
+		Options: []Option{{Number: 1, Label: "Yes", Selected: true}},
+	}
+
+	detected := PromptFromDirectoryAccess(access)
+	access.Paths[0] = "/tmp/changed"
+	access.SelectedOption.Label = "Changed"
+	access.Options[0].Label = "Changed"
+
+	if detected.Paths[0] != "/tmp/project" {
+		t.Fatalf("prompt paths shared backing array: %#v", detected.Paths)
+	}
+	if detected.SelectedOption.Label != "Yes" {
+		t.Fatalf("prompt selected option shared pointer: %#v", detected.SelectedOption)
+	}
+	if detected.Options[0].Label != "Yes" {
+		t.Fatalf("prompt options shared backing array: %#v", detected.Options)
+	}
+
+	roundTripped := DirectoryAccessFromPrompt(detected)
+	detected.Paths[0] = "/tmp/changed-again"
+	detected.SelectedOption.Label = "Changed again"
+	detected.Options[0].Label = "Changed again"
+
+	if roundTripped.Paths[0] != "/tmp/project" {
+		t.Fatalf("directory paths shared backing array: %#v", roundTripped.Paths)
+	}
+	if roundTripped.SelectedOption.Label != "Yes" {
+		t.Fatalf("directory selected option shared pointer: %#v", roundTripped.SelectedOption)
+	}
+	if roundTripped.Options[0].Label != "Yes" {
+		t.Fatalf("directory options shared backing array: %#v", roundTripped.Options)
+	}
+}
+
 func TestDetectGenericCommandApprovalPrompt(t *testing.T) {
 	raw := `
 Allow this command?
