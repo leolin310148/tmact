@@ -143,6 +143,37 @@ func TestSendExecuteCommandCanClearLine(t *testing.T) {
 	}
 }
 
+func TestSendExecuteCombinesRepeatedAndCSVKeys(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	var sentTarget string
+	var sentKeys []string
+	sendTmuxKeys = func(target string, keys []string) error {
+		sentTarget = target
+		sentKeys = append([]string(nil), keys...)
+		return nil
+	}
+	pasteTmuxText = func(string, string, bool) error {
+		t.Fatal("key mode should not paste text")
+		return nil
+	}
+
+	out, err := captureRun(t, "-t", "%42", "send", "--key", "C-a", "--keys", "Left,Enter", "--execute")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sentTarget != "%42" {
+		t.Fatalf("sent target = %q", sentTarget)
+	}
+	if strings.Join(sentKeys, ",") != "C-a,Left,Enter" {
+		t.Fatalf("sent keys = %#v", sentKeys)
+	}
+	if !strings.Contains(out, "send keys to %42: C-a,Left,Enter") {
+		t.Fatalf("output = %q", out)
+	}
+}
+
 func TestSendValidation(t *testing.T) {
 	tests := [][]string{
 		{"send", "--command", "go test ./..."},
