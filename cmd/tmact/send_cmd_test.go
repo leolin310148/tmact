@@ -83,6 +83,33 @@ func TestSendDryRunResolvesNumberedTarget(t *testing.T) {
 	}
 }
 
+func TestSendRejectsExpiredNumberedTargetCache(t *testing.T) {
+	t.Chdir(t.TempDir())
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	now := time.Date(2026, 5, 11, 10, 1, 0, 0, time.UTC)
+	tmactNow = func() time.Time { return now }
+	if err := writeTargetCache(targetCache{
+		GeneratedAt: now.Add(-targetCacheMaxAge - time.Second),
+		Panes: []listPaneRow{{
+			Index:  0,
+			Target: "%42",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	listTargetTmuxPanes = func(string) ([]tmux.Pane, error) {
+		t.Fatal("expired cache should be rejected before tmux lookup")
+		return nil, nil
+	}
+
+	_, err := captureRun(t, "-t", "0", "send", "--text", "status?")
+	if err == nil || !strings.Contains(err.Error(), "target cache is older than 30m0s") {
+		t.Fatalf("err = %v, want expired cache error", err)
+	}
+}
+
 func TestSendExecuteCommandCanClearLine(t *testing.T) {
 	resetCLIHooks := stubCLIHooks(t)
 	defer resetCLIHooks()
