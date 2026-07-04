@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -129,6 +130,9 @@ func decodeLocalFileURLPath(path, scheme string) (string, error) {
 	path = path[len(scheme)+len("://"):]
 	if strings.HasPrefix(path, "localhost/") {
 		path = strings.TrimPrefix(path, "localhost")
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "", errors.New("unsupported file URL host")
 	}
 	return url.PathUnescape(path)
 }
