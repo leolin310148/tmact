@@ -142,6 +142,7 @@ func detectGenericPrompt(raw string) *Prompt {
 		return nil
 	}
 	recent := recentLines(lines, 24)
+	recent = trimMenuFooter(recent)
 	for index, line := range recent {
 		lower := strings.ToLower(line)
 		promptType, title, ok := genericPromptHeader(lower)
@@ -154,11 +155,18 @@ func detectGenericPrompt(raw string) *Prompt {
 			Question:   line,
 			Confidence: "medium",
 		}
-		prompt.Options = collectOptions(recent[index+1:])
+		options, lastOptionIndex := collectOptionsWithLastIndex(recent[index+1:])
+		prompt.Options = options
 		if selected := selectedOption(prompt.Options); selected != nil {
 			prompt.SelectedOption = selected
 		}
-		if len(prompt.Options) > 0 || promptType == TypeWaitingApproval {
+		if len(prompt.Options) > 0 {
+			if !isNearPaneBottom(recent, index+1+lastOptionIndex) {
+				continue
+			}
+			return prompt
+		}
+		if promptType == TypeWaitingApproval && isNearPaneBottom(recent, index) {
 			return prompt
 		}
 	}
@@ -190,13 +198,24 @@ func genericPromptHeader(lower string) (string, string, bool) {
 }
 
 func collectOptions(lines []string) []Option {
+	options, _ := collectOptionsWithLastIndex(lines)
+	return options
+}
+
+func collectOptionsWithLastIndex(lines []string) ([]Option, int) {
 	options := []Option{}
-	for _, line := range lines {
+	lastIndex := -1
+	for index, line := range lines {
 		if option := parseOption(line); option != nil {
 			options = append(options, *option)
+			lastIndex = index
 		}
 	}
-	return options
+	return options, lastIndex
+}
+
+func isNearPaneBottom(lines []string, index int) bool {
+	return index >= 0 && len(lines)-1-index <= 3
 }
 
 func selectedOption(options []Option) *Option {

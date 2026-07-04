@@ -113,6 +113,24 @@ Allow this command?
 	}
 }
 
+func TestDetectGenericCommandApprovalIgnoresScrolledPrompt(t *testing.T) {
+	raw := `
+Allow this command?
+  1. Yes
+❯ 2. No
+running the build...
+compiling package one
+compiling package two
+compiling package three
+done in 4.2s
+project $
+`
+
+	if detected := Detect(raw); detected != nil {
+		t.Fatalf("expected no prompt, got %#v", detected)
+	}
+}
+
 func TestDetectTrustFolderPrompt(t *testing.T) {
 	detected := Detect("Do you trust the files in this folder?\n1. Trust folder\n3. Don't trust\n")
 	if detected == nil {
