@@ -73,6 +73,46 @@ func TestRemoteRequestOptionsParsesDurations(t *testing.T) {
 	}
 }
 
+func TestRemoteURLNormalizesDispatchEndpoint(t *testing.T) {
+	tests := []struct {
+		name string
+		base string
+		want string
+	}{
+		{
+			name: "http base",
+			base: "http://peer.example:7890/status?stale=1",
+			want: "http://peer.example:7890/api/dispatch-work",
+		},
+		{
+			name: "websocket base",
+			base: "ws://peer.example:7890/ws/snapshot",
+			want: "http://peer.example:7890/api/dispatch-work",
+		},
+		{
+			name: "secure websocket base",
+			base: "wss://peer.example/ws/snapshot?token=redacted",
+			want: "https://peer.example/api/dispatch-work",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RemoteURL(tt.base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("RemoteURL(%q) = %q, want %q", tt.base, got, tt.want)
+			}
+		})
+	}
+
+	if _, err := RemoteURL("peer.example:7890"); err == nil {
+		t.Fatal("expected missing scheme error")
+	}
+}
+
 func writeRemoteJSON(t *testing.T, w http.ResponseWriter, v any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
