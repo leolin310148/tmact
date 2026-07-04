@@ -130,3 +130,9 @@ func TestSendValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGlobalTargetRejectedForNonSendCommands(t *testing.T) {
+	if _, err := captureRun(t, "-t", "%42", "ls"); err == nil {
+		t.Fatal("expected global target to be rejected for ls")
+	}
+}
