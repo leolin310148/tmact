@@ -81,6 +81,34 @@ func TestParsePanesAcceptsSessionIDWithoutWindowActive(t *testing.T) {
 	}
 }
 
+func TestParsePanesAcceptsTabDelimitedFormat(t *testing.T) {
+	raw := "sample\t$1\t0\tcodex-aarch64-a\t0\t%14\t70365\tcodex-aarch64-a\t/tmp/tmact-sample/project\t1\t0\t1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	pane := panes[0]
+	if pane.Session != "sample" {
+		t.Fatalf("session = %q", pane.Session)
+	}
+	if pane.SessionID != "$1" {
+		t.Fatalf("session id = %q", pane.SessionID)
+	}
+	if pane.WindowName != "codex-aarch64-a" {
+		t.Fatalf("window name = %q", pane.WindowName)
+	}
+	if pane.CurrentPath != "/tmp/tmact-sample/project" {
+		t.Fatalf("current path = %q", pane.CurrentPath)
+	}
+	if !pane.Active || pane.InMode || !pane.WindowActive {
+		t.Fatalf("pane flags active=%v inMode=%v windowActive=%v", pane.Active, pane.InMode, pane.WindowActive)
+	}
+}
+
 func TestParsePanesAllowsPipeInCurrentPath(t *testing.T) {
 	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/with|pipe|1|0|1\n"
 
