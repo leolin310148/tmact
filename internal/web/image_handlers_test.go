@@ -125,6 +125,20 @@ func TestImageEndpointPreviewDoesNotForceDownload(t *testing.T) {
 	}
 }
 
+func TestImageEndpointMethodNotAllowedSetsAllowHeader(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/image", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+	if got := rec.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("Allow = %q, want %q", got, http.MethodGet)
+	}
+}
+
 func TestImageEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "img"), 0o755); err != nil {
