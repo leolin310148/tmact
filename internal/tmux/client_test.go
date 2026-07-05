@@ -99,6 +99,30 @@ func TestParsePanesAllowsPipeInWindowName(t *testing.T) {
 	}
 }
 
+func TestParsePanesAllowsPipeInSessionName(t *testing.T) {
+	raw := "sample|team|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	if panes[0].Session != "sample|team" {
+		t.Fatalf("session = %q", panes[0].Session)
+	}
+	if panes[0].SessionID != "$1" {
+		t.Fatalf("session id = %q", panes[0].SessionID)
+	}
+	if panes[0].WindowName != "codex-aarch64-a" {
+		t.Fatalf("window name = %q", panes[0].WindowName)
+	}
+	if panes[0].CurrentPath != "/tmp/tmact-sample/project" {
+		t.Fatalf("current path = %q", panes[0].CurrentPath)
+	}
+}
+
 func TestParsePanesRejectsMalformedRow(t *testing.T) {
 	_, err := ParsePanes("too\tfew\n")
 	if err == nil {
