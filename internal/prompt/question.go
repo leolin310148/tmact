@@ -101,8 +101,14 @@ func detectTrailingChoicePrompt(raw string) *Prompt {
 	}
 
 	options := make([]Option, 0, len(menu))
-	for _, item := range menu {
-		options = append(options, item.option)
+	for index, item := range menu {
+		option := item.option
+		end := len(recent)
+		if index+1 < len(menu) {
+			end = menu[index+1].index
+		}
+		option.Label = optionLabelWithContinuation(recent, item.index, end)
+		options = append(options, option)
 	}
 	detected := &Prompt{
 		Type:       TypeChoicePrompt,
@@ -114,6 +120,21 @@ func detectTrailingChoicePrompt(raw string) *Prompt {
 		detected.SelectedOption = selected
 	}
 	return detected
+}
+
+func optionLabelWithContinuation(lines []string, start, end int) string {
+	option := parseOption(lines[start])
+	if option == nil {
+		return ""
+	}
+	parts := []string{option.Label}
+	for index := start + 1; index < end; index++ {
+		line := strings.TrimSpace(lines[index])
+		if line != "" {
+			parts = append(parts, line)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // trimMenuFooter strips trailing hint lines printed below an interactive menu.
