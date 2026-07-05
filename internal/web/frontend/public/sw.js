@@ -78,3 +78,77 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(request)),
   );
 });
+
+self.addEventListener("push", (event) => {
+  let data = {};
+
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (err) {
+      data = { body: event.data.text() };
+    }
+  }
+
+  if (!data || typeof data !== "object") {
+    data = { body: String(data || "") };
+  }
+
+  const title = data.title || "tmact";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: data.tag || "tmact-status",
+    renotify: Boolean(data.tag),
+    data: { url: normalizeAppURL(data.url) },
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options).then(() =>
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: "PUSH_RECEIVED", payload: data });
+        });
+      }),
+    ),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetURL = normalizeAppURL(event.notification.data && event.notification.data.url);
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const sameOriginClient = clients.find((client) => {
+        try {
+          return new URL(client.url).origin === self.location.origin;
+        } catch (err) {
+          return false;
+        }
+      });
+
+      if (sameOriginClient) {
+        return sameOriginClient.focus();
+      }
+
+      return self.clients.openWindow(targetURL);
+    }),
+  );
+});
+
+function normalizeAppURL(rawURL) {
+  if (typeof rawURL !== "string" || rawURL.trim() === "") {
+    return "/";
+  }
+  try {
+    const url = new URL(rawURL, self.location.origin);
+    if (url.origin !== self.location.origin) {
+      return "/";
+    }
+    return url.pathname + url.search + url.hash;
+  } catch (err) {
+    return "/";
+  }
+}

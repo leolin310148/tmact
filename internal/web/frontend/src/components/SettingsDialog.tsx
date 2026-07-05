@@ -27,6 +27,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import type { ReactNode, MouseEvent as ReactMouseEvent } from "react";
 import type { UseSettingsResult } from "../hooks/useSettings";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 
 export interface SettingsDialogProps {
   /** The useSettings handle App created (visibility + refs + handlers). */
@@ -36,6 +37,7 @@ export interface SettingsDialogProps {
 }
 
 export default function SettingsDialog({ settings, quickEditor }: SettingsDialogProps) {
+  const push = usePushNotifications();
   const {
     visible,
     closeSettings,
@@ -111,6 +113,50 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
         </div>
         <div className="settings-body">
           <div className="settings-section">Client · this browser</div>
+          <div className="settings-field">
+            <span>Notifications</span>
+            <div className="notification-row">
+              <span
+                className={
+                  push.state === "subscribed"
+                    ? "settings-status ok"
+                    : push.state === "error" ||
+                        push.state === "blocked" ||
+                        push.state === "unsupported" ||
+                        push.state === "not-configured"
+                      ? "settings-status err"
+                      : "settings-status"
+                }
+                id="notification-status"
+              >
+                {push.message}
+              </span>
+              {push.state === "subscribed" ? (
+                <button
+                  id="notification-disable"
+                  type="button"
+                  onClick={() => void push.disable()}
+                >
+                  Disable
+                </button>
+              ) : (
+                <button
+                  id="notification-enable"
+                  type="button"
+                  disabled={
+                    push.state === "busy" ||
+                    push.state === "checking" ||
+                    push.state === "unsupported" ||
+                    push.state === "blocked" ||
+                    push.state === "not-configured"
+                  }
+                  onClick={() => void push.enable()}
+                >
+                  Enable Notifications
+                </button>
+              )}
+            </div>
+          </div>
           <div className="settings-field">
             <span>Panel font size</span>
             <div className="font-row">

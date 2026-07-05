@@ -33,6 +33,13 @@ Common commands:
 shows sessions and panes, streams selected pane output, sends text or keys back
 to panes, offers quick prompt buttons, uploads files or clipboard images and
 pastes their saved paths, and can use configured speech-to-text for voice input.
+It also owns same-origin PWA Web Push: `/sw.js` handles `push` and
+`notificationclick`, focuses an existing same-origin vibe window when possible,
+and only opens same-origin paths. Configure VAPID with
+`TMACT_WEBPUSH_VAPID_PRIVATE_KEY`, `TMACT_WEBPUSH_VAPID_PUBLIC_KEY`,
+`TMACT_WEBPUSH_VAPID_SUBJECT` or the matching `webpush_*` keys in
+`~/.tmact/statusd.json`; do not commit private keys. Subscriptions default to
+`~/.tmact/webpush_subscriptions.json`.
 
 ## Development
 
@@ -55,8 +62,9 @@ Its production build is emitted into `internal/web/static/` (embedded via
   the web server).
 - Use `gofmt` on edited Go files; the frontend is TypeScript-strict (`make web`
   type-checks via `tsc` before bundling).
-- Keep Go dependencies minimal; current external Go deps are YAML config and the
-  web socket package. The frontend's npm deps live in `internal/web/frontend/`.
+- Keep Go dependencies minimal; current external Go deps are YAML config,
+  websocket packages, and Web Push/VAPID support. The frontend's npm deps live
+  in `internal/web/frontend/`.
 
 ## Safety
 

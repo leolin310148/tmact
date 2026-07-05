@@ -49,6 +49,14 @@ type FileConfig struct {
 	// scan + peer roll-up. Empty uses defaults (5m / 60s).
 	UsageInterval string `json:"usage_interval,omitempty"`
 	SpendInterval string `json:"spend_interval,omitempty"`
+	// WebPush configures the same-origin PWA Web Push service. VAPIDPrivateKey
+	// is supported for local config, but production should prefer the
+	// TMACT_WEBPUSH_VAPID_PRIVATE_KEY environment variable so secrets are not
+	// accidentally copied around with general statusd config.
+	WebPushVAPIDPublicKey    string `json:"webpush_vapid_public_key,omitempty"`
+	WebPushVAPIDPrivateKey   string `json:"webpush_vapid_private_key,omitempty"`
+	WebPushVAPIDSubject      string `json:"webpush_vapid_subject,omitempty"`
+	WebPushSubscriptionsPath string `json:"webpush_subscriptions_path,omitempty"`
 }
 
 // PeerFileConfig is the on-disk shape of one entry in FileConfig.Peers.

@@ -1024,6 +1024,17 @@
   }
   .settings-note { font-size: 11px; color: var(--fg-dim); margin: -4px 0 12px; }
   .settings-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .notification-row {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 0;
+  }
+  .notification-row button {
+    flex: 0 0 auto;
+    background: var(--accent); color: #fff; border: 0; border-radius: 5px;
+    padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    white-space: nowrap;
+  }
+  .notification-row button:disabled { opacity: 0.5; cursor: not-allowed; }
   .voice-device-actions { margin: -4px 0 12px; }
   .settings-status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--fg-dim); }
   .settings-status.ok { color: var(--green); }
@@ -1403,4 +1414,3 @@
       max-width: calc(100vw - 96px);
     }
   }
-
