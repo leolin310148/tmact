@@ -200,6 +200,31 @@ func TestImageEndpointRejectsHomeRelativePath(t *testing.T) {
 	}
 }
 
+func TestImageEndpointRejectsNonRegularFile(t *testing.T) {
+	if !filepath.IsAbs(os.DevNull) {
+		t.Skipf("%s is not an absolute path on this platform", os.DevNull)
+	}
+	info, err := os.Stat(os.DevNull)
+	if err != nil {
+		t.Skipf("stat %s: %v", os.DevNull, err)
+	}
+	if info.Mode().IsRegular() {
+		t.Skipf("%s is a regular file on this platform", os.DevNull)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image?path="+url.QueryEscape(os.DevNull), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "path is not a regular file") {
+		t.Fatalf("body = %q, want non-regular file error", rec.Body.String())
+	}
+}
+
 func TestImageEndpointServesSVG(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "logo.svg")
