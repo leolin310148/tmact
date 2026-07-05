@@ -94,6 +94,12 @@ func TestDetectQuestionFromCodexStructuredQuestion(t *testing.T) {
 	if q.Choices[0].Number != 1 || q.Choices[3].Number != 4 {
 		t.Fatalf("choice numbers = %#v", q.Choices)
 	}
+	if q.Choices[0].Label != "新增 Monitor tab (Recommended)  Control 保持操作 導向，監控集中在獨 立頁面。" {
+		t.Fatalf("choice 1 label = %q", q.Choices[0].Label)
+	}
+	if q.Choices[3].Label != "None of the above               Optionally, add details in notes (tab)." {
+		t.Fatalf("choice 4 label = %q", q.Choices[3].Label)
+	}
 }
 
 func TestDetectQuestionIgnoresProseNumberedList(t *testing.T) {
