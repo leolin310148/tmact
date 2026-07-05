@@ -172,6 +172,25 @@ func TestDetectTrustFolderPrompt(t *testing.T) {
 	}
 }
 
+func TestDetectGenericConfirmationPrompt(t *testing.T) {
+	raw := `
+Do you want to proceed?
+  1. Yes
+❯ 2. No
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeGenericConfirmation {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 2 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+}
+
 func TestDetectWaitingApprovalPromptWithoutOptions(t *testing.T) {
 	detected := Detect("Waiting for approval\n")
 	if detected == nil {
