@@ -225,6 +225,31 @@ Do you want to proceed?
 	}
 }
 
+func TestDetectPatchApprovalPrompt(t *testing.T) {
+	raw := `
+Apply this patch?
+  1. Yes
+❯ 2. No
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypePatchApproval {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.Title != "Apply this patch?" {
+		t.Fatalf("title = %q", detected.Title)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 2 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+	if len(detected.Options) != 2 {
+		t.Fatalf("options len = %d", len(detected.Options))
+	}
+}
+
 func TestDetectWaitingApprovalPromptWithoutOptions(t *testing.T) {
 	detected := Detect("Waiting for approval\n")
 	if detected == nil {
