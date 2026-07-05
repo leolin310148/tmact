@@ -1,6 +1,10 @@
 package panestate
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestClassifyDetectsDirectoryAccessPrompt(t *testing.T) {
 	raw := `
@@ -138,5 +142,17 @@ func TestClassifyDetectsWorkingText(t *testing.T) {
 	}
 	if result.Asking {
 		t.Fatal("working text should not be asking")
+	}
+}
+
+func TestLastMeaningfulLineTruncatesWithoutSplittingUTF8(t *testing.T) {
+	prefix := strings.Repeat("a", 179)
+	got := LastMeaningfulLine(prefix + "界")
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("last line is invalid UTF-8: %q", got)
+	}
+	if got != prefix+"..." {
+		t.Fatalf("last line = %q, want %q", got, prefix+"...")
 	}
 }
