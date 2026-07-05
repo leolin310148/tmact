@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/leolin310148/tmact/internal/statusd"
 )
@@ -334,5 +335,19 @@ func TestSanitizeUploadFilename(t *testing.T) {
 				t.Fatalf("sanitizeUploadFilename(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSanitizeUploadFilenameTruncatesLongUnicodeName(t *testing.T) {
+	got := sanitizeUploadFilename(strings.Repeat("報", 80) + ".png")
+
+	if len(got) > 120 {
+		t.Fatalf("sanitized filename length = %d, want <= 120: %q", len(got), got)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("sanitized filename is not valid UTF-8: %q", got)
+	}
+	if !strings.HasSuffix(got, ".png") {
+		t.Fatalf("sanitized filename = %q, want .png extension preserved", got)
 	}
 }
