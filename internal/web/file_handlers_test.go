@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -130,6 +131,23 @@ func TestFileEndpointRejectsDirectory(t *testing.T) {
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(dir), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestFileEndpointRejectsNonRegularFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stream.txt")
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Skipf("mkfifo unavailable: %v", err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(path), nil)
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
