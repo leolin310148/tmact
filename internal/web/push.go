@@ -23,10 +23,13 @@ const (
 type webpushHTTPClient = webpush.HTTPClient
 
 type pushMessage struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
-	URL   string `json:"url,omitempty"`
-	Tag   string `json:"tag,omitempty"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	URL       string `json:"url,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	PaneID    string `json:"paneId,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	CWD       string `json:"cwd,omitempty"`
 }
 
 type unsubscribeRequest struct {
@@ -122,6 +125,9 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	msg.Body = strings.TrimSpace(msg.Body)
 	msg.URL = normalizePushURL(msg.URL)
 	msg.Tag = strings.TrimSpace(msg.Tag)
+	msg.PaneID = strings.TrimSpace(msg.PaneID)
+	msg.SessionID = strings.TrimSpace(msg.SessionID)
+	msg.CWD = strings.TrimSpace(msg.CWD)
 	if msg.Title == "" {
 		writeJSONError(w, http.StatusBadRequest, "title is required")
 		return

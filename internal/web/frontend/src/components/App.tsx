@@ -53,6 +53,7 @@ import type { AppCallbacks } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
 import { translateKey } from "../lib/keymap";
+import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
 import { StatusLine, panePeer } from "./StatusLine";
 import { ConnStatus } from "./ConnStatus";
@@ -591,6 +592,40 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       syncQuickDock,
     ],
   );
+
+  const handlePaneIntent = useCallback(
+    (rawPaneID: unknown): boolean => {
+      const paneID = normalizePaneID(rawPaneID);
+      if (!paneID) return false;
+      selectPane(paneID);
+      return true;
+    },
+    [selectPane],
+  );
+
+  const initialPaneIntentConsumedRef = useRef(false);
+  useEffect(() => {
+    if (initialPaneIntentConsumedRef.current) return;
+    initialPaneIntentConsumedRef.current = true;
+    const paneID = paneIDFromURL(window.location.href);
+    if (handlePaneIntent(paneID)) {
+      removePaneParamFromCurrentURL();
+    }
+  }, [handlePaneIntent]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onServiceWorkerMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== "object" || data.type !== "SELECT_PANE") return;
+      const paneID = normalizePaneID(data.paneId) || paneIDFromURL(String(data.url || ""));
+      if (handlePaneIntent(paneID)) {
+        removePaneParamFromCurrentURL();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onServiceWorkerMessage);
+  }, [handlePaneIntent]);
 
   // ----- draft / send / clear (App-local) -----
   const clearDraft = useCallback(() => {
