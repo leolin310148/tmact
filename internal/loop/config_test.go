@@ -119,6 +119,36 @@ flows:
 	}
 }
 
+func TestLoadConfigRejectsNegativeActionMaxRuns(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+actions:
+  - type: clear
+    max_runs: -1
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadConfigRejectsNegativeFlowMaxRuns(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+flows:
+  - type: clear
+    max_runs: -1
+    steps:
+      - type: clear
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadConfigRejectsInvalidIdleIgnorePattern(t *testing.T) {
 	path := writeTempConfig(t, `
 target: sample:0.0
