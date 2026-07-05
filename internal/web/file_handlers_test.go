@@ -94,6 +94,18 @@ func TestFileEndpointRejectsRemoteURL(t *testing.T) {
 	}
 }
 
+func TestFileEndpointRejectsHomeRelativePath(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/file?path="+url.QueryEscape("~/report.txt")+"&cwd="+url.QueryEscape(t.TempDir()), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
 func TestFileEndpointMethodNotAllowedSetsAllowHeader(t *testing.T) {
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
