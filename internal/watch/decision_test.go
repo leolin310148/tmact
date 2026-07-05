@@ -40,6 +40,24 @@ func TestEvaluateDirectoryAccessBlocksPathsOutsideAllowlist(t *testing.T) {
 	}
 }
 
+func TestEvaluateDirectoryAccessBlocksSharedPrefixSibling(t *testing.T) {
+	parent := t.TempDir()
+	allowed := filepath.Join(parent, "repo")
+	requested := filepath.Join(parent, "repo-cache", "state.json")
+	detected := directoryAccessPrompt(requested)
+	rule := RuleConfig{
+		AllowPaths: []string{allowed},
+	}
+
+	decision := evaluateDirectoryAccess(rule, detected)
+	if decision.Accept {
+		t.Fatal("accept = true")
+	}
+	if decision.Reason != "path_not_allowed" {
+		t.Fatalf("reason = %q", decision.Reason)
+	}
+}
+
 func TestEvaluateDirectoryAccessAllowsPathPatterns(t *testing.T) {
 	detected := directoryAccessPrompt("/tmp/tmact-sample-home.md", "/tmp/tmact-sample-network.json")
 	rule := RuleConfig{
