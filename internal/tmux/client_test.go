@@ -160,3 +160,21 @@ func TestCanSendLiteralRejectsStandaloneSemicolon(t *testing.T) {
 		t.Fatal("embedded semicolon should remain eligible for literal send")
 	}
 }
+
+func TestTmuxArgsForcesUTF8(t *testing.T) {
+	args := []string{"list-panes", "-a"}
+
+	got := tmuxArgs(args)
+	want := []string{"-u", "list-panes", "-a"}
+	if len(got) != len(want) {
+		t.Fatalf("args len = %d, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg[%d] = %q, want %q; all args: %v", i, got[i], want[i], got)
+		}
+	}
+	if len(args) != 2 || args[0] != "list-panes" || args[1] != "-a" {
+		t.Fatalf("tmuxArgs mutated input args: %v", args)
+	}
+}
