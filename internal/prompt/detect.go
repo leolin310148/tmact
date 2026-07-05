@@ -90,15 +90,13 @@ func DirectoryAccessFromPrompt(detected *Prompt) *DirectoryAccess {
 
 func DetectDirectoryAccess(raw string) *DirectoryAccess {
 	var detected *DirectoryAccess
+	lastOptionIndex := -1
 
-	for _, line := range strings.Split(raw, "\n") {
-		text := CleanLine(line)
-		if text == "" {
-			continue
-		}
-
+	lines := recentLines(cleanedLines(raw), 24)
+	for index, text := range lines {
 		if strings.Contains(text, "Allow directory access") {
 			detected = &DirectoryAccess{Title: "Allow directory access"}
+			lastOptionIndex = -1
 			continue
 		}
 		if detected == nil {
@@ -112,6 +110,7 @@ func DetectDirectoryAccess(raw string) *DirectoryAccess {
 
 		if option := parseOption(text); option != nil {
 			detected.Options = append(detected.Options, *option)
+			lastOptionIndex = index
 			if option.Selected {
 				selected := *option
 				detected.SelectedOption = &selected
@@ -131,6 +130,9 @@ func DetectDirectoryAccess(raw string) *DirectoryAccess {
 		return nil
 	}
 	if detected.Question == "" || len(detected.Options) == 0 {
+		return nil
+	}
+	if !isNearPaneBottom(lines, lastOptionIndex) {
 		return nil
 	}
 	return detected

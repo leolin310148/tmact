@@ -50,6 +50,28 @@ func TestDetectDirectoryAccessPrompt(t *testing.T) {
 	}
 }
 
+func TestDetectDirectoryAccessIgnoresScrolledPrompt(t *testing.T) {
+	raw := `
+Allow directory access
+This action may read or write the following paths outside your allowed directory list.
+/tmp/project
+Do you want to allow this?
+  1. Yes
+❯ 2. Yes, and add these directories to the allowed list
+  3. No (Esc)
+running tests...
+compiling package one
+compiling package two
+compiling package three
+done in 4.2s
+project $
+`
+
+	if detected := DetectDirectoryAccess(raw); detected != nil {
+		t.Fatalf("expected no prompt, got %#v", detected)
+	}
+}
+
 func TestDirectoryAccessPromptConversionsCloneMutableFields(t *testing.T) {
 	access := &DirectoryAccess{
 		Title: "Allow directory access",
