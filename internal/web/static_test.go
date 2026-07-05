@@ -142,6 +142,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 		"/api/snapshot", "/api/snapshot/stream", "/api/version",
 		"/api/frontend-logs",
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
+		"/api/vapid-public-key", "/api/subscribe", "/api/unsubscribe",
 		"/api/paste-image", "/api/upload-file", "/api/image", "/api/markdown", "/api/file", "/ws/pane",
 	} {
 		if !strings.Contains(allJS, want) {
@@ -255,6 +256,26 @@ func TestServiceWorkerBypassesLiveEndpoints(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("service worker missing %q", want)
+		}
+	}
+}
+
+func TestServiceWorkerHandlesWebPushSameOriginClicks(t *testing.T) {
+	requireBuilt(t)
+	handler := (&Server{}).Handler()
+	sw := servedBody(t, handler, "/sw.js")
+
+	for _, want := range []string{
+		`self.addEventListener("push"`,
+		`self.registration.showNotification`,
+		`self.addEventListener("notificationclick"`,
+		`matchAll({ type: "window", includeUncontrolled: true })`,
+		`sameOriginClient.focus()`,
+		`self.clients.openWindow(targetURL)`,
+		`url.origin !== self.location.origin`,
+	} {
+		if !strings.Contains(sw, want) {
+			t.Fatalf("service worker missing web push behavior %q", want)
 		}
 	}
 }

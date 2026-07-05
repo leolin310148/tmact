@@ -178,6 +178,26 @@ export function loadAgentUsage(): Promise<JsonResponse<AgentUsage>> {
   return jsonResponse("/api/agent-usage", { cache: "no-store" });
 }
 
+export function loadVAPIDPublicKey(): Promise<JsonResponse<{ publicKey?: string }>> {
+  return jsonResponse("/api/vapid-public-key", { cache: "no-store" });
+}
+
+export function subscribePush(subscription: PushSubscription): Promise<JsonResponse<{ ok?: boolean }>> {
+  return jsonResponse("/api/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(subscription),
+  });
+}
+
+export function unsubscribePush(endpoint: string): Promise<JsonResponse<{ ok?: boolean }>> {
+  return jsonResponse("/api/unsubscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
 export function saveSTTConfig(payload: STTSettingsInput): Promise<JsonResponse<STTSettings>> {
   return jsonResponse("/api/settings/stt", {
     method: "PUT",

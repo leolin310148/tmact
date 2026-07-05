@@ -131,6 +131,18 @@ type Server struct {
 	FetchUsage func(ctx context.Context) agentusage.Snapshot
 	// DispatchRun handles /api/dispatch-work; defaults to dispatch.Run.
 	DispatchRun func(dispatch.Options) (dispatch.Report, error)
+	// WebPushVAPIDPublicKey / WebPushVAPIDPrivateKey / WebPushVAPIDSubject
+	// configure same-origin PWA Web Push. Empty values fall back to
+	// TMACT_WEBPUSH_VAPID_* environment variables.
+	WebPushVAPIDPublicKey  string
+	WebPushVAPIDPrivateKey string
+	WebPushVAPIDSubject    string
+	// WebPushSubscriptionsPath stores browser PushSubscription JSON keyed by
+	// endpoint. Empty falls back to TMACT_WEBPUSH_SUBSCRIPTIONS_PATH, then
+	// ~/.tmact/webpush_subscriptions.json.
+	WebPushSubscriptionsPath string
+	// WebPushHTTPClient sends push POSTs; defaults to http.DefaultClient.
+	WebPushHTTPClient webpushHTTPClient
 
 	// usage caches the latest quota snapshot the usage refresher produces.
 	usage usageCache
@@ -146,6 +158,8 @@ type Server struct {
 
 	// paneDiff caches the latest local capture per pane for /api/pane/diff.
 	paneDiff paneDiffCache
+	// pushMu serializes reads/writes to the subscription JSON file.
+	pushMu sync.Mutex
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -282,6 +296,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/version", s.handleVersion)
+	mux.HandleFunc("/api/vapid-public-key", s.handleVAPIDPublicKey)
+	mux.HandleFunc("/api/subscribe", s.handlePushSubscribe)
+	mux.HandleFunc("/api/unsubscribe", s.handlePushUnsubscribe)
+	mux.HandleFunc("/api/push", s.handlePush)
 	mux.HandleFunc("/api/frontend-logs", s.handleFrontendLogs)
 	mux.HandleFunc("/api/settings/stt", s.handleSTTSettings)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)

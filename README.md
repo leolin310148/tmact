@@ -60,6 +60,52 @@ http://127.0.0.1:7890
 The web UI can send input to tmux panes, so it binds to `127.0.0.1` by default.
 Only bind it to `0.0.0.0` on a trusted network.
 
+### PWA Web Push
+
+The web UI ships a same-origin PWA Service Worker at `/sw.js`. Web Push
+notifications are shown by that worker, and notification clicks focus an
+existing same-origin `vibe.puni.tw` window or open `/`, so installed PWA clients
+are woken by the vibe origin itself.
+
+Generate a VAPID key pair for this app, separate from any other notification
+service:
+
+```sh
+npx web-push generate-vapid-keys
+```
+
+Configure the public key and subject in `~/.tmact/statusd.json` or with
+environment variables; keep the private key out of git:
+
+```json
+{
+  "webpush_vapid_public_key": "BASE64URL_PUBLIC_KEY",
+  "webpush_vapid_subject": "mailto:you@example.com"
+}
+```
+
+```sh
+export TMACT_WEBPUSH_VAPID_PRIVATE_KEY=BASE64URL_PRIVATE_KEY
+export TMACT_WEBPUSH_VAPID_PUBLIC_KEY=BASE64URL_PUBLIC_KEY
+export TMACT_WEBPUSH_VAPID_SUBJECT=mailto:you@example.com
+```
+
+Subscriptions are stored by endpoint in
+`~/.tmact/webpush_subscriptions.json` by default. Override with
+`webpush_subscriptions_path` or `TMACT_WEBPUSH_SUBSCRIPTIONS_PATH`.
+
+After subscribing in the web UI settings panel, send a test push:
+
+```sh
+curl -sS http://127.0.0.1:7890/api/push \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"tmact","body":"hello from vibe","url":"/","tag":"tmact-test"}'
+```
+
+`POST /api/push` returns `{ "sent": N, "failed": N, "total": N }` and removes
+subscriptions whose push endpoint returns 404 or 410. On iOS, install the site
+to the Home Screen first; iOS Web Push is only delivered to installed PWAs.
+
 ### Federation (multi-host)
 
 statusd can pull snapshots from other statusd instances and merge them into

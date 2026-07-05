@@ -165,17 +165,21 @@ func runStatusdStart(args []string) error {
 	// Always serve the unix socket so CLI read/status can reach the daemon.
 	// The TCP --web-addr is additional and optional.
 	server := &web.Server{
-		Addr:          *webAddr,
-		SocketPath:    cfg.SocketPath,
-		Store:         daemon.Store(),
-		CapturePane:   tmux.CapturePaneANSI,
-		BuildTime:     buildVersionInfo().Time,
-		Peers:         cfg.Peers,
-		CostPeers:     cfg.CostPeers,
-		UsageEnabled:  usageEnabled,
-		SpendEnabled:  spendEnabled,
-		UsageInterval: cfg.UsageInterval,
-		SpendInterval: cfg.SpendInterval,
+		Addr:                     *webAddr,
+		SocketPath:               cfg.SocketPath,
+		Store:                    daemon.Store(),
+		CapturePane:              tmux.CapturePaneANSI,
+		BuildTime:                buildVersionInfo().Time,
+		Peers:                    cfg.Peers,
+		CostPeers:                cfg.CostPeers,
+		UsageEnabled:             usageEnabled,
+		SpendEnabled:             spendEnabled,
+		UsageInterval:            cfg.UsageInterval,
+		SpendInterval:            cfg.SpendInterval,
+		WebPushVAPIDPublicKey:    fileCfg.WebPushVAPIDPublicKey,
+		WebPushVAPIDPrivateKey:   fileCfg.WebPushVAPIDPrivateKey,
+		WebPushVAPIDSubject:      fileCfg.WebPushVAPIDSubject,
+		WebPushSubscriptionsPath: fileCfg.WebPushSubscriptionsPath,
 	}
 	go func() {
 		if err := server.Serve(ctx); err != nil {
