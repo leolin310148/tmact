@@ -95,27 +95,31 @@ self.addEventListener("push", (event) => {
   }
 
   const paneId = normalizePaneID(data.paneId || data.pane_id);
+  const rawTag = typeof data.tag === "string" ? data.tag.trim() : "";
   const title = data.title || "tmact";
+  const tag = normalizeNotificationTag(rawTag, paneId);
   const options = {
     body: data.body || "",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    tag: data.tag || "tmact-status",
-    renotify: Boolean(data.tag),
+    tag,
+    renotify: Boolean(rawTag),
     data: {
       url: normalizeAppURL(data.url, paneId),
       paneId,
+      rawTag,
     },
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options).then(() =>
-      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    closeSupersededNotifications(tag, paneId, rawTag)
+      .then(() => self.registration.showNotification(title, options))
+      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
+      .then((clients) => {
         clients.forEach((client) => {
           client.postMessage({ type: "PUSH_RECEIVED", payload: data });
         });
       }),
-    ),
   );
 });
 
@@ -163,6 +167,78 @@ function normalizeAppURL(rawURL, paneId) {
     url.searchParams.set("pane", paneId);
   }
   return url.pathname + url.search + url.hash;
+}
+
+function normalizeNotificationTag(rawTag, paneId) {
+  let tag = typeof rawTag === "string" ? rawTag.trim() : "";
+  if (paneId) {
+    const paneDigits = paneId.slice(1);
+    const safePane = `pane-${paneDigits}`;
+    const encodedPane = encodeURIComponent(paneId);
+    if (tag) {
+      tag = tag.split(encodedPane).join(safePane).split(paneId).join(safePane);
+    }
+    if (!tag) {
+      tag = `tmact-${safePane}`;
+    }
+  }
+  return sanitizeNotificationTag(tag || "tmact-status");
+}
+
+function sanitizeNotificationTag(tag) {
+  return tag
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "tmact-status";
+}
+
+function closeSupersededNotifications(tag, paneId, rawTag) {
+  if (!self.registration.getNotifications) {
+    return Promise.resolve();
+  }
+  return self.registration.getNotifications()
+    .then((notifications) => {
+      notifications.forEach((notification) => {
+        if (shouldCloseSupersededNotification(notification, tag, paneId, rawTag)) {
+          notification.close();
+        }
+      });
+    })
+    .catch(() => {
+      if (!tag) {
+        return undefined;
+      }
+      return self.registration.getNotifications({ tag }).then((notifications) => {
+        notifications.forEach((notification) => notification.close());
+      }).catch(() => undefined);
+    });
+}
+
+function shouldCloseSupersededNotification(notification, tag, paneId, rawTag) {
+  if (!notification) {
+    return false;
+  }
+  if (tag && notification.tag === tag) {
+    return true;
+  }
+  if (rawTag && notification.tag === rawTag) {
+    return true;
+  }
+  if (!paneId) {
+    return false;
+  }
+  const encodedPaneId = encodeURIComponent(paneId);
+  const legacyRawTag = `claude-${paneId}`;
+  const legacyEncodedTag = `claude-${encodedPaneId}`;
+  if (notification.tag === legacyRawTag || notification.tag === legacyEncodedTag) {
+    return true;
+  }
+  const notificationData = notification.data || {};
+  const notificationPaneId = normalizePaneID(notificationData.paneId || notificationData.pane_id);
+  if (notificationPaneId === paneId) {
+    return true;
+  }
+  return Boolean(rawTag && notificationData.rawTag === rawTag);
 }
 
 function normalizePaneID(rawPaneId) {

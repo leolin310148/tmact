@@ -14,14 +14,16 @@ import (
 )
 
 type pushTestHTTPClient struct {
-	status int
+	status  int
+	headers []http.Header
 }
 
-func (c pushTestHTTPClient) Do(*http.Request) (*http.Response, error) {
+func (c *pushTestHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	status := c.status
 	if status == 0 {
 		status = http.StatusCreated
 	}
+	c.headers = append(c.headers, req.Header.Clone())
 	return &http.Response{
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader("")),
@@ -133,14 +135,70 @@ func TestPushAcceptsPaneIDPayload(t *testing.T) {
 	}
 }
 
-func TestPushDeletesExpiredSubscriptions(t *testing.T) {
+func TestNormalizeWebPushTopic(t *testing.T) {
+	tests := []struct {
+		name   string
+		tag    string
+		paneID string
+		want   string
+	}{
+		{name: "raw pane tag", tag: "claude-%60", paneID: "%60", want: "claude-pane-60"},
+		{name: "encoded pane tag", tag: "claude-%2560", paneID: "%60", want: "claude-pane-60"},
+		{name: "missing tag", tag: "", paneID: "%60", want: "tmact-pane-60"},
+		{name: "encoded pane id", tag: "claude-%2560", paneID: "%2560", want: "claude-pane-60"},
+		{name: "invalid pane", tag: "claude-%xx", paneID: "%xx", want: ""},
+		{name: "url-safe only", tag: "repo.done:%60/abc", paneID: "%60", want: "repo-done-pane-60-abc"},
+		{name: "max 32 bytes", tag: "claude-%60-abcdefghijklmnopqrstuvwxyz", paneID: "%60", want: "claude-pane-60-abcdefghijklmnopq"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeWebPushTopic(tt.tag, tt.paneID); got != tt.want {
+				t.Fatalf("topic = %q, want %q", got, tt.want)
+			}
+			if len(tt.want) > maxWebPushTopicBytes {
+				t.Fatalf("test want is too long: %q", tt.want)
+			}
+		})
+	}
+}
+
+func TestPushSetsPaneTopicHeader(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "subscriptions.json")
+	client := &pushTestHTTPClient{status: http.StatusCreated}
 	server := &Server{
 		WebPushVAPIDPublicKey:    "test-public",
 		WebPushVAPIDPrivateKey:   "test-private",
 		WebPushVAPIDSubject:      "mailto:test@example.com",
 		WebPushSubscriptionsPath: path,
-		WebPushHTTPClient:        pushTestHTTPClient{status: http.StatusGone},
+		WebPushHTTPClient:        client,
+	}
+	sub := testSubscription("https://updates.push.services.mozilla.com/wpush/v2/topic")
+	if err := server.savePushSubscription(sub); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/push", strings.NewReader(`{"title":"hi","body":"there","paneId":"%60","tag":"claude-%60"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if len(client.headers) != 1 {
+		t.Fatalf("sent requests = %d, want 1", len(client.headers))
+	}
+	if got := client.headers[0].Get("Topic"); got != "claude-pane-60" {
+		t.Fatalf("Topic header = %q, want claude-pane-60", got)
+	}
+}
+
+func TestPushDeletesExpiredSubscriptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "subscriptions.json")
+	client := &pushTestHTTPClient{status: http.StatusGone}
+	server := &Server{
+		WebPushVAPIDPublicKey:    "test-public",
+		WebPushVAPIDPrivateKey:   "test-private",
+		WebPushVAPIDSubject:      "mailto:test@example.com",
+		WebPushSubscriptionsPath: path,
+		WebPushHTTPClient:        client,
 	}
 	sub := testSubscription("https://updates.push.services.mozilla.com/wpush/v2/expired")
 	if err := server.savePushSubscription(sub); err != nil {

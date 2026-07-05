@@ -117,9 +117,14 @@ curl -sS http://127.0.0.1:7890/api/push \
 
 `paneId` is the raw tmux pane id (`%60`). If you only provide `url`, encode the
 percent sign in the query (`/?pane=%2560`). `session_id` and `cwd` are accepted
-as optional metadata for sender hooks. On notification click, the Service Worker
-focuses an existing vibe PWA window and posts `SELECT_PANE`; if no window is
-open, it opens `/?pane=...` so the frontend selects the pane on boot.
+as optional metadata for sender hooks. Sender hooks may keep using per-pane tags
+like `claude-%60`; the server sends the Web Push `Topic` header as
+`claude-pane-60` so iOS/APNs can collapse same-pane notifications at the system
+layer. The Service Worker also normalizes pane tags to the same safe internal
+form and closes existing same-pane notifications before showing the latest one
+as a desktop/Android fallback. On notification click, the Service Worker focuses
+an existing vibe PWA window and posts `SELECT_PANE`; if no window is open, it
+opens `/?pane=...` so the frontend selects the pane on boot.
 
 ### Federation (multi-host)
 
