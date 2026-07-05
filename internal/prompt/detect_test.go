@@ -196,6 +196,33 @@ project $
 	}
 }
 
+func TestDetectGenericPromptDoesNotClaimNewTrailingMenu(t *testing.T) {
+	raw := `
+Allow this command?
+  1. Yes
+❯ 2. No
+running the build...
+done in 4.2s
+Choose next action
+❯ 1. Run tests
+  2. Commit changes
+`
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeChoicePrompt {
+		t.Fatalf("type = %q", detected.Type)
+	}
+	if detected.Question != "Choose next action" {
+		t.Fatalf("question = %q", detected.Question)
+	}
+	if len(detected.Options) != 2 {
+		t.Fatalf("options len = %d", len(detected.Options))
+	}
+}
+
 func TestDetectTrustFolderPrompt(t *testing.T) {
 	detected := Detect("Do you trust the files in this folder?\n1. Trust folder\n3. Don't trust\n")
 	if detected == nil {

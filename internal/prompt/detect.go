@@ -207,10 +207,19 @@ func collectOptions(lines []string) []Option {
 func collectOptionsWithLastIndex(lines []string) ([]Option, int) {
 	options := []Option{}
 	lastIndex := -1
+	seenGapAfterOption := false
 	for index, line := range lines {
 		if option := parseOption(line); option != nil {
+			if seenGapAfterOption && len(options) > 0 && option.Number <= options[len(options)-1].Number {
+				break
+			}
 			options = append(options, *option)
 			lastIndex = index
+			seenGapAfterOption = false
+			continue
+		}
+		if len(options) > 0 {
+			seenGapAfterOption = true
 		}
 	}
 	return options, lastIndex
