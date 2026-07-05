@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -51,10 +52,19 @@ func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, `invalid "pane" parameter, expected a local tmux pane id like %12`)
 		return
 	}
+	captureLines := wsCaptureLines
+	if raw := r.URL.Query().Get("lines"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeJSONError(w, http.StatusBadRequest, `invalid "lines" parameter, expected a positive integer`)
+			return
+		}
+		captureLines = parsed
+	}
 
 	started := time.Now()
 	captureCtx, cancel := context.WithTimeout(r.Context(), s.paneCaptureTimeout())
-	content, err := s.captureContext()(captureCtx, pane, wsCaptureLines)
+	content, err := s.captureContext()(captureCtx, pane, captureLines)
 	cancel()
 	elapsed := time.Since(started)
 	if err != nil {

@@ -614,12 +614,25 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   z-index: 105;
   max-width: calc(var(--ds) * 52px);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
   font: 10px/1.2 var(--mono);
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(12,17,24,0.72);
+}
+.desk-peer {
+  max-width: calc(var(--ds) * 27px);
+  padding: 1px 3px;
+  font-size: 8px;
+}
+.desk-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .desk:hover .desk-name { color: var(--fg); }
 .desk.state-running .desk-name { color: var(--green); }

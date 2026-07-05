@@ -130,6 +130,28 @@ image previews through that peer's statusd. If a peer goes unreachable, its
 last successful snapshot stays visible as stale while the fetch error is
 reported in `/api/snapshot`.
 
+The CLI can also send to peer panes through the coordinator statusd config:
+
+```sh
+tmact -t peer-a@%0 send --text "status?" --enter --execute
+tmact -t %0 send --peer peer-a --command "go test ./..." --execute
+```
+
+Loops can target a peer pane from the coordinator too:
+
+```yaml
+peer: peer-a
+target: "%0"
+# statusd_config: ~/.tmact/statusd.json  # optional; this is the default
+actions:
+  - type: send_text
+    text: "continue"
+    enter: true
+```
+
+Remote send and loop targets must use a canonical pane id like `%0`; the peer
+statusd receives the request and acts on its local tmux pane.
+
 Remote dispatch is configured separately from snapshot federation. Use
 `dispatch_peers` when a machine should be able to call another machine's
 statusd without also pulling that machine's snapshot:

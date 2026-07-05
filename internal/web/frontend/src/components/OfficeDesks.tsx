@@ -132,7 +132,7 @@ function Desk({
       className={cls}
       type="button"
       title={title}
-      aria-label={"Select pane " + label + ", " + paneStateLabel(pane)}
+      aria-label={"Select pane " + (peer ? peer + " " : "") + label + ", " + paneStateLabel(pane)}
       aria-pressed={selected}
       onPointerDown={onPointerDownNoBlur}
       onClick={() => onSelect(paneID)}
@@ -152,7 +152,10 @@ function Desk({
           </span>
         ) : null}
       </span>
-      <span className="desk-name">{label}</span>
+      <span className="desk-name">
+        {peer ? <span className="peer-badge desk-peer">{peer}</span> : null}
+        <span className="desk-label">{label}</span>
+      </span>
     </button>
   );
 }

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
@@ -170,6 +172,49 @@ func TestSendExecuteCombinesRepeatedAndCSVKeys(t *testing.T) {
 		t.Fatalf("sent keys = %#v", sentKeys)
 	}
 	if !strings.Contains(out, "send keys to %42: C-a,Left,Enter") {
+		t.Fatalf("output = %q", out)
+	}
+}
+
+func TestSendExecutePeerTarget(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	configPath := filepath.Join(t.TempDir(), "statusd.json")
+	writeText(t, configPath, `{"peers":[{"name":"peer-a","url":"http://peer-a.example:7890"}]}`)
+
+	var gotPeer statusd.Peer
+	var gotTarget string
+	var gotReport sendReport
+	sendPeerPaneInput = func(_ context.Context, peer statusd.Peer, target string, report sendReport) error {
+		gotPeer = peer
+		gotTarget = target
+		gotReport = report
+		return nil
+	}
+	sendTmuxKeys = func(string, []string) error {
+		t.Fatal("peer send must not use local tmux")
+		return nil
+	}
+	pasteTmuxText = func(string, string, bool) error {
+		t.Fatal("peer send must not use local tmux")
+		return nil
+	}
+
+	out, err := captureRun(t, "-t", "peer-a@%42", "send", "--config", configPath, "--command", "go test ./...", "--execute")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPeer.Name != "peer-a" || gotPeer.URL != "http://peer-a.example:7890" {
+		t.Fatalf("peer = %#v", gotPeer)
+	}
+	if gotTarget != "%42" {
+		t.Fatalf("target = %q", gotTarget)
+	}
+	if gotReport.Target != "peer-a@%42" || gotReport.RemoteTarget != "%42" || gotReport.Text != "go test ./..." || !gotReport.Enter {
+		t.Fatalf("report = %#v", gotReport)
+	}
+	if !strings.Contains(out, "send command to peer-a@%42: go test ./...") {
 		t.Fatalf("output = %q", out)
 	}
 }
