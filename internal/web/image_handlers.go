@@ -133,8 +133,8 @@ func localImagePathScheme(path string) (string, bool) {
 
 func decodeLocalFileURLPath(path, scheme string) (string, error) {
 	path = path[len(scheme)+len("://"):]
-	if strings.HasPrefix(path, "localhost/") {
-		path = strings.TrimPrefix(path, "localhost")
+	if slash := strings.IndexByte(path, '/'); slash > 0 && strings.EqualFold(path[:slash], "localhost") {
+		path = path[slash:]
 	}
 	if !strings.HasPrefix(path, "/") {
 		return "", errors.New("unsupported file URL host")
