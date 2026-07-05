@@ -2,8 +2,10 @@ package dispatch_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/leolin310148/tmact/internal/dispatch"
 	"github.com/leolin310148/tmact/internal/panestatus"
@@ -84,6 +86,28 @@ func baseOpts() dispatch.Options {
 	}
 }
 
+func TestDryRunPromptDetailTruncatesLongUnicodePromptAtRuneBoundary(t *testing.T) {
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Execute = false
+	opts.Prompt = "a" + strings.Repeat("請", 80)
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := stepDetail(t, report, "send-prompt")
+	if !utf8.ValidString(detail) {
+		t.Fatalf("send-prompt detail is invalid UTF-8: %q", detail)
+	}
+	if !strings.HasSuffix(detail, "...") {
+		t.Fatalf("send-prompt detail = %q, want ellipsis suffix", detail)
+	}
+	if utf8.RuneCountInString(detail) != 60 {
+		t.Fatalf("send-prompt detail rune count = %d, want 60", utf8.RuneCountInString(detail))
+	}
+}
+
 func claudePane() tmux.Pane {
 	return tmux.Pane{
 		Session:        "work",
@@ -108,6 +132,17 @@ func stepStatus(t *testing.T, report dispatch.Report, name string) string {
 	for _, step := range report.Steps {
 		if step.Name == name {
 			return step.Status
+		}
+	}
+	t.Fatalf("step %q not found in %+v", name, report.Steps)
+	return ""
+}
+
+func stepDetail(t *testing.T, report dispatch.Report, name string) string {
+	t.Helper()
+	for _, step := range report.Steps {
+		if step.Name == name {
+			return step.Detail
 		}
 	}
 	t.Fatalf("step %q not found in %+v", name, report.Steps)

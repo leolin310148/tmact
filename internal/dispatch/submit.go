@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/leolin310148/tmact/internal/panestate"
 )
@@ -110,8 +111,8 @@ func promptSubmitted(classified panestate.Result) bool {
 
 func promptDetail(prompt string) string {
 	prompt = strings.Join(strings.Fields(prompt), " ")
-	if len(prompt) > 60 {
-		return prompt[:57] + "..."
+	if utf8.RuneCountInString(prompt) > 60 {
+		return string([]rune(prompt)[:57]) + "..."
 	}
 	return prompt
 }
