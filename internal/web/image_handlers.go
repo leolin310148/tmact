@@ -68,6 +68,10 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "path is a directory")
 		return
 	}
+	if !info.Mode().IsRegular() {
+		writeJSONError(w, http.StatusBadRequest, "path is not a regular file")
+		return
+	}
 
 	ext := sniffImageExtension(file)
 	mimeType := imageMIMEByExt[ext]
