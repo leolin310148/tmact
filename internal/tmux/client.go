@@ -143,7 +143,7 @@ func ParsePanes(output string) ([]Pane, error) {
 			return nil, fmt.Errorf("invalid pane pid %q: %w", parts[5+offset], err)
 		}
 		windowActive := true
-		if len(parts) == 11 || len(parts) == 12 {
+		if len(parts) > 10+offset {
 			windowActive = parts[10+offset] == "1"
 		}
 		panes = append(panes, Pane{
