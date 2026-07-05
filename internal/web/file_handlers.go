@@ -23,14 +23,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := os.Open(path)
-	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "file not readable")
-		return
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
+	info, err := os.Stat(path)
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "file not readable")
 		return
@@ -43,6 +36,13 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "path is not a regular file")
 		return
 	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "file not readable")
+		return
+	}
+	defer file.Close()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+sanitizeDownloadFilename(filepath.Base(path))+`"`)
