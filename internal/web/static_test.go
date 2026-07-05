@@ -271,7 +271,9 @@ func TestServiceWorkerHandlesWebPushSameOriginClicks(t *testing.T) {
 		`self.addEventListener("notificationclick"`,
 		`matchAll({ type: "window", includeUncontrolled: true })`,
 		`sameOriginClient.focus()`,
+		`postMessage({ type: "SELECT_PANE"`,
 		`self.clients.openWindow(targetURL)`,
+		`url.searchParams.set("pane", paneId)`,
 		`url.origin !== self.location.origin`,
 	} {
 		if !strings.Contains(sw, want) {

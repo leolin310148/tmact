@@ -94,6 +94,7 @@ self.addEventListener("push", (event) => {
     data = { body: String(data || "") };
   }
 
+  const paneId = normalizePaneID(data.paneId || data.pane_id);
   const title = data.title || "tmact";
   const options = {
     body: data.body || "",
@@ -101,7 +102,10 @@ self.addEventListener("push", (event) => {
     badge: "/icons/icon-192.png",
     tag: data.tag || "tmact-status",
     renotify: Boolean(data.tag),
-    data: { url: normalizeAppURL(data.url) },
+    data: {
+      url: normalizeAppURL(data.url, paneId),
+      paneId,
+    },
   };
 
   event.waitUntil(
@@ -117,7 +121,9 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetURL = normalizeAppURL(event.notification.data && event.notification.data.url);
+  const notificationData = event.notification.data || {};
+  const paneId = normalizePaneID(notificationData.paneId);
+  const targetURL = normalizeAppURL(notificationData.url, paneId);
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
@@ -130,6 +136,7 @@ self.addEventListener("notificationclick", (event) => {
       });
 
       if (sameOriginClient) {
+        sameOriginClient.postMessage({ type: "SELECT_PANE", paneId, url: targetURL });
         return sameOriginClient.focus();
       }
 
@@ -138,17 +145,51 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-function normalizeAppURL(rawURL) {
+function normalizeAppURL(rawURL, paneId) {
+  let url;
   if (typeof rawURL !== "string" || rawURL.trim() === "") {
-    return "/";
+    url = new URL("/", self.location.origin);
+  } else {
+    try {
+      url = new URL(rawURL, self.location.origin);
+    } catch (err) {
+      url = new URL("/", self.location.origin);
+    }
+  }
+  if (url.origin !== self.location.origin) {
+    url = new URL("/", self.location.origin);
+  }
+  if (paneId) {
+    url.searchParams.set("pane", paneId);
+  }
+  return url.pathname + url.search + url.hash;
+}
+
+function normalizePaneID(rawPaneId) {
+  if (typeof rawPaneId !== "string") {
+    return "";
+  }
+  const paneId = rawPaneId.trim();
+  if (paneId.startsWith("%25")) {
+    try {
+      const decoded = decodeURIComponent(paneId);
+      if (/^%[0-9]+$/.test(decoded)) {
+        return decoded;
+      }
+    } catch (err) {
+      return "";
+    }
+  }
+  if (/^%[0-9]+$/.test(paneId)) {
+    return paneId;
   }
   try {
-    const url = new URL(rawURL, self.location.origin);
-    if (url.origin !== self.location.origin) {
-      return "/";
+    const decoded = decodeURIComponent(paneId);
+    if (/^%[0-9]+$/.test(decoded)) {
+      return decoded;
     }
-    return url.pathname + url.search + url.hash;
   } catch (err) {
-    return "/";
+    // Fall through to the no-pane path.
   }
+  return "";
 }

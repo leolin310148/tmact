@@ -107,6 +107,32 @@ func TestPushRequiresVAPIDKeys(t *testing.T) {
 	}
 }
 
+func TestPushAcceptsPaneIDPayload(t *testing.T) {
+	handler := (&Server{
+		WebPushVAPIDPublicKey:    "test-public",
+		WebPushVAPIDPrivateKey:   "test-private",
+		WebPushVAPIDSubject:      "mailto:test@example.com",
+		WebPushSubscriptionsPath: filepath.Join(t.TempDir(), "subscriptions.json"),
+	}).Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/push", strings.NewReader(`{"title":"hi","body":"there","paneId":"%60","session_id":"1","cwd":"tmact"}`)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Sent   int `json:"sent"`
+		Failed int `json:"failed"`
+		Total  int `json:"total"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Sent != 0 || got.Failed != 0 || got.Total != 0 {
+		t.Fatalf("result = %#v, want empty delivery stats", got)
+	}
+}
+
 func TestPushDeletesExpiredSubscriptions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "subscriptions.json")
 	server := &Server{

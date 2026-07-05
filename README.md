@@ -106,6 +106,21 @@ curl -sS http://127.0.0.1:7890/api/push \
 subscriptions whose push endpoint returns 404 or 410. On iOS, install the site
 to the Home Screen first; iOS Web Push is only delivered to installed PWAs.
 
+Notifications can deep-link to a tmux pane by pane id. Prefer sending the raw
+tmux pane id in `paneId`:
+
+```sh
+curl -sS http://127.0.0.1:7890/api/push \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"tmact","body":"done","paneId":"%60","url":"/?pane=%2560","tag":"tmact-%60","session_id":"1","cwd":"tmact"}'
+```
+
+`paneId` is the raw tmux pane id (`%60`). If you only provide `url`, encode the
+percent sign in the query (`/?pane=%2560`). `session_id` and `cwd` are accepted
+as optional metadata for sender hooks. On notification click, the Service Worker
+focuses an existing vibe PWA window and posts `SELECT_PANE`; if no window is
+open, it opens `/?pane=...` so the frontend selects the pane on boot.
+
 ### Federation (multi-host)
 
 statusd can pull snapshots from other statusd instances and merge them into
