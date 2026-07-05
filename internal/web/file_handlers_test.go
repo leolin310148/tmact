@@ -59,6 +59,28 @@ func TestFileEndpointDownloadsEscapedFileURL(t *testing.T) {
 	}
 }
 
+func TestFileEndpointDownloadsFileURLWithUppercaseLocalhost(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.txt")
+	body := "download me"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	fileURL := strings.Replace(escapedFileURL(path), "file:///", "file://LOCALHOST/", 1)
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(fileURL), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != body {
+		t.Fatalf("body = %q, want %q", rec.Body.String(), body)
+	}
+}
+
 func TestFileEndpointRejectsFileURLWithRemoteHost(t *testing.T) {
 	handler := (&Server{}).Handler()
 	rec := httptest.NewRecorder()
