@@ -180,6 +180,9 @@ func validateConfig(cfg Config) error {
 		if flow.InitialDelay.Duration < 0 {
 			return fmt.Errorf("flow %q: initial_delay cannot be negative", flow.Name)
 		}
+		if flow.MaxRuns < 0 {
+			return fmt.Errorf("flow %q: max_runs cannot be negative", flow.Name)
+		}
 		for _, step := range flow.Steps {
 			if err := validateFlowStep(flow.Name, step); err != nil {
 				return err
@@ -239,6 +242,9 @@ func validateAction(action ActionConfig) error {
 	}
 	if action.PostDelay.Duration < 0 {
 		return fmt.Errorf("action %q: post_delay cannot be negative", action.Name)
+	}
+	if action.MaxRuns < 0 {
+		return fmt.Errorf("action %q: max_runs cannot be negative", action.Name)
 	}
 	return nil
 }
