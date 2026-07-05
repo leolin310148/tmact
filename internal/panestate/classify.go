@@ -224,5 +224,12 @@ func truncate(text string, max int) string {
 	if len(text) <= max {
 		return text
 	}
-	return text[:max] + "..."
+	end := 0
+	for index := range text {
+		if index > max {
+			break
+		}
+		end = index
+	}
+	return text[:end] + "..."
 }
