@@ -142,6 +142,9 @@ func RemoteURL(base string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported peer scheme %q", u.Scheme)
 	}
+	if u.Host == "" {
+		return "", fmt.Errorf("missing host in peer URL")
+	}
 	u.Path = remoteDispatchPath
 	u.RawQuery = ""
 	return u.String(), nil

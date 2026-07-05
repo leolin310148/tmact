@@ -111,6 +111,9 @@ func TestRemoteURLNormalizesDispatchEndpoint(t *testing.T) {
 	if _, err := RemoteURL("peer.example:7890"); err == nil {
 		t.Fatal("expected missing scheme error")
 	}
+	if _, err := RemoteURL("http:///status"); err == nil {
+		t.Fatal("expected missing host error")
+	}
 }
 
 func writeRemoteJSON(t *testing.T, w http.ResponseWriter, v any) {
