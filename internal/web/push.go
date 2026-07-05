@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 const (
 	defaultWebPushSubject = "mailto:tmact@localhost"
 	maxPushRequestBytes   = 64 << 10
+	maxWebPushTopicBytes  = 32
 )
 
 type webpushHTTPClient = webpush.HTTPClient
@@ -135,6 +137,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	if msg.Body == "" {
 		msg.Body = msg.Title
 	}
+	topic := normalizeWebPushTopic(msg.Tag, msg.PaneID)
 
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -158,6 +161,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 			Subscriber:      subject,
 			VAPIDPublicKey:  publicKey,
 			VAPIDPrivateKey: privateKey,
+			Topic:           topic,
 			TTL:             60,
 			Urgency:         webpush.UrgencyHigh,
 		})
@@ -188,6 +192,75 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"sent": sent, "failed": failed, "total": total})
+}
+
+func normalizeWebPushTopic(rawTag, rawPaneID string) string {
+	paneID := normalizeWebPushPaneID(rawPaneID)
+	if paneID == "" {
+		return ""
+	}
+
+	paneDigits := strings.TrimPrefix(paneID, "%")
+	safePane := "pane-" + paneDigits
+	tag := strings.TrimSpace(rawTag)
+	if tag != "" {
+		encodedPaneID := url.QueryEscape(paneID)
+		tag = strings.ReplaceAll(tag, encodedPaneID, safePane)
+		tag = strings.ReplaceAll(tag, paneID, safePane)
+	} else {
+		tag = "tmact-" + safePane
+	}
+	return sanitizeWebPushTopic(tag)
+}
+
+func normalizeWebPushPaneID(rawPaneID string) string {
+	paneID := strings.TrimSpace(rawPaneID)
+	if strings.HasPrefix(paneID, "%25") {
+		decoded, err := url.QueryUnescape(paneID)
+		if err != nil {
+			return ""
+		}
+		paneID = decoded
+	}
+	if len(paneID) < 2 || paneID[0] != '%' {
+		return ""
+	}
+	for _, r := range paneID[1:] {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return paneID
+}
+
+func sanitizeWebPushTopic(tag string) string {
+	tag = strings.TrimSpace(tag)
+	var b strings.Builder
+	lastDash := false
+	for _, r := range tag {
+		isAllowed := (r >= 'A' && r <= 'Z') ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' ||
+			r == '_'
+		if isAllowed {
+			b.WriteRune(r)
+			lastDash = r == '-'
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	topic := strings.Trim(b.String(), "-")
+	if topic == "" {
+		topic = "tmact-status"
+	}
+	if len(topic) > maxWebPushTopicBytes {
+		topic = topic[:maxWebPushTopicBytes]
+	}
+	return topic
 }
 
 func decodePushJSON(w http.ResponseWriter, r *http.Request, dst any) error {

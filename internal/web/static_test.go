@@ -268,6 +268,10 @@ func TestServiceWorkerHandlesWebPushSameOriginClicks(t *testing.T) {
 	for _, want := range []string{
 		`self.addEventListener("push"`,
 		`self.registration.showNotification`,
+		`closeSupersededNotifications(tag, paneId, rawTag)`,
+		`self.registration.getNotifications()`,
+		`shouldCloseSupersededNotification`,
+		`normalizeNotificationTag`,
 		`self.addEventListener("notificationclick"`,
 		`matchAll({ type: "window", includeUncontrolled: true })`,
 		`sameOriginClient.focus()`,
