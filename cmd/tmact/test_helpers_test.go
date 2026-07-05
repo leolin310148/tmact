@@ -38,6 +38,7 @@ func stubCLIHooks(t *testing.T) func() {
 	oldTmactNow := tmactNow
 	oldDispatchRun := dispatchRun
 	oldDispatchRemoteRun := dispatchRemoteRun
+	oldSendPeerPaneInput := sendPeerPaneInput
 
 	return func() {
 		listAllTmuxPanes = oldListAllTmuxPanes
@@ -47,5 +48,6 @@ func stubCLIHooks(t *testing.T) func() {
 		tmactNow = oldTmactNow
 		dispatchRun = oldDispatchRun
 		dispatchRemoteRun = oldDispatchRemoteRun
+		sendPeerPaneInput = oldSendPeerPaneInput
 	}
 }

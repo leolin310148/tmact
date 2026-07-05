@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 type targetCache struct {
@@ -36,6 +38,9 @@ func resolveTarget(selector string) (string, error) {
 		return "", fmt.Errorf("target index %d not found; run `tmact ls` again", index)
 	}
 	row := cache.Panes[index]
+	if peer, _ := statusd.SplitPeerTarget(row.Target); peer != "" {
+		return row.Target, nil
+	}
 	if _, err := listTargetTmuxPanes(row.Target); err != nil {
 		return "", fmt.Errorf("cached target %d (%s) is no longer available; run `tmact ls` again: %w", index, row.Target, err)
 	}

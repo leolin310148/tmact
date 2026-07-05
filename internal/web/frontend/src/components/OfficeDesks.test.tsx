@@ -26,6 +26,28 @@ function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
 }
 
 describe("OfficeDesks overflow", () => {
+  it("shows peer badges on visible remote desks", () => {
+    render(
+      <OfficeDesks
+        panes={[
+          pane({
+            target: "peer-a@%2",
+            pane_id: "peer-a@%2",
+            session: "peer-a@work",
+            peer: "peer-a",
+            runtime: "codex",
+          }),
+        ]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const remoteDesk = screen.getByRole("button", { name: "Select pane peer-a work, idle" });
+    expect(remoteDesk.querySelector(".desk-peer")).toHaveTextContent("peer-a");
+    expect(remoteDesk.querySelector(".desk-label")).toHaveTextContent("work");
+  });
+
   it("shows peer badges for collapsed remote panes", () => {
     render(
       <OfficeDesks

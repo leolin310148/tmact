@@ -52,6 +52,38 @@ actions:
 	}
 }
 
+func TestLoadConfigParsesPeerTarget(t *testing.T) {
+	path := writeTempConfig(t, `
+peer: peer-a
+target: "%7"
+statusd_config: /tmp/statusd.json
+actions:
+  - type: clear
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Target != "peer-a@%7" || cfg.Peer != "peer-a" || cfg.StatusdConfig != "/tmp/statusd.json" {
+		t.Fatalf("cfg = %#v", cfg)
+	}
+}
+
+func TestLoadConfigRejectsConflictingPeerTarget(t *testing.T) {
+	path := writeTempConfig(t, `
+peer: peer-a
+target: peer-b@%7
+actions:
+  - type: clear
+`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestLoadConfigParsesFlows(t *testing.T) {
 	path := writeTempConfig(t, `
 target: sample:0.0

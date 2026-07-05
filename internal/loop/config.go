@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/statusd"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,6 +32,8 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 
 type Config struct {
 	Target                 string         `yaml:"target"`
+	Peer                   string         `yaml:"peer"`
+	StatusdConfig          string         `yaml:"statusd_config"`
 	CaptureLines           int            `yaml:"capture_lines"`
 	IdleIgnorePatterns     []string       `yaml:"idle_ignore_patterns"`
 	PollInterval           Duration       `yaml:"poll_interval"`
@@ -120,6 +123,12 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func applyDefaults(cfg *Config) {
+	if cfg.Peer != "" {
+		peer, rest := statusd.SplitPeerTarget(cfg.Target)
+		if peer == "" {
+			cfg.Target = cfg.Peer + statusd.PeerSeparator + rest
+		}
+	}
 	if cfg.CaptureLines <= 0 {
 		cfg.CaptureLines = 120
 	}
@@ -160,6 +169,12 @@ func applyDefaults(cfg *Config) {
 func validateConfig(cfg Config) error {
 	if cfg.Target == "" {
 		return errors.New("target is required")
+	}
+	if cfg.Peer != "" {
+		peer, _ := statusd.SplitPeerTarget(cfg.Target)
+		if peer != "" && peer != cfg.Peer {
+			return fmt.Errorf("peer %q conflicts with target peer %q", cfg.Peer, peer)
+		}
 	}
 	if len(cfg.Actions) == 0 && len(cfg.Flows) == 0 {
 		return errors.New("at least one action or flow is required")

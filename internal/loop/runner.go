@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,7 +14,9 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/peerpane"
 	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
@@ -27,6 +30,8 @@ type Runner struct {
 	options            Options
 	now                func() time.Time
 	capturePane        func(string, int) (string, error)
+	sendText           func(string, string, bool) error
+	sendKeys           func(string, []string) error
 	fetchUsage         func(context.Context, ...string) agentusage.Snapshot
 	idleIgnorePatterns []*regexp.Regexp
 
@@ -79,12 +84,17 @@ func NewRunner(cfg Config, options Options) *Runner {
 		options:            options,
 		now:                time.Now,
 		capturePane:        tmux.CapturePane,
+		sendText:           tmux.PasteText,
+		sendKeys:           tmux.SendKeys,
 		fetchUsage:         agentusage.Fetch,
 		idleIgnorePatterns: compiled,
 	}
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	if err := r.configurePeerTarget(ctx); err != nil {
+		return err
+	}
 	start := r.now()
 	lastChangedAt := start
 	if r.cfg.AssumeIdleOnStart {
@@ -486,18 +496,47 @@ func (r *Runner) executeAction(action ActionConfig) error {
 
 	switch action.Type {
 	case "send_text":
-		return tmux.PasteText(r.cfg.Target, action.Text, actionEnter(action))
+		return r.sendText(r.cfg.Target, action.Text, actionEnter(action))
 	case "send_keys":
-		return tmux.SendKeys(r.cfg.Target, action.Keys)
+		return r.sendKeys(r.cfg.Target, action.Keys)
 	case "clear":
 		command := action.Command
 		if command == "" {
 			command = "/clear"
 		}
-		return tmux.PasteText(r.cfg.Target, command, actionEnter(action))
+		return r.sendText(r.cfg.Target, command, actionEnter(action))
 	default:
 		return fmt.Errorf("unsupported action type %q", action.Type)
 	}
+}
+
+func (r *Runner) configurePeerTarget(ctx context.Context) error {
+	peerName, remoteTarget := statusd.SplitPeerTarget(r.cfg.Target)
+	if peerName == "" {
+		return nil
+	}
+	if remoteTarget == "" || !strings.HasPrefix(remoteTarget, "%") {
+		return fmt.Errorf("peer target must be a tmux pane id like peer@%%12, got %q", r.cfg.Target)
+	}
+	configPath := r.cfg.StatusdConfig
+	if configPath == "" {
+		configPath = statusd.DefaultFileConfigPath()
+	}
+	peer, err := peerpane.LoadConfigPeer(configPath, peerName)
+	if err != nil {
+		return err
+	}
+	client := peerpane.Client{Peer: peer, HTTPClient: &http.Client{}}
+	r.capturePane = func(_ string, lines int) (string, error) {
+		return client.Capture(ctx, remoteTarget, lines)
+	}
+	r.sendText = func(_ string, text string, enter bool) error {
+		return client.SendText(ctx, remoteTarget, text, enter)
+	}
+	r.sendKeys = func(_ string, keys []string) error {
+		return client.SendKeys(ctx, remoteTarget, keys)
+	}
+	return nil
 }
 
 func (r *Runner) emit(e event) error {

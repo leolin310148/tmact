@@ -20,6 +20,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				`tmact -t TARGET send --command COMMAND [--clear-line] [--execute]`,
 				`tmact -t TARGET send --key KEY [--key KEY...] [--execute]`,
 				`tmact -t TARGET send --keys C-u,Enter [--execute]`,
+				`tmact -t peer-a@%7 send --text TEXT [--enter] [--execute]`,
 			},
 			Flags: []helpFlag{
 				{Name: "--text", Value: "TEXT", Description: "text to paste without Enter unless --enter is set"},
@@ -28,6 +29,8 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--keys", Value: "CSV", Description: "comma-separated tmux keys"},
 				{Name: "--enter", Description: "press Enter after --text"},
 				{Name: "--clear-line", Description: "send C-u before text or command"},
+				{Name: "--peer", Value: "NAME", Description: "send through the named statusd peer from config"},
+				{Name: "--config", Value: "PATH", Description: "statusd config file containing peers"},
 				{Name: "--execute", Description: "actually send to tmux; default is dry-run"},
 				{Name: "--json", Description: "print JSON output"},
 			},
@@ -35,8 +38,10 @@ func paneCommandHelpCatalog() []commandHelp {
 				`tmact ls`,
 				`tmact -t 0 send --command "go test ./..."`,
 				`tmact -t work:0.0 send --text "summarize progress" --enter --execute`,
+				`tmact -t peer-a@%7 send --text "status?" --enter --execute`,
 			},
 			Safety: []string{"Without --execute this prints the planned send and does not touch tmux."},
+			Notes:  []string{"Peer targets must be canonical pane ids like peer-a@%7; session:window.pane targets are local-only."},
 		},
 		{
 			Command: "dispatch-work",

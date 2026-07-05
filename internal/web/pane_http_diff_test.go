@@ -33,6 +33,30 @@ func TestPaneDiffFirstRequestReturnsFullPatch(t *testing.T) {
 	}
 }
 
+func TestPaneDiffHonorsLinesParameter(t *testing.T) {
+	var gotLines int
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(target string, lines int) (string, error) {
+			gotLines = lines
+			return "line", nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/pane/diff?pane=%257&lines=80")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, body)
+	}
+	if gotLines != 80 {
+		t.Fatalf("lines = %d, want 80", gotLines)
+	}
+}
+
 func TestPaneDiffSameCursorUnchangedReturnsNoContent(t *testing.T) {
 	s := &Server{CapturePane: func(string, int) (string, error) { return "same", nil }}
 	srv := httptest.NewServer(s.Handler())
