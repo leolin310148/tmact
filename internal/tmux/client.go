@@ -206,11 +206,33 @@ func normalizePaneRowFields(parts []string, delimiter string) []string {
 		body[paneIndex],
 		body[paneIndex+1],
 		body[paneIndex+2],
-		body[paneIndex+3],
-		strings.Join(body[paneIndex+4:], delimiter),
 	)
+	currentCommand, currentPath := paneRowCommandAndPath(body[paneIndex+3:], delimiter)
+	normalized = append(normalized, currentCommand, currentPath)
 	normalized = append(normalized, suffix...)
 	return normalized
+}
+
+func paneRowCommandAndPath(fields []string, delimiter string) (string, string) {
+	if len(fields) == 0 {
+		return "", ""
+	}
+	if len(fields) == 1 {
+		return fields[0], ""
+	}
+	for i := 1; i < len(fields); i++ {
+		if looksLikePaneCurrentPath(fields[i]) {
+			return strings.Join(fields[:i], delimiter), strings.Join(fields[i:], delimiter)
+		}
+	}
+	return fields[0], strings.Join(fields[1:], delimiter)
+}
+
+func looksLikePaneCurrentPath(value string) bool {
+	return strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "~/") ||
+		strings.HasPrefix(value, "./") ||
+		strings.HasPrefix(value, "../")
 }
 
 func paneRowSuffixCount(parts []string) int {

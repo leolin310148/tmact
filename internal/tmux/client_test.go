@@ -127,6 +127,24 @@ func TestParsePanesAllowsPipeInCurrentPath(t *testing.T) {
 	}
 }
 
+func TestParsePanesAllowsPipeInCurrentCommand(t *testing.T) {
+	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|agent|worker|/tmp/tmact-sample/project|1|0|1\n"
+
+	panes, err := ParsePanes(raw)
+	if err != nil {
+		t.Fatalf("ParsePanes returned error: %v", err)
+	}
+	if len(panes) != 1 {
+		t.Fatalf("panes len = %d", len(panes))
+	}
+	if panes[0].CurrentCommand != "agent|worker" {
+		t.Fatalf("current command = %q", panes[0].CurrentCommand)
+	}
+	if panes[0].CurrentPath != "/tmp/tmact-sample/project" {
+		t.Fatalf("current path = %q", panes[0].CurrentPath)
+	}
+}
+
 func TestParsePanesAllowsPipeInWindowName(t *testing.T) {
 	raw := "sample|$1|0|codex|aarch64|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
 
