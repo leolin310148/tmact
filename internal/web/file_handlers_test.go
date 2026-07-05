@@ -59,6 +59,18 @@ func TestFileEndpointDownloadsEscapedFileURL(t *testing.T) {
 	}
 }
 
+func TestFileEndpointRejectsFileURLWithRemoteHost(t *testing.T) {
+	handler := (&Server{}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/file?path="+url.QueryEscape("file://example.test/report.txt"), nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
 func TestFileEndpointResolvesRelativePathFromCWD(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "dist"), 0o755); err != nil {
