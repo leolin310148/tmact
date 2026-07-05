@@ -144,6 +144,18 @@ func TestDetectGenericPromptIgnoresOSCTitleSequence(t *testing.T) {
 	}
 }
 
+func TestDetectGenericPromptIgnoresOSCTitleSequenceWithSTTerminator(t *testing.T) {
+	raw := "\x1b]0;tmact\x1b\\Allow this command?\n  1. Yes\n❯ 2. No\n"
+
+	detected := Detect(raw)
+	if detected == nil {
+		t.Fatal("expected prompt")
+	}
+	if detected.Type != TypeCommandApproval {
+		t.Fatalf("type = %q", detected.Type)
+	}
+}
+
 func TestDetectGenericCommandApprovalIgnoresScrolledPrompt(t *testing.T) {
 	raw := `
 Allow this command?
