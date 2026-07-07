@@ -383,6 +383,33 @@ The daemon should prefer stable pane IDs such as `%10` for internal state. The
 human target (`session:window.pane`) should be recomputed on each tick because
 window indexes can move.
 
+### Shell Hook Events (opt-in)
+
+Shells that source `tmact hook init zsh|bash|fish` emit structured
+preexec/precmd events (`tmact hook emit` → `POST /api/hook-event` on the
+daemon's unix socket, `internal/shellhook`). Per pane, the daemon keeps the
+latest active (unfinished preexec) and completed (matching precmd) command
+and overlays that onto the snapshot each tick, before tmux-option publishing
+and peer merging:
+
+- Active command → `running`/`working`, signals `shell_hook`,
+  `shell_hook_active`.
+- Completed command → `idle`/`input_ready`, signals `shell_hook`,
+  `shell_hook_completed` — even while the capture-hash debounce would still
+  say running.
+- Capture evidence outranks hooks where stronger: an asking pane keeps every
+  capture-derived field (only signals are added), a `working_text`
+  classification is not downgraded by a completed hook command, and an
+  active command past a short grace window loses to a capture that shows an
+  input-ready prompt (covers lost precmd emits — sends are fire-and-forget —
+  and foreground TUIs sitting at their own input prompt).
+- Precmd events are order-checked: a delayed precmd whose command_id
+  mismatches the active command and whose timestamp predates its start is
+  dropped instead of clearing the newer command.
+- Panes without hook events keep the capture-based behavior above unchanged.
+- `/api/hook-event` is IPC-only: requests over a TCP listener are rejected
+  (403); only the unix socket accepts hook events.
+
 ### Lines To Ignore Before Hashing
 
 The existing `panestatus.DefaultIdleIgnorePatterns` is a good start:

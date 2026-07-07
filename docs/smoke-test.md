@@ -34,6 +34,35 @@ Run dry-run config checks:
 .cache/tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
 ```
 
+## Shell hook events (live socket)
+
+Start an isolated statusd (unix socket only — `--web-addr ""` avoids
+colliding with an installed statusd's TCP port), then emit against a real
+pane id from `tmact ls`:
+
+```sh
+.cache/tmact statusd start --web-addr "" --no-tmux-options \
+  --pane-cols 0 --pane-rows 0 --socket-path /tmp/tmact-hooktest.sock &
+.cache/tmact hook emit --type preexec --pane-id %5 --command-id s1 \
+  --command "sleep 99" --socket-path /tmp/tmact-hooktest.sock
+.cache/tmact statusd read --socket-path /tmp/tmact-hooktest.sock --json
+# expect the pane working/running with signals shell_hook, shell_hook_active
+.cache/tmact hook emit --type precmd --pane-id %5 --command-id s1 \
+  --exit-code 0 --socket-path /tmp/tmact-hooktest.sock
+.cache/tmact statusd read --socket-path /tmp/tmact-hooktest.sock --json
+# expect the pane idle/input_ready with signals shell_hook, shell_hook_completed
+```
+
+Also syntax-check the generated hook scripts:
+
+```sh
+.cache/tmact hook init zsh | zsh -n
+.cache/tmact hook init bash | bash -n
+.cache/tmact hook init fish | fish -n
+```
+
+Last run 2026-07-07: all of the above passed (fish skipped, not installed).
+
 ## statusd web UI (manual / browser)
 
 The React UI's layout-dependent behavior is not unit-testable (jsdom has no

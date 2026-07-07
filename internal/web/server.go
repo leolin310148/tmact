@@ -23,6 +23,7 @@ import (
 
 	"github.com/leolin310148/tmact/internal/agentusage"
 	"github.com/leolin310148/tmact/internal/dispatch"
+	"github.com/leolin310148/tmact/internal/shellhook"
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -131,6 +132,9 @@ type Server struct {
 	FetchUsage func(ctx context.Context) agentusage.Snapshot
 	// DispatchRun handles /api/dispatch-work; defaults to dispatch.Run.
 	DispatchRun func(dispatch.Options) (dispatch.Report, error)
+	// HookRecord ingests one shell preexec/precmd event from /api/hook-event
+	// (typically the daemon's shellhook store). Nil disables the endpoint.
+	HookRecord func(shellhook.Event) error
 	// WebPushVAPIDPublicKey / WebPushVAPIDPrivateKey / WebPushVAPIDSubject
 	// configure same-origin PWA Web Push. Empty values fall back to
 	// TMACT_WEBPUSH_VAPID_* environment variables.
@@ -310,6 +314,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/file", s.handleFile)
 	mux.HandleFunc("/api/files/check", s.handleFilesCheck)
 	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
+	mux.HandleFunc("/api/hook-event", s.handleHookEvent)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
@@ -443,6 +448,14 @@ func (s *Server) Serve(ctx context.Context) error {
 	srv := &http.Server{
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Tag connections that did not arrive over the unix socket so
+		// IPC-only endpoints (/api/hook-event) can reject TCP callers.
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			if c.LocalAddr().Network() != "unix" {
+				return context.WithValue(ctx, tcpConnContextKey{}, true)
+			}
+			return ctx
+		},
 	}
 
 	go s.runUploadsGC(ctx)

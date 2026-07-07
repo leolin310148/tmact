@@ -5,6 +5,7 @@ func commandHelpCatalog() []commandHelp {
 		paneCommandHelpCatalog(),
 		agentCommandHelpCatalog(),
 		workflowCommandHelpCatalog(),
+		hookCommandHelpCatalog(),
 		llmCommandHelpCatalog(),
 		paneUtilityCommandHelpCatalog(),
 	)

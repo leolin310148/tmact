@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/leolin310148/tmact/internal/shellhook"
 )
 
 type Daemon struct {
@@ -14,11 +16,12 @@ type Daemon struct {
 	store       *Store
 	optionCache *TmuxOptionCache
 	peers       *PeerFetcher
+	hooks       *shellhook.Store
 }
 
 func NewDaemon(cfg Config) *Daemon {
 	cfg = cfg.withDefaults()
-	d := &Daemon{cfg: cfg, mem: NewMemory(), store: NewStore(), optionCache: NewTmuxOptionCache()}
+	d := &Daemon{cfg: cfg, mem: NewMemory(), store: NewStore(), optionCache: NewTmuxOptionCache(), hooks: shellhook.NewStore()}
 	if len(cfg.Peers) > 0 {
 		d.peers = NewPeerFetcher(cfg.Peers, cfg.PeerInterval, cfg.PeerTimeout)
 		d.peers.SetLogger(cfg.Logf)
@@ -28,6 +31,9 @@ func NewDaemon(cfg Config) *Daemon {
 
 // Peers returns the peer fetcher, or nil when no peers are configured.
 func (d *Daemon) Peers() *PeerFetcher { return d.peers }
+
+// Hooks returns the shell hook store the web ingest endpoint records into.
+func (d *Daemon) Hooks() *shellhook.Store { return d.hooks }
 
 // Store returns the in-memory snapshot store the daemon publishes to. The web
 // server and IPC handlers read from this; nothing is written to disk.
@@ -43,6 +49,16 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 		}
 		return snapshot, scanErr
 	}
+	// Shell hook state merges before the tmux-option publish so the status
+	// line reflects it too, and before MergePeers because hooks are local-only.
+	seen := make(map[string]bool, len(snapshot.Panes))
+	for _, pane := range snapshot.Panes {
+		if pane.PaneID != "" {
+			seen[pane.PaneID] = true
+		}
+	}
+	d.hooks.Prune(seen, snapshot.Timestamp.Add(-shellHookPruneGrace))
+	snapshot = ApplyShellHooks(snapshot, d.hooks.States())
 	if d.cfg.TmuxOptions {
 		if err := PublishTmuxOptions(d.cfg, snapshot, d.optionCache); err != nil {
 			snapshot.addError("tmux_options", "", err)
