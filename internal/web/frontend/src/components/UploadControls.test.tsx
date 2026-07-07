@@ -20,7 +20,7 @@ import { UploadControls } from "./UploadControls";
 
 afterEach(cleanup);
 
-function renderControls() {
+function renderControls(selectionMode = false) {
   const handlers = {
     onUpload: vi.fn(),
     onSelection: vi.fn(),
@@ -28,8 +28,9 @@ function renderControls() {
     onHelp: vi.fn(),
     onSettings: vi.fn(),
     onFiles: vi.fn(),
+    onDownloadList: vi.fn(),
   };
-  render(<UploadControls {...handlers} />);
+  render(<UploadControls {...handlers} selectionMode={selectionMode} />);
   return handlers;
 }
 
@@ -83,6 +84,16 @@ describe("UploadControls", () => {
     const handlers = renderControls();
     fireEvent.click(document.getElementById("gear-btn") as HTMLButtonElement);
     expect(handlers.onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("#upload-btn becomes the download button in selection mode", () => {
+    const handlers = renderControls(true);
+    const btn = document.getElementById("upload-btn") as HTMLButtonElement;
+    expect(btn.getAttribute("aria-label")).toBe("download files from pane");
+    btn.disabled = false;
+    fireEvent.click(btn);
+    expect(handlers.onDownloadList).toHaveBeenCalledTimes(1);
+    expect(handlers.onUpload).not.toHaveBeenCalled();
   });
 
   it("#file-upload change forwards the selected files then clears its value", () => {

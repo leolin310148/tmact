@@ -52,6 +52,8 @@ import {
 import type { AppCallbacks } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
+import { scanDownloadablePaths } from "../lib/downloadScan";
+import { checkDownloadFiles } from "../api/client";
 import { translateKey } from "../lib/keymap";
 import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
@@ -62,6 +64,8 @@ import ContentPane from "./ContentPane";
 import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
 import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePreview";
+import DownloadList from "./DownloadList";
+import type { DownloadListState } from "./DownloadList";
 import type { MarkdownPreviewTarget } from "./MarkdownPreview";
 // markdown-it (~30-40 kB gzip) only loads when a preview is actually opened.
 const MarkdownPreview = lazy(() => import("./MarkdownPreview"));
@@ -704,6 +708,48 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     setMarkdownPreviewTarget(null);
   }, []);
 
+  // ----- selection-mode download list -----
+  // The upload FAB doubles as a download button while selection mode is on:
+  // scan the full pane buffer (not just the rendered tail) for path-looking
+  // tokens, let /api/files/check keep the ones that are real files, then show
+  // the pick-and-download overlay.
+  const [downloadList, setDownloadList] = useState<DownloadListState | null>(null);
+  const closeDownloadList = useCallback(() => setDownloadList(null), []);
+  const openDownloadList = useCallback(() => {
+    const pcCur = paneContentRef.current;
+    const buffer = paneLinesRef.current.length
+      ? paneLinesRef.current.join("\n")
+      : pcCur.text;
+    const base: DownloadListState = {
+      loading: true,
+      error: "",
+      files: [],
+      cwd: pcCur.cwd,
+      peer: pcCur.peer,
+    };
+    const paths = scanDownloadablePaths(buffer);
+    if (!paths.length) {
+      setDownloadList({ ...base, loading: false });
+      return;
+    }
+    setDownloadList(base);
+    checkDownloadFiles(paths, pcCur.cwd, pcCur.peer)
+      .then(({ res, data }) => {
+        setDownloadList((prev) => {
+          if (!prev) return prev; // closed while the check was in flight
+          if (!res.ok) {
+            return { ...base, loading: false, error: data.error || "掃描失敗(HTTP " + res.status + ")" };
+          }
+          return { ...base, loading: false, files: Array.isArray(data.files) ? data.files : [] };
+        });
+      })
+      .catch(() => {
+        setDownloadList((prev) =>
+          prev ? { ...base, loading: false, error: "掃描失敗 — 連線錯誤" } : prev,
+        );
+      });
+  }, []);
+
   // ----- ContentPane focus handlers (mouseup refocus / blur) -----
   const followPaneBottomThroughKeyboard = useCallback(() => {
     if (!isMobile()) return;
@@ -1060,6 +1106,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
             onHelp={help.toggle}
             onSettings={openSettings}
             onFiles={onFiles}
+            selectionMode={state.selectionMode}
+            onDownloadList={openDownloadList}
           />
           <QuickDock quick={quick} />
           <CopyLineBar cwd={pc.cwd} peer={pc.peer} />
@@ -1144,6 +1192,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           <MarkdownPreview target={markdownPreviewTarget} onClose={closeMarkdownPreview} />
         </Suspense>
       ) : null}
+      <DownloadList state={downloadList} onClose={closeDownloadList} />
     </>
   );
 }

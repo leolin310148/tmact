@@ -166,6 +166,25 @@ export function uploadPaneFiles(
   return jsonResponse("/api/upload-file" + peerQuery(peer), { method: "POST", body: form });
 }
 
+export interface DownloadCheckFile {
+  path: string;
+  name: string;
+  dir: string;
+  size: number;
+}
+
+export function checkDownloadFiles(
+  paths: string[],
+  cwd?: string | null,
+  peer?: string | null,
+): Promise<JsonResponse<{ files?: DownloadCheckFile[]; error?: string }>> {
+  return jsonResponse("/api/files/check" + peerQuery(peer || undefined), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cwd: cwd || "", paths }),
+  });
+}
+
 export function loadSTTConfig(): Promise<JsonResponse<STTSettings>> {
   return jsonResponse("/api/settings/stt", { cache: "no-store" });
 }

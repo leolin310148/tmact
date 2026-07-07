@@ -44,6 +44,14 @@ export interface UploadControlsProps {
   onSettings: () => void;
   /** #file-upload change → uploadFilesToPane(files); input cleared after read. */
   onFiles: (files: File[]) => void;
+  /**
+   * Selection mode flips #upload-btn into a download button: same element/id
+   * (so the imperative .ready/disabled sync still lands on it), but the icon
+   * and click handler swap to the pane file-scan download list.
+   */
+  selectionMode: boolean;
+  /** #upload-btn click while selectionMode → scan pane paths, open DownloadList. */
+  onDownloadList: () => void;
 }
 
 export function UploadControls({
@@ -53,6 +61,8 @@ export function UploadControls({
   onHelp,
   onSettings,
   onFiles,
+  selectionMode,
+  onDownloadList,
 }: UploadControlsProps) {
   return (
     <>
@@ -96,9 +106,9 @@ export function UploadControls({
         className="upload-btn"
         id="upload-btn"
         type="button"
-        title="upload file"
-        aria-label="upload file"
-        onClick={onUpload}
+        title={selectionMode ? "download files from pane" : "upload file"}
+        aria-label={selectionMode ? "download files from pane" : "upload file"}
+        onClick={selectionMode ? onDownloadList : onUpload}
       >
         <svg
           viewBox="0 0 24 24"
@@ -109,9 +119,19 @@ export function UploadControls({
           strokeLinejoin="round"
           aria-hidden="true"
         >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <path d="M17 8 12 3 7 8" />
-          <path d="M12 3v12" />
+          {selectionMode ? (
+            <>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M12 15V3" />
+            </>
+          ) : (
+            <>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M17 8 12 3 7 8" />
+              <path d="M12 3v12" />
+            </>
+          )}
         </svg>
       </button>
       <button

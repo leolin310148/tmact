@@ -1261,6 +1261,41 @@
     background: var(--green); border-color: var(--green); color: #06210f;
   }
 
+  /* Selection-mode download list — the upload FAB turns into a download button
+     while selection mode is on; pressing it scans the pane buffer for file
+     paths and opens this pick-and-download overlay. Reuses the settings-card
+     shell for the panel chrome. */
+  .download-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top, 0px))
+             calc(16px + env(safe-area-inset-right, 0px))
+             calc(16px + env(safe-area-inset-bottom, 0px))
+             calc(16px + env(safe-area-inset-left, 0px));
+    background: rgba(8,10,14,0.82);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .download-card { max-width: 480px; }
+  .download-body { padding: 8px; }
+  .download-empty {
+    padding: 20px 12px; text-align: center;
+    color: var(--fg-dim); font: 13px/1.5 var(--mono);
+  }
+  .download-list { list-style: none; margin: 0; padding: 0; }
+  .download-item {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 10px 12px; border-radius: 8px; text-decoration: none;
+  }
+  .download-item:hover, .download-item:active { background: var(--panel-2); }
+  .download-name {
+    color: var(--fg); font: 600 13px/1.3 var(--mono);
+    word-break: break-all;
+  }
+  .download-meta {
+    color: var(--fg-dim); font: 11px/1.4 var(--mono);
+    word-break: break-all;
+  }
+
   /* Help button — always visible (the desktop Option+key hotkeys benefit from
      hints too). On phones it sits above Upload and the lightning FAB. */
   .help-btn {
