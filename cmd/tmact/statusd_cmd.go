@@ -169,6 +169,7 @@ func runStatusdStart(args []string) error {
 		SocketPath:               cfg.SocketPath,
 		Store:                    daemon.Store(),
 		CapturePane:              tmux.CapturePaneANSI,
+		HookRecord:               daemon.Hooks().Record,
 		BuildTime:                buildVersionInfo().Time,
 		Peers:                    cfg.Peers,
 		CostPeers:                cfg.CostPeers,

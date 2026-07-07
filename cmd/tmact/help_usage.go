@@ -21,6 +21,8 @@ Usage:
   tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
   tmact statusd start|once|read|status [--socket-path /tmp/tmact-statusd.sock]
+  tmact hook init zsh|bash|fish
+  tmact hook emit --type preexec|precmd [--pane-id %5] [--exit-code 0] [--quiet]
   tmact usage [--provider claude|codex] [--json]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
@@ -51,6 +53,7 @@ Commands:
   inspect       classify panes by runtime and idle/running/asking state
   status        summarize configured agent panes
   statusd       maintain/read the cached pane snapshot and optional web UI
+  hook          opt-in shell preexec/precmd hooks that sharpen statusd state
   usage         fetch Claude / Codex quota, rate-limit, and spend usage
   stt-set       configure statusd web UI voice transcription
   inbox         list agent panes that need human intervention

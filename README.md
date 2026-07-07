@@ -23,6 +23,12 @@ Use the CLI when you want scriptable tmux control:
   and sends it a prompt.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
+- `tmact hook init zsh|bash|fish` prints an opt-in shell snippet whose
+  preexec/precmd hooks emit structured events (via `tmact hook emit`) to the
+  local statusd, sharpening its running/idle classification. tmact never edits
+  shell rc files — source the snippet yourself, e.g.
+  `eval "$(tmact hook init zsh)"` in `~/.zshrc`. Panes without hook events
+  keep the capture-based heuristics.
 - `tmact commands --json` exposes command metadata for tooling, and
   `tmact llm instructions` prints an LLM-facing operating guide.
 
