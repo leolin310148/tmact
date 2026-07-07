@@ -299,8 +299,8 @@
   }
   /* Agent usage overlay: semi-transparent, top-right, never blocks the pane
      (pointer-events: none). One semi-transparent bubble holding a grid so the
-     columns line up across rows. Each provider takes two lines (session then
-     weekly); column layout is:  icon | % | reserve | time */
+     columns line up across rows. Column layout is: icon/label | % | reserve |
+     time. */
   .usage-panel {
     position: absolute; z-index: 28;
     /* Fold in the safe-area insets so the panel clears the notch / status bar
@@ -346,6 +346,20 @@
     /* Relative so it stays a notch smaller than the window rows at every
        breakpoint — an absolute px here would overtake the 7px phone panel. */
     color: var(--fg-dim); font-size: 0.85em; letter-spacing: 0.2px;
+  }
+  .usage-panel .u-window-spacer {
+    justify-self: start;
+    min-width: 1px;
+  }
+  .usage-panel .u-window-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0.9em;
+    margin-right: 3px;
+    color: var(--fg-dim);
+    font-size: 0.78em;
+    font-weight: 700;
   }
   .usage-panel .u-err {
     grid-column: 2 / -1; justify-self: start;

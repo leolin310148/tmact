@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -34,11 +36,13 @@ type claudeCredentialsFile struct {
 // claudeUsageResponse mirrors the /api/oauth/usage payload. Each window is
 // optional; absent windows stay nil.
 type claudeUsageResponse struct {
-	FiveHour       *claudeWindow    `json:"five_hour"`
-	SevenDay       *claudeWindow    `json:"seven_day"`
-	SevenDayOpus   *claudeWindow    `json:"seven_day_opus"`
-	SevenDaySonnet *claudeWindow    `json:"seven_day_sonnet"`
-	ExtraUsage     *claudeExtraUsed `json:"extra_usage"`
+	FiveHour       *claudeWindow            `json:"five_hour"`
+	SevenDay       *claudeWindow            `json:"seven_day"`
+	SevenDayOpus   *claudeWindow            `json:"seven_day_opus"`
+	SevenDaySonnet *claudeWindow            `json:"seven_day_sonnet"`
+	Limits         []claudeLimit            `json:"limits"`
+	ExtraUsage     *claudeExtraUsed         `json:"extra_usage"`
+	SevenDayModels map[string]*claudeWindow `json:"-"`
 }
 
 type claudeWindow struct {
@@ -51,6 +55,61 @@ type claudeExtraUsed struct {
 	MonthlyLimit *float64 `json:"monthly_limit"` // cents
 	UsedCredits  *float64 `json:"used_credits"`  // cents
 	Currency     string   `json:"currency"`
+}
+
+type claudeLimit struct {
+	Group    string            `json:"group"`
+	Kind     string            `json:"kind"`
+	Percent  *float64          `json:"percent"`
+	ResetsAt string            `json:"resets_at"`
+	Scope    *claudeLimitScope `json:"scope"`
+}
+
+type claudeLimitScope struct {
+	Model *claudeLimitModel `json:"model"`
+}
+
+type claudeLimitModel struct {
+	ID          *string `json:"id"`
+	DisplayName string  `json:"display_name"`
+}
+
+func (r *claudeUsageResponse) UnmarshalJSON(data []byte) error {
+	type known claudeUsageResponse
+	if err := json.Unmarshal(data, (*known)(r)); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for key, value := range raw {
+		if !strings.HasPrefix(key, "seven_day_") || isKnownClaudeSevenDayWindow(key) {
+			continue
+		}
+		var window claudeWindow
+		if err := json.Unmarshal(value, &window); err != nil {
+			return fmt.Errorf("decode %s: %w", key, err)
+		}
+		if window.Utilization == nil && window.ResetsAt == "" {
+			continue
+		}
+		if r.SevenDayModels == nil {
+			r.SevenDayModels = make(map[string]*claudeWindow)
+		}
+		r.SevenDayModels[strings.TrimPrefix(key, "seven_day_")] = &window
+	}
+	return nil
+}
+
+func isKnownClaudeSevenDayWindow(key string) bool {
+	switch key {
+	case "seven_day", "seven_day_opus", "seven_day_sonnet":
+		return true
+	default:
+		return false
+	}
 }
 
 // fetchClaude reads Claude Code's OAuth token and queries the usage endpoint.
@@ -127,10 +186,15 @@ func claudeUsageRequest(ctx context.Context, accessToken string) (*claudeUsageRe
 }
 
 func applyClaudeUsage(out *ProviderUsage, resp *claudeUsageResponse, now time.Time) {
+	seen := map[string]bool{}
 	add := func(name string, w *claudeWindow, windowMinutes int) {
 		if w == nil || w.Utilization == nil {
 			return
 		}
+		if seen[name] {
+			return
+		}
+		seen[name] = true
 		rw := RateWindow{Name: name, UsedPercent: *w.Utilization, WindowMinutes: windowMinutes}
 		if t := parseISOTime(w.ResetsAt); t != nil {
 			rw.ResetsAt = t
@@ -138,10 +202,29 @@ func applyClaudeUsage(out *ProviderUsage, resp *claudeUsageResponse, now time.Ti
 		rw.Pace = computePace(rw.UsedPercent, rw.WindowMinutes, rw.ResetsAt, now)
 		out.Windows = append(out.Windows, rw)
 	}
+
+	for _, limit := range resp.Limits {
+		name, minutes, ok := claudeLimitWindow(limit)
+		if !ok || limit.Percent == nil {
+			continue
+		}
+		add(name, &claudeWindow{Utilization: limit.Percent, ResetsAt: limit.ResetsAt}, minutes)
+	}
+
 	add("session", resp.FiveHour, 300)
 	add("weekly", resp.SevenDay, 10080)
 	add("weekly_opus", resp.SevenDayOpus, 10080)
 	add("weekly_sonnet", resp.SevenDaySonnet, 10080)
+	if len(resp.SevenDayModels) > 0 {
+		names := make([]string, 0, len(resp.SevenDayModels))
+		for name := range resp.SevenDayModels {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			add("weekly_"+name, resp.SevenDayModels[name], 10080)
+		}
+	}
 
 	if e := resp.ExtraUsage; e != nil && e.IsEnabled != nil && *e.IsEnabled {
 		cost := &CostWindow{Enabled: true, Currency: e.Currency}
@@ -153,4 +236,54 @@ func applyClaudeUsage(out *ProviderUsage, resp *claudeUsageResponse, now time.Ti
 		}
 		out.Cost = cost
 	}
+}
+
+func claudeLimitWindow(limit claudeLimit) (name string, windowMinutes int, ok bool) {
+	switch limit.Kind {
+	case "session":
+		return "session", 300, true
+	case "weekly_all":
+		return "weekly", 10080, true
+	case "weekly_scoped":
+		if suffix := stableClaudeLimitSuffix(limit); suffix != "" {
+			return "weekly_" + suffix, 10080, true
+		}
+		return "weekly_scoped", 10080, true
+	}
+
+	switch limit.Group {
+	case "session":
+		return "session", 300, true
+	case "weekly":
+		return "weekly", 10080, true
+	default:
+		return "", 0, false
+	}
+}
+
+func stableClaudeLimitSuffix(limit claudeLimit) string {
+	if limit.Scope == nil || limit.Scope.Model == nil {
+		return ""
+	}
+	label := limit.Scope.Model.DisplayName
+	if label == "" && limit.Scope.Model.ID != nil {
+		label = *limit.Scope.Model.ID
+	}
+	return stableWindowSuffix(label)
+}
+
+func stableWindowSuffix(s string) string {
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastUnderscore = false
+		case b.Len() > 0 && !lastUnderscore:
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "_")
 }
