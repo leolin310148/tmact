@@ -49,3 +49,36 @@ func (s *Server) handleHookEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+// handleHookState serves the daemon's recorded per-pane shell hook state for
+// diagnostics (`tmact hook state` / `tmact hook doctor`). Like handleHookEvent
+// it is local IPC only: the state exposes command lines run in local panes, so
+// TCP callers (the browser UI origin, peers) are rejected. An optional
+// ?pane-id=%N query narrows the result to one pane.
+func (s *Server) handleHookState(w http.ResponseWriter, r *http.Request) {
+	if r.Context().Value(tcpConnContextKey{}) != nil {
+		writeJSONError(w, http.StatusForbidden, "hook state is served only over the local IPC socket")
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.HookStates == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "shell hook state not configured")
+		return
+	}
+	states := s.HookStates()
+	if states == nil {
+		states = map[string]shellhook.PaneState{}
+	}
+	if paneID := r.URL.Query().Get("pane-id"); paneID != "" {
+		filtered := map[string]shellhook.PaneState{}
+		if st, ok := states[paneID]; ok {
+			filtered[paneID] = st
+		}
+		states = filtered
+	}
+	writeJSON(w, http.StatusOK, shellhook.StatesResponse{Panes: states})
+}

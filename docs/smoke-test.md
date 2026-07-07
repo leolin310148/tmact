@@ -53,6 +53,17 @@ pane id from `tmact ls`:
 # expect the pane idle/input_ready with signals shell_hook, shell_hook_completed
 ```
 
+Then diagnose the same socket with the read-only observability commands:
+
+```sh
+.cache/tmact hook state --socket-path /tmp/tmact-hooktest.sock
+# expect pane %5 listed with its completed command (exit=0 matched)
+.cache/tmact hook doctor --socket-path /tmp/tmact-hooktest.sock --pane-id %5
+# expect tmux/socket/daemon/pane_events all [ok]; exit 0
+.cache/tmact hook doctor --socket-path /tmp/does-not-exist.sock; echo $?
+# expect socket + daemon [!!] and a non-zero exit
+```
+
 Also syntax-check the generated hook scripts:
 
 ```sh
@@ -62,6 +73,11 @@ Also syntax-check the generated hook scripts:
 ```
 
 Last run 2026-07-07: all of the above passed (fish skipped, not installed).
+
+Last run 2026-07-08: `hook state` / `hook doctor` round-trip verified against an
+isolated statusd (short `/tmp` socket, `web_addr:""`) — active→completed state
+reflected, doctor healthy/unhealthy exit codes correct, no panes or rc files
+touched.
 
 ## statusd web UI (manual / browser)
 

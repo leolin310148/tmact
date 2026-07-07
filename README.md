@@ -28,7 +28,10 @@ Use the CLI when you want scriptable tmux control:
   local statusd, sharpening its running/idle classification. tmact never edits
   shell rc files — source the snippet yourself, e.g.
   `eval "$(tmact hook init zsh)"` in `~/.zshrc`. Panes without hook events
-  keep the capture-based heuristics.
+  keep the capture-based heuristics. `tmact hook doctor` diagnoses the pipeline
+  (tmux, socket, daemon reachability, per-pane emits) and `tmact hook state`
+  dumps the daemon's recorded per-pane command state; both are read-only and
+  reach the daemon over the local IPC socket only.
 - `tmact commands --json` exposes command metadata for tooling, and
   `tmact llm instructions` prints an LLM-facing operating guide.
 
