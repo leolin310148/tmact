@@ -23,6 +23,8 @@ Usage:
   tmact statusd start|once|read|status [--socket-path /tmp/tmact-statusd.sock]
   tmact hook init zsh|bash|fish
   tmact hook emit --type preexec|precmd [--pane-id %5] [--exit-code 0] [--quiet]
+  tmact hook doctor [--pane-id %5] [--json]
+  tmact hook state [--pane-id %5] [--json]
   tmact usage [--provider claude|codex] [--json]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]

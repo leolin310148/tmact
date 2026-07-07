@@ -60,6 +60,49 @@ func TestSendSurfacesDaemonRejection(t *testing.T) {
 	}
 }
 
+func TestFetchStatesReturnsPanes(t *testing.T) {
+	socketPath := shortSocketPath(t)
+	serveUnix(t, socketPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/hook-state" || r.Method != http.MethodGet {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		if got := r.URL.Query().Get("pane-id"); got != "%5" {
+			http.Error(w, "pane-id = "+got, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(StatesResponse{Panes: map[string]PaneState{
+			"%5": {PaneID: "%5", Active: &CommandRecord{Command: "make test"}},
+		}})
+	})
+
+	states, err := FetchStates(socketPath, "%5", time.Second)
+	if err != nil {
+		t.Fatalf("FetchStates: %v", err)
+	}
+	if state, ok := states["%5"]; !ok || state.Active == nil || state.Active.Command != "make test" {
+		t.Fatalf("states = %+v", states)
+	}
+}
+
+func TestFetchStatesMissingSocketIsQuietSentinel(t *testing.T) {
+	_, err := FetchStates(filepath.Join(t.TempDir(), "nope.sock"), "", time.Second)
+	if !errors.Is(err, ErrDaemonUnavailable) {
+		t.Fatalf("err = %v, want ErrDaemonUnavailable", err)
+	}
+}
+
+func TestFetchStatesSurfacesDaemonRejection(t *testing.T) {
+	socketPath := shortSocketPath(t)
+	serveUnix(t, socketPath, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+	_, err := FetchStates(socketPath, "", time.Second)
+	if err == nil || errors.Is(err, ErrDaemonUnavailable) {
+		t.Fatalf("err = %v, want explicit rejection error", err)
+	}
+}
+
 // shortSocketPath returns a socket path short enough for the unix sockaddr
 // limit (t.TempDir can exceed it on macOS).
 func shortSocketPath(t *testing.T) string {

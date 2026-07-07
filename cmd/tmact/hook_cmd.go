@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +15,11 @@ import (
 	"github.com/leolin310148/tmact/internal/statusd"
 )
 
-// sendHookEvent is an injection point for tests.
-var sendHookEvent = shellhook.Send
+// sendHookEvent and fetchHookStates are injection points for tests.
+var (
+	sendHookEvent   = shellhook.Send
+	fetchHookStates = shellhook.FetchStates
+)
 
 // hookSocketEnv overrides the emit socket path without flags so the
 // init-script emits stay short; the --socket-path flag still wins.
@@ -26,18 +30,34 @@ func runHook(args []string) error {
 		return printCommandHelp("hook")
 	}
 	if len(args) == 0 {
-		return errors.New("hook requires a subcommand: init, emit")
+		return errors.New("hook requires a subcommand: init, emit, state, doctor")
 	}
 	switch args[0] {
 	case "init":
 		return runHookInit(args[1:])
 	case "emit":
 		return runHookEmit(args[1:])
+	case "state":
+		return runHookState(args[1:])
+	case "doctor":
+		return runHookDoctor(args[1:])
 	case "help", "-h", "--help":
 		return printCommandHelp("hook")
 	default:
 		return fmt.Errorf("unknown hook subcommand %q", args[0])
 	}
+}
+
+// resolveHookSocket applies the shared emit/read socket precedence:
+// explicit flag, then $TMACT_HOOK_SOCKET, then the default statusd socket.
+func resolveHookSocket(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if env := os.Getenv(hookSocketEnv); env != "" {
+		return env
+	}
+	return statusd.DefaultSocketPath
 }
 
 func runHookInit(args []string) error {
@@ -100,13 +120,7 @@ func runHookEmit(args []string) error {
 		return hookEmitFail(*quiet, err)
 	}
 
-	socket := *socketPath
-	if socket == "" {
-		socket = os.Getenv(hookSocketEnv)
-	}
-	if socket == "" {
-		socket = statusd.DefaultSocketPath
-	}
+	socket := resolveHookSocket(*socketPath)
 
 	sendErr := sendHookEvent(socket, event, *timeout)
 	if *jsonOutput {
@@ -180,4 +194,259 @@ func buildHookEvent(in hookEmitInputs, getenv func(string) string, stdin io.Read
 		return shellhook.Event{}, err
 	}
 	return event, nil
+}
+
+func runHookState(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("hook state")
+	}
+	fs := flag.NewFlagSet("hook state", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	paneID := fs.String("pane-id", "", "limit to one tmux pane id such as %5; defaults to all panes")
+	socketPath := fs.String("socket-path", "", "statusd IPC unix socket; defaults to $TMACT_HOOK_SOCKET, then "+statusd.DefaultSocketPath)
+	timeout := fs.Duration("timeout", shellhook.DefaultFetchTimeout, "max time for the fetch round-trip")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+
+	socket := resolveHookSocket(*socketPath)
+	states, err := fetchHookStates(socket, *paneID, *timeout)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(shellhook.StatesResponse{Panes: states})
+	}
+	printHookStates(os.Stdout, socket, states, tmactNow())
+	return nil
+}
+
+func printHookStates(w io.Writer, socket string, states map[string]shellhook.PaneState, now time.Time) {
+	fmt.Fprintf(w, "socket: %s\n", socket)
+	fmt.Fprintf(w, "panes: %d\n", len(states))
+	if len(states) == 0 {
+		fmt.Fprintln(w, "no shell hook events recorded")
+		return
+	}
+	ids := make([]string, 0, len(states))
+	for id := range states {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		state := states[id]
+		fmt.Fprintf(w, "\n%s", id)
+		if state.SessionID != "" {
+			fmt.Fprintf(w, "  session=%s", state.SessionID)
+		}
+		fmt.Fprintf(w, "  updated %s ago\n", formatAge(now.Sub(state.UpdatedAt)))
+		fmt.Fprintf(w, "  %s\n", describePaneState(state, now))
+	}
+}
+
+// describePaneState renders one pane's active-or-completed command in one line.
+func describePaneState(state shellhook.PaneState, now time.Time) string {
+	switch {
+	case state.Active != nil:
+		c := state.Active
+		return fmt.Sprintf("active     %s started %s ago", describeCommand(c.CommandID, c.Command, c.CWD), formatAge(now.Sub(c.StartedAt)))
+	case state.Completed != nil:
+		c := state.Completed
+		exit := "exit=?"
+		if c.ExitCode != nil {
+			exit = fmt.Sprintf("exit=%d", *c.ExitCode)
+		}
+		match := "unmatched"
+		if c.Matched {
+			match = "matched"
+		}
+		return fmt.Sprintf("completed  %s %s %s ended %s ago", describeCommand(c.CommandID, c.Command, c.CWD), exit, match, formatAge(now.Sub(c.EndedAt)))
+	default:
+		return "no command recorded"
+	}
+}
+
+func describeCommand(id, command, cwd string) string {
+	var b strings.Builder
+	if id != "" {
+		fmt.Fprintf(&b, "%s ", id)
+	}
+	if command != "" {
+		fmt.Fprintf(&b, "%q", command)
+	} else {
+		b.WriteString("(no command text)")
+	}
+	if cwd != "" {
+		fmt.Fprintf(&b, " cwd=%s", cwd)
+	}
+	return b.String()
+}
+
+// hookDoctorInputs are the resolved environment facts a doctor run reads;
+// splitting them out keeps buildHookDoctor pure and unit-testable.
+type hookDoctorInputs struct {
+	Socket       string
+	SocketExists bool
+	PaneID       string // pane to check; empty means "no pane to check"
+	InTmux       bool
+	Timeout      time.Duration
+}
+
+type hookDoctorCheck struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // ok | warn | fail
+	Detail string `json:"detail"`
+}
+
+type hookDoctorReport struct {
+	Socket          string               `json:"socket"`
+	SocketExists    bool                 `json:"socket_exists"`
+	DaemonReachable bool                 `json:"daemon_reachable"`
+	InTmux          bool                 `json:"in_tmux"`
+	PaneID          string               `json:"pane_id,omitempty"`
+	PaneHasEvents   bool                 `json:"pane_has_events"`
+	Pane            *shellhook.PaneState `json:"pane,omitempty"`
+	PaneCount       int                  `json:"pane_count"`
+	Checks          []hookDoctorCheck    `json:"checks"`
+	Healthy         bool                 `json:"healthy"`
+}
+
+// buildHookDoctor runs the read-only diagnostic checklist. It only reads:
+// it never emits events into panes or edits shell rc files. The daemon fetch
+// goes through fetch (shellhook.FetchStates in production, stubbed in tests).
+func buildHookDoctor(in hookDoctorInputs, fetch func(string, string, time.Duration) (map[string]shellhook.PaneState, error)) hookDoctorReport {
+	r := hookDoctorReport{
+		Socket:       in.Socket,
+		SocketExists: in.SocketExists,
+		InTmux:       in.InTmux,
+		PaneID:       in.PaneID,
+	}
+
+	switch {
+	case in.InTmux:
+		if in.PaneID != "" {
+			r.Checks = append(r.Checks, hookDoctorCheck{"tmux", "ok", "inside tmux; checking pane " + in.PaneID})
+		} else {
+			r.Checks = append(r.Checks, hookDoctorCheck{"tmux", "ok", "inside tmux"})
+		}
+	case in.PaneID != "":
+		r.Checks = append(r.Checks, hookDoctorCheck{"tmux", "warn", "TMUX_PANE unset; checking --pane-id " + in.PaneID})
+	default:
+		r.Checks = append(r.Checks, hookDoctorCheck{"tmux", "warn", "not inside tmux (TMUX_PANE unset); hooks only emit inside tmux"})
+	}
+
+	if in.SocketExists {
+		r.Checks = append(r.Checks, hookDoctorCheck{"socket", "ok", in.Socket})
+	} else {
+		r.Checks = append(r.Checks, hookDoctorCheck{"socket", "fail", in.Socket + " does not exist; is statusd running?"})
+	}
+
+	states, err := fetch(in.Socket, "", in.Timeout)
+	if err != nil {
+		detail := err.Error()
+		if errors.Is(err, shellhook.ErrDaemonUnavailable) {
+			detail = "statusd not reachable at " + in.Socket
+		}
+		r.Checks = append(r.Checks, hookDoctorCheck{"daemon", "fail", detail})
+		r.Healthy = false
+		return r
+	}
+	r.DaemonReachable = true
+	r.PaneCount = len(states)
+	r.Checks = append(r.Checks, hookDoctorCheck{"daemon", "ok", fmt.Sprintf("reachable; %d pane(s) with hook state", len(states))})
+
+	switch {
+	case in.PaneID == "":
+		r.Checks = append(r.Checks, hookDoctorCheck{"pane_events", "warn", "no pane to check (not inside tmux; pass --pane-id to check a specific pane)"})
+	default:
+		if st, ok := states[in.PaneID]; ok {
+			state := st
+			r.Pane = &state
+			r.PaneHasEvents = true
+			r.Checks = append(r.Checks, hookDoctorCheck{"pane_events", "ok", "hooks are emitting for " + in.PaneID})
+		} else {
+			r.Checks = append(r.Checks, hookDoctorCheck{"pane_events", "warn", "no events recorded for " + in.PaneID + "; source `tmact hook init <shell>` and run a command"})
+		}
+	}
+
+	r.Healthy = true
+	for _, c := range r.Checks {
+		if c.Status == "fail" {
+			r.Healthy = false
+		}
+	}
+	return r
+}
+
+func runHookDoctor(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("hook doctor")
+	}
+	fs := flag.NewFlagSet("hook doctor", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	paneID := fs.String("pane-id", "", "pane to check for recorded events; defaults to $TMUX_PANE")
+	socketPath := fs.String("socket-path", "", "statusd IPC unix socket; defaults to $TMACT_HOOK_SOCKET, then "+statusd.DefaultSocketPath)
+	timeout := fs.Duration("timeout", shellhook.DefaultFetchTimeout, "max time for the fetch round-trip")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+
+	socket := resolveHookSocket(*socketPath)
+	_, statErr := os.Stat(socket)
+	pane := *paneID
+	inTmux := os.Getenv("TMUX_PANE") != ""
+	if pane == "" {
+		pane = os.Getenv("TMUX_PANE")
+	}
+	report := buildHookDoctor(hookDoctorInputs{
+		Socket:       socket,
+		SocketExists: statErr == nil,
+		PaneID:       pane,
+		InTmux:       inTmux,
+		Timeout:      *timeout,
+	}, fetchHookStates)
+
+	if *jsonOutput {
+		if err := printJSON(report); err != nil {
+			return err
+		}
+	} else {
+		printHookDoctor(os.Stdout, report)
+	}
+	if !report.Healthy {
+		return fmt.Errorf("hook doctor: statusd daemon unreachable at %s", report.Socket)
+	}
+	return nil
+}
+
+func printHookDoctor(w io.Writer, report hookDoctorReport) {
+	for _, c := range report.Checks {
+		fmt.Fprintf(w, "[%s] %-11s %s\n", hookDoctorMark(c.Status), c.Name, c.Detail)
+	}
+	if report.Healthy {
+		fmt.Fprintln(w, "\nhook pipeline looks healthy")
+	} else {
+		fmt.Fprintln(w, "\nhook pipeline has problems (see fail lines above)")
+	}
+}
+
+func hookDoctorMark(status string) string {
+	switch status {
+	case "ok":
+		return "ok"
+	case "warn":
+		return "--"
+	default:
+		return "!!"
+	}
 }

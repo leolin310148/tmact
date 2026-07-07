@@ -135,6 +135,10 @@ type Server struct {
 	// HookRecord ingests one shell preexec/precmd event from /api/hook-event
 	// (typically the daemon's shellhook store). Nil disables the endpoint.
 	HookRecord func(shellhook.Event) error
+	// HookStates returns the recorded per-pane shell hook state for the
+	// IPC-only /api/hook-state read endpoint (typically the daemon's shellhook
+	// store States method). Nil disables the endpoint.
+	HookStates func() map[string]shellhook.PaneState
 	// WebPushVAPIDPublicKey / WebPushVAPIDPrivateKey / WebPushVAPIDSubject
 	// configure same-origin PWA Web Push. Empty values fall back to
 	// TMACT_WEBPUSH_VAPID_* environment variables.
@@ -315,6 +319,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/files/check", s.handleFilesCheck)
 	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
 	mux.HandleFunc("/api/hook-event", s.handleHookEvent)
+	mux.HandleFunc("/api/hook-state", s.handleHookState)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)

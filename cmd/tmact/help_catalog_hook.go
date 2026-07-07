@@ -5,15 +5,17 @@ func hookCommandHelpCatalog() []commandHelp {
 		{
 			Command:     "hook",
 			Summary:     "Opt-in shell preexec/precmd hooks that sharpen statusd running/idle state.",
-			Usage:       []string{"tmact hook init zsh|bash|fish", "tmact hook emit --type preexec|precmd [flags]"},
-			Subcommands: []string{"init", "emit"},
+			Usage:       []string{"tmact hook init zsh|bash|fish", "tmact hook emit --type preexec|precmd [flags]", "tmact hook doctor [--pane-id %5]", "tmact hook state [--pane-id %5] [--json]"},
+			Subcommands: []string{"init", "emit", "state", "doctor"},
 			Examples: []string{
 				`eval "$(tmact hook init zsh)"`,
 				"tmact hook emit --type precmd --pane-id %5 --exit-code 0",
+				"tmact hook doctor",
 			},
 			Notes: []string{
 				"Hooks are opt-in: tmact never edits shell rc files; source the init script yourself.",
 				"Panes without hook events keep the existing capture-based classification.",
+				"hook doctor / hook state read the daemon over the local IPC socket to verify emits are landing.",
 			},
 		},
 		{
@@ -60,6 +62,49 @@ func hookCommandHelpCatalog() []commandHelp {
 			},
 			Notes: []string{
 				"When statusd is not running, emit fails fast; --quiet turns that into a silent no-op.",
+			},
+		},
+		{
+			Command: "hook state",
+			Summary: "Read the daemon's recorded per-pane shell hook state over the local IPC socket.",
+			Usage: []string{
+				"tmact hook state [--pane-id %5] [--socket-path PATH] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--pane-id", Value: "ID", Description: "limit to one tmux pane id such as %5; defaults to all panes"},
+				{Name: "--socket-path", Value: "PATH", Description: "statusd IPC unix socket; defaults to $TMACT_HOOK_SOCKET, then the standard socket"},
+				{Name: "--timeout", Value: "DURATION", Description: "max time for the fetch round-trip"},
+				{Name: "--json", Description: "print JSON output"},
+			},
+			Examples: []string{
+				"tmact hook state",
+				"tmact hook state --pane-id %5 --json",
+			},
+			Notes: []string{
+				"Read-only: it never emits events into panes. Served only over the local IPC socket, never TCP.",
+			},
+		},
+		{
+			Command: "hook doctor",
+			Summary: "Diagnose the shell hook pipeline: tmux, socket, daemon reachability, and per-pane emits.",
+			Usage: []string{
+				"tmact hook doctor [--pane-id %5] [--socket-path PATH] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--pane-id", Value: "ID", Description: "pane to check for recorded events; defaults to $TMUX_PANE"},
+				{Name: "--socket-path", Value: "PATH", Description: "statusd IPC unix socket; defaults to $TMACT_HOOK_SOCKET, then the standard socket"},
+				{Name: "--timeout", Value: "DURATION", Description: "max time for the fetch round-trip"},
+				{Name: "--json", Description: "print JSON output"},
+			},
+			Examples: []string{
+				"tmact hook doctor",
+				"tmact hook doctor --pane-id %5 --json",
+			},
+			Safety: []string{
+				"Read-only diagnostics: never edits rc files, never sends keys or events into panes.",
+			},
+			Notes: []string{
+				"Exits non-zero only when the statusd daemon is unreachable; missing per-pane events are warnings.",
 			},
 		},
 	}
