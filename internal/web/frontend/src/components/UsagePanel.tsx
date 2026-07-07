@@ -88,6 +88,16 @@ function paceInfo(pace: Pace | null | undefined): { cls: string; text: string } 
   return { cls: "deficit", text: "-" + pad2(-reserve) + "%" };
 }
 
+function windowLabel(name: string): string {
+  const base = name.startsWith("weekly_") ? name.slice("weekly_".length) : name;
+  return base.replace(/_/g, " ");
+}
+
+function windowMarker(name: string): string {
+  const label = windowLabel(name).trim();
+  return label.charAt(0).toUpperCase();
+}
+
 // WindowCells emits one window's three grid cells (remaining %, pace reserve,
 // reset countdown) — i.e. one line of the panel. A missing window (`w`
 // undefined) still emits empty cells so the columns stay aligned across rows.
@@ -97,18 +107,22 @@ function WindowCells({
   w,
   keyBase,
   stale,
+  marker,
 }: {
   w: RateWindow | undefined;
   keyBase: string;
   stale?: boolean;
+  marker?: string;
 }) {
   const remain = w ? Math.max(0, Math.round(100 - (w.used_percent || 0))) + "%" : "";
   const pace = w ? paceInfo(w.pace) : null;
   const t = w && w.resets_at ? fmtShort(w.resets_at) : "";
   const dim = stale ? " u-stale" : "";
+  const title = w ? [marker ? windowLabel(w.name) : "", fmtCountdown(w.resets_at)].filter(Boolean).join(" · ") : "";
   return (
     <>
-      <span key={keyBase + ":remain"} className={"u-remain" + dim} title={w ? fmtCountdown(w.resets_at) : ""}>
+      <span key={keyBase + ":remain"} className={"u-remain" + dim} title={title}>
+        {marker ? <span className="u-window-marker">{marker}</span> : null}
         {remain}
       </span>
       <span key={keyBase + ":pace"} className={"u-pace" + (pace ? " " + pace.cls : "") + dim}>
@@ -121,17 +135,10 @@ function WindowCells({
   );
 }
 
-// ProviderRows lays one provider into the grid: icon | % | reserve | time. Each
-// provider takes two lines — session on top, weekly below — with the icon in
-// column 1 of the first line and the month-to-date spend tucked directly under
-// it in column 1 of the second line. To keep that placement the cells are
-// emitted in grid auto-flow order (icon, session, spend, weekly): icon fills
-// row1col1, session fills the rest of row1, spend lands at row2col1 (the first
-// free cell), then weekly fills row2col2–4. The spend cell is always emitted
-// (empty when there is no spend) so row2col1 stays occupied and the next
-// provider can't auto-flow into it. An errored provider spans the value columns
-// (u-err, cols 2-4) with its message instead. Mirrors usage.js render() per
-// provider body.
+// ProviderRows lays one provider into the grid: icon | % | reserve | time. The
+// first line is the session window, the second is the all-models weekly window,
+// and any model-family weekly windows follow with a compact marker. An errored
+// provider spans the value columns (u-err, cols 2-4) with its message instead.
 function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   const runtime = (p.provider || "").toLowerCase();
   const icon = RUNTIME_ICON[runtime] || runtime.slice(0, 2);
@@ -159,6 +166,7 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   }
   const byName: Record<string, RateWindow> = {};
   for (const w of p.windows || []) byName[w.name] = w;
+  const extraWindows = (p.windows || []).filter((w) => w.name !== "session" && w.name !== "weekly");
   // Dollar-equivalent month-to-date token spend (codeburn-style), tucked under
   // the runtime badge on the weekly line (column 1, left-aligned).
   const spend = p.spend ? fmtUSD(p.spend.month_usd) : "";
@@ -176,6 +184,12 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
         {spend}
       </span>
       <WindowCells key={base + ":weekly"} keyBase={base + ":weekly"} w={byName.weekly} stale={stale} />
+      {extraWindows.map((w) => (
+        <Fragment key={base + ":" + w.name}>
+          <span className="u-window-spacer" aria-hidden="true" />
+          <WindowCells keyBase={base + ":" + w.name} w={w} stale={stale} marker={windowMarker(w.name)} />
+        </Fragment>
+      ))}
     </>
   );
 }
