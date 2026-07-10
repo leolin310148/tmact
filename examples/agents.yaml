@@ -5,12 +5,16 @@ agents:
     repo: .
     type: codex
     role: maintenance
+    # Explicit opt-in: only accepts Codex workspace trust when pane cwd is
+    # canonically identical to repo. It does not accept other permissions.
+    trust_folder: false
 
   - name: sample-claude
     target: sample-claude:0.0
     repo: .
     type: claude
     role: review
+    trust_folder: false
 
   - name: sample-shell
     target: sample-shell:0.0

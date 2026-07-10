@@ -77,6 +77,20 @@ func ListSessionPanes(session string) ([]Pane, error) {
 	return listPanes([]string{"list-panes", "-s", "-t", session, "-F", paneListFormat})
 }
 
+// PaneStartCommand returns the shell command tmux used to create the pane. It
+// is useful as a runtime hint when the pane directly execs an agent and process
+// inspection is unavailable.
+func PaneStartCommand(target string) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("target cannot be empty")
+	}
+	output, err := outputTmux("display-message", "-p", "-t", target, "#{pane_start_command}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
 func NewSession(session string, window string, cwd string, command []string) error {
 	args := []string{"new-session", "-d", "-s", session}
 	if window != "" {

@@ -38,6 +38,7 @@ func runDispatch(args []string) error {
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
+	trustFolder := fs.Bool("trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")
 	execute := fs.Bool("execute", false, "actually create, launch, and send; default is dry-run")
 	peerName := fs.String("peer", "", "dispatch on the named statusd dispatch_peer from config")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file containing dispatch_peers")
@@ -70,6 +71,7 @@ func runDispatch(args []string) error {
 		Execute:      *execute,
 		ReadyTimeout: *readyTimeout,
 		ReadySettle:  *readySettle,
+		TrustFolder:  *trustFolder,
 	}
 	var report dispatch.Report
 	var err error

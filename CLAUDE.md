@@ -50,6 +50,12 @@ agents. The safety design is intentional — do not weaken it:
   `allow_path_patterns` (Go filepath glob) must be respected; never add a
   bypass for "convenience".
 - **Loops stop on permission prompts.** Don't change that to auto-confirm.
+- **Workspace trust is a narrow opt-in exception.** Only the `trust-folder`
+  command, `dispatch-work --trust-folder`, `panels ensure --trust-folders`, or
+  per-agent `trust_folder: true` may accept it. The runtime must be Claude or
+  Codex and canonical pane cwd must exactly equal the explicitly allowed dir.
+  Never reuse this path for command, patch, directory-access, or general
+  approval prompts.
 - **Quota skipping fails open by default.** The optional loop `quota` block
   skips cycles when the target agent's weekly/session usage is too high, but
   when quota can't be read (expired token, provider error, stale reading) it

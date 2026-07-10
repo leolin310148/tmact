@@ -70,5 +70,8 @@ Its production build is emitted into `internal/web/static/` (embedded via
 
 This tool presses keys in live tmux panes. Default to dry-runs, keep targets
 explicit, preserve watcher allowlists, and do not auto-confirm permission,
-approval, trust-folder, or broad path prompts. Keep the web UI on `127.0.0.1`
+approval, or broad path prompts. Folder trust is the only opt-in exception: it
+must use `--trust-folder`, `--trust-folders`, or `trust_folder: true`, support
+only Claude/Codex, and require exact canonical pane-cwd/allowed-dir equality.
+Keep the web UI on `127.0.0.1`
 unless the operator explicitly chooses a trusted-network bind.

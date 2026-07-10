@@ -22,6 +22,7 @@ type RemoteRequest struct {
 	Execute      bool   `json:"execute"`
 	ReadyTimeout string `json:"ready_timeout,omitempty"`
 	ReadySettle  string `json:"ready_settle,omitempty"`
+	TrustFolder  bool   `json:"trust_folder,omitempty"`
 }
 
 // RemoteError mirrors statusd's JSON error response.
@@ -32,11 +33,12 @@ type RemoteError struct {
 // RemoteRequestFromOptions converts local dispatch options into the wire shape.
 func RemoteRequestFromOptions(opts Options) RemoteRequest {
 	req := RemoteRequest{
-		Session: opts.Session,
-		Dir:     opts.Dir,
-		Agent:   opts.Agent,
-		Prompt:  opts.Prompt,
-		Execute: opts.Execute,
+		Session:     opts.Session,
+		Dir:         opts.Dir,
+		Agent:       opts.Agent,
+		Prompt:      opts.Prompt,
+		Execute:     opts.Execute,
+		TrustFolder: opts.TrustFolder,
 	}
 	if opts.ReadyTimeout > 0 {
 		req.ReadyTimeout = opts.ReadyTimeout.String()
@@ -51,11 +53,12 @@ func RemoteRequestFromOptions(opts Options) RemoteRequest {
 // strings only after JSON decoding has succeeded.
 func (r RemoteRequest) Options() (Options, error) {
 	opts := Options{
-		Session: r.Session,
-		Dir:     r.Dir,
-		Agent:   r.Agent,
-		Prompt:  r.Prompt,
-		Execute: r.Execute,
+		Session:     r.Session,
+		Dir:         r.Dir,
+		Agent:       r.Agent,
+		Prompt:      r.Prompt,
+		Execute:     r.Execute,
+		TrustFolder: r.TrustFolder,
 	}
 	if r.ReadyTimeout != "" {
 		d, err := time.ParseDuration(r.ReadyTimeout)

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/leolin310148/tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/foldertrust"
 )
 
 func runStatus(args []string) error {
@@ -185,6 +188,8 @@ func runPanels(args []string) error {
 	role := fs.String("role", "", "role to include")
 	session := fs.String("session", "", "override target tmux session for selected agents")
 	execute := fs.Bool("execute", false, "apply planned tmux panel changes")
+	trustFolders := fs.Bool("trust-folders", false, "accept exact-repo Claude/Codex trust prompts for newly created panels")
+	trustTimeout := fs.Duration("trust-timeout", 30*time.Second, "maximum wait for each opted-in panel trust prompt")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args[1:]); err != nil {
@@ -192,6 +197,9 @@ func runPanels(args []string) error {
 	}
 	if action == "plan" && *execute {
 		return errors.New("--execute is only valid with panels ensure")
+	}
+	if *trustTimeout < 0 {
+		return errors.New("--trust-timeout cannot be negative")
 	}
 
 	cfg, err := loadAgentConfig(*configPath)
@@ -203,7 +211,16 @@ func runPanels(args []string) error {
 		return err
 	}
 
-	opts := agents.PanelOptions{Session: *session, Execute: action == "ensure" && *execute}
+	opts := agents.PanelOptions{
+		Session:      *session,
+		Execute:      action == "ensure" && *execute,
+		TrustFolders: *trustFolders,
+		TrustTimeout: *trustTimeout,
+		FolderTrust: func(target, dir, agent string, timeout time.Duration) (bool, error) {
+			result, err := foldertrust.Run(context.Background(), foldertrust.Options{Target: target, Dir: dir, Agent: agent, Timeout: timeout})
+			return result.Accepted, err
+		},
+	}
 	var report agents.PanelReport
 	if action == "ensure" {
 		report, err = agents.EnsurePanels(cfg, opts)

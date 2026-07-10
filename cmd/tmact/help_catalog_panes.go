@@ -47,8 +47,8 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
-				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--trust-folder] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
@@ -56,6 +56,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
+				{Name: "--trust-folder", Description: "opt in to accepting a Claude/Codex trust prompt only when pane cwd exactly matches --dir"},
 				{Name: "--peer", Value: "NAME", Description: "dispatch through the named statusd dispatch_peer from config"},
 				{Name: "--config", Value: "PATH", Description: "statusd config file containing dispatch_peers"},
 				{Name: "--execute", Description: "actually create, launch, and send; default is dry-run"},
@@ -63,13 +64,13 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Examples: []string{
 				`tmact dispatch-work work --dir . --agent claude --prompt "review the diff"`,
-				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --execute`,
+				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --trust-folder --execute`,
 				`tmact dispatch-work work --peer peer-a --dir /repo --agent codex --prompt "run the tests" --execute`,
 			},
 			Safety: []string{
 				"Without --execute this prints the plan and does not touch tmux.",
 				"Fails if the session already runs a different agent or the agent is busy working.",
-				"Refuses to auto-confirm trust or permission prompts shown during agent startup.",
+				"Refuses permission and approval prompts. Trust prompts are accepted only with --trust-folder, for Claude/Codex, after exact canonical pane-cwd/--dir matching.",
 			},
 			Notes: []string{
 				"The session name is the first positional argument.",
@@ -78,6 +79,22 @@ func paneCommandHelpCatalog() []commandHelp {
 				"With --peer, --dir is validated on the peer machine, not the host.",
 				"--peer reads dispatch_peers first, then falls back to peers for compatibility.",
 			},
+		},
+		{
+			Command: "trust-folder",
+			Summary: "Inspect or accept one exact-directory Claude/Codex workspace-trust prompt.",
+			Usage:   []string{"tmact trust-folder --target TARGET --dir DIR --agent claude|codex [--timeout 30s] [--execute] [--json]"},
+			Flags: []helpFlag{
+				{Name: "--target", Value: "TARGET", Description: "exact tmux pane target", Required: true},
+				{Name: "--dir", Value: "DIR", Description: "exact canonical directory allowed by this decision", Required: true},
+				{Name: "--agent", Value: "AGENT", Description: "expected runtime: claude or codex", Required: true},
+				{Name: "--timeout", Value: "DURATION", Description: "wait for a trust prompt or ready runtime; default 30s"},
+				{Name: "--execute", Description: "accept the matched prompt; without it only report the planned option"},
+				{Name: "--json", Description: "print structured result"},
+			},
+			Examples: []string{"tmact trust-folder --target work:0.0 --dir ~/work/repo --agent claude", "tmact trust-folder --target work:0.0 --dir ~/work/repo --agent claude --execute"},
+			Safety:   []string{"Default is dry-run.", "The command refuses non-trust prompts, non-Claude/Codex runtimes, ambiguous affirmative options, and parent/child/symlink paths that do not canonicalize to the exact pane cwd."},
+			Notes:    []string{"Use dispatch-work --trust-folder when tmact launches the agent. Use this command after another tool creates the pane.", "This only answers workspace trust; it never grants command, filesystem-boundary, patch, or general permission prompts."},
 		},
 		{
 			Command: "detect",

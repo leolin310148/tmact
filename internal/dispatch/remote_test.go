@@ -31,11 +31,12 @@ func TestPostRemoteSendsRequestAndPrefixesTarget(t *testing.T) {
 		Execute:      true,
 		ReadyTimeout: 45 * time.Second,
 		ReadySettle:  2 * time.Second,
+		TrustFolder:  true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ReadyTimeout != "45s" || got.ReadySettle != "2s" {
+	if got.ReadyTimeout != "45s" || got.ReadySettle != "2s" || !got.TrustFolder {
 		t.Fatalf("request durations = %#v", got)
 	}
 	if report.Peer != "peer-a" || report.Target != "peer-a@%9" {
@@ -60,11 +61,11 @@ func TestPostRemoteReportsUnsupportedPeer(t *testing.T) {
 }
 
 func TestRemoteRequestOptionsParsesDurations(t *testing.T) {
-	opts, err := (RemoteRequest{ReadyTimeout: "3s", ReadySettle: "500ms"}).Options()
+	opts, err := (RemoteRequest{ReadyTimeout: "3s", ReadySettle: "500ms", TrustFolder: true}).Options()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.ReadyTimeout != 3*time.Second || opts.ReadySettle != 500*time.Millisecond {
+	if opts.ReadyTimeout != 3*time.Second || opts.ReadySettle != 500*time.Millisecond || !opts.TrustFolder {
 		t.Fatalf("opts = %#v", opts)
 	}
 

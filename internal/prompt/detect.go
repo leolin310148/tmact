@@ -192,6 +192,10 @@ func genericPromptHeader(lower string) (string, string, bool) {
 		return TypeGenericConfirmation, "Do you want to proceed?", true
 	case strings.Contains(text, "do you trust the files in this folder?"):
 		return TypeTrustFolder, "Do you trust the files in this folder?", true
+	case strings.Contains(text, "do you trust the contents of this directory?"):
+		return TypeTrustFolder, "Do you trust the contents of this directory?", true
+	case strings.Contains(text, "do you trust this folder?"):
+		return TypeTrustFolder, "Do you trust this folder?", true
 	case strings.Contains(text, "confirm folder trust"):
 		return TypeTrustFolder, "Confirm folder trust", true
 	default:

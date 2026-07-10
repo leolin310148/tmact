@@ -38,6 +38,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"loop status", "Inspect registered loop run metadata", "--run-dir", "last event"},
 		},
 		{
+			name: "trust folder",
+			args: []string{"trust-folder", "--help"},
+			want: []string{"trust-folder", "exact-directory", "--execute", "Default is dry-run", "refuses non-trust prompts"},
+		},
+		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
 			want: []string{"workflow", "OpenSpec review and implementation", "workflow example", "SWE apply -> QA verify -> PM archive", "--execute"},
@@ -103,6 +108,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	foundLoopStatus := false
 	foundLoopStart := false
+	foundTrustFolder := false
 	foundWorkflow := false
 	foundLLM := false
 	for _, command := range manifest.Commands {
@@ -116,6 +122,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 			foundLoopStart = true
 			if len(command.Safety) == 0 || len(command.Notes) < 2 {
 				t.Fatalf("loop start help is too sparse: %#v", command)
+			}
+		}
+		if command.Command == "trust-folder" {
+			foundTrustFolder = true
+			if len(command.Safety) < 2 || len(command.Notes) < 2 {
+				t.Fatalf("trust-folder help is too sparse: %#v", command)
 			}
 		}
 		if command.Command == "workflow" {
@@ -133,6 +145,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundLoopStart {
 		t.Fatalf("loop start missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundTrustFolder {
+		t.Fatalf("trust-folder missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundWorkflow {
 		t.Fatalf("workflow missing from manifest: %#v", manifest.Commands)
@@ -156,6 +171,7 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	}
 	foundUntrusted := false
 	foundLoopLifecycle := false
+	foundTrustWorkflow := false
 	for _, note := range instructions.SafeDefaults {
 		if strings.Contains(note, "untrusted") {
 			foundUntrusted = true
@@ -165,7 +181,9 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	for _, step := range instructions.RecommendedWorkflow {
 		if strings.Contains(step, "tmact loop start") && strings.Contains(step, "tmact loop stop") {
 			foundLoopLifecycle = true
-			break
+		}
+		if strings.Contains(step, "dispatch-work --trust-folder") && strings.Contains(step, "tmact trust-folder") {
+			foundTrustWorkflow = true
 		}
 	}
 	if !foundUntrusted {
@@ -173,5 +191,8 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	}
 	if !foundLoopLifecycle {
 		t.Fatalf("instructions missing managed loop lifecycle: %#v", instructions.RecommendedWorkflow)
+	}
+	if !foundTrustWorkflow {
+		t.Fatalf("instructions missing exact-directory trust workflow: %#v", instructions.RecommendedWorkflow)
 	}
 }

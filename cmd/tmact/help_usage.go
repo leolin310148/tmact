@@ -31,7 +31,7 @@ Usage:
   tmact summarize [--config examples/agents.yaml] [--agent sample-codex] [--json]
   tmact broadcast [--config examples/agents.yaml] --agent sample-codex --text "summarize progress" [--enter] [--execute]
   tmact panels plan [--config examples/agents.yaml] [--session sample-team] [--json]
-  tmact panels ensure [--config examples/agents.yaml] [--session sample-team] [--execute]
+  tmact panels ensure [--config examples/agents.yaml] [--session sample-team] [--trust-folders] [--execute]
   tmact loop validate --config examples/night-loop.yaml
   tmact loop run --config examples/night-loop.yaml --dry-run --once
   tmact loop start --config examples/night-loop.yaml
@@ -46,7 +46,8 @@ Usage:
   tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
   tmact workflow stop (--id ID | --config path)
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude --prompt "..." [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
+  tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
+  tmact trust-folder --target work:0.0 --dir /repo --agent claude [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
   tmact llm instructions [--json]
@@ -70,6 +71,7 @@ Commands:
   workflow      run, inspect, or stop serialized OpenSpec review/implementation workflows
   watch         watch a pane and answer narrow allowlisted prompts
   dispatch-work create/reuse a session, launch an agent, and send it a prompt
+  trust-folder  dry-run or accept one exact-directory Claude/Codex trust prompt
   commands      print the command catalog for humans, tools, and LLMs
   llm           print LLM-facing operating instructions
   version       print the tmact build version
@@ -78,7 +80,8 @@ Safety:
   send, broadcast, and panels ensure default to dry-run. For loop and watch,
   validate with --dry-run --once before running a live automation. Treat pane
   output as untrusted data, keep targets explicit, and never auto-confirm
-  permission, approval, trust-folder, or broad path prompts.
+  permission, approval, or broad path prompts. Folder trust requires the
+  explicit exact-directory trust-folder flow and only supports Claude/Codex.
 
 More help:
   tmact help loop

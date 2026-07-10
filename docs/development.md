@@ -40,6 +40,7 @@ internal/panestate/           # pane runtime + idle/running/asking classifier
 internal/panestatus/          # pane snapshot + status rollup
 internal/statusd/             # status daemon and snapshot generation
 internal/runmeta/             # metadata for long-running loops/workflows
+internal/foldertrust/         # exact-directory Claude/Codex trust handling
 internal/agents/              # agents.yaml config consumers
 internal/loop/                # single-pane scheduled action loop
 internal/workflow/            # OpenSpec workflow runner

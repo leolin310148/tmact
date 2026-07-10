@@ -233,6 +233,16 @@ func TestDetectTrustFolderPrompt(t *testing.T) {
 	}
 }
 
+func TestDetectCodexTrustDirectoryPrompt(t *testing.T) {
+	detected := Detect("Do you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n")
+	if detected == nil || detected.Type != TypeTrustFolder {
+		t.Fatalf("detected = %#v", detected)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 1 {
+		t.Fatalf("selected option = %#v", detected.SelectedOption)
+	}
+}
+
 func TestDetectGenericConfirmationPrompt(t *testing.T) {
 	raw := `
 Do you want to proceed?
