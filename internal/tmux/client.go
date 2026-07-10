@@ -86,7 +86,7 @@ func NewSession(session string, window string, cwd string, command []string) err
 		args = append(args, "-c", cwd)
 	}
 	if len(command) > 0 {
-		args = append(args, strings.Join(command, " "))
+		args = append(args, shellJoin(command))
 	}
 	return runTmux(args...)
 }
@@ -100,9 +100,21 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 		args = append(args, "-c", cwd)
 	}
 	if len(command) > 0 {
-		args = append(args, strings.Join(command, " "))
+		args = append(args, shellJoin(command))
 	}
 	return runTmux(args...)
+}
+
+func shellJoin(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "" {
+			quoted = append(quoted, "''")
+			continue
+		}
+		quoted = append(quoted, "'"+strings.ReplaceAll(arg, "'", "'\\''")+"'")
+	}
+	return strings.Join(quoted, " ")
 }
 
 const paneListFormat = "#{session_name}|#{session_id}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_pid}|#{pane_current_command}|#{pane_current_path}|#{pane_active}|#{pane_in_mode}|#{window_active}"

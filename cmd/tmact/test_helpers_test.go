@@ -33,9 +33,14 @@ func stubCLIHooks(t *testing.T) func() {
 
 	oldListAllTmuxPanes := listAllTmuxPanes
 	oldListTargetTmuxPanes := listTargetTmuxPanes
+	oldListSessionTmuxPanes := listSessionTmuxPanes
+	oldNewTmuxSession := newTmuxSession
+	oldNewTmuxWindow := newTmuxWindow
 	oldPasteTmuxText := pasteTmuxText
 	oldSendTmuxKeys := sendTmuxKeys
 	oldTmactNow := tmactNow
+	oldTmactSleep := tmactSleep
+	oldTmactExecutable := tmactExecutable
 	oldDispatchRun := dispatchRun
 	oldDispatchRemoteRun := dispatchRemoteRun
 	oldSendPeerPaneInput := sendPeerPaneInput
@@ -43,9 +48,14 @@ func stubCLIHooks(t *testing.T) func() {
 	return func() {
 		listAllTmuxPanes = oldListAllTmuxPanes
 		listTargetTmuxPanes = oldListTargetTmuxPanes
+		listSessionTmuxPanes = oldListSessionTmuxPanes
+		newTmuxSession = oldNewTmuxSession
+		newTmuxWindow = oldNewTmuxWindow
 		pasteTmuxText = oldPasteTmuxText
 		sendTmuxKeys = oldSendTmuxKeys
 		tmactNow = oldTmactNow
+		tmactSleep = oldTmactSleep
+		tmactExecutable = oldTmactExecutable
 		dispatchRun = oldDispatchRun
 		dispatchRemoteRun = oldDispatchRemoteRun
 		sendPeerPaneInput = oldSendPeerPaneInput

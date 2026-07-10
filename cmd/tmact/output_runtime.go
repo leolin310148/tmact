@@ -16,23 +16,23 @@ func printRuntimeStatuses(statuses []runmeta.Status) {
 		return
 	}
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "id\tstatus\tpid\ttarget\tconfig\tlast")
+	fmt.Fprintln(writer, "id\tstatus\tdesired\tphase\tmode\tpid\ttarget\tconfig\tlast")
 	for _, status := range statuses {
 		run := status.Run
 		last := ""
 		if status.LastEvent != nil {
 			last = formatRuntimeEvent(*status.LastEvent)
 		}
-		fmt.Fprintf(writer, "%s\t%s\t%d\t%s\t%s\t%s\n", run.ID, status.RuntimeStatus, run.PID, run.Target, run.ConfigPath, last)
+		fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n", run.ID, status.RuntimeStatus, status.DesiredState, displayPhase(run.Phase), loopRunMode(run), run.PID, run.Target, run.ConfigPath, last)
 		if run.Tmux.PaneID != "" {
 			window := run.Tmux.WindowName
 			if window != "" {
 				window = fmt.Sprintf("%d:%s", run.Tmux.WindowIndex, window)
 			}
-			fmt.Fprintf(writer, "\t\t\tpane:%s\t%s\t%s\n", run.Tmux.PaneID, run.Tmux.Session, window)
+			fmt.Fprintf(writer, "\t\t\t\t\t\tpane:%s\t%s\t%s\n", run.Tmux.PaneID, run.Tmux.Session, window)
 		}
 		for _, problem := range status.RecentProblems {
-			fmt.Fprintf(writer, "\tproblem\t\t\t\t%s\n", formatRuntimeEvent(problem))
+			fmt.Fprintf(writer, "\tproblem\t\t\t\t\t\t\t%s\n", formatRuntimeEvent(problem))
 		}
 	}
 	_ = writer.Flush()

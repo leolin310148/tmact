@@ -56,7 +56,7 @@ systemd/                      # Linux systemd --user unit template
 ```sh
 go test ./...
 go build -o .cache/tmact ./cmd/tmact
-.cache/tmact loop --config examples/night-loop.yaml --dry-run --once
+.cache/tmact loop run --config examples/night-loop.yaml --dry-run --once
 .cache/tmact watch --config examples/accept-question-watch.yaml --dry-run --once
 ```
 

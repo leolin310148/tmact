@@ -3,16 +3,166 @@ package loop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/prompt"
 )
+
+func TestLoopStopsCooperativelyWhileWaitingForNextPoll(t *testing.T) {
+	calls := 0
+	runner := NewRunner(Config{
+		Target:       "demo:0.0",
+		CaptureLines: 20,
+		IdleAfter:    Duration{Duration: time.Hour},
+		PollInterval: Duration{Duration: time.Hour},
+		Actions: []ActionConfig{{
+			Name:         "later",
+			Type:         "send_text",
+			Text:         "go",
+			InitialDelay: Duration{Duration: time.Hour},
+		}},
+	}, Options{
+		DryRun: true,
+		Control: func() (string, error) {
+			calls++
+			if calls >= 2 {
+				return "stopped", nil
+			}
+			return "running", nil
+		},
+	})
+	runner.capturePane = func(string, int) (string, error) { return "idle", nil }
+
+	started := time.Now()
+	err := runner.Run(context.Background())
+	if !errors.Is(err, ErrStopRequested) {
+		t.Fatalf("err = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("cooperative stop took %s", elapsed)
+	}
+}
+
+func TestLoopResumeAcknowledgesWithoutWaitingForLongPollInterval(t *testing.T) {
+	var desired atomic.Value
+	desired.Store("paused")
+	phases := make(chan string, 8)
+	runner := NewRunner(Config{
+		Target:       "demo:0.0",
+		CaptureLines: 20,
+		IdleAfter:    Duration{Duration: time.Hour},
+		PollInterval: Duration{Duration: time.Hour},
+		Actions: []ActionConfig{{
+			Name:         "later",
+			Type:         "send_text",
+			Text:         "go",
+			InitialDelay: Duration{Duration: time.Hour},
+		}},
+	}, Options{
+		DryRun: true,
+		Control: func() (string, error) {
+			return desired.Load().(string), nil
+		},
+		Heartbeat: func(phase string) error {
+			phases <- phase
+			return nil
+		},
+	})
+	runner.capturePane = func(string, int) (string, error) { return "idle", nil }
+	done := make(chan error, 1)
+	go func() { done <- runner.Run(context.Background()) }()
+
+	waitForPhase := func(want string) {
+		t.Helper()
+		timer := time.NewTimer(time.Second)
+		defer timer.Stop()
+		for {
+			select {
+			case phase := <-phases:
+				if phase == want {
+					return
+				}
+			case <-timer.C:
+				t.Fatalf("timed out waiting for phase %q", want)
+			}
+		}
+	}
+	waitForPhase("paused")
+	desired.Store("running")
+	waitForPhase("resuming")
+	desired.Store("stopped")
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrStopRequested) {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("runner did not stop")
+	}
+}
+
+func TestLoopCompletesWhenFiniteSchedulesAreExhausted(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "loop.jsonl")
+	runner := NewRunner(Config{
+		Target:       "demo:0.0",
+		CaptureLines: 20,
+		IdleAfter:    Duration{Duration: time.Second},
+		PollInterval: Duration{Duration: time.Hour},
+		LogPath:      logPath,
+		Actions:      []ActionConfig{{Name: "once", Type: "send_text", Text: "go"}},
+	}, Options{DryRun: true})
+	runner.capturePane = func(string, int) (string, error) { return "idle", nil }
+
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"reason":"actions_exhausted"`) {
+		t.Fatalf("log = %s", data)
+	}
+}
+
+func TestLoopDoesNotStartFlowThatWouldExceedMaxActions(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "loop.jsonl")
+	runner := NewRunner(Config{
+		Target:       "demo:0.0",
+		CaptureLines: 20,
+		IdleAfter:    Duration{Duration: time.Second},
+		PollInterval: Duration{Duration: time.Hour},
+		MaxActions:   1,
+		LogPath:      logPath,
+		Flows: []FlowConfig{{
+			Name: "two-steps",
+			Steps: []ActionConfig{
+				{Name: "one", Type: "send_text", Text: "one"},
+				{Name: "two", Type: "send_text", Text: "two"},
+			},
+		}},
+	}, Options{DryRun: true})
+	runner.capturePane = func(string, int) (string, error) { return "idle", nil }
+
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"type":"action"`) || !strings.Contains(string(data), `"reason":"max_actions"`) {
+		t.Fatalf("log = %s", data)
+	}
+}
 
 func TestLoopStopsOnGenericPrompt(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "loop.jsonl")

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,9 +22,18 @@ import (
 )
 
 type Options struct {
-	DryRun bool
-	Once   bool
+	DryRun    bool
+	Once      bool
+	Control   func() (string, error)
+	Heartbeat func(string) error
 }
+
+var (
+	ErrStopRequested = errors.New("loop stop requested")
+	errMaxActions    = errors.New("loop max actions reached")
+)
+
+const controlPollInterval = 250 * time.Millisecond
 
 type Runner struct {
 	cfg                Config
@@ -38,9 +48,11 @@ type Runner struct {
 	// Cached quota snapshot. The provider endpoints are rate-limited, so
 	// fetchUsage runs at most once per Quota.RefreshInterval and the last
 	// snapshot is reused in between.
-	quotaSnap    agentusage.Snapshot
-	quotaHave    bool
-	quotaFetched time.Time
+	quotaSnap     agentusage.Snapshot
+	quotaHave     bool
+	quotaFetched  time.Time
+	lastPhase     string
+	lastHeartbeat time.Time
 }
 
 type actionState struct {
@@ -95,6 +107,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err := r.configurePeerTarget(ctx); err != nil {
 		return err
 	}
+	if err := r.heartbeat("starting"); err != nil {
+		return err
+	}
 	start := r.now()
 	lastChangedAt := start
 	if r.cfg.AssumeIdleOnStart {
@@ -122,11 +137,17 @@ func (r *Runner) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
+		if err := r.awaitRunnable(ctx); err != nil {
+			return err
+		}
 		now := r.now()
 		if r.cfg.MaxRuntime.Duration > 0 && now.Sub(start) >= r.cfg.MaxRuntime.Duration {
 			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_runtime"})
 		}
 
+		if err := r.heartbeat("observing"); err != nil {
+			return err
+		}
 		state, changed, err := r.observe(now, lastHash, lastChangedAt)
 		if err != nil {
 			_ = r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "error", Target: r.cfg.Target, Status: "failed", Reason: err.Error()})
@@ -150,17 +171,19 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 
+		executedThisCycle := 0
 		for i := range actions {
 			if r.cfg.MaxActions > 0 && actionCount >= r.cfg.MaxActions {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
-			executed, err := r.maybeRunAction(now, state, &actions[i], quotaSkip, quotaReason)
+			executed, err := r.maybeRunAction(ctx, now, state, &actions[i], quotaSkip, quotaReason)
 			if err != nil {
 				return err
 			}
 			if executed {
 				actionCount++
+				executedThisCycle++
 			}
 		}
 		for i := range flows {
@@ -168,23 +191,56 @@ func (r *Runner) Run(ctx context.Context) error {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
-			executed, err := r.maybeRunFlow(now, state, &flows[i], quotaSkip, quotaReason)
+			remaining := 0
+			if r.cfg.MaxActions > 0 {
+				remaining = r.cfg.MaxActions - actionCount
+			}
+			executed, err := r.maybeRunFlow(ctx, now, state, &flows[i], quotaSkip, quotaReason, remaining)
+			if errors.Is(err, errMaxActions) {
+				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
+			}
 			if err != nil {
 				return err
 			}
 			actionCount += executed
+			executedThisCycle += executed
 		}
 
 		if r.options.Once {
 			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "state", Target: r.cfg.Target, Details: state})
 		}
+		if schedulesComplete(actions, flows) {
+			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "actions_exhausted"})
+		}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
+		phase := "sleeping"
+		if quotaSkip {
+			phase = "waiting_quota"
+		} else if executedThisCycle == 0 && !state.Idle {
+			phase = "waiting_idle"
+		}
+		if err := r.heartbeat(phase); err != nil {
+			return err
+		}
+
+		if err := r.waitForTick(ctx, ticker.C); err != nil {
+			return err
 		}
 	}
+}
+
+func schedulesComplete(actions []actionState, flows []flowState) bool {
+	for _, action := range actions {
+		if action.config.MaxRuns == 0 || action.runs < action.config.MaxRuns {
+			return false
+		}
+	}
+	for _, flow := range flows {
+		if flow.config.MaxRuns == 0 || flow.runs < flow.config.MaxRuns {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runner) observe(now time.Time, previousHash string, lastChangedAt time.Time) (paneState, bool, error) {
@@ -229,7 +285,7 @@ func (r *Runner) idleText(raw string) string {
 	return strings.Join(kept, "\n")
 }
 
-func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionState, quotaSkip bool, quotaReason string) (bool, error) {
+func (r *Runner) maybeRunAction(ctx context.Context, now time.Time, state paneState, action *actionState, quotaSkip bool, quotaReason string) (bool, error) {
 	if now.Before(action.nextRun) {
 		return false, nil
 	}
@@ -262,7 +318,10 @@ func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionSt
 		return false, nil
 	}
 
-	if err := r.runAction(now, action.config.Name, action.config); err != nil {
+	if err := r.awaitRunnable(ctx); err != nil {
+		return false, err
+	}
+	if err := r.runAction(ctx, now, action.config.Name, action.config); err != nil {
 		return false, err
 	}
 
@@ -276,7 +335,7 @@ func (r *Runner) maybeRunAction(now time.Time, state paneState, action *actionSt
 	return true, nil
 }
 
-func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState, quotaSkip bool, quotaReason string) (int, error) {
+func (r *Runner) maybeRunFlow(ctx context.Context, now time.Time, state paneState, flow *flowState, quotaSkip bool, quotaReason string, remaining int) (int, error) {
 	if now.Before(flow.nextRun) {
 		return 0, nil
 	}
@@ -308,6 +367,9 @@ func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState, q
 		}
 		return 0, nil
 	}
+	if remaining > 0 && len(flow.config.Steps) > remaining {
+		return 0, errMaxActions
+	}
 
 	if err := r.emit(event{
 		Timestamp: now.Format(time.RFC3339),
@@ -325,8 +387,11 @@ func (r *Runner) maybeRunFlow(now time.Time, state paneState, flow *flowState, q
 
 	executed := 0
 	for _, step := range flow.config.Steps {
+		if err := r.awaitRunnable(ctx); err != nil {
+			return executed, err
+		}
 		stepName := flow.config.Name + "." + step.Name
-		if err := r.runAction(now, stepName, step); err != nil {
+		if err := r.runAction(ctx, now, stepName, step); err != nil {
 			return executed, err
 		}
 		executed++
@@ -455,7 +520,10 @@ func providerUsage(snap agentusage.Snapshot, name string) (agentusage.ProviderUs
 	return agentusage.ProviderUsage{}, false
 }
 
-func (r *Runner) runAction(now time.Time, name string, action ActionConfig) error {
+func (r *Runner) runAction(ctx context.Context, now time.Time, name string, action ActionConfig) error {
+	if err := r.heartbeat("action:" + name); err != nil {
+		return err
+	}
 	err := r.executeAction(action)
 	status := "ok"
 	reason := ""
@@ -484,9 +552,109 @@ func (r *Runner) runAction(now time.Time, name string, action ActionConfig) erro
 	}
 
 	if action.PostDelay.Duration > 0 && !r.options.DryRun {
-		time.Sleep(action.PostDelay.Duration)
+		if err := r.waitDuration(ctx, action.PostDelay.Duration); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func (r *Runner) heartbeat(phase string) error {
+	if r.options.Heartbeat == nil {
+		return nil
+	}
+	now := r.now()
+	if phase == r.lastPhase && now.Sub(r.lastHeartbeat) < 2*time.Second {
+		return nil
+	}
+	if err := r.options.Heartbeat(phase); err != nil {
+		return err
+	}
+	r.lastPhase = phase
+	r.lastHeartbeat = now
+	return nil
+}
+
+func (r *Runner) desiredState() (string, error) {
+	if r.options.Control == nil {
+		return "running", nil
+	}
+	state, err := r.options.Control()
+	if err != nil {
+		return "", err
+	}
+	if state == "" {
+		state = "running"
+	}
+	return state, nil
+}
+
+func (r *Runner) awaitRunnable(ctx context.Context) error {
+	for {
+		state, err := r.desiredState()
+		if err != nil {
+			return err
+		}
+		switch state {
+		case "running":
+			if r.lastPhase == "paused" {
+				if err := r.heartbeat("resuming"); err != nil {
+					return err
+				}
+			}
+			return nil
+		case "stopped":
+			if err := r.emit(event{
+				Timestamp: r.now().Format(time.RFC3339),
+				Type:      "stop",
+				Target:    r.cfg.Target,
+				Reason:    "requested",
+			}); err != nil {
+				return err
+			}
+			return ErrStopRequested
+		case "paused":
+			if err := r.heartbeat("paused"); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported loop desired state %q", state)
+		}
+		timer := time.NewTimer(controlPollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (r *Runner) waitDuration(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	return r.waitControlled(ctx, timer.C)
+}
+
+func (r *Runner) waitForTick(ctx context.Context, tick <-chan time.Time) error {
+	return r.waitControlled(ctx, tick)
+}
+
+func (r *Runner) waitControlled(ctx context.Context, done <-chan time.Time) error {
+	controlTicker := time.NewTicker(controlPollInterval)
+	defer controlTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-done:
+			return nil
+		case <-controlTicker.C:
+			if err := r.awaitRunnable(ctx); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (r *Runner) executeAction(action ActionConfig) error {

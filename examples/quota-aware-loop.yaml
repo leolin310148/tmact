@@ -7,10 +7,10 @@
 # exhausts the hourly/session window.
 #
 # Dry-run one pass:
-#   go run ./cmd/tmact loop --config examples/quota-aware-loop.yaml --dry-run --once --assume-idle-on-start
+#   go run ./cmd/tmact loop run --config examples/quota-aware-loop.yaml --dry-run --once --assume-idle-on-start
 #
-# Start the real loop:
-#   go run ./cmd/tmact loop --config examples/quota-aware-loop.yaml --assume-idle-on-start
+# Start the managed background loop:
+#   tmact loop start --config examples/quota-aware-loop.yaml --assume-idle-on-start
 
 target: sample-agent:0.0
 capture_lines: 160

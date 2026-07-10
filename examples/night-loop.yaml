@@ -1,10 +1,10 @@
 # Minimal midnight tmux agent loop.
 #
 # Run a one-pass dry run:
-#   go run ./cmd/tmact loop --config examples/night-loop.yaml --dry-run --once
+#   go run ./cmd/tmact loop run --config examples/night-loop.yaml --dry-run --once
 #
-# Run the loop:
-#   go run ./cmd/tmact loop --config examples/night-loop.yaml
+# Start the managed background loop:
+#   tmact loop start --config examples/night-loop.yaml
 
 target: sample-agent:0.0
 capture_lines: 160

@@ -61,6 +61,9 @@ func buildLLMInstructions() llmInstructions {
 		},
 		RecommendedWorkflow: []string{
 			"Start with read-only commands: `tmact ls --json`, `tmact inspect --all --json`, `tmact statusd read --json`, or configured-agent status commands.",
+			"For loop automation, use this exact lifecycle: `tmact loop validate --config PATH`; `tmact loop run --config PATH --dry-run --once`; `tmact loop start --config PATH`; monitor with `tmact loop status --json` and `tmact loop logs --config PATH`; finish with `tmact loop stop --config PATH --wait`.",
+			"Use `tmact loop start`, never nohup, shell backgrounding, hand-written PID files, while loops, or hand-written tmux sessions. tmact owns the detached loop process and start is idempotent per config.",
+			"Use `tmact loop pause` for a temporary scheduling hold, `resume` after the operator clears the blocker, and `restart` when the config or runtime must be relaunched.",
 			"Resolve targets explicitly. Numeric targets such as `-t 0` come from the latest `tmact ls` cache.",
 			"Preview side-effecting commands first. `send`, `broadcast`, `panels ensure`, `workflow`, and `dispatch-work` are dry-run or planning-oriented until `--execute` is supplied.",
 			"Use `tmact detect` or `tmact inspect` to distinguish idle, running, and asking panes before sending input.",
@@ -72,11 +75,13 @@ func buildLLMInstructions() llmInstructions {
 			"Do not send input to busy panes unless the operator explicitly requested it.",
 			"Keep web/statusd binds on 127.0.0.1 unless the operator explicitly chooses a trusted-network bind.",
 			"Use `--execute` only after checking the planned target, prompt, and command effect.",
+			"Do not resume or restart a loop stopped by a permission prompt until a human has reviewed and handled that prompt.",
 		},
 		JSONTips: []string{
 			"`commands --json` and `help ... --json` are stable discovery surfaces for tools.",
 			"`ls --json`, `inspect --json`, `statusd read --json`, `usage --json`, and workflow status/report commands are preferred for machine parsing.",
 			"Side-effect previews still return enough metadata to audit targets before adding `--execute`.",
+			"Use `tmact help loop --json` for the complete loop lifecycle contract and `tmact help loop start --json` for start-specific flags and idempotency semantics.",
 		},
 		CommandCatalog: commandManifest(),
 	}
