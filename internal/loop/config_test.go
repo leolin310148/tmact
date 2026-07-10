@@ -52,6 +52,30 @@ actions:
 	}
 }
 
+func TestLoadConfigParsesQuotaPaceGates(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+quota:
+  enabled: true
+  provider: codex
+  weekly_require_headroom: true
+  session_min_remaining_percent: 20
+actions:
+  - type: clear
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Quota.WeeklyRequireHeadroom {
+		t.Fatal("weekly_require_headroom should be enabled")
+	}
+	if cfg.Quota.SessionMinRemainingPercent != 20 {
+		t.Fatalf("session_min_remaining_percent = %v", cfg.Quota.SessionMinRemainingPercent)
+	}
+}
+
 func TestLoadConfigParsesPeerTarget(t *testing.T) {
 	path := writeTempConfig(t, `
 peer: peer-a

@@ -15,17 +15,26 @@ func captureRun(t *testing.T, args ...string) (string, error) {
 		t.Fatal(err)
 	}
 	os.Stdout = write
+	type captureResult struct {
+		output []byte
+		err    error
+	}
+	captured := make(chan captureResult, 1)
+	go func() {
+		output, readErr := io.ReadAll(read)
+		captured <- captureResult{output: output, err: readErr}
+	}()
 	err = run(args)
 	if closeErr := write.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}
 	os.Stdout = oldStdout
 
-	output, readErr := io.ReadAll(read)
-	if readErr != nil && err == nil {
-		err = readErr
+	result := <-captured
+	if result.err != nil && err == nil {
+		err = result.err
 	}
-	return string(output), err
+	return string(result.output), err
 }
 
 func stubCLIHooks(t *testing.T) func() {

@@ -43,22 +43,23 @@ Use tmact itself as the loop supervisor. Do not wrap loops in `nohup`, shell
 backgrounding, PID files, `while` loops, or hand-written tmux sessions.
 
 ```sh
-# 1. Check the YAML and safely exercise one pass.
-tmact loop validate --config examples/maintenance-loop.yaml
-tmact loop run --config examples/maintenance-loop.yaml --dry-run --once
+# 1. Generate a complete template, edit target/prompt, then validate it.
+tmact loop example --quota > loop.yaml
+tmact loop validate --config loop.yaml
+tmact loop run --config loop.yaml --dry-run --once
 
 # 2. Start an idempotent detached runtime in the tmact-loops tmux session.
-tmact loop start --config examples/maintenance-loop.yaml
+tmact loop start --config loop.yaml
 
 # 3. Observe or control it from any shell using the same --run-dir.
 tmact loop status --json
-tmact loop logs --config examples/maintenance-loop.yaml --follow
-tmact loop pause --config examples/maintenance-loop.yaml
-tmact loop resume --config examples/maintenance-loop.yaml
-tmact loop restart --config examples/maintenance-loop.yaml
+tmact loop logs --config loop.yaml --follow
+tmact loop pause --config loop.yaml
+tmact loop resume --config loop.yaml
+tmact loop restart --config loop.yaml
 
 # 4. Request a cooperative stop and wait for final state.
-tmact loop stop --config examples/maintenance-loop.yaml --wait
+tmact loop stop --config loop.yaml --wait
 ```
 
 `loop start` validates the config before launching, creates or reuses the
@@ -288,9 +289,14 @@ them. The only exception is explicit exact-directory workspace trust through
 
 A loop can also back off on quota: an optional `quota` block (see
 [`examples/quota-aware-loop.yaml`](examples/quota-aware-loop.yaml)) reads the
-target agent's real rate-limit usage and skips a cycle when the weekly window is
-reached or the session window has little left, so an unattended loop never burns
-a weekly limit. It fails open (keeps running) when quota can't be read.
+target agent's real rate-limit usage. `session_min_remaining_percent: 20`
+requires the 5-hour/session window to have strictly more than 20% remaining;
+20% exactly is skipped. `weekly_require_headroom: true` requires positive
+weekly headroom, meaning expected linear usage is greater than actual usage and
+there is conserved weekly allowance available. When both are configured, both
+must pass before the cycle runs. `weekly_skip_at_percent` remains available as
+an absolute weekly ceiling. Quota checks fail open (keep running) when data or
+pace cannot be read unless `fail_closed: true` is configured.
 
 For source builds, tests, examples, and release notes, see
 [`docs/development.md`](docs/development.md).

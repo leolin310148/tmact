@@ -427,8 +427,8 @@ func (r *Runner) maybeRunFlow(ctx context.Context, now time.Time, state paneStat
 // last reading in between. When quota can't be determined (missing/expired
 // token, provider error, stale reading, or no windows) it fails open — runs
 // anyway and logs once per refresh — unless FailClosed is set. Returns
-// (skip, reason); reason is "quota_weekly", "quota_session_low", or (fail-closed
-// only) "quota_unavailable".
+// (skip, reason); reason is "quota_weekly", "quota_weekly_no_headroom",
+// "quota_session_low", or (fail-closed only) "quota_unavailable".
 func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string, error) {
 	q := r.cfg.Quota
 	if q == nil || !q.Enabled {
@@ -449,36 +449,15 @@ func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string
 
 	pu, ok := providerUsage(r.quotaSnap, q.Provider)
 	if !ok || pu.Error != "" || pu.Stale || len(pu.Windows) == 0 {
-		if fetched {
-			// Log the fail-open/fail-closed decision once per refresh so a broken
-			// token is visible rather than silently changing loop behavior.
-			reason := "no usage data"
-			if !ok {
-				reason = "provider not found in snapshot"
-			} else if pu.Error != "" {
-				reason = pu.Error
-			} else if pu.Stale {
-				reason = "stale reading"
-			}
-			policy := "fail_open_run"
-			if q.FailClosed {
-				policy = "fail_closed_skip"
-			}
-			if err := r.emit(event{
-				Timestamp: now.Format(time.RFC3339),
-				Type:      "quota",
-				Target:    r.cfg.Target,
-				Status:    "unavailable",
-				Reason:    reason,
-				Details:   map[string]interface{}{"provider": q.Provider, "policy": policy},
-			}); err != nil {
-				return false, "", err
-			}
+		reason := "no usage data"
+		if !ok {
+			reason = "provider not found in snapshot"
+		} else if pu.Error != "" {
+			reason = pu.Error
+		} else if pu.Stale {
+			reason = "stale reading"
 		}
-		if q.FailClosed {
-			return true, "quota_unavailable", nil
-		}
-		return false, "", nil
+		return r.quotaUnavailable(now, fetched, reason)
 	}
 
 	weeklyAt := q.WeeklySkipAtPercent
@@ -500,12 +479,57 @@ func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string
 		}
 	}
 
+	if weekly == nil {
+		return r.quotaUnavailable(now, fetched, "weekly window missing")
+	}
+	if session == nil {
+		return r.quotaUnavailable(now, fetched, "session window missing")
+	}
+
 	// Weekly exhaustion is the more severe condition, so it wins the reason.
-	if weekly != nil && weekly.UsedPercent >= weeklyAt {
+	if weekly.UsedPercent >= weeklyAt {
 		return true, "quota_weekly", nil
 	}
-	if session != nil && 100-session.UsedPercent < minRemaining {
+	if q.WeeklyRequireHeadroom {
+		if weekly.Pace == nil {
+			return r.quotaUnavailable(now, fetched, "weekly pace unavailable")
+		}
+		// Positive headroom means expected usage is ahead of actual usage: the
+		// account has conserved more weekly quota than a linear burn schedule.
+		headroom := weekly.Pace.ExpectedPercent - weekly.Pace.ActualPercent
+		if headroom <= 0 {
+			return true, "quota_weekly_no_headroom", nil
+		}
+	}
+	if 100-session.UsedPercent <= minRemaining {
 		return true, "quota_session_low", nil
+	}
+	return false, "", nil
+}
+
+func (r *Runner) quotaUnavailable(now time.Time, fetched bool, reason string) (bool, string, error) {
+	q := r.cfg.Quota
+	if fetched {
+		// Log the fail-open/fail-closed decision once per refresh so missing
+		// credentials or pace inputs are visible rather than silently changing
+		// loop behavior.
+		policy := "fail_open_run"
+		if q.FailClosed {
+			policy = "fail_closed_skip"
+		}
+		if err := r.emit(event{
+			Timestamp: now.Format(time.RFC3339),
+			Type:      "quota",
+			Target:    r.cfg.Target,
+			Status:    "unavailable",
+			Reason:    reason,
+			Details:   map[string]interface{}{"provider": q.Provider, "policy": policy},
+		}); err != nil {
+			return false, "", err
+		}
+	}
+	if q.FailClosed {
+		return true, "quota_unavailable", nil
 	}
 	return false, "", nil
 }

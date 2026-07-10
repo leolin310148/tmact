@@ -5,16 +5,17 @@ func workflowCommandHelpCatalog() []commandHelp {
 		{
 			Command:     "loop",
 			Summary:     "Manage the complete lifecycle of a configurable single-pane automation loop.",
-			Usage:       []string{"tmact loop validate --config PATH", "tmact loop start --config PATH", "tmact loop status [--json]", "tmact loop logs (--id ID | --config PATH) [--follow]", "tmact loop pause|resume --config PATH", "tmact loop restart --config PATH", "tmact loop stop --config PATH [--wait]", "tmact loop run --config PATH [--dry-run] [--once]"},
-			Subcommands: []string{"validate", "start", "run", "status", "logs", "pause", "resume", "restart", "stop"},
+			Usage:       []string{"tmact loop example [--quota]", "tmact loop validate --config PATH", "tmact loop start --config PATH", "tmact loop status [--json]", "tmact loop logs (--id ID | --config PATH) [--follow]", "tmact loop pause|resume --config PATH", "tmact loop restart --config PATH", "tmact loop stop --config PATH [--wait]", "tmact loop run --config PATH [--dry-run] [--once]"},
+			Subcommands: []string{"example", "validate", "start", "run", "status", "logs", "pause", "resume", "restart", "stop"},
 			Flags: []helpFlag{
 				{Name: "--config", Value: "PATH", Description: "select a loop by its YAML config; start/run/validate require it"},
 				{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory; use the same value for every lifecycle command"},
 			},
-			Examples: []string{"tmact loop validate --config examples/night-loop.yaml", "tmact loop run --config examples/night-loop.yaml --dry-run --once", "tmact loop start --config examples/night-loop.yaml", "tmact loop status --json", "tmact loop logs --config examples/night-loop.yaml --follow", "tmact loop stop --config examples/night-loop.yaml --wait"},
+			Examples: []string{"tmact loop example --quota > loop.yaml", "tmact loop validate --config loop.yaml", "tmact loop run --config loop.yaml --dry-run --once", "tmact loop start --config loop.yaml", "tmact loop status --json", "tmact loop logs --config loop.yaml --follow", "tmact loop stop --config loop.yaml --wait"},
 			Safety:   []string{"Always validate and perform a one-pass dry run before starting a new unattended loop.", "Permission, approval, trust-folder, and broad path prompts remain stop conditions; never resume until a human has handled the prompt."},
-			Notes:    []string{"Use start for normal background operation; tmact creates/reuses the detached tmux session tmact-loops automatically. Do not write nohup, while, PID-file, or tmux wrapper scripts.", "start is idempotent per config: it returns the existing active runtime instead of creating a duplicate.", "Use run only for foreground debugging or --once validation.", "Normal LLM lifecycle: validate -> run --dry-run --once -> start -> status/logs -> pause/resume/restart as needed -> stop --wait.", "Long-running metadata is stored under .tmact/runs by default; pass the same --run-dir to every command if overriding it."},
+			Notes:    []string{"Use start for normal background operation; tmact creates/reuses the detached tmux session tmact-loops automatically. Do not write nohup, while, PID-file, or tmux wrapper scripts.", "start is idempotent per config: it returns the existing active runtime instead of creating a duplicate.", "Use run only for foreground debugging or --once validation.", "Quota YAML: session_min_remaining_percent: 20 requires the 5-hour window to have strictly more than 20% left; weekly_require_headroom: true requires actual weekly usage to remain below its linear expected pace. Both gates must pass when combined.", "Quota data is cached for refresh_interval. Missing credentials, stale readings, or unavailable weekly pace run by default; set fail_closed: true to skip instead.", "Normal LLM lifecycle: validate -> run --dry-run --once -> start -> status/logs -> pause/resume/restart as needed -> stop --wait.", "Long-running metadata is stored under .tmact/runs by default; pass the same --run-dir to every command if overriding it."},
 		},
+		loopExampleHelp(),
 		loopValidateHelp(),
 		loopStartHelp(),
 		loopRunHelp(),
@@ -121,6 +122,20 @@ func workflowCommandHelpCatalog() []commandHelp {
 	}
 }
 
+func loopExampleHelp() commandHelp {
+	return commandHelp{
+		Command: "loop example",
+		Summary: "Print a complete loop YAML template that can be redirected to a file and validated.",
+		Usage:   []string{"tmact loop example [--quota]"},
+		Flags: []helpFlag{
+			{Name: "--quota", Description: "include configurable 5-hour remaining-quota and weekly headroom gates"},
+		},
+		Examples: []string{"tmact loop example > loop.yaml", "tmact loop example --quota > quota-loop.yaml", "tmact loop validate --config quota-loop.yaml"},
+		Safety:   []string{"The command only prints YAML. Edit the target and prompt, then validate and run with --dry-run --once before starting it."},
+		Notes:    []string{"The generated YAML is self-contained and does not depend on a source checkout's examples directory.", "With --quota, session_min_remaining_percent is user-configurable and weekly_require_headroom requires positive weekly reserve."},
+	}
+}
+
 func runtimeStatusHelp(kind string) commandHelp {
 	flags := []helpFlag{{Name: "--run-dir", Value: "PATH", Description: "directory for runtime metadata"}, {Name: "--json", Description: "print JSON output"}}
 	usage := "tmact " + kind + " status [--run-dir .tmact/runs] [--json]"
@@ -145,7 +160,7 @@ func loopValidateHelp() commandHelp {
 		Usage:    []string{"tmact loop validate --config PATH [--json]"},
 		Flags:    []helpFlag{{Name: "--config", Value: "PATH", Description: "loop YAML to validate", Required: true}, {Name: "--json", Description: "print a machine-readable validation result"}},
 		Examples: []string{"tmact loop validate --config examples/maintenance-loop.yaml", "tmact loop validate --config examples/maintenance-loop.yaml --json"},
-		Notes:    []string{"An exit status of zero means the YAML parsed and all target, action, flow, duration, quota, and prompt-safety settings passed validation."},
+		Notes:    []string{"An exit status of zero means the YAML parsed and all target, action, flow, duration, quota, and prompt-safety settings passed validation.", "For quota-gated loops, use session_min_remaining_percent: 20 for a strict >20% 5-hour reserve and weekly_require_headroom: true to run only while weekly actual usage is below expected linear usage."},
 	}
 }
 

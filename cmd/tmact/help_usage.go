@@ -32,6 +32,7 @@ Usage:
   tmact broadcast [--config examples/agents.yaml] --agent sample-codex --text "summarize progress" [--enter] [--execute]
   tmact panels plan [--config examples/agents.yaml] [--session sample-team] [--json]
   tmact panels ensure [--config examples/agents.yaml] [--session sample-team] [--trust-folders] [--execute]
+  tmact loop example [--quota]
   tmact loop validate --config examples/night-loop.yaml
   tmact loop run --config examples/night-loop.yaml --dry-run --once
   tmact loop start --config examples/night-loop.yaml

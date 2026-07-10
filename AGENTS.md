@@ -19,9 +19,10 @@ Common commands:
 - `tmact status`, `inbox`, `summarize`, `broadcast`, and `panels` use an agent
   YAML config.
 - `tmact loop` and `tmact watch` run pane automation with dry-run support.
+  `tmact loop example [--quota]` prints a complete self-contained YAML template.
   Loops accept an optional `quota` block that skips cycles when the target
-  agent's weekly/session rate-limit usage is too high (see
-  `examples/quota-aware-loop.yaml`).
+  agent lacks the configured 5-hour reserve or positive weekly pace headroom
+  (see `examples/quota-aware-loop.yaml`).
 - `tmact dispatch-work` starts or reuses a tmux session, launches an agent CLI,
   and sends it a prompt.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and

@@ -62,9 +62,14 @@ type QuotaConfig struct {
 	// WeeklySkipAtPercent skips the cycle when the weekly window's used-percent
 	// is >= this. Default 100 (skip only once the weekly limit is fully reached).
 	WeeklySkipAtPercent float64 `yaml:"weekly_skip_at_percent"`
+	// WeeklyRequireHeadroom runs a cycle only while weekly usage is below its
+	// linear expected pace (expected percent - actual percent > 0). This uses
+	// the weekly window's reset time and duration, so it adapts throughout the
+	// week instead of relying on one fixed usage threshold. Default false.
+	WeeklyRequireHeadroom bool `yaml:"weekly_require_headroom"`
 	// SessionMinRemainingPercent skips the cycle when the session (hourly/5h)
-	// window has less than this percent remaining (used-percent > 100-this).
-	// Default 20.
+	// window does not have strictly more than this percent remaining
+	// (used-percent >= 100-this). Default 20.
 	SessionMinRemainingPercent float64 `yaml:"session_min_remaining_percent"`
 	// RefreshInterval bounds how often the rate-limited provider endpoint is
 	// queried; the last snapshot is reused between refreshes. Default 5m.
