@@ -17,8 +17,9 @@ Use the CLI when you want scriptable tmux control:
 - `tmact detect --target session:0.0 --json` detects directory-access prompts.
 - `tmact status`, `inbox`, `summarize`, `broadcast`, and `panels` work from an
   agent YAML config.
-- `tmact loop` and `tmact watch` run narrow automation against panes, with
-  dry-run support.
+- `tmact loop` validates, starts, observes, pauses, resumes, restarts, and stops
+  detached pane-automation loops; `tmact watch` runs narrow allowlisted prompt
+  automation.
 - `tmact dispatch-work` creates or reuses a tmux session, launches an agent CLI,
   and sends it a prompt.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
@@ -34,6 +35,39 @@ Use the CLI when you want scriptable tmux control:
   reach the daemon over the local IPC socket only.
 - `tmact commands --json` exposes command metadata for tooling, and
   `tmact llm instructions` prints an LLM-facing operating guide.
+
+### Managed loop lifecycle
+
+Use tmact itself as the loop supervisor. Do not wrap loops in `nohup`, shell
+backgrounding, PID files, `while` loops, or hand-written tmux sessions.
+
+```sh
+# 1. Check the YAML and safely exercise one pass.
+tmact loop validate --config examples/maintenance-loop.yaml
+tmact loop run --config examples/maintenance-loop.yaml --dry-run --once
+
+# 2. Start an idempotent detached runtime in the tmact-loops tmux session.
+tmact loop start --config examples/maintenance-loop.yaml
+
+# 3. Observe or control it from any shell using the same --run-dir.
+tmact loop status --json
+tmact loop logs --config examples/maintenance-loop.yaml --follow
+tmact loop pause --config examples/maintenance-loop.yaml
+tmact loop resume --config examples/maintenance-loop.yaml
+tmact loop restart --config examples/maintenance-loop.yaml
+
+# 4. Request a cooperative stop and wait for final state.
+tmact loop stop --config examples/maintenance-loop.yaml --wait
+```
+
+`loop start` validates the config before launching, creates or reuses the
+detached `tmact-loops` session, waits for runtime registration, and returns an
+existing active runtime instead of starting a duplicate. `loop run` is the
+foreground/debugging form; the legacy `tmact loop --config ...` syntax remains
+an alias for it. Permission and approval prompts are never auto-confirmed.
+
+For machine-readable flags, safety notes, and the exact lifecycle contract,
+use `tmact help loop --json` or `tmact llm instructions --json`.
 
 Install the release binary (macOS or Linux/WSL, amd64/arm64):
 

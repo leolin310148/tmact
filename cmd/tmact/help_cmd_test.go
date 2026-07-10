@@ -20,7 +20,17 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "loop",
 			args: []string{"loop", "--help"},
-			want: []string{"loop", "Subcommands:", "tmact loop status", "--dry-run", "permission prompts"},
+			want: []string{"loop", "Subcommands:", "tmact loop start", "--dry-run", "Permission", "Do not write nohup"},
+		},
+		{
+			name: "loop start",
+			args: []string{"loop", "start", "--help"},
+			want: []string{"loop start", "Idempotently", "tmact-loops", "Do not put this command in nohup", "--timeout"},
+		},
+		{
+			name: "loop stop",
+			args: []string{"loop", "stop", "--help"},
+			want: []string{"cooperative stop", "--wait", "--force", "Bash polling loop"},
 		},
 		{
 			name: "nested loop status",
@@ -92,6 +102,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 		t.Fatalf("manifest = %#v", manifest)
 	}
 	foundLoopStatus := false
+	foundLoopStart := false
 	foundWorkflow := false
 	foundLLM := false
 	for _, command := range manifest.Commands {
@@ -99,6 +110,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 			foundLoopStatus = true
 			if len(command.Examples) == 0 || len(command.Notes) == 0 {
 				t.Fatalf("loop status help is too sparse: %#v", command)
+			}
+		}
+		if command.Command == "loop start" {
+			foundLoopStart = true
+			if len(command.Safety) == 0 || len(command.Notes) < 2 {
+				t.Fatalf("loop start help is too sparse: %#v", command)
 			}
 		}
 		if command.Command == "workflow" {
@@ -113,6 +130,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundLoopStatus {
 		t.Fatalf("loop status missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundLoopStart {
+		t.Fatalf("loop start missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundWorkflow {
 		t.Fatalf("workflow missing from manifest: %#v", manifest.Commands)
@@ -135,13 +155,23 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 		t.Fatalf("instructions too sparse: %#v", instructions)
 	}
 	foundUntrusted := false
+	foundLoopLifecycle := false
 	for _, note := range instructions.SafeDefaults {
 		if strings.Contains(note, "untrusted") {
 			foundUntrusted = true
 			break
 		}
 	}
+	for _, step := range instructions.RecommendedWorkflow {
+		if strings.Contains(step, "tmact loop start") && strings.Contains(step, "tmact loop stop") {
+			foundLoopLifecycle = true
+			break
+		}
+	}
 	if !foundUntrusted {
 		t.Fatalf("instructions missing untrusted-pane warning: %#v", instructions.SafeDefaults)
+	}
+	if !foundLoopLifecycle {
+		t.Fatalf("instructions missing managed loop lifecycle: %#v", instructions.RecommendedWorkflow)
 	}
 }

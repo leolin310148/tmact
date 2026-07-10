@@ -1,8 +1,8 @@
 # Running Loops
 
-Background automation should run in a detached tmux session such as
-`tmact-loops`. Do not start loop daemons in the same session/window where you
-are actively developing, because the foreground process will block that pane.
+Start background automation with `tmact loop start --config PATH`. tmact owns
+the detached `tmact-loops` session and runtime metadata; do not create the
+session, window, PID file, or shell wrapper yourself.
 
 ## Active Tasks
 
@@ -14,16 +14,17 @@ stop time, and stop command.
 
 ## Useful Commands
 
-Check running background windows:
+Check managed loop state:
 
 ```sh
-tmux list-windows -t tmact-loops -F '#{window_index} #{window_name} #{pane_current_command} dead=#{pane_dead} status=#{pane_dead_status}'
+tmact loop status
 ```
 
-Stop a specific daemon:
+Follow events and stop cleanly:
 
 ```sh
-tmux send-keys -t tmact-loops:0.0 C-c
+tmact loop logs --config PATH --follow
+tmact loop stop --config PATH --wait
 ```
 
 Inspect target panes:

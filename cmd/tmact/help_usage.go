@@ -32,9 +32,13 @@ Usage:
   tmact broadcast [--config examples/agents.yaml] --agent sample-codex --text "summarize progress" [--enter] [--execute]
   tmact panels plan [--config examples/agents.yaml] [--session sample-team] [--json]
   tmact panels ensure [--config examples/agents.yaml] [--session sample-team] [--execute]
-  tmact loop --config examples/night-loop.yaml [--dry-run] [--once] [--assume-idle-on-start]
+  tmact loop validate --config examples/night-loop.yaml
+  tmact loop run --config examples/night-loop.yaml --dry-run --once
+  tmact loop start --config examples/night-loop.yaml
   tmact loop status [--run-dir .tmact/runs] [--json]
-  tmact loop stop (--id ID | --config path)
+  tmact loop logs (--id ID | --config path) [--follow]
+  tmact loop pause|resume|restart --config examples/night-loop.yaml
+  tmact loop stop (--id ID | --config path) [--wait]
   tmact workflow discuss --config examples/openspec-workflow.yaml [--dry-run] [--once] [--execute]
   tmact workflow implement --config examples/openspec-implementation.yaml [--dry-run] [--once] [--execute]
   tmact workflow report review --config examples/openspec-workflow.yaml --role qa --kind accept --change-hash sha256:...
@@ -62,7 +66,7 @@ Commands:
   summarize     summarize recent pane and git activity
   broadcast     preview or send text to selected configured agent panes
   panels        plan or ensure configured agent tmux panels
-  loop          run, inspect, or stop a configurable tmux automation loop
+  loop          manage the full lifecycle of a configurable tmux automation loop
   workflow      run, inspect, or stop serialized OpenSpec review/implementation workflows
   watch         watch a pane and answer narrow allowlisted prompts
   dispatch-work create/reuse a session, launch an agent, and send it a prompt
@@ -78,6 +82,7 @@ Safety:
 
 More help:
   tmact help loop
+  tmact help loop start
   tmact help loop status
   tmact commands --json
   tmact llm instructions

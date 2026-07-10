@@ -2,6 +2,14 @@ package tmux
 
 import "testing"
 
+func TestShellJoinQuotesEveryArgument(t *testing.T) {
+	got := shellJoin([]string{"/tmp/tmact test", "loop", "it's.yaml", ""})
+	want := "'/tmp/tmact test' 'loop' 'it'\\''s.yaml' ''"
+	if got != want {
+		t.Fatalf("shellJoin = %q want %q", got, want)
+	}
+}
+
 func TestParsePanes(t *testing.T) {
 	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
 

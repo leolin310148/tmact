@@ -24,19 +24,37 @@ type TmuxInfo struct {
 }
 
 type Run struct {
-	ID         string    `json:"id"`
-	Kind       string    `json:"kind"`
-	ConfigPath string    `json:"config_path"`
-	Target     string    `json:"target"`
-	LogPath    string    `json:"log_path,omitempty"`
-	PID        int       `json:"pid"`
-	StartedAt  time.Time `json:"started_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	StoppedAt  time.Time `json:"stopped_at,omitempty"`
-	Status     string    `json:"status"`
-	Reason     string    `json:"reason,omitempty"`
-	Tmux       TmuxInfo  `json:"tmux,omitempty"`
+	ID          string    `json:"id"`
+	Kind        string    `json:"kind"`
+	ConfigPath  string    `json:"config_path"`
+	Target      string    `json:"target"`
+	LogPath     string    `json:"log_path,omitempty"`
+	DryRun      bool      `json:"dry_run,omitempty"`
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"started_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	StoppedAt   time.Time `json:"stopped_at,omitempty"`
+	Status      string    `json:"status"`
+	Reason      string    `json:"reason,omitempty"`
+	Phase       string    `json:"phase,omitempty"`
+	HeartbeatAt time.Time `json:"heartbeat_at,omitempty"`
+	Tmux        TmuxInfo  `json:"tmux,omitempty"`
 }
+
+// Control is the operator-requested state for a managed runtime. It lives in a
+// separate file from Run so the controller and runner never overwrite each
+// other's updates.
+type Control struct {
+	DesiredState string    `json:"desired_state"`
+	Reason       string    `json:"reason,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+const (
+	DesiredRunning = "running"
+	DesiredPaused  = "paused"
+	DesiredStopped = "stopped"
+)
 
 type EventSummary struct {
 	Timestamp time.Time `json:"ts,omitempty"`
@@ -52,6 +70,7 @@ type EventSummary struct {
 type Status struct {
 	Run            Run            `json:"run"`
 	RuntimeStatus  string         `json:"runtime_status"`
+	DesiredState   string         `json:"desired_state,omitempty"`
 	LastEvent      *EventSummary  `json:"last_event,omitempty"`
 	RecentProblems []EventSummary `json:"recent_problems,omitempty"`
 }
@@ -61,6 +80,7 @@ type RegisterOptions struct {
 	ConfigPath string
 	Target     string
 	LogPath    string
+	DryRun     bool
 	Tmux       TmuxInfo
 	Now        time.Time
 }
@@ -82,20 +102,35 @@ func Register(dir string, opts RegisterOptions) (Run, error) {
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
+	logPath := opts.LogPath
+	if logPath != "" {
+		if abs, err := filepath.Abs(logPath); err == nil {
+			logPath = abs
+		}
+	}
 	id := buildID(opts.Kind, opts.ConfigPath, opts.Target, os.Getpid())
 	run := Run{
-		ID:         id,
-		Kind:       opts.Kind,
-		ConfigPath: configPath,
-		Target:     opts.Target,
-		LogPath:    opts.LogPath,
-		PID:        os.Getpid(),
-		StartedAt:  opts.Now,
-		UpdatedAt:  opts.Now,
-		Status:     "running",
-		Tmux:       opts.Tmux,
+		ID:          id,
+		Kind:        opts.Kind,
+		ConfigPath:  configPath,
+		Target:      opts.Target,
+		LogPath:     logPath,
+		DryRun:      opts.DryRun,
+		PID:         os.Getpid(),
+		StartedAt:   opts.Now,
+		UpdatedAt:   opts.Now,
+		Status:      "running",
+		Phase:       "starting",
+		HeartbeatAt: opts.Now,
+		Tmux:        opts.Tmux,
 	}
-	return run, Write(dir, run)
+	if err := Write(dir, run); err != nil {
+		return Run{}, err
+	}
+	if err := WriteControl(dir, run.ID, Control{DesiredState: DesiredRunning, UpdatedAt: opts.Now}); err != nil {
+		return Run{}, err
+	}
+	return run, nil
 }
 
 func Finish(dir string, run Run, status string, reason string, now time.Time) error {
@@ -105,9 +140,15 @@ func Finish(dir string, run Run, status string, reason string, now time.Time) er
 	if now.IsZero() {
 		now = time.Now()
 	}
+	// Preserve heartbeat/phase updates written while the runner was active.
+	if latest, err := Read(dir, run.ID); err == nil {
+		run = latest
+	}
 	run.Status = status
 	run.Reason = reason
+	run.Phase = status
 	run.UpdatedAt = now
+	run.HeartbeatAt = now
 	run.StoppedAt = now
 	return Write(dir, run)
 }
@@ -121,6 +162,27 @@ func Mark(dir string, run Run, status string, reason string, now time.Time) erro
 	}
 	run.Status = status
 	run.Reason = reason
+	run.UpdatedAt = now
+	return Write(dir, run)
+}
+
+// Heartbeat records the runner's current phase without touching operator
+// control state.
+func Heartbeat(dir string, run Run, phase string, now time.Time) error {
+	if dir == "" {
+		dir = DefaultDir
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	latest, err := Read(dir, run.ID)
+	if err == nil {
+		run = latest
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	run.Phase = phase
+	run.HeartbeatAt = now
 	run.UpdatedAt = now
 	return Write(dir, run)
 }
@@ -143,6 +205,53 @@ func Write(dir string, run Run) error {
 
 func Path(dir string, id string) string {
 	return filepath.Join(dir, id+".json")
+}
+
+func ControlPath(dir string, id string) string {
+	return filepath.Join(dir, id+".control.json")
+}
+
+func WriteControl(dir string, id string, control Control) error {
+	if dir == "" {
+		dir = DefaultDir
+	}
+	if id == "" {
+		return errors.New("runtime id is required")
+	}
+	if control.DesiredState != DesiredRunning && control.DesiredState != DesiredPaused && control.DesiredState != DesiredStopped {
+		return fmt.Errorf("invalid desired state %q", control.DesiredState)
+	}
+	if control.UpdatedAt.IsZero() {
+		control.UpdatedAt = time.Now()
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(control, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := ControlPath(dir, id)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func ReadControl(dir string, id string) (Control, error) {
+	if dir == "" {
+		dir = DefaultDir
+	}
+	data, err := os.ReadFile(ControlPath(dir, id))
+	if err != nil {
+		return Control{}, err
+	}
+	var control Control
+	if err := json.Unmarshal(data, &control); err != nil {
+		return Control{}, err
+	}
+	return control, nil
 }
 
 func Read(dir string, id string) (Run, error) {
@@ -170,7 +279,7 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 	}
 	var statuses []Status
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || strings.HasSuffix(entry.Name(), ".control.json") {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
@@ -187,6 +296,9 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 		status, err := BuildStatus(run, now)
 		if err != nil {
 			return nil, err
+		}
+		if control, err := ReadControl(dir, run.ID); err == nil {
+			status.DesiredState = control.DesiredState
 		}
 		statuses = append(statuses, status)
 	}
@@ -222,6 +334,10 @@ func RuntimeStatus(run Run) string {
 	return "dead"
 }
 
+func Active(status Status) bool {
+	return status.RuntimeStatus != "stopped" && status.RuntimeStatus != "error" && status.RuntimeStatus != "dead" && status.RuntimeStatus != "unknown"
+}
+
 func ProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
@@ -230,7 +346,10 @@ func ProcessAlive(pid int) bool {
 	if err != nil {
 		return false
 	}
-	return process.Signal(syscall.Signal(0)) == nil
+	err = process.Signal(syscall.Signal(0))
+	// POSIX kill(pid, 0) returns EPERM when the process exists but the caller
+	// cannot signal it. That is still positive liveness evidence.
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func Select(statuses []Status, id string, configPath string) (Run, error) {
@@ -259,7 +378,7 @@ func SelectStatus(statuses []Status, id string, configPath string) (Status, erro
 			matches = append(matches, status)
 		case configPath != "" && run.ConfigPath == configPath:
 			matches = append(matches, status)
-			if status.RuntimeStatus == "running" || status.RuntimeStatus == "stopping" {
+			if Active(status) {
 				active = append(active, status)
 			}
 		}
@@ -281,6 +400,9 @@ func SelectStatus(statuses []Status, id string, configPath string) (Status, erro
 
 func ReadLogSummary(path string) (*EventSummary, []EventSummary, error) {
 	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil, nil
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -339,7 +461,15 @@ func parseEvent(line string) (EventSummary, error) {
 }
 
 func isProblem(event EventSummary) bool {
-	return event.Type == "error" || event.Type == "stop" || event.Type == "blocked" || event.Status == "failed"
+	if event.Type == "stop" {
+		switch event.Reason {
+		case "requested", "actions_exhausted", "max_runtime", "max_actions":
+			return false
+		default:
+			return true
+		}
+	}
+	return event.Type == "error" || event.Type == "blocked" || event.Status == "failed"
 }
 
 var nonID = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)

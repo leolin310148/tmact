@@ -1,10 +1,10 @@
 # Generic frontend/UI review loop for a single agent pane.
 #
 # Dry-run one pass:
-#   go run ./cmd/tmact loop --config examples/frontend-review-loop.yaml --dry-run --once --assume-idle-on-start
+#   go run ./cmd/tmact loop run --config examples/frontend-review-loop.yaml --dry-run --once --assume-idle-on-start
 #
-# Start the real loop:
-#   go run ./cmd/tmact loop --config examples/frontend-review-loop.yaml --assume-idle-on-start
+# Start the managed background loop:
+#   tmact loop start --config examples/frontend-review-loop.yaml --assume-idle-on-start
 
 target: sample-frontend:0.0
 capture_lines: 200

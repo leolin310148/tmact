@@ -60,16 +60,20 @@ agents. The safety design is intentional — do not weaken it:
 
 ## Running Background Work
 
-Background loop/workflow daemons run in the detached tmux session
-`tmact-loops` — never start one in the main `tmact` session (it blocks the
-working window). `RUNNING_LOOPS.md` is the local inventory template; keep live
-machine-specific inventory in an untracked note or local operations docs.
+Use `tmact loop start --config <path>` for background loops. It creates or
+reuses the detached `tmact-loops` session, prevents duplicate active runs for
+the same config, and waits for runtime registration. Never write a nohup,
+background-shell, PID-file, while-loop, or hand-written tmux wrapper around a
+loop. Use `tmact loop run` only for foreground debugging or `--dry-run --once`.
 
 Use the runmeta commands to inspect/stop rather than killing tmux windows:
 
 ```sh
 tmact loop status
-tmact loop stop --id <id>
+tmact loop logs --config <path> --follow
+tmact loop pause --config <path>
+tmact loop resume --config <path>
+tmact loop stop --id <id> --wait
 tmact workflow stop --config <path>
 ```
 

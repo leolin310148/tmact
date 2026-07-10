@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/leolin310148/tmact/internal/loop"
 	"github.com/leolin310148/tmact/internal/runmeta"
@@ -23,14 +24,39 @@ func runLoop(args []string) error {
 	}
 	if len(args) > 0 {
 		switch args[0] {
+		case "start":
+			return runLoopStart(args[1:])
+		case "run":
+			return runLoopForeground(args[1:])
+		case "validate":
+			return runLoopValidate(args[1:])
 		case "status":
-			return runRuntimeStatus("loop", args[1:])
+			return runLoopStatus(args[1:])
 		case "stop":
-			return runRuntimeStop("loop", args[1:])
+			return runLoopStop(args[1:])
+		case "pause":
+			return runLoopControl(args[1:], runmeta.DesiredPaused)
+		case "resume":
+			return runLoopControl(args[1:], runmeta.DesiredRunning)
+		case "restart":
+			return runLoopRestart(args[1:])
+		case "logs":
+			return runLoopLogs(args[1:])
+		}
+		if !strings.HasPrefix(args[0], "-") {
+			return fmt.Errorf("unknown loop subcommand %q", args[0])
 		}
 	}
+	// Backward compatibility: the historical foreground form was
+	// `tmact loop --config ...`. Keep it as an alias for `loop run`.
+	return runLoopForeground(args)
+}
 
-	fs := flag.NewFlagSet("loop", flag.ContinueOnError)
+func runLoopForeground(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("loop run")
+	}
+	fs := flag.NewFlagSet("loop run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
 	configPath := fs.String("config", "", "path to loop YAML config")
@@ -54,15 +80,27 @@ func runLoop(args []string) error {
 		cfg.AssumeIdleOnStart = true
 	}
 
-	runner := loop.NewRunner(cfg, loop.Options{
+	options := loop.Options{
 		DryRun: *dryRun,
 		Once:   *once,
-	})
+	}
 	if *once {
+		runner := loop.NewRunner(cfg, options)
 		return runner.Run(context.Background())
 	}
 
-	return runManagedRunner(*runDir, "loop", *configPath, cfg.Target, cfg.LogPath, func(ctx context.Context) error {
+	return runManagedRunner(*runDir, "loop", *configPath, cfg.Target, cfg.LogPath, *dryRun, func(ctx context.Context, record runmeta.Run) error {
+		options.Control = func() (string, error) {
+			control, err := runmeta.ReadControl(*runDir, record.ID)
+			if errors.Is(err, os.ErrNotExist) {
+				return runmeta.DesiredRunning, nil
+			}
+			return control.DesiredState, err
+		}
+		options.Heartbeat = func(phase string) error {
+			return runmeta.Heartbeat(*runDir, record, phase, tmactNow())
+		}
+		runner := loop.NewRunner(cfg, options)
 		return runner.Run(ctx)
 	})
 }
@@ -97,13 +135,14 @@ func runWatch(args []string) error {
 	return runner.Run(context.Background())
 }
 
-func runManagedRunner(runDir string, kind string, configPath string, target string, logPath string, run func(context.Context) error) error {
+func runManagedRunner(runDir string, kind string, configPath string, target string, logPath string, dryRun bool, run func(context.Context, runmeta.Run) error) error {
 	startedAt := tmactNow()
 	record, err := runmeta.Register(runDir, runmeta.RegisterOptions{
 		Kind:       kind,
 		ConfigPath: configPath,
 		Target:     target,
 		LogPath:    logPath,
+		DryRun:     dryRun,
 		Tmux:       currentTmuxInfo(),
 		Now:        startedAt,
 	})
@@ -111,13 +150,16 @@ func runManagedRunner(runDir string, kind string, configPath string, target stri
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	err = run(ctx)
+	err = run(ctx, record)
 	status := "stopped"
 	reason := "complete"
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, loop.ErrStopRequested) {
+		err = nil
+		reason = "requested"
+	} else if errors.Is(err, context.Canceled) {
 		err = nil
 		reason = "interrupted"
 	} else if err != nil {

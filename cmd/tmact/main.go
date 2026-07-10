@@ -36,11 +36,16 @@ func main() {
 }
 
 var (
-	listAllTmuxPanes    = tmux.ListAllPanes
-	listTargetTmuxPanes = tmux.ListPanes
-	pasteTmuxText       = tmux.PasteText
-	sendTmuxKeys        = tmux.SendKeys
-	tmactNow            = time.Now
+	listAllTmuxPanes     = tmux.ListAllPanes
+	listTargetTmuxPanes  = tmux.ListPanes
+	listSessionTmuxPanes = tmux.ListSessionPanes
+	newTmuxSession       = tmux.NewSession
+	newTmuxWindow        = tmux.NewWindow
+	pasteTmuxText        = tmux.PasteText
+	sendTmuxKeys         = tmux.SendKeys
+	tmactNow             = time.Now
+	tmactSleep           = time.Sleep
+	tmactExecutable      = os.Executable
 )
 
 func run(args []string) error {

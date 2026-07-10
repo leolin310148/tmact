@@ -32,6 +32,13 @@ func TestRegisterAndListRunStatus(t *testing.T) {
 	if run.ID == "" || !strings.HasPrefix(run.ID, "loop-night-loop-") {
 		t.Fatalf("id = %q", run.ID)
 	}
+	control, err := ReadControl(dir, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if control.DesiredState != DesiredRunning {
+		t.Fatalf("control = %#v", control)
+	}
 
 	statuses, err := List(dir, "loop", now)
 	if err != nil {
@@ -47,8 +54,44 @@ func TestRegisterAndListRunStatus(t *testing.T) {
 	if status.LastEvent == nil || status.LastEvent.Type != "stop" || status.LastEvent.Reason != "max_runtime" {
 		t.Fatalf("last event = %#v", status.LastEvent)
 	}
-	if len(status.RecentProblems) != 1 || status.RecentProblems[0].Type != "stop" {
+	if len(status.RecentProblems) != 0 {
 		t.Fatalf("problems = %#v", status.RecentProblems)
+	}
+}
+
+func TestHeartbeatAndFinishPreserveLatestPhase(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 5, 12, 8, 0, 0, 0, time.UTC)
+	run, err := Register(dir, RegisterOptions{
+		Kind:       "loop",
+		ConfigPath: "loop.yaml",
+		Target:     "demo:0.0",
+		Now:        start,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beat := start.Add(time.Minute)
+	if err := Heartbeat(dir, run, "waiting_idle", beat); err != nil {
+		t.Fatal(err)
+	}
+	finish := beat.Add(time.Minute)
+	if err := Finish(dir, run, "stopped", "requested", finish); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(dir, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "stopped" || got.Phase != "stopped" || !got.HeartbeatAt.Equal(finish) {
+		t.Fatalf("run = %#v", got)
+	}
+	statuses, err := List(dir, "loop", finish)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 1 {
+		t.Fatalf("control file leaked into run list: %#v", statuses)
 	}
 }
 
