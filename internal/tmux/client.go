@@ -105,6 +105,14 @@ func NewSession(session string, window string, cwd string, command []string) err
 	return runTmux(args...)
 }
 
+// KillSession stops one exact tmux session.
+func KillSession(session string) error {
+	if strings.TrimSpace(session) == "" {
+		return fmt.Errorf("session cannot be empty")
+	}
+	return runTmux("kill-session", "-t", session)
+}
+
 func NewWindow(session string, window string, cwd string, command []string) error {
 	args := []string{"new-window", "-d", "-t", session + ":"}
 	if window != "" {

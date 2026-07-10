@@ -43,7 +43,7 @@ internal/runmeta/             # metadata for long-running loops/workflows
 internal/foldertrust/         # exact-directory Claude/Codex trust handling
 internal/agents/              # agents.yaml config consumers
 internal/loop/                # single-pane scheduled action loop
-internal/workflow/            # OpenSpec workflow runner
+internal/workflow/            # generic revision-aware DAG workflow engine
 internal/watch/               # allowlisted prompt watcher
 internal/web/                 # statusd web UI server and static assets
 examples/                     # sample YAML configs

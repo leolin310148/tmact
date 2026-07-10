@@ -30,8 +30,9 @@ Run dry-run config checks:
 .cache/tmact loop run --config examples/night-loop.yaml --dry-run --once
 .cache/tmact loop run --config examples/maintenance-loop.yaml --dry-run --once --assume-idle-on-start
 .cache/tmact watch --config examples/accept-question-watch.yaml --dry-run --once
-.cache/tmact workflow discuss --config examples/openspec-workflow.yaml --dry-run --once
-.cache/tmact workflow implement --config examples/openspec-implementation.yaml --dry-run --once
+.cache/tmact workflow example --profile openspec > tmact-openspec-workflow.yaml
+.cache/tmact workflow validate --config tmact-openspec-workflow.yaml --var change=demo
+.cache/tmact workflow plan --config tmact-openspec-workflow.yaml --var change=demo
 ```
 
 ## Shell hook events (live socket)
