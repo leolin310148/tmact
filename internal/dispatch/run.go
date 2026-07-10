@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leolin310148/tmact/internal/foldertrust"
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
+	"github.com/leolin310148/tmact/internal/prompt"
 )
 
 // Run dispatches work using the real tmux helpers.
@@ -18,11 +20,12 @@ func Run(opts Options) (Report, error) {
 // RunWithDeps dispatches work using the supplied dependencies.
 func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	report := Report{
-		Session: opts.Session,
-		Dir:     opts.Dir,
-		Agent:   opts.Agent,
-		Prompt:  opts.Prompt,
-		Execute: opts.Execute,
+		Session:     opts.Session,
+		Dir:         opts.Dir,
+		Agent:       opts.Agent,
+		Prompt:      opts.Prompt,
+		Execute:     opts.Execute,
+		TrustFolder: opts.TrustFolder,
 	}
 
 	if strings.TrimSpace(opts.Session) == "" {
@@ -30,6 +33,9 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	}
 	if !supportedAgents[opts.Agent] {
 		return report, fmt.Errorf("unsupported agent %q; want one of %s", opts.Agent, strings.Join(SupportedAgents(), ", "))
+	}
+	if opts.TrustFolder && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
+		return report, fmt.Errorf("trust-folder only supports claude or codex, got %q", opts.Agent)
 	}
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return report, fmt.Errorf("prompt is required")
@@ -111,7 +117,9 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	steps[1].Status = StatusOK
 
-	if err := waitReady(opts, deps, target); err != nil {
+	trusted, err := waitReady(opts, deps, target)
+	report.TrustedFolder = trusted
+	if err != nil {
 		steps[2].Status = StatusFailed
 		report.Steps = steps
 		return report, err
@@ -153,6 +161,20 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 			return report, fmt.Errorf("session %s is already running %s but it is busy working; refusing to dispatch", opts.Session, opts.Agent)
 		}
 		if classified.Asking {
+			if opts.TrustFolder && classified.InteractivePrompt != nil && classified.InteractivePrompt.Type == prompt.TypeTrustFolder {
+				report.AgentWasRunning = true
+				result, err := foldertrust.AcceptPrompt(foldertrust.Options{Target: target, Dir: opts.Dir, Agent: opts.Agent}, pane, raw, runtime, deps.SendKeys)
+				if err != nil {
+					return report, err
+				}
+				report.TrustedFolder = result.Accepted
+				withoutTrust := opts
+				withoutTrust.TrustFolder = false
+				if _, err := waitReady(withoutTrust, deps, target); err != nil {
+					return report, err
+				}
+				return dispatchReuse(opts, deps, report, target)
+			}
 			return report, fmt.Errorf("session %s is running %s but it is waiting on a prompt (%s); resolve it first", opts.Session, opts.Agent, promptKind(classified))
 		}
 		report.AgentWasRunning = true
@@ -212,7 +234,9 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	}
 	steps[0].Status = StatusOK
 
-	if err := waitReady(opts, deps, target); err != nil {
+	trusted, err := waitReady(opts, deps, target)
+	report.TrustedFolder = trusted
+	if err != nil {
 		steps[1].Status = StatusFailed
 		report.Steps = steps
 		return report, err

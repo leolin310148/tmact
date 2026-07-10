@@ -52,9 +52,43 @@ func TestBuildPanelReportUsesOverrideSession(t *testing.T) {
 	}
 }
 
+func TestBuildPanelReportPlansExactFolderTrust(t *testing.T) {
+	cfg := Config{Agents: []AgentConfig{{Name: "worker", Session: "agents", Window: "worker", Repo: "/repo", Type: "codex", TrustFolder: true}}}
+	report, err := buildPanelReport(cfg, PanelOptions{}, tmux.Layout{Sessions: map[string]bool{}, Windows: map[string]map[string]bool{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := report.Operations[0]
+	if !op.TrustFolder || op.Launcher != "codex" || op.Repo != "/repo" {
+		t.Fatalf("operation = %#v", op)
+	}
+}
+
+func TestBuildPanelReportTrustOverrideRequiresRepo(t *testing.T) {
+	cfg := Config{Agents: []AgentConfig{{Name: "worker", Session: "agents", Window: "worker", Type: "claude"}}}
+	_, err := buildPanelReport(cfg, PanelOptions{TrustFolders: true}, tmux.Layout{Sessions: map[string]bool{}, Windows: map[string]map[string]bool{}})
+	if err == nil {
+		t.Fatal("expected exact repo error")
+	}
+}
+
 func TestLaunchCommandRejectsUnsupportedLauncher(t *testing.T) {
 	_, err := launchCommand(AgentConfig{Name: "sample", Launcher: "bash"})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestConfigRejectsFolderTrustWithoutExactRepo(t *testing.T) {
+	err := validateConfig(Config{Agents: []AgentConfig{{Name: "worker", Target: "work:0.0", Type: "codex", TrustFolder: true}}})
+	if err == nil {
+		t.Fatal("expected repo requirement")
+	}
+}
+
+func TestConfigRejectsFolderTrustForNonClaudeCodex(t *testing.T) {
+	err := validateConfig(Config{Agents: []AgentConfig{{Name: "worker", Target: "work:0.0", Repo: "/repo", Type: "gemini", TrustFolder: true}}})
+	if err == nil {
+		t.Fatal("expected launcher restriction")
 	}
 }

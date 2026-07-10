@@ -21,7 +21,8 @@ Use the CLI when you want scriptable tmux control:
   detached pane-automation loops; `tmact watch` runs narrow allowlisted prompt
   automation.
 - `tmact dispatch-work` creates or reuses a tmux session, launches an agent CLI,
-  and sends it a prompt.
+  sends it a prompt, and can explicitly handle exact-directory Claude/Codex
+  workspace trust.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
 - `tmact hook init zsh|bash|fish` prints an opt-in shell snippet whose
@@ -68,6 +69,29 @@ an alias for it. Permission and approval prompts are never auto-confirmed.
 
 For machine-readable flags, safety notes, and the exact lifecycle contract,
 use `tmact help loop --json` or `tmact llm instructions --json`.
+
+### Exact-directory workspace trust
+
+Workspace trust is opt-in and limited to Claude/Codex. `dispatch-work` can
+handle the startup prompt while it waits for the agent:
+
+```sh
+tmact dispatch-work work --dir ~/work/repo --agent codex \
+  --prompt "run the tests" --trust-folder --execute
+```
+
+For a pane created by another tool, inspect first (dry-run), then execute:
+
+```sh
+tmact trust-folder --target work:0.0 --dir ~/work/repo --agent claude
+tmact trust-folder --target work:0.0 --dir ~/work/repo --agent claude --execute
+```
+
+For configured panels, set `trust_folder: true` on an individual Claude/Codex
+agent or pass `panels ensure --trust-folders --execute`. tmact accepts only a
+recognized trust prompt when the detected runtime matches and the canonical
+pane cwd is exactly the allowed directory. Parent directories, child
+directories, ambiguous choices, and every other permission prompt are refused.
 
 Install the release binary (macOS or Linux/WSL, amd64/arm64):
 
@@ -258,7 +282,9 @@ session locally. For compatibility, `dispatch-work --peer` also falls back to
 Most commands preview actions first and require `--execute` before pressing
 keys. Watchers keep allowlist checks, and loops stop on known permission,
 approval, trust-folder, and confirmation prompts instead of auto-confirming
-them.
+them. The only exception is explicit exact-directory workspace trust through
+`dispatch-work --trust-folder`, `panels ensure --trust-folders`, an agent's
+`trust_folder: true`, or the dry-run-first `tmact trust-folder` command.
 
 A loop can also back off on quota: an optional `quota` block (see
 [`examples/quota-aware-loop.yaml`](examples/quota-aware-loop.yaml)) reads the

@@ -28,6 +28,7 @@ type AgentConfig struct {
 	Role          string `yaml:"role"`
 	Launcher      string `yaml:"launcher"`
 	AllowAllTools bool   `yaml:"allow_all_tools"`
+	TrustFolder   bool   `yaml:"trust_folder"`
 	CaptureLines  int    `yaml:"capture_lines"`
 }
 
@@ -144,6 +145,9 @@ func validateLauncher(agent AgentConfig) error {
 		if agent.AllowAllTools {
 			return errors.New("allow_all_tools requires launcher or type")
 		}
+		if agent.TrustFolder {
+			return errors.New("trust_folder requires a claude or codex launcher")
+		}
 		return nil
 	}
 	if !isSupportedLauncher(launcher) {
@@ -151,6 +155,12 @@ func validateLauncher(agent AgentConfig) error {
 	}
 	if agent.AllowAllTools && launcher != "copilot" {
 		return fmt.Errorf("allow_all_tools is only supported for copilot, not %s", launcher)
+	}
+	if agent.TrustFolder && launcher != "claude" && launcher != "codex" {
+		return fmt.Errorf("trust_folder is only supported for claude or codex, not %s", launcher)
+	}
+	if agent.TrustFolder && agent.Repo == "" {
+		return errors.New("trust_folder requires repo as the exact allowed directory")
 	}
 	return nil
 }

@@ -8,9 +8,14 @@ import (
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
+type FolderTrustFunc func(target, dir, agent string, timeout time.Duration) (bool, error)
+
 type PanelOptions struct {
-	Session string
-	Execute bool
+	Session      string
+	Execute      bool
+	TrustFolders bool
+	TrustTimeout time.Duration
+	FolderTrust  FolderTrustFunc
 }
 
 type PanelReport struct {
@@ -20,15 +25,18 @@ type PanelReport struct {
 }
 
 type PanelOperation struct {
-	Agent   string   `json:"agent"`
-	Action  string   `json:"action"`
-	Session string   `json:"session"`
-	Window  string   `json:"window"`
-	Target  string   `json:"target"`
-	Repo    string   `json:"repo,omitempty"`
-	Command []string `json:"command,omitempty"`
-	Status  string   `json:"status"`
-	Error   string   `json:"error,omitempty"`
+	Agent         string   `json:"agent"`
+	Action        string   `json:"action"`
+	Session       string   `json:"session"`
+	Window        string   `json:"window"`
+	Target        string   `json:"target"`
+	Repo          string   `json:"repo,omitempty"`
+	Command       []string `json:"command,omitempty"`
+	Launcher      string   `json:"launcher,omitempty"`
+	TrustFolder   bool     `json:"trust_folder,omitempty"`
+	TrustedFolder bool     `json:"trusted_folder,omitempty"`
+	Status        string   `json:"status"`
+	Error         string   `json:"error,omitempty"`
 }
 
 func PlanPanels(cfg Config, opts PanelOptions) (PanelReport, error) {
@@ -70,6 +78,17 @@ func EnsurePanels(cfg Config, opts PanelOptions) (PanelReport, error) {
 			op.Status = "error"
 			op.Error = "unknown panel action"
 		}
+		if op.Status == "ok" && op.TrustFolder && (op.Action == "new_session" || op.Action == "new_window") {
+			if opts.FolderTrust == nil {
+				setPanelStatus(op, fmt.Errorf("trust folder: handler is not configured"))
+				continue
+			}
+			accepted, err := opts.FolderTrust(op.Target, op.Repo, op.Launcher, opts.TrustTimeout)
+			op.TrustedFolder = accepted
+			if err != nil {
+				setPanelStatus(op, fmt.Errorf("trust folder: %w", err))
+			}
+		}
 	}
 	return report, nil
 }
@@ -91,6 +110,11 @@ func buildPanelReport(cfg Config, opts PanelOptions, layout tmux.Layout) (PanelR
 		}
 
 		action := "exists"
+		launcher := agentLauncher(agent)
+		trustFolder := (agent.TrustFolder || opts.TrustFolders) && (launcher == "claude" || launcher == "codex")
+		if trustFolder && agent.Repo == "" {
+			return PanelReport{}, fmt.Errorf("agent %q: exact repo is required when folder trust is enabled", agent.Name)
+		}
 		switch {
 		case !layout.Sessions[session]:
 			action = "new_session"
@@ -108,14 +132,16 @@ func buildPanelReport(cfg Config, opts PanelOptions, layout tmux.Layout) (PanelR
 		}
 
 		report.Operations = append(report.Operations, PanelOperation{
-			Agent:   agent.Name,
-			Action:  action,
-			Session: session,
-			Window:  window,
-			Target:  session + ":" + window + ".0",
-			Repo:    agent.Repo,
-			Command: command,
-			Status:  "planned",
+			Agent:       agent.Name,
+			Action:      action,
+			Session:     session,
+			Window:      window,
+			Target:      session + ":" + window + ".0",
+			Repo:        agent.Repo,
+			Command:     command,
+			Launcher:    launcher,
+			TrustFolder: trustFolder,
+			Status:      "planned",
 		})
 	}
 	return report, nil

@@ -21,6 +21,9 @@ func printDispatchReport(report dispatch.Report) {
 		fmt.Printf("  target: %s\n", report.Target)
 	}
 	fmt.Printf("  session existed: %t  agent already running: %t\n", report.SessionExisted, report.AgentWasRunning)
+	if report.TrustFolder {
+		fmt.Printf("  folder trust: requested  accepted: %t\n", report.TrustedFolder)
+	}
 	for _, step := range report.Steps {
 		line := fmt.Sprintf("  [%s] %s", step.Status, step.Name)
 		if step.Detail != "" {
@@ -155,6 +158,9 @@ func printPanelReport(report agents.PanelReport) {
 		fmt.Printf("%s\t%s\t%s\t%s", op.Agent, op.Action, op.Target, op.Status)
 		if len(op.Command) > 0 {
 			fmt.Printf("\tcmd:%s", strings.Join(op.Command, " "))
+		}
+		if op.TrustFolder {
+			fmt.Printf("\ttrust-folder:true\ttrusted:%t", op.TrustedFolder)
 		}
 		if op.Error != "" {
 			fmt.Printf("\terror:%s", op.Error)

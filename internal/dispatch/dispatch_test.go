@@ -158,6 +158,16 @@ func TestRunRejectsUnsupportedAgent(t *testing.T) {
 	}
 }
 
+func TestRunRejectsTrustFolderForUnsupportedAgent(t *testing.T) {
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Agent = "gemini"
+	opts.TrustFolder = true
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "only supports claude or codex") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRunRejectsEmptyPrompt(t *testing.T) {
 	_, deps := baseDeps()
 	opts := baseOpts()
@@ -230,6 +240,66 @@ func TestExecuteNewSession(t *testing.T) {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
 		}
+	}
+}
+
+func TestExecuteNewSessionAutoTrustsExactCodexDirectory(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	pane := codexPane()
+	pane.CurrentPath = dir
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.keys) == 0 {
+			return "OpenAI Codex\nDo you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n", nil
+		}
+		if len(rec.pastes) < 2 {
+			return "OpenAI Codex\n› ", nil
+		}
+		return "OpenAI Codex\nWorking... esc to interrupt", nil
+	}
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Agent = "codex"
+	opts.Execute = true
+	opts.TrustFolder = true
+	opts.ReadySettle = 0
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.TrustFolder || !report.TrustedFolder {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(rec.keys) != 1 || len(rec.keys[0].keys) != 1 || rec.keys[0].keys[0] != "Enter" {
+		t.Fatalf("keys = %#v", rec.keys)
+	}
+}
+
+func TestExecuteNewSessionStillRefusesTrustPromptWithoutOptIn(t *testing.T) {
+	_, deps := baseDeps()
+	dir := t.TempDir()
+	pane := codexPane()
+	pane.CurrentPath = dir
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return "OpenAI Codex\nDo you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n", nil
+	}
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Agent = "codex"
+	opts.Execute = true
+
+	_, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil || !strings.Contains(err.Error(), "refusing to auto-confirm") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

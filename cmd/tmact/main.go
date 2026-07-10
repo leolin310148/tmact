@@ -135,6 +135,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runDispatch(args[1:])
+	case "trust-folder":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runTrustFolder(args[1:])
 	case "hook":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")

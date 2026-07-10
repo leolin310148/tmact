@@ -56,6 +56,7 @@ type Options struct {
 	Execute      bool
 	ReadyTimeout time.Duration
 	ReadySettle  time.Duration
+	TrustFolder  bool
 }
 
 // Step is one planned or executed operation in a dispatch.
@@ -76,6 +77,8 @@ type Report struct {
 	SessionExisted  bool   `json:"session_existed"`
 	AgentWasRunning bool   `json:"agent_was_running"`
 	Execute         bool   `json:"execute"`
+	TrustFolder     bool   `json:"trust_folder,omitempty"`
+	TrustedFolder   bool   `json:"trusted_folder,omitempty"`
 	Steps           []Step `json:"steps"`
 }
 
