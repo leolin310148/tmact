@@ -65,6 +65,7 @@ func buildLLMInstructions() llmInstructions {
 			"For quota-gated loops, put `quota: {enabled: true, provider: codex, session_min_remaining_percent: 20, weekly_require_headroom: true}` in YAML. A cycle runs only with strictly more than 20% of the 5-hour window remaining and positive weekly headroom (expected linear usage is greater than actual usage). Use provider: claude for Claude.",
 			"Use `tmact loop start`, never nohup, shell backgrounding, hand-written PID files, while loops, or hand-written tmux sessions. tmact owns the detached loop process and start is idempotent per config.",
 			"Use `tmact loop pause` for a temporary scheduling hold, `resume` after the operator clears the blocker, and `restart` when the config or runtime must be relaunched.",
+			"For workflow v2, generate or author YAML, then use `tmact workflow validate --config PATH --var key=value` and `tmact workflow plan --config PATH --var key=value`; only then use `workflow start ... --execute`. Monitor with status/logs, resolve human stages with `resolve`, and report agent results only with the runner-issued dispatch ID.",
 			"When a newly launched Claude/Codex agent is blocked on workspace trust, prefer `dispatch-work --trust-folder`; for another launcher workflow use `tmact trust-folder --target TARGET --dir EXACT_DIR --agent claude|codex` as a dry run, then repeat with --execute.",
 			"Resolve targets explicitly. Numeric targets such as `-t 0` come from the latest `tmact ls` cache.",
 			"Preview side-effecting commands first. `send`, `broadcast`, `panels ensure`, `workflow`, and `dispatch-work` are dry-run or planning-oriented until `--execute` is supplied.",
@@ -77,7 +78,7 @@ func buildLLMInstructions() llmInstructions {
 			"Do not send input to busy panes unless the operator explicitly requested it.",
 			"Keep web/statusd binds on 127.0.0.1 unless the operator explicitly chooses a trusted-network bind.",
 			"Use `--execute` only after checking the planned target, prompt, and command effect.",
-			"Do not resume or restart a loop stopped by a permission prompt until a human has reviewed and handled that prompt.",
+			"Do not resume a loop or workflow stopped by a permission prompt until a human has reviewed and handled that prompt.",
 			"Quota reads fail open by default, including unavailable weekly pace. Set quota.fail_closed: true only when skipping is safer than continuing without a fresh quota decision.",
 		},
 		JSONTips: []string{
@@ -85,6 +86,7 @@ func buildLLMInstructions() llmInstructions {
 			"`ls --json`, `inspect --json`, `statusd read --json`, `usage --json`, and workflow status/report commands are preferred for machine parsing.",
 			"Side-effect previews still return enough metadata to audit targets before adding `--execute`.",
 			"Use `tmact help loop --json` for the complete loop lifecycle contract and `tmact help loop start --json` for start-specific flags and idempotency semantics.",
+			"Use `tmact help workflow --json` for the revision-aware DAG lifecycle and durable report/resolve contract.",
 		},
 		CommandCatalog: commandManifest(),
 	}

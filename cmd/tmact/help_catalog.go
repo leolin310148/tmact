@@ -4,7 +4,8 @@ func commandHelpCatalog() []commandHelp {
 	return concatCommandHelpCatalogs(
 		paneCommandHelpCatalog(),
 		agentCommandHelpCatalog(),
-		workflowCommandHelpCatalog(),
+		loopCommandHelpCatalog(),
+		workflowV2CommandHelpCatalog(),
 		hookCommandHelpCatalog(),
 		llmCommandHelpCatalog(),
 		paneUtilityCommandHelpCatalog(),

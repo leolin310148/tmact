@@ -40,12 +40,14 @@ Usage:
   tmact loop logs (--id ID | --config path) [--follow]
   tmact loop pause|resume|restart --config examples/night-loop.yaml
   tmact loop stop (--id ID | --config path) [--wait]
-  tmact workflow discuss --config examples/openspec-workflow.yaml [--dry-run] [--once] [--execute]
-  tmact workflow implement --config examples/openspec-implementation.yaml [--dry-run] [--once] [--execute]
-  tmact workflow report review --config examples/openspec-workflow.yaml --role qa --kind accept --change-hash sha256:...
-  tmact workflow example
-  tmact workflow status [--config examples/openspec-workflow.yaml] [--json]
-  tmact workflow stop (--id ID | --config path)
+  tmact workflow example [--profile openspec]
+  tmact workflow validate --config workflow.yaml [--var key=value] [--json]
+  tmact workflow plan --config workflow.yaml [--var key=value] [--json]
+  tmact workflow run --config workflow.yaml [--var key=value] [--once] [--execute]
+  tmact workflow start --config workflow.yaml [--var key=value] [--execute]
+  tmact workflow status (--id ID | --config workflow.yaml) [--json]
+  tmact workflow report --dispatch-id ID --outcome OUTCOME [--body TEXT]
+  tmact workflow stop (--id ID | --config workflow.yaml) --wait
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
   tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
   tmact trust-folder --target work:0.0 --dir /repo --agent claude [--execute]
@@ -69,7 +71,7 @@ Commands:
   broadcast     preview or send text to selected configured agent panes
   panels        plan or ensure configured agent tmux panels
   loop          manage the full lifecycle of a configurable tmux automation loop
-  workflow      run, inspect, or stop serialized OpenSpec review/implementation workflows
+  workflow      run and manage persistent revision-aware DAG workflows
   watch         watch a pane and answer narrow allowlisted prompts
   dispatch-work create/reuse a session, launch an agent, and send it a prompt
   trust-folder  dry-run or accept one exact-directory Claude/Codex trust prompt

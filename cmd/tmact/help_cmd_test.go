@@ -50,22 +50,22 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
-			want: []string{"workflow", "OpenSpec review and implementation", "workflow example", "SWE apply -> QA verify -> PM archive", "--execute"},
+			want: []string{"workflow", "revision-aware DAG", "workflow validate", "workflow start", "durable dispatch IDs", "--execute"},
 		},
 		{
 			name: "workflow example",
 			args: []string{"workflow", "example", "--help"},
-			want: []string{"workflow example", "combined OpenSpec workflow YAML", "tmact workflow example"},
+			want: []string{"workflow example", "workflow v2 YAML", "--profile openspec", "tmact workflow example"},
 		},
 		{
-			name: "workflow implement",
-			args: []string{"workflow", "implement", "--help"},
-			want: []string{"workflow implement", "OpenSpec implementation", "--config", "--execute"},
+			name: "workflow start",
+			args: []string{"workflow", "start", "--help"},
+			want: []string{"workflow start", "Idempotently", "tmact-workflows", "--config", "--execute"},
 		},
 		{
 			name: "workflow report",
 			args: []string{"workflow", "report", "--help"},
-			want: []string{"workflow report", "durable JSONL reports", "workflow report review", "workflow report implementation"},
+			want: []string{"workflow report", "durable dispatch ID", "--dispatch-id", "--outcome"},
 		},
 		{
 			name: "panels group",
