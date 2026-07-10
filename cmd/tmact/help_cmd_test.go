@@ -20,12 +20,17 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "loop",
 			args: []string{"loop", "--help"},
-			want: []string{"loop", "Subcommands:", "tmact loop start", "--dry-run", "Permission", "Do not write nohup"},
+			want: []string{"loop", "Subcommands:", "tmact loop start", "--dry-run", "Permission", "Do not write nohup", "session_min_remaining_percent", "weekly_require_headroom"},
 		},
 		{
 			name: "loop start",
 			args: []string{"loop", "start", "--help"},
 			want: []string{"loop start", "Idempotently", "tmact-loops", "Do not put this command in nohup", "--timeout"},
+		},
+		{
+			name: "loop example",
+			args: []string{"loop", "example", "--help"},
+			want: []string{"loop example", "complete loop YAML", "--quota", "loop validate", "self-contained"},
 		},
 		{
 			name: "loop stop",
@@ -108,6 +113,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	foundLoopStatus := false
 	foundLoopStart := false
+	foundLoopExample := false
 	foundTrustFolder := false
 	foundWorkflow := false
 	foundLLM := false
@@ -122,6 +128,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 			foundLoopStart = true
 			if len(command.Safety) == 0 || len(command.Notes) < 2 {
 				t.Fatalf("loop start help is too sparse: %#v", command)
+			}
+		}
+		if command.Command == "loop example" {
+			foundLoopExample = true
+			if len(command.Flags) == 0 || len(command.Examples) < 2 || len(command.Notes) < 2 {
+				t.Fatalf("loop example help is too sparse: %#v", command)
 			}
 		}
 		if command.Command == "trust-folder" {
@@ -145,6 +157,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundLoopStart {
 		t.Fatalf("loop start missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundLoopExample {
+		t.Fatalf("loop example missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundTrustFolder {
 		t.Fatalf("trust-folder missing from manifest: %#v", manifest.Commands)
@@ -172,6 +187,7 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	foundUntrusted := false
 	foundLoopLifecycle := false
 	foundTrustWorkflow := false
+	foundQuotaWorkflow := false
 	for _, note := range instructions.SafeDefaults {
 		if strings.Contains(note, "untrusted") {
 			foundUntrusted = true
@@ -185,6 +201,9 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 		if strings.Contains(step, "dispatch-work --trust-folder") && strings.Contains(step, "tmact trust-folder") {
 			foundTrustWorkflow = true
 		}
+		if strings.Contains(step, "session_min_remaining_percent") && strings.Contains(step, "weekly_require_headroom") {
+			foundQuotaWorkflow = true
+		}
 	}
 	if !foundUntrusted {
 		t.Fatalf("instructions missing untrusted-pane warning: %#v", instructions.SafeDefaults)
@@ -194,5 +213,8 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	}
 	if !foundTrustWorkflow {
 		t.Fatalf("instructions missing exact-directory trust workflow: %#v", instructions.RecommendedWorkflow)
+	}
+	if !foundQuotaWorkflow {
+		t.Fatalf("instructions missing quota-gated loop workflow: %#v", instructions.RecommendedWorkflow)
 	}
 }

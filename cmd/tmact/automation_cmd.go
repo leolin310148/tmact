@@ -24,6 +24,8 @@ func runLoop(args []string) error {
 	}
 	if len(args) > 0 {
 		switch args[0] {
+		case "example":
+			return runLoopExample(args[1:])
 		case "start":
 			return runLoopStart(args[1:])
 		case "run":

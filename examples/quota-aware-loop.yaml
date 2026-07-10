@@ -25,7 +25,8 @@ quota:
   enabled: true
   provider: codex               # "codex" | "claude"; required when enabled
   weekly_skip_at_percent: 100   # skip when the weekly window is >= 100% used
-  session_min_remaining_percent: 20  # skip when the session window has < 20% left
+  weekly_require_headroom: true # run only when expected weekly usage > actual usage
+  session_min_remaining_percent: 20  # run only when the 5h window has > 20% left
   refresh_interval: 5m          # re-fetch at most this often (endpoints are rate-limited)
   fail_closed: false            # default: run (fail open) when quota can't be read
 

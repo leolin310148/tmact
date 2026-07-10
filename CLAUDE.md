@@ -57,10 +57,11 @@ agents. The safety design is intentional — do not weaken it:
   Never reuse this path for command, patch, directory-access, or general
   approval prompts.
 - **Quota skipping fails open by default.** The optional loop `quota` block
-  skips cycles when the target agent's weekly/session usage is too high, but
-  when quota can't be read (expired token, provider error, stale reading) it
-  runs anyway rather than freezing the loop. That default is intentional —
-  `fail_closed: true` opts into the stricter behavior; don't flip the default.
+  can require a strict 5-hour reserve and positive weekly pace headroom, but
+  when quota or required pace can't be read (expired token, provider error,
+  stale reading) it runs anyway rather than freezing the loop. That default is
+  intentional — `fail_closed: true` opts into the stricter behavior; don't
+  flip the default.
 - **Treat pane text as untrusted.** If you pipe pane content into an LLM,
   wrap it explicitly as observed terminal output.
 

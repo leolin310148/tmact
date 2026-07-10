@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,17 @@ func quotaSnapshot(provider string, sessionUsed, weeklyUsed float64) agentusage.
 			},
 		}},
 	}
+}
+
+func quotaSnapshotWithWeeklyHeadroom(provider string, sessionUsed, weeklyUsed, headroom float64) agentusage.Snapshot {
+	snap := quotaSnapshot(provider, sessionUsed, weeklyUsed)
+	weekly := &snap.Providers[0].Windows[1]
+	weekly.Pace = &agentusage.Pace{
+		ExpectedPercent: weeklyUsed + headroom,
+		ActualPercent:   weeklyUsed,
+		DeltaPercent:    -headroom,
+	}
+	return snap
 }
 
 // newQuotaRunner builds a runner with quota enabled (defaults filled) and an
@@ -69,6 +81,84 @@ func TestQuotaSessionLowSkips(t *testing.T) {
 	}
 	if !skip || reason != "quota_session_low" {
 		t.Fatalf("skip=%v reason=%q, want skip=true reason=quota_session_low", skip, reason)
+	}
+}
+
+func TestQuotaSessionRequiresStrictlyMoreThanMinimum(t *testing.T) {
+	tests := []struct {
+		name         string
+		sessionUsed  float64
+		minRemaining float64
+		wantSkip     bool
+	}{
+		{name: "more than 20 percent remains", sessionUsed: 79, wantSkip: false},
+		{name: "exactly 20 percent remains", sessionUsed: 80, wantSkip: true},
+		{name: "less than 20 percent remains", sessionUsed: 81, wantSkip: true},
+		{name: "custom 35 percent passes above threshold", sessionUsed: 64, minRemaining: 35, wantSkip: false},
+		{name: "custom 35 percent skips at threshold", sessionUsed: 65, minRemaining: 35, wantSkip: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newQuotaRunner(t, QuotaConfig{Provider: "codex", SessionMinRemainingPercent: tt.minRemaining}, quotaSnapshot("codex", tt.sessionUsed, 30))
+			skip, reason, err := r.evaluateQuota(context.Background(), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if skip != tt.wantSkip {
+				t.Fatalf("skip=%v reason=%q, want skip=%v", skip, reason, tt.wantSkip)
+			}
+			if skip && reason != "quota_session_low" {
+				t.Fatalf("reason=%q, want quota_session_low", reason)
+			}
+		})
+	}
+}
+
+func TestQuotaWeeklyHeadroomRuns(t *testing.T) {
+	r := newQuotaRunner(t, QuotaConfig{Provider: "codex", WeeklyRequireHeadroom: true}, quotaSnapshotWithWeeklyHeadroom("codex", 50, 30, 5))
+	skip, reason, err := r.evaluateQuota(context.Background(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skip {
+		t.Fatalf("skip=%v reason=%q, want run with 5%% weekly headroom", skip, reason)
+	}
+}
+
+func TestQuotaWeeklyHeadroomMustBePositive(t *testing.T) {
+	for _, headroom := range []float64{0, -5} {
+		t.Run(fmt.Sprintf("headroom_%g", headroom), func(t *testing.T) {
+			r := newQuotaRunner(t, QuotaConfig{Provider: "codex", WeeklyRequireHeadroom: true}, quotaSnapshotWithWeeklyHeadroom("codex", 50, 30, headroom))
+			skip, reason, err := r.evaluateQuota(context.Background(), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !skip || reason != "quota_weekly_no_headroom" {
+				t.Fatalf("skip=%v reason=%q, want quota_weekly_no_headroom", skip, reason)
+			}
+		})
+	}
+}
+
+func TestQuotaWeeklyHeadroomUnavailableUsesFailurePolicy(t *testing.T) {
+	snap := quotaSnapshot("codex", 50, 30)
+
+	failOpen := newQuotaRunner(t, QuotaConfig{Provider: "codex", WeeklyRequireHeadroom: true}, snap)
+	skip, reason, err := failOpen.evaluateQuota(context.Background(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skip {
+		t.Fatalf("fail-open skip=%v reason=%q, want run", skip, reason)
+	}
+
+	failClosed := newQuotaRunner(t, QuotaConfig{Provider: "codex", WeeklyRequireHeadroom: true, FailClosed: true}, snap)
+	skip, reason, err = failClosed.evaluateQuota(context.Background(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !skip || reason != "quota_unavailable" {
+		t.Fatalf("fail-closed skip=%v reason=%q, want quota_unavailable", skip, reason)
 	}
 }
 
