@@ -234,6 +234,21 @@ func TestApplyShellHooksLeavesPanesWithoutHookData(t *testing.T) {
 	}
 }
 
+func TestApplyShellHooksRejectsReusedPaneFromDifferentSession(t *testing.T) {
+	pane := PaneStatus{
+		Target: "main:0.0", PaneID: "%1", SessionID: "$2", Session: "main",
+		State: panestate.StateWaitingInput, Idle: true, InputReady: true,
+	}
+	state := activeHookState("%1")
+	state.SessionID = "$1"
+	merged := ApplyShellHooks(hookMergeSnapshot(pane), map[string]shellhook.PaneState{"%1": state})
+
+	got := merged.Panes["main:0.0"]
+	if got.Running || got.State != panestate.StateWaitingInput || len(got.Signals) != 0 {
+		t.Fatalf("pane = %+v, want mismatched hook ignored", got)
+	}
+}
+
 func TestDaemonRunOnceAppliesAndPrunesShellHooks(t *testing.T) {
 	now := time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
 	cfg := Config{
@@ -270,6 +285,38 @@ func TestDaemonRunOnceAppliesAndPrunesShellHooks(t *testing.T) {
 	}
 	if _, ok := daemon.Hooks().State("%99"); ok {
 		t.Fatal("hook state for dead pane was not pruned")
+	}
+}
+
+func TestDaemonRunOnceCapturesAndDropsStaleActiveShellHook(t *testing.T) {
+	now := time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
+	captures := 0
+	cfg := Config{
+		TmuxOptions: false, InitialSamples: 1, Now: func() time.Time { return now },
+		ListPanes: func() ([]tmux.Pane, error) {
+			return []tmux.Pane{{Session: "hc", SessionID: "$6", PaneID: "%6", CurrentCommand: "zsh"}}, nil
+		},
+		CapturePane: func(target string, lines int) (string, error) {
+			captures++
+			return "puni in ~/w/hc\n❯\n", nil
+		},
+	}
+	daemon := NewDaemon(cfg)
+	mustHookRecord(t, daemon, shellhook.Event{
+		Type: shellhook.TypePreexec, PaneID: "%6", Command: "cc", CWD: "/old/repo",
+		Timestamp: now.Add(-time.Hour),
+	})
+
+	snapshot, err := daemon.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	pane := snapshot.Panes["hc:0.0"]
+	if captures == 0 || pane.Running || pane.State != panestate.StateWaitingInput {
+		t.Fatalf("captures=%d pane=%+v, want captured idle prompt", captures, pane)
+	}
+	if _, ok := daemon.Hooks().State("%6"); ok {
+		t.Fatal("stale active hook was not retired")
 	}
 }
 

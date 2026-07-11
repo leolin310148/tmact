@@ -98,6 +98,30 @@ func TestHookEmitSurfacesFailuresWithoutQuiet(t *testing.T) {
 	}
 }
 
+func TestHookEmitAddsCurrentSessionID(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%9")
+	oldLookup := lookupSessionID
+	lookupSessionID = func(target string) (string, error) {
+		if target != "%9" {
+			t.Fatalf("target = %q", target)
+		}
+		return "$4", nil
+	}
+	t.Cleanup(func() { lookupSessionID = oldLookup })
+
+	var got shellhook.Event
+	stubHookSend(t, func(_ string, event shellhook.Event, _ time.Duration) error {
+		got = event
+		return nil
+	})
+	if _, err := captureRun(t, "hook", "emit", "--type", "preexec"); err != nil {
+		t.Fatalf("hook emit: %v", err)
+	}
+	if got.SessionID != "$4" {
+		t.Fatalf("session id = %q, want $4", got.SessionID)
+	}
+}
+
 func TestBuildHookEventFromStdinJSON(t *testing.T) {
 	now := time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
 	event, err := buildHookEvent(hookEmitInputs{Stdin: true},

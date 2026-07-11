@@ -125,7 +125,7 @@ func TestStorePrune(t *testing.T) {
 
 	// %1 is still seen; %2 is gone and old; %3 is unseen but fresh (event
 	// racing the pane scan) and must survive.
-	store.Prune(map[string]bool{"%1": true}, base.Add(-time.Minute))
+	store.Prune(map[string]string{"%1": "$1"}, base.Add(-time.Minute))
 
 	if _, ok := store.State("%1"); !ok {
 		t.Fatal("%1 pruned despite being seen")
@@ -135,6 +135,31 @@ func TestStorePrune(t *testing.T) {
 	}
 	if _, ok := store.State("%3"); !ok {
 		t.Fatal("%3 pruned despite fresh update")
+	}
+}
+
+func TestStoreResetsReusedPaneOnSessionChange(t *testing.T) {
+	store := NewStore()
+	mustRecord(t, store, Event{Type: TypePreexec, PaneID: "%5", SessionID: "$1", CommandID: "old", Command: "cc"})
+	mustRecord(t, store, Event{Type: TypePrecmd, PaneID: "%5", SessionID: "$2", CommandID: "new", ExitCode: intPtr(0)})
+
+	state, _ := store.State("%5")
+	if state.SessionID != "$2" || state.Active != nil {
+		t.Fatalf("state = %+v, want reset state for session $2", state)
+	}
+	if state.Completed == nil || state.Completed.Command == "cc" {
+		t.Fatalf("completed = %+v, inherited command from old session", state.Completed)
+	}
+}
+
+func TestStorePruneDropsOldReusedPaneIdentity(t *testing.T) {
+	base := time.Date(2026, 7, 7, 10, 0, 0, 0, time.UTC)
+	store := NewStore()
+	mustRecord(t, store, Event{Type: TypePreexec, PaneID: "%5", SessionID: "$1", Timestamp: base.Add(-2 * time.Minute)})
+
+	store.Prune(map[string]string{"%5": "$2"}, base.Add(-time.Minute))
+	if _, ok := store.State("%5"); ok {
+		t.Fatal("old state survived pane id reuse by a different session")
 	}
 }
 

@@ -60,6 +60,9 @@ func ApplyShellHooks(snapshot Snapshot, states map[string]shellhook.PaneState) S
 		if !ok {
 			continue
 		}
+		if state.SessionID != "" && pane.SessionID != "" && state.SessionID != pane.SessionID {
+			continue
+		}
 		switch {
 		case state.Active != nil:
 			staleActive := staleActiveCommand(pane, state.Active, snapshot.Timestamp)

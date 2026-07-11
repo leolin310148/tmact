@@ -45,6 +45,10 @@ type Options struct {
 	Interval           time.Duration
 	IdleIgnorePatterns []string
 	CaptureRuntimes    []string
+	// ForceCapturePaneIDs captures selected panes even when their detected
+	// runtime is outside CaptureRuntimes. statusd uses this for panes with an
+	// unfinished shell hook so a visible prompt can retire a lost preexec.
+	ForceCapturePaneIDs map[string]bool
 	// MaxConcurrency caps the number of panes inspected in parallel. Each
 	// inspectPane fires a `tmux capture-pane` (and possibly pgrep/ps for
 	// runtime detection) so the wall-time of a full cycle is dominated by
@@ -274,7 +278,7 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	status.Runtime = runtime.Runtime
 	status.Confidence = runtime.Confidence
 	status.Signals = append(status.Signals, runtime.Signals...)
-	if !i.shouldCapture(status.Runtime, pane.CurrentCommand) {
+	if !i.shouldCapture(status.Runtime, pane) {
 		status.Signals = appendSignal(status.Signals, "capture_skipped")
 		return status
 	}
@@ -336,7 +340,10 @@ func idleState(state string) bool {
 	return state == panestate.StateIdle || state == panestate.StateWaitingInput
 }
 
-func (i inspector) shouldCapture(runtime, command string) bool {
+func (i inspector) shouldCapture(runtime string, pane tmux.Pane) bool {
+	if i.options.ForceCapturePaneIDs[pane.PaneID] {
+		return true
+	}
 	if len(i.captureRuntime) == 0 {
 		return true
 	}
@@ -348,7 +355,7 @@ func (i inspector) shouldCapture(runtime, command string) bool {
 	// runs on the far end. Its only fingerprint is the pane text, so we must
 	// capture it even when the wrapper itself isn't on the runtime allowlist;
 	// the second-round text classification then recognizes the nested agent.
-	return isWrapperCommand(command)
+	return isWrapperCommand(pane.CurrentCommand)
 }
 
 func isWrapperCommand(command string) bool {

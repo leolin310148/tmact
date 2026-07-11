@@ -42,7 +42,14 @@ func (d *Daemon) Store() *Store {
 }
 
 func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
-	snapshot, scanErr := BuildSnapshot(ctx, d.cfg, d.mem)
+	hookStates := d.hooks.States()
+	forceCapturePaneIDs := make(map[string]bool)
+	for paneID, state := range hookStates {
+		if state.Active != nil {
+			forceCapturePaneIDs[paneID] = true
+		}
+	}
+	snapshot, scanErr := buildSnapshot(ctx, d.cfg, d.mem, forceCapturePaneIDs)
 	if scanErr != nil {
 		if d.cfg.LogPath != "" {
 			_ = appendLog(d.cfg.LogPath, snapshot)
@@ -51,14 +58,22 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 	}
 	// Shell hook state merges before the tmux-option publish so the status
 	// line reflects it too, and before MergePeers because hooks are local-only.
-	seen := make(map[string]bool, len(snapshot.Panes))
+	seen := make(map[string]string, len(snapshot.Panes))
 	for _, pane := range snapshot.Panes {
 		if pane.PaneID != "" {
-			seen[pane.PaneID] = true
+			seen[pane.PaneID] = pane.SessionID
 		}
 	}
 	d.hooks.Prune(seen, snapshot.Timestamp.Add(-shellHookPruneGrace))
-	snapshot = ApplyShellHooks(snapshot, d.hooks.States())
+	hookStates = d.hooks.States()
+	snapshot = ApplyShellHooks(snapshot, hookStates)
+	for _, pane := range snapshot.Panes {
+		if hasSignal(pane.Signals, SignalShellHookActiveStale) {
+			if state, ok := hookStates[pane.PaneID]; ok {
+				d.hooks.DeleteIfUpdatedAt(pane.PaneID, state.UpdatedAt)
+			}
+		}
+	}
 	if d.cfg.TmuxOptions {
 		if err := PublishTmuxOptions(d.cfg, snapshot, d.optionCache); err != nil {
 			snapshot.addError("tmux_options", "", err)
