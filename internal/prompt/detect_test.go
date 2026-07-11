@@ -333,3 +333,50 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
 		t.Fatalf("options len = %d", len(detected.Options))
 	}
 }
+
+func TestIsCodexModelCapacityRetry(t *testing.T) {
+	detected := &Prompt{
+		Type:     TypeChoicePrompt,
+		Question: "response, though it may be less capable of handling complex requests.",
+		SelectedOption: &Option{
+			Number: 1, Label: "Retry with a faster model", Selected: true,
+		},
+		Options: []Option{
+			{Number: 1, Label: "Retry with a faster model", Selected: true},
+			{Number: 2, Label: "Keep waiting"},
+			{Number: 3, Label: "Learn more Press enter to confirm or esc to go back"},
+		},
+	}
+
+	if !IsCodexModelCapacityRetry(detected) {
+		t.Fatalf("prompt was not allowlisted: %#v", detected)
+	}
+}
+
+func TestIsCodexModelCapacityRetryRejectsPermissionAndUnknownChoices(t *testing.T) {
+	tests := []*Prompt{
+		{
+			Type: TypeCommandApproval, Title: "Allow this command?",
+			SelectedOption: &Option{Number: 1, Label: "Yes", Selected: true},
+			Options:        []Option{{Number: 1, Label: "Yes", Selected: true}, {Number: 2, Label: "No"}},
+		},
+		{
+			Type:     TypeChoicePrompt,
+			Question: "Choose how to continue",
+			SelectedOption: &Option{
+				Number: 1, Label: "Retry with a faster model", Selected: true,
+			},
+			Options: []Option{
+				{Number: 1, Label: "Retry with a faster model", Selected: true},
+				{Number: 2, Label: "Keep waiting"},
+				{Number: 3, Label: "Approve filesystem access"},
+			},
+		},
+	}
+
+	for _, detected := range tests {
+		if IsCodexModelCapacityRetry(detected) {
+			t.Fatalf("unsafe prompt was allowlisted: %#v", detected)
+		}
+	}
+}

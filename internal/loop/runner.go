@@ -53,6 +53,9 @@ type Runner struct {
 	quotaFetched  time.Time
 	lastPhase     string
 	lastHeartbeat time.Time
+	// capacityPromptAnswered prevents a slow Codex redraw from receiving Enter
+	// more than once. It resets after the exact allowlisted prompt disappears.
+	capacityPromptAnswered bool
 }
 
 type actionState struct {
@@ -163,8 +166,25 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		if state.InteractivePrompt != nil && r.cfg.StopOnPermissionPrompt {
+			if prompt.IsCodexModelCapacityRetry(state.InteractivePrompt) {
+				if !r.capacityPromptAnswered {
+					if err := r.acceptCodexModelCapacityRetry(now, state.InteractivePrompt); err != nil {
+						return err
+					}
+					r.capacityPromptAnswered = true
+				}
+				if r.options.Once {
+					return nil
+				}
+				if err := r.waitForTick(ctx, ticker.C); err != nil {
+					return err
+				}
+				continue
+			}
+			r.capacityPromptAnswered = false
 			return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "permission_prompt", Details: state.InteractivePrompt})
 		}
+		r.capacityPromptAnswered = false
 
 		quotaSkip, quotaReason, err := r.evaluateQuota(ctx, now)
 		if err != nil {
@@ -227,6 +247,32 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+func (r *Runner) acceptCodexModelCapacityRetry(now time.Time, detected *prompt.Prompt) error {
+	var err error
+	if !r.options.DryRun {
+		err = r.sendKeys(r.cfg.Target, []string{"Enter"})
+	}
+	status := "ok"
+	reason := "codex_model_capacity_retry"
+	if err != nil {
+		status = "failed"
+		reason = err.Error()
+	}
+	emitErr := r.emit(event{
+		Timestamp: now.Format(time.RFC3339),
+		Type:      "prompt_accept",
+		Target:    r.cfg.Target,
+		DryRun:    r.options.DryRun,
+		Status:    status,
+		Reason:    reason,
+		Details:   detected,
+	})
+	if err != nil {
+		return err
+	}
+	return emitErr
 }
 
 func schedulesComplete(actions []actionState, flows []flowState) bool {
