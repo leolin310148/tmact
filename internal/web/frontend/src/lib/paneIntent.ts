@@ -1,22 +1,14 @@
 export function normalizePaneID(rawPaneID: unknown): string {
   if (typeof rawPaneID !== "string") return "";
-  const paneID = rawPaneID.trim();
-  if (paneID.startsWith("%25")) {
+  let paneID = rawPaneID.trim();
+  if (paneID.includes("%25")) {
     try {
-      const decoded = decodeURIComponent(paneID);
-      if (/^%[0-9]+$/.test(decoded)) return decoded;
+      paneID = decodeURIComponent(paneID);
     } catch {
       return "";
     }
   }
-  if (/^%[0-9]+$/.test(paneID)) return paneID;
-  try {
-    const decoded = decodeURIComponent(paneID);
-    if (/^%[0-9]+$/.test(decoded)) return decoded;
-  } catch {
-    // Ignore malformed percent-encoding.
-  }
-  return "";
+  return /^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$/.test(paneID) ? paneID : "";
 }
 
 export function paneIDFromURL(rawURL: string): string {

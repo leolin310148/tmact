@@ -172,11 +172,24 @@ function normalizeAppURL(rawURL, paneId) {
 function normalizeNotificationTag(rawTag, paneId) {
   let tag = typeof rawTag === "string" ? rawTag.trim() : "";
   if (paneId) {
-    const paneDigits = paneId.slice(1);
-    const safePane = `pane-${paneDigits}`;
+    const separator = paneId.indexOf("@%");
+    const localPaneId = separator >= 0 ? paneId.slice(separator + 1) : paneId;
+    const safePane = separator >= 0
+      ? `${paneId.slice(0, separator)}-pane-${localPaneId.slice(1)}`
+      : `pane-${localPaneId.slice(1)}`;
     const encodedPane = encodeURIComponent(paneId);
     if (tag) {
       tag = tag.split(encodedPane).join(safePane).split(paneId).join(safePane);
+      // Existing hooks commonly emit tags such as claude-%60. Preserve that
+      // convention while including the peer so equal local pane ids on two
+      // machines cannot collapse each other's notifications.
+      if (separator >= 0) {
+        const encodedLocalPane = encodeURIComponent(localPaneId);
+        tag = tag.split(encodedLocalPane).join(safePane).split(localPaneId).join(safePane);
+        if (!tag.includes(safePane)) {
+          tag = `${safePane}-${tag}`;
+        }
+      }
     }
     if (!tag) {
       tag = `tmact-${safePane}`;
@@ -221,51 +234,41 @@ function shouldCloseSupersededNotification(notification, tag, paneId, rawTag) {
   if (tag && notification.tag === tag) {
     return true;
   }
-  if (rawTag && notification.tag === rawTag) {
-    return true;
-  }
   if (!paneId) {
-    return false;
+    return Boolean(rawTag && notification.tag === rawTag);
   }
+  const federated = paneId.includes("@%");
   const encodedPaneId = encodeURIComponent(paneId);
   const legacyRawTag = `claude-${paneId}`;
   const legacyEncodedTag = `claude-${encodedPaneId}`;
-  if (notification.tag === legacyRawTag || notification.tag === legacyEncodedTag) {
+  if (!federated && (
+    notification.tag === legacyRawTag ||
+    notification.tag === legacyEncodedTag ||
+    (rawTag && notification.tag === rawTag)
+  )) {
     return true;
   }
   const notificationData = notification.data || {};
   const notificationPaneId = normalizePaneID(notificationData.paneId || notificationData.pane_id);
-  if (notificationPaneId === paneId) {
-    return true;
+  if (notificationPaneId) {
+    return notificationPaneId === paneId;
   }
-  return Boolean(rawTag && notificationData.rawTag === rawTag);
+  // A legacy notification without pane metadata can only be matched safely by
+  // raw tag for local panes. The same legacy tag may exist on several peers.
+  return Boolean(!federated && rawTag && notificationData.rawTag === rawTag);
 }
 
 function normalizePaneID(rawPaneId) {
   if (typeof rawPaneId !== "string") {
     return "";
   }
-  const paneId = rawPaneId.trim();
-  if (paneId.startsWith("%25")) {
+  let paneId = rawPaneId.trim();
+  if (paneId.includes("%25")) {
     try {
-      const decoded = decodeURIComponent(paneId);
-      if (/^%[0-9]+$/.test(decoded)) {
-        return decoded;
-      }
+      paneId = decodeURIComponent(paneId);
     } catch (err) {
       return "";
     }
   }
-  if (/^%[0-9]+$/.test(paneId)) {
-    return paneId;
-  }
-  try {
-    const decoded = decodeURIComponent(paneId);
-    if (/^%[0-9]+$/.test(decoded)) {
-      return decoded;
-    }
-  } catch (err) {
-    // Fall through to the no-pane path.
-  }
-  return "";
+  return /^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$/.test(paneId) ? paneId : "";
 }
