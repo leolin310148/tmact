@@ -14,6 +14,7 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 const (
@@ -200,13 +201,24 @@ func normalizeWebPushTopic(rawTag, rawPaneID string) string {
 		return ""
 	}
 
-	paneDigits := strings.TrimPrefix(paneID, "%")
-	safePane := "pane-" + paneDigits
+	peer, localPaneID := statusd.SplitPeerTarget(paneID)
+	safePane := "pane-" + strings.TrimPrefix(localPaneID, "%")
+	if peer != "" {
+		safePane = peer + "-" + safePane
+	}
 	tag := strings.TrimSpace(rawTag)
 	if tag != "" {
 		encodedPaneID := url.QueryEscape(paneID)
 		tag = strings.ReplaceAll(tag, encodedPaneID, safePane)
 		tag = strings.ReplaceAll(tag, paneID, safePane)
+		if peer != "" {
+			encodedLocalPaneID := url.QueryEscape(localPaneID)
+			tag = strings.ReplaceAll(tag, encodedLocalPaneID, safePane)
+			tag = strings.ReplaceAll(tag, localPaneID, safePane)
+			if !strings.Contains(tag, safePane) {
+				tag = safePane + "-" + tag
+			}
+		}
 	} else {
 		tag = "tmact-" + safePane
 	}
@@ -215,20 +227,15 @@ func normalizeWebPushTopic(rawTag, rawPaneID string) string {
 
 func normalizeWebPushPaneID(rawPaneID string) string {
 	paneID := strings.TrimSpace(rawPaneID)
-	if strings.HasPrefix(paneID, "%25") {
+	if strings.Contains(paneID, "%25") {
 		decoded, err := url.QueryUnescape(paneID)
 		if err != nil {
 			return ""
 		}
 		paneID = decoded
 	}
-	if len(paneID) < 2 || paneID[0] != '%' {
+	if !paneIDPattern.MatchString(paneID) {
 		return ""
-	}
-	for _, r := range paneID[1:] {
-		if r < '0' || r > '9' {
-			return ""
-		}
 	}
 	return paneID
 }

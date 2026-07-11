@@ -194,6 +194,21 @@ as a desktop/Android fallback. On notification click, the Service Worker focuses
 an existing vibe PWA window and posts `SELECT_PANE`; if no window is open, it
 opens `/?pane=...` so the frontend selects the pane on boot.
 
+For a pane merged from a configured peer, send the coordinator's canonical
+federated pane id. The push must go to the coordinator statusd that owns the
+browser subscription; it will proxy the selected pane to the peer:
+
+```sh
+curl -sS http://127.0.0.1:7890/api/push \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"tmact","body":"peer done","paneId":"peer-a@%60","tag":"tmact-peer-a@%60"}'
+```
+
+The Service Worker generates the same-origin deep link
+`/?pane=peer-a%40%2560`. Notification and Web Push topic normalization include
+the peer name, so panes with the same local id on different machines do not
+replace one another.
+
 ### Federation (multi-host)
 
 statusd can pull snapshots from other statusd instances and merge them into
