@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -199,10 +198,10 @@ func (s Store) withLock(fn func() error) error {
 		return err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFile(f, false); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer unlockFile(f)
 	return fn()
 }
 
@@ -214,11 +213,11 @@ func (s Store) AcquireRunnerLock() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockFile(file, true); err != nil {
 		_ = file.Close()
 		return nil, fmt.Errorf("workflow %s already has an active runner", s.RunID)
 	}
-	return func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN); _ = file.Close() }, nil
+	return func() { _ = unlockFile(file); _ = file.Close() }, nil
 }
 func (s Store) Append(path string, value any) error {
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
