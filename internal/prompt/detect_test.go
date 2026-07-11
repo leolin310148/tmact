@@ -243,6 +243,30 @@ func TestDetectCodexTrustDirectoryPrompt(t *testing.T) {
 	}
 }
 
+func TestDetectClaudeQuickSafetyCheckTrustPrompt(t *testing.T) {
+	raw := `
+Accessing workspace:
+
+/private/tmp/tmact-e2e-session-history
+
+Quick safety check: Is this a project you created or one you trust?
+
+Security guide
+
+❯ 1. Yes, I trust this folder
+  2. No, exit
+
+Enter to confirm · Esc to cancel
+`
+	detected := Detect(raw)
+	if detected == nil || detected.Type != TypeTrustFolder {
+		t.Fatalf("detected=%#v", detected)
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 1 {
+		t.Fatalf("selected option=%#v", detected.SelectedOption)
+	}
+}
+
 func TestDetectGenericConfirmationPrompt(t *testing.T) {
 	raw := `
 Do you want to proceed?

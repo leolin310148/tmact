@@ -200,6 +200,9 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 	if state.Status == "paused" {
 		state.Status = "running"
 	}
+	if state.Status == "needs_user" {
+		return false, e.Store.Write(state)
+	}
 	data := templateData(state)
 	current, err := ComputeRevisions(e.Loaded.Config, data)
 	if err != nil {
@@ -267,7 +270,15 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 			state.Stages[stage.ID] = ss
 			state.Status = "needs_user"
 			_ = e.Store.Event(Event{Type: "human_wait", Stage: stage.ID, Status: StageWaitingHuman})
-			continue
+			for _, selectedStage := range selected {
+				selectedState := state.Stages[selectedStage.ID]
+				if selectedState.Status == StageRunnable {
+					selectedState.Status = StagePending
+					state.Stages[selectedStage.ID] = selectedState
+				}
+			}
+			selected = nil
+			break
 		}
 		if available <= 0 {
 			continue
@@ -354,7 +365,22 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 		}
 		if result.err != nil {
 			ss.Error = result.err.Error()
-			if isNeedsUser(result.err) {
+			if isDeferredDispatch(result.err) {
+				ss.Status = StagePending
+				if ss.Attempt > 0 {
+					ss.Attempt--
+				}
+				ss.Generation++
+				ss.DispatchID = ""
+				ss.StartedAt = time.Time{}
+				delay := result.stage.Retry.Backoff.Duration
+				if delay <= 0 {
+					delay = e.Loaded.Config.Defaults.PollInterval.Duration
+				}
+				ss.NextAttemptAt = e.Now().Add(delay)
+				latest.Status = "running"
+				_ = e.Store.Event(Event{Type: "stage_deferred", Stage: result.stage.ID, Attempt: ss.Attempt, Status: ss.Status, Reason: result.err.Error()})
+			} else if isNeedsUser(result.err) {
 				ss.Status = StageBlocked
 				latest.Status = "needs_user"
 			} else {
@@ -527,7 +553,7 @@ func updateRunStatus(state *State, cfg Config, now time.Time) bool {
 func dependenciesReady(stage StageConfig, state State) (bool, bool) {
 	for _, id := range stage.Needs {
 		s := state.Stages[id]
-		if s.Status == StageFailed || s.Status == StageBlocked {
+		if s.Status == StageFailed || s.Status == StageBlocked || (s.Status == StageSkipped && s.Error != "") {
 			return false, true
 		}
 		if s.Status != StageSucceeded && s.Status != StageSkipped {
@@ -806,6 +832,14 @@ type needsUserError struct{ message string }
 func (e needsUserError) Error() string { return e.message }
 func isNeedsUser(err error) bool       { var target needsUserError; return errors.As(err, &target) }
 
+type deferredDispatchError struct{ message string }
+
+func (e deferredDispatchError) Error() string { return e.message }
+func isDeferredDispatch(err error) bool {
+	var target deferredDispatchError
+	return errors.As(err, &target)
+}
+
 func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state State) (*Evidence, error) {
 	ss := state.Stages[stage.ID]
 	actor := e.Loaded.Config.Actors[stage.Actor]
@@ -858,8 +892,12 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 			dispatchRecord.Timestamp = e.Now()
 			dispatchRecord.Status = "failed"
 			_ = e.Store.Dispatch(dispatchRecord)
-			if strings.Contains(err.Error(), "prompt") || strings.Contains(err.Error(), "busy") {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "prompt") {
 				return nil, needsUserError{err.Error()}
+			}
+			if strings.Contains(message, "busy") || strings.Contains(message, "did not remain idle") || strings.Contains(message, "explicitly input-ready") {
+				return nil, deferredDispatchError{err.Error()}
 			}
 			return nil, err
 		}
@@ -995,7 +1033,7 @@ func (e *Engine) preflightAgent(target, runtime, workspace string, idleAfter tim
 	}
 	classified := panestate.Classify(raw)
 	if classified.State == panestate.StateWorking {
-		return needsUserError{fmt.Sprintf("target %s is busy", target)}
+		return deferredDispatchError{fmt.Sprintf("target %s is busy", target)}
 	}
 	if idleAfter > 0 {
 		e.Sleep(idleAfter)
@@ -1004,7 +1042,7 @@ func (e *Engine) preflightAgent(target, runtime, workspace string, idleAfter tim
 			return err
 		}
 		if second != raw || panestate.Classify(second).State == panestate.StateWorking {
-			return needsUserError{fmt.Sprintf("target %s did not remain idle for %s", target, idleAfter)}
+			return deferredDispatchError{fmt.Sprintf("target %s did not remain idle for %s", target, idleAfter)}
 		}
 	}
 	return nil
@@ -1026,6 +1064,9 @@ func ApplyReport(root, dispatchID, outcome, body string) (Report, error) {
 	state, err := store.Read()
 	if err != nil {
 		return Report{}, err
+	}
+	if state.Desired == "stopped" || state.Status == "stopped" {
+		return Report{}, fmt.Errorf("workflow %s is stopped; report rejected", state.RunID)
 	}
 	loaded, err := LoadSnapshot(store, state)
 	if err != nil {
@@ -1098,6 +1139,9 @@ func ResolveHuman(root, id, configPath, stageID, outcome string, input map[strin
 	if err != nil {
 		return err
 	}
+	if state.Desired == "stopped" || state.Status == "stopped" {
+		return fmt.Errorf("workflow %s is stopped; resolution rejected", state.RunID)
+	}
 	loaded, err := LoadSnapshot(store, state)
 	if err != nil {
 		return err
@@ -1168,6 +1212,9 @@ func RetryStage(root, id, stageID string) error {
 	store, state, err := Find(root, id, "")
 	if err != nil {
 		return err
+	}
+	if state.Desired == "stopped" || state.Status == "stopped" {
+		return fmt.Errorf("workflow %s is stopped; resume it before retrying", state.RunID)
 	}
 	loaded, err := LoadSnapshot(store, state)
 	if err != nil {

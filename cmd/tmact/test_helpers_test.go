@@ -50,6 +50,7 @@ func stubCLIHooks(t *testing.T) func() {
 	oldTmactNow := tmactNow
 	oldTmactSleep := tmactSleep
 	oldTmactExecutable := tmactExecutable
+	oldWorkflowProcessAlive := workflowProcessAlive
 	oldTrustFolderRun := trustFolderRun
 	oldDispatchRun := dispatchRun
 	oldDispatchRemoteRun := dispatchRemoteRun
@@ -66,6 +67,7 @@ func stubCLIHooks(t *testing.T) func() {
 		tmactNow = oldTmactNow
 		tmactSleep = oldTmactSleep
 		tmactExecutable = oldTmactExecutable
+		workflowProcessAlive = oldWorkflowProcessAlive
 		trustFolderRun = oldTrustFolderRun
 		dispatchRun = oldDispatchRun
 		dispatchRemoteRun = oldDispatchRemoteRun
