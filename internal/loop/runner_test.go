@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -200,6 +201,93 @@ func TestLoopStopsOnGenericPrompt(t *testing.T) {
 	}
 	if details["type"] != prompt.TypeCommandApproval || details["title"] != "Allow this command?" {
 		t.Fatalf("details = %#v", details)
+	}
+}
+
+func TestLoopAcceptsAllowlistedCodexModelCapacityRetry(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "loop.jsonl")
+	runner := NewRunner(Config{
+		Target:                 "demo:0.0",
+		CaptureLines:           80,
+		IdleAfter:              Duration{Duration: time.Second},
+		PollInterval:           Duration{Duration: time.Second},
+		StopOnPermissionPrompt: true,
+		LogPath:                logPath,
+		Actions:                []ActionConfig{{Name: "nudge", Type: "send_text", Text: "go"}},
+	}, Options{Once: true})
+	runner.capturePane = func(target string, lines int) (string, error) {
+		return "response, though it may be less capable of handling complex requests.\n› 1. Retry with a faster model\n  2. Keep waiting\n  3. Learn more\nPress enter to confirm or esc to go back\n", nil
+	}
+	var sentKeys []string
+	runner.sendKeys = func(target string, keys []string) error {
+		sentKeys = append(sentKeys, keys...)
+		return nil
+	}
+	runner.sendText = func(string, string, bool) error {
+		t.Fatal("scheduled action must not run against the capacity prompt")
+		return nil
+	}
+
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sentKeys, []string{"Enter"}) {
+		t.Fatalf("sent keys = %#v, want Enter", sentKeys)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got event
+	if err := json.Unmarshal(data[:len(data)-1], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != "prompt_accept" || got.Status != "ok" || got.Reason != "codex_model_capacity_retry" {
+		t.Fatalf("event = %#v", got)
+	}
+}
+
+func TestLoopStillStopsOnDirectoryPermissionPrompt(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "loop.jsonl")
+	runner := NewRunner(Config{
+		Target:                 "demo:0.0",
+		CaptureLines:           80,
+		IdleAfter:              Duration{Duration: time.Second},
+		PollInterval:           Duration{Duration: time.Second},
+		StopOnPermissionPrompt: true,
+		LogPath:                logPath,
+		Actions:                []ActionConfig{{Name: "nudge", Type: "send_text", Text: "go"}},
+	}, Options{})
+	runner.capturePane = func(target string, lines int) (string, error) {
+		return "Allow directory access\n/private/tmp/project\nDo you want to allow this?\n› 1. Yes\n  2. No\n", nil
+	}
+	runner.sendKeys = func(string, []string) error {
+		t.Fatal("filesystem permission prompt must not be answered")
+		return nil
+	}
+	runner.sendText = func(string, string, bool) error {
+		t.Fatal("scheduled action must not run against a permission prompt")
+		return nil
+	}
+
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got event
+	if err := json.Unmarshal(data[:len(data)-1], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != "stop" || got.Reason != "permission_prompt" {
+		t.Fatalf("event = %#v", got)
+	}
+	details, ok := got.Details.(map[string]interface{})
+	if !ok || details["type"] != prompt.TypeDirectoryAccess {
+		t.Fatalf("details = %#v", got.Details)
 	}
 }
 

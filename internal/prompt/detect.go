@@ -43,6 +43,41 @@ type Option struct {
 	Selected bool   `json:"selected"`
 }
 
+// IsCodexModelCapacityRetry reports the one benign Codex choice prompt that an
+// unattended loop may answer automatically. Keep this intentionally stricter
+// than generic choice detection: any wording or menu-shape drift must fail
+// closed and remain a stop condition for the loop.
+func IsCodexModelCapacityRetry(detected *Prompt) bool {
+	if detected == nil || detected.Type != TypeChoicePrompt || len(detected.Options) != 3 {
+		return false
+	}
+	if detected.SelectedOption == nil || detected.SelectedOption.Number != 1 || !detected.SelectedOption.Selected ||
+		normalizePromptText(detected.SelectedOption.Label) != "retry with a faster model" {
+		return false
+	}
+
+	first := detected.Options[0]
+	second := detected.Options[1]
+	third := detected.Options[2]
+	thirdLabel := normalizePromptText(third.Label)
+	thirdAllowed := thirdLabel == "learn more" ||
+		(strings.HasPrefix(thirdLabel, "learn more ") &&
+			strings.Contains(thirdLabel, "press enter to confirm") &&
+			strings.Contains(thirdLabel, "esc to go back"))
+	if first.Number != 1 || !first.Selected || normalizePromptText(first.Label) != "retry with a faster model" ||
+		second.Number != 2 || second.Selected || normalizePromptText(second.Label) != "keep waiting" ||
+		third.Number != 3 || third.Selected || !thirdAllowed {
+		return false
+	}
+
+	question := normalizePromptText(detected.Question)
+	return strings.Contains(question, "less capable of handling complex requests")
+}
+
+func normalizePromptText(text string) string {
+	return strings.Join(strings.Fields(strings.ToLower(text)), " ")
+}
+
 // optionPattern matches a numbered menu option, optionally led by a selection
 // cursor. Claude renders the cursor as "❯", Codex as "›" — both mean the row
 // is the current choice.
