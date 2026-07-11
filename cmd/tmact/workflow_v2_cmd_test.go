@@ -84,3 +84,78 @@ stages:
 		t.Fatalf("status=%s", status)
 	}
 }
+
+func TestWorkflowStopFinalizesDeadRunner(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(`version: 2
+workspace: {root: .}
+stages:
+  - {id: wait, type: human, outcomes: {done: success}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Store.Update(func(state *workflow.State) error {
+		state.PID = 424242
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	workflowProcessAlive = func(int) bool { return false }
+	out, err := captureRun(t, "workflow", "stop", "--id", engine.Store.RunID, "--store-dir", root, "--wait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "runner not alive") {
+		t.Fatalf("out=%q", out)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != "stopped" || state.Desired != "stopped" || state.PID != 0 {
+		t.Fatalf("state=%#v", state)
+	}
+}
+
+func TestWorkflowStartRejectsPendingStopRequest(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(`version: 2
+workspace: {root: .}
+stages:
+  - {id: wait, type: human, outcomes: {done: success}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, workflow.DefaultStoreDir)
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Store.Update(func(state *workflow.State) error {
+		state.Desired = "stopped"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = captureRun(t, "workflow", "start", "--config", path, "--execute")
+	if err == nil || !strings.Contains(err.Error(), "stop request") {
+		t.Fatalf("error=%v", err)
+	}
+}

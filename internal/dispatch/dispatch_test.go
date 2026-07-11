@@ -371,7 +371,7 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 		if len(rec.pastes) >= 2 {
 			return "Claude Code\nWorking... esc to interrupt", nil
 		}
-		return "Claude Code\nidle", nil
+		return "Claude Code\n❯", nil
 	}
 
 	opts := baseOpts()
@@ -391,6 +391,28 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 		if rec.pastes[i] != want[i] {
 			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
 		}
+	}
+}
+
+func TestExistingSessionUnknownStateRefusesClear(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return "Claude Code\nstatus unavailable", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "explicitly input-ready") {
+		t.Fatalf("error=%v", err)
+	}
+	if len(rec.pastes) != 0 {
+		t.Fatalf("unknown pane received input: %#v", rec.pastes)
 	}
 }
 

@@ -177,6 +177,9 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 			}
 			return report, fmt.Errorf("session %s is running %s but it is waiting on a prompt (%s); resolve it first", opts.Session, opts.Agent, promptKind(classified))
 		}
+		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
+			return report, fmt.Errorf("session %s is running %s but pane state is %s; refusing to clear or dispatch until it is explicitly input-ready", opts.Session, opts.Agent, classified.State)
+		}
 		report.AgentWasRunning = true
 		return dispatchReuse(opts, deps, report, target)
 	case runtime == panestatus.RuntimeShell:

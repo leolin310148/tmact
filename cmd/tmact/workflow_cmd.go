@@ -21,6 +21,7 @@ import (
 const workflowSupervisorSession = "tmact-workflows"
 
 var workflowWindowRE = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
+var workflowProcessAlive = processAlive
 
 func runWorkflow(args []string) error {
 	if wantsHelp(args) {
@@ -261,6 +262,11 @@ func runWorkflowStart(args []string) error {
 		return err
 	}
 	defer release()
+	if existing, readErr := workflow.NewStore(root, plan.RunID).Read(); readErr == nil && existing.Desired == "stopped" {
+		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", existing.RunID)
+	} else if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return readErr
+	}
 	engine, err := workflow.NewEngine(loaded, root, true)
 	if err != nil {
 		return err
@@ -269,11 +275,14 @@ func runWorkflowStart(args []string) error {
 	if err != nil {
 		return err
 	}
+	if state.Desired == "stopped" {
+		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", state.RunID)
+	}
 	if state.Status == "stopped" || state.Status == "failed" || state.Status == "blocked" || state.Status == "succeeded" {
 		fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", state.RunID, state.Status)
 		return nil
 	}
-	if state.PID != 0 && state.PID != os.Getpid() && processAlive(state.PID) {
+	if state.PID != 0 && state.PID != os.Getpid() && workflowProcessAlive(state.PID) {
 		fmt.Printf("workflow already active: %s (%s)\n", state.RunID, state.Status)
 		return nil
 	}
@@ -597,6 +606,23 @@ func runWorkflowStop(args []string) error {
 	}
 	if err := store.Update(func(s *workflow.State) error { s.Desired = "stopped"; return nil }); err != nil {
 		return err
+	}
+	fresh, err := store.Read()
+	if err != nil {
+		return err
+	}
+	if fresh.PID == 0 || !workflowProcessAlive(fresh.PID) {
+		if err := store.Update(func(s *workflow.State) error {
+			s.Status = "stopped"
+			s.Reason = "operator_request_runner_not_alive"
+			s.FinishedAt = time.Now()
+			s.PID = 0
+			return nil
+		}); err != nil {
+			return err
+		}
+		fmt.Printf("stopped workflow %s (runner not alive)\n", state.RunID)
+		return nil
 	}
 	deadline := time.Now().Add(*timeout)
 	for time.Now().Before(deadline) {

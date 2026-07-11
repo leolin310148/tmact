@@ -119,7 +119,19 @@ func detectTrailingChoicePrompt(raw string) *Prompt {
 	if selected := selectedOption(detected.Options); selected != nil {
 		detected.SelectedOption = selected
 	}
+	if isClaudeTrustFolderMenu(detected.Options) {
+		detected.Type = TypeTrustFolder
+		detected.Title = "Confirm folder trust"
+	}
 	return detected
+}
+
+func isClaudeTrustFolderMenu(options []Option) bool {
+	if len(options) != 2 || options[0].Number != 1 || options[1].Number != 2 {
+		return false
+	}
+	return normalizePromptText(options[0].Label) == "yes, i trust this folder" &&
+		normalizePromptText(options[1].Label) == "no, exit"
 }
 
 func optionLabelWithContinuation(lines []string, start, end int) string {
