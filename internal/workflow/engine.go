@@ -76,6 +76,11 @@ func NewEngine(loaded Loaded, storeRoot string, execute bool) (*Engine, error) {
 	id := RunID(loaded.Hash)
 	e := &Engine{Loaded: loaded, Store: NewStore(storeRoot, id), Execute: execute, Now: time.Now, Sleep: time.Sleep, ListLayout: tmux.ListLayout, ListPanes: tmux.ListPanes, ListSessionPanes: tmux.ListSessionPanes, CapturePane: tmux.CapturePane, PasteText: tmux.PasteText, DispatchAgent: dispatch.Run, ProcessRuntime: panestatus.DetectChildProcessRuntime, KillSession: tmux.KillSession}
 	e.ActorKeys = e.buildActorKeys()
+	release, err := e.Store.AcquireRunnerLock()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if state, err := e.Store.Read(); err == nil {
 		if state.ConfigHash != loaded.Hash {
 			return nil, errors.New("active run config snapshot hash does not match")
@@ -848,7 +853,8 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 		return nil, err
 	}
 	outcomes := sortedKeys(stage.Outcomes)
-	promptText += fmt.Sprintf("\n\n完成後請回報：tmact workflow report --dispatch-id %s --outcome OUTCOME --body \"summary\"\nOUTCOME 必須是：%s", ss.DispatchID, strings.Join(outcomes, ", "))
+	statusCommand := fmt.Sprintf("tmact workflow status --id %s --store-dir %q --json", state.RunID, e.Store.Root)
+	promptText += fmt.Sprintf("\n\n停止協議：執行任何有副作用的動作前，以及回報前，都必須執行 `%s`。若輸出的 `desired` 是 `stopped`，立即停止，不要再執行動作，也不要回報。\n完成後請回報：tmact workflow report --dispatch-id %s --outcome OUTCOME --body \"summary\"\nOUTCOME 必須是：%s", statusCommand, ss.DispatchID, strings.Join(outcomes, ", "))
 	dispatchRecord := Dispatch{Timestamp: e.Now(), ID: ss.DispatchID, RunID: state.RunID, Stage: stage.ID, Attempt: ss.Attempt, Actor: stage.Actor, Status: "planned", Revisions: bindValues(ss.BoundRevisions, revisionInputs(stage))}
 	last, exists, err := LastDispatch(e.Store, ss.DispatchID)
 	if err != nil {

@@ -14,7 +14,10 @@ import (
 
 const DefaultStoreDir = ".tmact/workflows"
 
-var ErrStateConflict = errors.New("workflow state changed concurrently")
+var (
+	ErrStateConflict = errors.New("workflow state changed concurrently")
+	ErrRunnerActive  = errors.New("workflow runner is active")
+)
 
 const (
 	StagePending       = "pending"
@@ -215,9 +218,21 @@ func (s Store) AcquireRunnerLock() (func(), error) {
 	}
 	if err := lockFile(file, true); err != nil {
 		_ = file.Close()
-		return nil, fmt.Errorf("workflow %s already has an active runner", s.RunID)
+		return nil, fmt.Errorf("%w: workflow %s", ErrRunnerActive, s.RunID)
 	}
 	return func() { _ = unlockFile(file); _ = file.Close() }, nil
+}
+
+func (s Store) RunnerActive() (bool, error) {
+	release, err := s.AcquireRunnerLock()
+	if err == nil {
+		release()
+		return false, nil
+	}
+	if errors.Is(err, ErrRunnerActive) {
+		return true, nil
+	}
+	return false, err
 }
 func (s Store) Append(path string, value any) error {
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
