@@ -85,7 +85,7 @@ func (codexScanner) parseFile(path string) []pricedRow {
 	sessionModel := ""
 	havePrevCumulative := false
 	prevCumulative := 0
-	var prevInput, prevCached, prevOutput, prevReasoning int
+	var prevInput, prevCached, prevOutput int
 
 	var rows []pricedRow
 	sc := bufio.NewScanner(f)
@@ -127,26 +127,25 @@ func (codexScanner) parseFile(path string) []pricedRow {
 			continue // duplicate / replayed event
 		}
 
-		var input, cached, output, reasoning int
+		var input, cached, output int
 		if last := info.LastTokenUsage; last != nil {
-			input, cached, output, reasoning = last.InputTokens, last.CachedInputTokens, last.OutputTokens, last.ReasoningOutputTokens
+			input, cached, output = last.InputTokens, last.CachedInputTokens, last.OutputTokens
 		} else if cumulative > 0 {
 			t := info.TotalTokenUsage
 			input = t.InputTokens - prevInput
 			cached = t.CachedInputTokens - prevCached
 			output = t.OutputTokens - prevOutput
-			reasoning = t.ReasoningOutputTokens - prevReasoning
 		}
 
 		// Advance cumulative baseline regardless of which branch produced the
 		// delta (codeburn note: otherwise mixed last/no-last sessions
 		// double-count).
 		t := info.TotalTokenUsage
-		prevInput, prevCached, prevOutput, prevReasoning = t.InputTokens, t.CachedInputTokens, t.OutputTokens, t.ReasoningOutputTokens
+		prevInput, prevCached, prevOutput = t.InputTokens, t.CachedInputTokens, t.OutputTokens
 		havePrevCumulative = true
 		prevCumulative = cumulative
 
-		if input+cached+output+reasoning == 0 {
+		if input+cached+output == 0 {
 			continue
 		}
 
@@ -165,13 +164,7 @@ func (codexScanner) parseFile(path string) []pricedRow {
 			continue
 		}
 
-		// OpenAI folds cached tokens into input_tokens; normalize to
-		// Anthropic semantics (input = non-cached) before pricing.
-		uncachedInput := input - cached
-		if uncachedInput < 0 {
-			uncachedInput = 0
-		}
-		cost, ok := calculateCost(model, uncachedInput, output+reasoning, 0, cached, 0, "standard", 0)
+		cost, ok := calculateCodexTokenCost(model, input, cached, output)
 		if !ok {
 			continue
 		}
@@ -182,6 +175,39 @@ func (codexScanner) parseFile(path string) []pricedRow {
 		})
 	}
 	return rows
+}
+
+const codexLongContextThreshold = 272_000
+
+// calculateCodexTokenCost normalizes the Responses API usage shape before
+// pricing. Cached tokens are included in input_tokens, while reasoning tokens
+// are already included in output_tokens and must not be added a second time.
+// Current 1.05M-context GPT families charge 2x input and 1.5x output when the
+// request input exceeds 272K tokens.
+func calculateCodexTokenCost(model string, input, cached, output int) (float64, bool) {
+	uncachedInput := input - cached
+	if uncachedInput < 0 {
+		uncachedInput = 0
+	}
+	inputCost, ok := calculateCost(model, uncachedInput, 0, 0, cached, 0, "standard", 0)
+	if !ok {
+		return 0, false
+	}
+	outputCost, _ := calculateCost(model, 0, output, 0, 0, 0, "standard", 0)
+	if input > codexLongContextThreshold && codexHasLongContextSurcharge(model) {
+		return 2*inputCost + 1.5*outputCost, true
+	}
+	return inputCost + outputCost, true
+}
+
+func codexHasLongContextSurcharge(model string) bool {
+	switch resolveAlias(canonicalName(model)) {
+	case "gpt-5.4", "gpt-5.4-pro", "gpt-5.5", "gpt-5.5-pro",
+		"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna":
+		return true
+	default:
+		return false
+	}
 }
 
 func itoa(n int) string {

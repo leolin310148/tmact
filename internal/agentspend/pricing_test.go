@@ -78,9 +78,10 @@ func TestClaudeFable5ProviderPrefixPricing(t *testing.T) {
 	approx(t, "anthropic claude fable 5 input", cost, 10)
 }
 
-// Codex normalizes cached into cacheRead and folds reasoning into output.
+// Codex normalizes cached into cacheRead. Reasoning is already included in
+// output_tokens and must not be added a second time by the log parser.
 // gpt-5.3-codex = [input 1.75e-6, output 1.4e-5, cacheWrite nil, cacheRead 1.75e-7].
-// uncachedInput=800, output+reasoning=600, cacheRead=200:
+// normalized uncachedInput=800, output=600, cacheRead=200:
 //
 //	800*1.75e-6 + 600*1.4e-5 + 200*1.75e-7 = 0.0014 + 0.0084 + 0.000035 = 0.009835
 func TestCodexKnownLineCost(t *testing.T) {
@@ -89,6 +90,30 @@ func TestCodexKnownLineCost(t *testing.T) {
 		t.Fatal("unpriced")
 	}
 	approx(t, "codex gpt-5.3 line", cost, 0.009835)
+}
+
+func TestCodexTokenCostDoesNotDoubleCountReasoning(t *testing.T) {
+	cost, ok := calculateCodexTokenCost("gpt-5.3-codex", 1000, 200, 500)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	approx(t, "codex output includes reasoning", cost, 0.008435)
+}
+
+func TestCodexGPT56LongContextPricing(t *testing.T) {
+	standard, ok := calculateCodexTokenCost("gpt-5.6-sol", 272_000, 200_000, 10_000)
+	if !ok {
+		t.Fatal("gpt-5.6-sol unpriced")
+	}
+	// input: 72K*$5/M + 200K*$0.50/M = $0.46; output: 10K*$30/M = $0.30.
+	approx(t, "gpt-5.6 threshold is standard", standard, 0.76)
+
+	long, ok := calculateCodexTokenCost("gpt-5.6-sol", 272_001, 200_000, 10_000)
+	if !ok {
+		t.Fatal("gpt-5.6-sol unpriced")
+	}
+	// Above 272K, all input is 2x and output is 1.5x.
+	approx(t, "gpt-5.6 long context", long, 2*(72_001*5e-6+200_000*0.5e-6)+1.5*(10_000*30e-6))
 }
 
 // Opus 4.8 fast tier is billed at 2x standard. Older 4.6/4.7 fast tiers remain

@@ -52,6 +52,34 @@ var fastMultipliers = map[string]float64{
 // manualPricing contains newly released models that are not yet present in the
 // vendored LiteLLM snapshot. Rates are dollars per token.
 var manualPricing = map[string]modelCosts{
+	"gpt-5.6": {
+		inputPerToken:      5e-6,
+		outputPerToken:     30e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"gpt-5.6-sol": {
+		inputPerToken:      5e-6,
+		outputPerToken:     30e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"gpt-5.6-terra": {
+		inputPerToken:      2.5e-6,
+		outputPerToken:     15e-6,
+		cacheWritePerToken: 3.125e-6,
+		cacheReadPerToken:  0.25e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"gpt-5.6-luna": {
+		inputPerToken:      1e-6,
+		outputPerToken:     6e-6,
+		cacheWritePerToken: 1.25e-6,
+		cacheReadPerToken:  0.1e-6,
+		webSearchPerReq:    webSearchCost,
+	},
 	"claude-opus-4-8": {
 		inputPerToken:      5e-6,
 		outputPerToken:     25e-6,

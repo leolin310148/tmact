@@ -40,8 +40,9 @@ func TestComputeWindowsAndDedup(t *testing.T) {
 	}
 	writeFixture(t, filepath.Join(claudeDir, "projects", "proj", "s.jsonl"), rows)
 
-	// Codex: one token_count, uncached input 800 + output 600 + cacheRead 200
-	// @ gpt-5.3-codex → $0.009835, dated in-week.
+	// Codex: one token_count, uncached input 800 + output 500 + cacheRead 200.
+	// reasoning_output_tokens is a breakdown of output_tokens, not additional
+	// usage. At gpt-5.3-codex rates this is $0.008435, dated in-week.
 	codexRows := []string{
 		`{"type":"session_meta","timestamp":"2026-05-29T09:00:00Z","payload":{"session_id":"sess1","model":"gpt-5.3-codex"}}`,
 		`{"type":"event_msg","timestamp":"2026-05-29T09:01:00Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":500,"reasoning_output_tokens":100,"total_tokens":1600},"total_token_usage":{"total_tokens":1600}}}}`,
@@ -53,8 +54,8 @@ func TestComputeWindowsAndDedup(t *testing.T) {
 
 	approx(t, "claude week", res["claude"].WeekUSD, 0.005)   // only msgA
 	approx(t, "claude month", res["claude"].MonthUSD, 0.010) // msgA + msgB
-	approx(t, "codex week", res["codex"].WeekUSD, 0.009835)
-	approx(t, "codex month", res["codex"].MonthUSD, 0.009835)
+	approx(t, "codex week", res["codex"].WeekUSD, 0.008435)
+	approx(t, "codex month", res["codex"].MonthUSD, 0.008435)
 }
 
 func TestComputeCacheReusesParse(t *testing.T) {

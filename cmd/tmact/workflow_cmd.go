@@ -322,14 +322,6 @@ func acquireWorkflowStartLock(root, id string) (func(), error) {
 	_ = file.Close()
 	return func() { _ = os.Remove(path) }, nil
 }
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
-}
-
 func workflowSelection(fs *flag.FlagSet) (id, config, store *string) {
 	id = fs.String("id", "", "workflow run id")
 	config = fs.String("config", "", "workflow config path")
