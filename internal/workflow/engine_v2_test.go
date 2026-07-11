@@ -300,6 +300,11 @@ stages:
 	if len(sent) != 2 || sent[0] != "/clear" || !strings.Contains(sent[1], "--dispatch-id "+ss.DispatchID) {
 		t.Fatalf("sent=%#v", sent)
 	}
+	for _, want := range []string{"tmact workflow status --id " + state.RunID, "--store-dir \"" + engine.Store.Root + "\" --json", "`desired` 是 `stopped`", "不要回報"} {
+		if !strings.Contains(sent[1], want) {
+			t.Fatalf("prompt missing %q: %s", want, sent[1])
+		}
+	}
 	last, ok, err := LastDispatch(engine.Store, ss.DispatchID)
 	if err != nil || !ok || last.Status != "sent" {
 		t.Fatalf("dispatch=%#v ok=%t err=%v", last, ok, err)
@@ -572,8 +577,19 @@ func TestStoreRejectsStaleWriterAndRunnerLockIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer release()
-	if _, err := engine.Store.AcquireRunnerLock(); err == nil {
-		t.Fatal("duplicate runner lock succeeded")
+	if _, err := engine.Store.AcquireRunnerLock(); !errors.Is(err, ErrRunnerActive) {
+		t.Fatalf("duplicate runner lock error=%v", err)
+	}
+	active, err := engine.Store.RunnerActive()
+	if err != nil || !active {
+		t.Fatalf("active=%t err=%v", active, err)
+	}
+	if _, err := NewEngine(loaded, engine.Store.Root, true); !errors.Is(err, ErrRunnerActive) {
+		t.Fatalf("NewEngine while runner active error=%v", err)
+	}
+	release()
+	active, err = engine.Store.RunnerActive()
+	if err != nil || active {
+		t.Fatalf("after release active=%t err=%v", active, err)
 	}
 }

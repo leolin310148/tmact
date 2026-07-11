@@ -21,7 +21,6 @@ import (
 const workflowSupervisorSession = "tmact-workflows"
 
 var workflowWindowRE = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
-var workflowProcessAlive = processAlive
 
 func runWorkflow(args []string) error {
 	if wantsHelp(args) {
@@ -262,9 +261,25 @@ func runWorkflowStart(args []string) error {
 		return err
 	}
 	defer release()
-	if existing, readErr := workflow.NewStore(root, plan.RunID).Read(); readErr == nil && existing.Desired == "stopped" {
-		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", existing.RunID)
-	} else if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+	store := workflow.NewStore(root, plan.RunID)
+	existing, readErr := store.Read()
+	if readErr == nil {
+		if existing.Desired == "stopped" {
+			return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", existing.RunID)
+		}
+		if workflowTerminal(existing.Status) {
+			fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", existing.RunID, existing.Status)
+			return nil
+		}
+		active, activeErr := store.RunnerActive()
+		if activeErr != nil {
+			return activeErr
+		}
+		if active {
+			fmt.Printf("workflow already active: %s (%s)\n", existing.RunID, existing.Status)
+			return nil
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return readErr
 	}
 	engine, err := workflow.NewEngine(loaded, root, true)
@@ -278,12 +293,8 @@ func runWorkflowStart(args []string) error {
 	if state.Desired == "stopped" {
 		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", state.RunID)
 	}
-	if state.Status == "stopped" || state.Status == "failed" || state.Status == "blocked" || state.Status == "succeeded" {
+	if workflowTerminal(state.Status) {
 		fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", state.RunID, state.Status)
-		return nil
-	}
-	if state.PID != 0 && state.PID != os.Getpid() && workflowProcessAlive(state.PID) {
-		fmt.Printf("workflow already active: %s (%s)\n", state.RunID, state.Status)
 		return nil
 	}
 	executable, err := tmactExecutable()
@@ -307,13 +318,23 @@ func runWorkflowStart(args []string) error {
 	deadline := time.Now().Add(*timeout)
 	for time.Now().Before(deadline) {
 		fresh, e := engine.Store.Read()
-		if e == nil && fresh.PID != os.Getpid() {
-			fmt.Printf("started workflow %s in %s\n", fresh.RunID, workflowSupervisorSession)
-			return nil
+		if e == nil {
+			active, activeErr := engine.Store.RunnerActive()
+			if activeErr != nil {
+				return activeErr
+			}
+			if active || workflowTerminal(fresh.Status) {
+				fmt.Printf("started workflow %s in %s\n", fresh.RunID, workflowSupervisorSession)
+				return nil
+			}
 		}
 		tmactSleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("timed out waiting for workflow %s to start", state.RunID)
+}
+
+func workflowTerminal(status string) bool {
+	return status == "stopped" || status == "failed" || status == "blocked" || status == "succeeded"
 }
 
 func acquireWorkflowStartLock(root, id string) (func(), error) {
@@ -607,21 +628,21 @@ func runWorkflowStop(args []string) error {
 	if err := store.Update(func(s *workflow.State) error { s.Desired = "stopped"; return nil }); err != nil {
 		return err
 	}
-	fresh, err := store.Read()
+	active, err := store.RunnerActive()
 	if err != nil {
 		return err
 	}
-	if fresh.PID == 0 || !workflowProcessAlive(fresh.PID) {
+	if !active {
 		if err := store.Update(func(s *workflow.State) error {
 			s.Status = "stopped"
-			s.Reason = "operator_request_runner_not_alive"
+			s.Reason = "operator_request_runner_not_active"
 			s.FinishedAt = time.Now()
 			s.PID = 0
 			return nil
 		}); err != nil {
 			return err
 		}
-		fmt.Printf("stopped workflow %s (runner not alive)\n", state.RunID)
+		fmt.Printf("stopped workflow %s (runner not active)\n", state.RunID)
 		return nil
 	}
 	deadline := time.Now().Add(*timeout)
@@ -630,7 +651,7 @@ func runWorkflowStop(args []string) error {
 		if e != nil {
 			return e
 		}
-		if fresh.Status == "stopped" || fresh.Status == "succeeded" || fresh.Status == "failed" || fresh.Status == "blocked" {
+		if workflowTerminal(fresh.Status) {
 			fmt.Printf("stopped workflow %s (%s)\n", state.RunID, fresh.Status)
 			return nil
 		}

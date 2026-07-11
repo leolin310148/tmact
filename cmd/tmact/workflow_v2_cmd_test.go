@@ -85,7 +85,7 @@ stages:
 	}
 }
 
-func TestWorkflowStopFinalizesDeadRunner(t *testing.T) {
+func TestWorkflowStopFinalizesRunnerWithoutLockDespiteStalePID(t *testing.T) {
 	restore := stubCLIHooks(t)
 	defer restore()
 	dir := t.TempDir()
@@ -112,12 +112,11 @@ stages:
 	}); err != nil {
 		t.Fatal(err)
 	}
-	workflowProcessAlive = func(int) bool { return false }
 	out, err := captureRun(t, "workflow", "stop", "--id", engine.Store.RunID, "--store-dir", root, "--wait")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "runner not alive") {
+	if !strings.Contains(out, "runner not active") {
 		t.Fatalf("out=%q", out)
 	}
 	state, err := engine.Store.Read()
@@ -126,6 +125,78 @@ stages:
 	}
 	if state.Status != "stopped" || state.Desired != "stopped" || state.PID != 0 {
 		t.Fatalf("state=%#v", state)
+	}
+}
+
+func TestWorkflowStopDoesNotFinalizeWhileRunnerLockIsHeld(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(`version: 2
+workspace: {root: .}
+stages:
+  - {id: wait, type: human, outcomes: {done: success}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := engine.Store.AcquireRunnerLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	_, err = captureRun(t, "workflow", "stop", "--id", engine.Store.RunID, "--store-dir", root, "--wait", "--timeout", "0s")
+	if err == nil || !strings.Contains(err.Error(), "timed out waiting") {
+		t.Fatalf("error=%v", err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status == "stopped" || state.Desired != "stopped" {
+		t.Fatalf("state=%#v", state)
+	}
+}
+
+func TestWorkflowStartUsesRunnerLockAsActiveSignal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(`version: 2
+workspace: {root: .}
+stages:
+  - {id: wait, type: human, outcomes: {done: success}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, workflow.DefaultStoreDir)
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := engine.Store.AcquireRunnerLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	out, err := captureRun(t, "workflow", "start", "--config", path, "--execute")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "workflow already active") {
+		t.Fatalf("out=%q", out)
 	}
 }
 
