@@ -66,6 +66,9 @@ func (s *Store) Record(e Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.panes[e.PaneID]
+	if state.SessionID != "" && e.SessionID != "" && state.SessionID != e.SessionID {
+		state = PaneState{}
+	}
 	state.PaneID = e.PaneID
 	if e.SessionID != "" {
 		state.SessionID = e.SessionID
@@ -132,18 +135,33 @@ func (s *Store) States() map[string]PaneState {
 	return out
 }
 
-// Prune drops state for panes that are gone. Entries updated at or after
-// keepAfter survive even when unseen, so an event racing the pane scan (a
-// brand-new pane whose first prompt fired before statusd noticed the pane)
-// is not lost.
-func (s *Store) Prune(seen map[string]bool, keepAfter time.Time) {
+// Prune drops state for panes that are gone or whose pane id now belongs to a
+// different session. Entries updated at or after keepAfter survive a mismatch
+// so an event racing the pane scan (a brand-new pane whose first prompt fired
+// before statusd noticed the pane) is not lost.
+func (s *Store) Prune(seen map[string]string, keepAfter time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, state := range s.panes {
-		if seen[id] || !state.UpdatedAt.Before(keepAfter) {
+		sessionID, paneSeen := seen[id]
+		identityMatches := state.SessionID == "" || sessionID == "" || state.SessionID == sessionID
+		if paneSeen && identityMatches {
+			continue
+		}
+		if !state.UpdatedAt.Before(keepAfter) {
 			continue
 		}
 		delete(s.panes, id)
+	}
+}
+
+// DeleteIfUpdatedAt removes one exact observed state without racing a newer
+// hook event that arrived while statusd was building its snapshot.
+func (s *Store) DeleteIfUpdatedAt(paneID string, updatedAt time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if state, ok := s.panes[paneID]; ok && state.UpdatedAt.Equal(updatedAt) {
+		delete(s.panes, paneID)
 	}
 }
 

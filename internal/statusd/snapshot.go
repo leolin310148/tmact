@@ -121,6 +121,10 @@ func NewMemory() *Memory {
 }
 
 func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, error) {
+	return buildSnapshot(ctx, cfg, mem, nil)
+}
+
+func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePaneIDs map[string]bool) (Snapshot, error) {
 	cfg = cfg.withDefaults()
 	if mem == nil {
 		mem = NewMemory()
@@ -149,7 +153,8 @@ func BuildSnapshot(ctx context.Context, cfg Config, mem *Memory) (Snapshot, erro
 			panestatus.RuntimeCopilot,
 			panestatus.RuntimeGemini,
 		},
-		RuntimeCache: mem.runtimeCache,
+		RuntimeCache:        mem.runtimeCache,
+		ForceCapturePaneIDs: forceCapturePaneIDs,
 	}, cfg.CapturePane, cfg.Sleep)
 	if err != nil {
 		snapshot.addError("inspect", "", err)

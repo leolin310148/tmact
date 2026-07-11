@@ -13,12 +13,14 @@ import (
 
 	"github.com/leolin310148/tmact/internal/shellhook"
 	"github.com/leolin310148/tmact/internal/statusd"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 // sendHookEvent and fetchHookStates are injection points for tests.
 var (
 	sendHookEvent   = shellhook.Send
 	fetchHookStates = shellhook.FetchStates
+	lookupSessionID = tmux.PaneSessionID
 )
 
 // hookSocketEnv overrides the emit socket path without flags so the
@@ -118,6 +120,16 @@ func runHookEmit(args []string) error {
 	}, os.Getenv, os.Stdin, tmactNow())
 	if err != nil {
 		return hookEmitFail(*quiet, err)
+	}
+	// Pane ids can be reused after panes or the tmux server are recreated.
+	// Attach the owning session id so statusd can distinguish a current event
+	// from stale in-memory state for an earlier owner of the same pane id.
+	// Keep this best-effort: shell hooks must never break the user's prompt if
+	// tmux disappears during the lookup.
+	if event.SessionID == "" && event.PaneID != "" {
+		if sessionID, lookupErr := lookupSessionID(event.PaneID); lookupErr == nil {
+			event.SessionID = sessionID
+		}
 	}
 
 	socket := resolveHookSocket(*socketPath)

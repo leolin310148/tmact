@@ -91,6 +91,20 @@ func PaneStartCommand(target string) (string, error) {
 	return strings.TrimSpace(output), nil
 }
 
+// PaneSessionID returns the stable tmux session id (for example "$3") that
+// currently owns target. Unlike a pane id, this lets long-lived consumers
+// reject hook state left behind when tmux reuses a pane id.
+func PaneSessionID(target string) (string, error) {
+	if target == "" {
+		return "", fmt.Errorf("target cannot be empty")
+	}
+	output, err := outputTmux("display-message", "-p", "-t", target, "#{session_id}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
 func NewSession(session string, window string, cwd string, command []string) error {
 	args := []string{"new-session", "-d", "-s", session}
 	if window != "" {
