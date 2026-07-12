@@ -21,15 +21,17 @@ func ClassifyANSI(raw, ansi string) Result {
 	if result.Asking || !strings.Contains(ansi, "\x1b[") {
 		return result
 	}
+	if hasActiveInterruptIndicator(raw) {
+		result.State = StateWorking
+		result.Signals = appendSignal(result.Signals, "working_text")
+		return result
+	}
 	input, ok := currentStyledInput(ansi)
 	if !ok {
 		return result
 	}
 	if len(input) == 0 {
-		if hasRecentInterruptIndicator(raw) {
-			result.State = StateWorking
-			result.Signals = appendSignal(result.Signals, "working_text")
-		} else if result.State != StateWorking {
+		if result.State != StateWorking {
 			result.State = StateWaitingInput
 			result.Signals = appendSignal(result.Signals, "empty_input")
 		}
@@ -52,13 +54,25 @@ func ClassifyANSI(raw, ansi string) Result {
 	return result
 }
 
-func hasRecentInterruptIndicator(raw string) bool {
+func hasActiveInterruptIndicator(raw string) bool {
 	lines := CleanedLines(raw)
-	for _, line := range recentLines(lines, 20) {
-		lower := strings.ToLower(line)
-		if strings.Contains(lower, "esc to interrupt") || strings.Contains(lower, "ctrl-c to interrupt") {
-			return true
+	promptIndex := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if looksLikeAgentPrompt(lines[i]) {
+			promptIndex = i
+			break
 		}
+	}
+	if promptIndex < 0 {
+		return false
+	}
+	for i := promptIndex - 1; i >= 0 && promptIndex-i <= 3; i-- {
+		line := lines[i]
+		if isAgentChromeLine(line) {
+			continue
+		}
+		lower := strings.ToLower(line)
+		return strings.Contains(lower, "esc to interrupt") || strings.Contains(lower, "ctrl-c to interrupt")
 	}
 	return false
 }
