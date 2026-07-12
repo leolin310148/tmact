@@ -9,6 +9,7 @@ func TestNoServerErrorClassification(t *testing.T) {
 	for _, message := range []string{
 		"tmux list-windows failed: no server running on /tmp/tmux-501/default",
 		"tmux list-windows failed: failed to connect to server: Connection refused",
+		"tmux list-panes failed: error connecting to /private/tmp/tmux-501/default (No such file or directory)",
 	} {
 		if !isNoServerError(errors.New(message)) {
 			t.Fatalf("expected no-server classification for %q", message)
