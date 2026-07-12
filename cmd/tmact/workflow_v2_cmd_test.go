@@ -22,6 +22,10 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if len(loaded.Config.Stages) != 11 {
 		t.Fatalf("stages=%d", len(loaded.Config.Stages))
 	}
+	archive := loaded.Config.Stages[len(loaded.Config.Stages)-1]
+	if archive.ID != "archive" || strings.Join(archive.ProducesRevisions, ",") != "spec,source" {
+		t.Fatalf("archive produces=%v", archive.ProducesRevisions)
+	}
 }
 func TestWorkflowExampleAndRemovedCommands(t *testing.T) {
 	out, err := captureRun(t, "workflow", "example", "--profile", "openspec")

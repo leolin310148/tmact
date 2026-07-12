@@ -145,7 +145,7 @@ stages:
     needs: [archive_gate]
     actor: pm
     bind_revisions: [spec, source]
-    produces_revisions: [spec]
+    produces_revisions: [spec, source]
     prompt: Archive OpenSpec change {{ .vars.change }} now that all gates pass.
     outcomes: {complete: success, blocked: blocked}
 `

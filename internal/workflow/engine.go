@@ -672,6 +672,7 @@ func invalidateDrift(state *State, cfg Config, old, current map[string]string, n
 			changed[name] = true
 		}
 	}
+	protected := protectedProducerChains(*state, cfg, changed)
 	invalid := map[string]bool{}
 	for _, stage := range cfg.Stages {
 		ss := state.Stages[stage.ID]
@@ -679,7 +680,7 @@ func invalidateDrift(state *State, cfg Config, old, current map[string]string, n
 			continue
 		}
 		for name, bound := range ss.BoundRevisions {
-			if (ss.Status == StageRunning || ss.Status == StageWaitingReport) && contains(stage.ProducesRevisions, name) {
+			if protected[name][stage.ID] {
 				continue
 			}
 			if changed[name] && current[name] != bound {
@@ -718,6 +719,41 @@ func invalidateDrift(state *State, cfg Config, old, current map[string]string, n
 		}
 	}
 }
+
+func protectedProducerChains(state State, cfg Config, changed map[string]bool) map[string]map[string]bool {
+	stages := map[string]StageConfig{}
+	for _, stage := range cfg.Stages {
+		stages[stage.ID] = stage
+	}
+	protected := map[string]map[string]bool{}
+	for _, producer := range cfg.Stages {
+		ss := state.Stages[producer.ID]
+		if ss.Status != StageRunning && ss.Status != StageWaitingReport {
+			continue
+		}
+		for _, revision := range producer.ProducesRevisions {
+			if !changed[revision] {
+				continue
+			}
+			if protected[revision] == nil {
+				protected[revision] = map[string]bool{}
+			}
+			protectStageAndAncestors(producer.ID, stages, protected[revision])
+		}
+	}
+	return protected
+}
+
+func protectStageAndAncestors(stageID string, stages map[string]StageConfig, protected map[string]bool) {
+	if protected[stageID] {
+		return
+	}
+	protected[stageID] = true
+	for _, need := range stages[stageID].Needs {
+		protectStageAndAncestors(need, stages, protected)
+	}
+}
+
 func attemptInputsDrifted(ss StageState, stage StageConfig, current map[string]string) bool {
 	for name, bound := range ss.BoundRevisions {
 		if contains(stage.ProducesRevisions, name) {
@@ -1144,6 +1180,7 @@ func ApplyReport(root, dispatchID, outcome, body string) (Report, error) {
 		}
 	}
 	err = store.Update(func(s *State) error {
+		invalidateDrift(s, loaded.Config, s.Revisions, current, report.Timestamp)
 		stageState := s.Stages[d.Stage]
 		ev := &Evidence{Result: outcome, Summary: body, Body: body, FinishedAt: report.Timestamp}
 		finishDisposition(&stageState, stage, outcome, ev, report.Timestamp)
