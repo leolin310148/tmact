@@ -91,7 +91,10 @@ tmact dispatch-work work --dir ~/work/repo --agent codex \
 
 Model selection applies when tmact launches the agent. If the named session
 already has that agent running, tmact rejects `--model` instead of silently
-reusing an agent whose model it cannot verify.
+reusing an agent whose model it cannot verify. Model names are checked against
+an explicit per-agent allowlist; run `tmact help dispatch-work` to see the
+accepted values. Unknown names are rejected locally before tmux or a remote
+peer is touched.
 
 For a pane created by another tool, inspect first (dry-run), then execute:
 

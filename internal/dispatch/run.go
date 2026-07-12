@@ -35,16 +35,12 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	if !supportedAgents[opts.Agent] {
 		return report, fmt.Errorf("unsupported agent %q; want one of %s", opts.Agent, strings.Join(SupportedAgents(), ", "))
 	}
-	if opts.Model != "" {
-		opts.Model = strings.TrimSpace(opts.Model)
-		if opts.Model == "" {
-			return report, fmt.Errorf("model cannot be blank")
-		}
-		if opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
-			return report, fmt.Errorf("model selection only supports claude or codex, got %q", opts.Agent)
-		}
-		report.Model = opts.Model
+	model, err := ValidateModel(opts.Agent, opts.Model)
+	if err != nil {
+		return report, err
 	}
+	opts.Model = model
+	report.Model = opts.Model
 	if opts.TrustFolder && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
 		return report, fmt.Errorf("trust-folder only supports claude or codex, got %q", opts.Agent)
 	}

@@ -61,6 +61,25 @@ func TestPostRemoteReportsUnsupportedPeer(t *testing.T) {
 	}
 }
 
+func TestPostRemoteRejectsUnknownModelBeforeRequest(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer srv.Close()
+
+	_, err := PostRemote(context.Background(), srv.Client(), "peer-a", srv.URL, Options{
+		Agent: "codex",
+		Model: "gpt-5.4-typo",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported model") {
+		t.Fatalf("err = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
+	}
+}
+
 func TestRemoteRequestOptionsParsesDurations(t *testing.T) {
 	opts, err := (RemoteRequest{Model: "sonnet", ReadyTimeout: "3s", ReadySettle: "500ms", TrustFolder: true}).Options()
 	if err != nil {

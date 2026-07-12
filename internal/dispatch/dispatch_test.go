@@ -178,6 +178,26 @@ func TestRunRejectsModelForUnsupportedAgent(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnknownModelForAgent(t *testing.T) {
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Model = "sonnett"
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), `unsupported model "sonnett" for claude`) || !strings.Contains(err.Error(), "sonnet") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSupportedModelsReturnsCopy(t *testing.T) {
+	models := dispatch.SupportedModels("codex")
+	if len(models) == 0 {
+		t.Fatal("codex model allowlist is empty")
+	}
+	models[0] = "changed"
+	if dispatch.SupportedModels("codex")[0] == "changed" {
+		t.Fatal("SupportedModels exposed its internal slice")
+	}
+}
+
 func TestRunRejectsEmptyPrompt(t *testing.T) {
 	_, deps := baseDeps()
 	opts := baseOpts()
@@ -269,35 +289,17 @@ func TestExecuteNewSession(t *testing.T) {
 	}
 }
 
-func TestExecuteNewSessionWithModelShellQuotesModel(t *testing.T) {
+func TestExecuteNewSessionRejectsUnsafeModelBeforeLaunching(t *testing.T) {
 	rec, deps := baseDeps()
-	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
-		return []tmux.Pane{codexPane()}, nil
-	}
-	deps.CapturePane = func(string, int) (string, error) {
-		if len(rec.pastes) < 2 {
-			return "OpenAI Codex\n› ", nil
-		}
-		return "OpenAI Codex\nWorking... esc to interrupt", nil
-	}
-
 	opts := baseOpts()
 	opts.Agent = "codex"
 	opts.Model = "gpt-5.4'; echo unsafe"
 	opts.Execute = true
-	report, err := dispatch.RunWithDeps(opts, deps)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "unsupported model") {
+		t.Fatalf("err = %v", err)
 	}
-	wantCommand := "codex --model 'gpt-5.4'\\''; echo unsafe'"
-	if report.Model != opts.Model {
-		t.Fatalf("model = %q, want %q", report.Model, opts.Model)
-	}
-	if len(rec.pastes) < 1 || rec.pastes[0].text != wantCommand {
-		t.Fatalf("launch paste = %#v, want %q", rec.pastes, wantCommand)
-	}
-	if detail := stepDetail(t, report, "launch-agent"); !strings.Contains(detail, "codex --model") {
-		t.Fatalf("launch detail = %q", detail)
+	if rec.newSessions != 0 || len(rec.pastes) != 0 {
+		t.Fatalf("invalid model touched tmux: newSessions=%d pastes=%#v", rec.newSessions, rec.pastes)
 	}
 }
 

@@ -53,7 +53,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini", Required: true},
-				{Name: "--model", Value: "MODEL", Description: "model used when launching Claude or Codex"},
+				{Name: "--model", Value: "MODEL", Description: dispatchModelHelp()},
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
@@ -78,7 +78,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"The session name is the first positional argument.",
 				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",
-				"--model applies only while launching Claude or Codex; it is rejected if that agent is already running.",
+				"--model applies only while launching Claude or Codex, must match that agent's allowlist, and is rejected if that agent is already running.",
 				"With --peer, --dir is validated on the peer machine, not the host.",
 				"--peer reads dispatch_peers first, then falls back to peers for compatibility.",
 			},
