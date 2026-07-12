@@ -52,6 +52,7 @@ type Options struct {
 	Session      string
 	Dir          string
 	Agent        string
+	Model        string
 	Prompt       string
 	Execute      bool
 	ReadyTimeout time.Duration
@@ -73,6 +74,7 @@ type Report struct {
 	Target          string `json:"target,omitempty"`
 	Dir             string `json:"dir"`
 	Agent           string `json:"agent"`
+	Model           string `json:"model,omitempty"`
 	Prompt          string `json:"prompt"`
 	SessionExisted  bool   `json:"session_existed"`
 	AgentWasRunning bool   `json:"agent_was_running"`

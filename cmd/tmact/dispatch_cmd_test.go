@@ -19,13 +19,13 @@ func TestDispatchWithoutPeerUsesLocalRun(t *testing.T) {
 	called := false
 	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
 		called = true
-		if opts.Session != "work" || opts.Dir != dir || opts.Agent != "codex" || opts.Prompt != "go" || opts.Execute {
+		if opts.Session != "work" || opts.Dir != dir || opts.Agent != "codex" || opts.Model != "gpt-5.4" || opts.Prompt != "go" || opts.Execute {
 			t.Fatalf("opts = %#v", opts)
 		}
-		return dispatch.Report{Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt, Execute: opts.Execute}, nil
+		return dispatch.Report{Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Model: opts.Model, Prompt: opts.Prompt, Execute: opts.Execute}, nil
 	}
 
-	out, err := captureRun(t, "dispatch-work", "work", "--dir", dir, "--agent", "codex", "--prompt", "go")
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", dir, "--agent", "codex", "--model", "gpt-5.4", "--prompt", "go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +33,9 @@ func TestDispatchWithoutPeerUsesLocalRun(t *testing.T) {
 		t.Fatal("dispatchRun was not called")
 	}
 	if !strings.Contains(out, "dry-run: dispatch-work work") {
+		t.Fatalf("output = %s", out)
+	}
+	if !strings.Contains(out, "model=gpt-5.4") {
 		t.Fatalf("output = %s", out)
 	}
 }
@@ -54,13 +57,13 @@ func TestDispatchPeerReadsConfigAndUsesRemoteRun(t *testing.T) {
 		if peerName != "peer-a" || peerURL != "http://dispatch-peer.example:7890" {
 			t.Fatalf("peer = %s %s", peerName, peerURL)
 		}
-		if opts.Dir != "/peer/repo" || opts.ReadyTimeout != 45*time.Second || opts.ReadySettle != 2*time.Second || !opts.Execute || !opts.TrustFolder {
+		if opts.Dir != "/peer/repo" || opts.Model != "gpt-5.4" || opts.ReadyTimeout != 45*time.Second || opts.ReadySettle != 2*time.Second || !opts.Execute || !opts.TrustFolder {
 			t.Fatalf("opts = %#v", opts)
 		}
 		return dispatch.Report{Peer: peerName, Session: opts.Session, Target: "peer-a@%7", Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt, Execute: opts.Execute}, nil
 	}
 
-	out, err := captureRun(t, "dispatch-work", "work", "--peer", "peer-a", "--config", configPath, "--dir", "/peer/repo", "--agent", "codex", "--prompt", "go", "--ready-timeout", "45s", "--ready-settle", "2s", "--trust-folder", "--execute")
+	out, err := captureRun(t, "dispatch-work", "work", "--peer", "peer-a", "--config", configPath, "--dir", "/peer/repo", "--agent", "codex", "--model", "gpt-5.4", "--prompt", "go", "--ready-timeout", "45s", "--ready-settle", "2s", "--trust-folder", "--execute")
 	if err != nil {
 		t.Fatal(err)
 	}

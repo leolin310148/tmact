@@ -23,6 +23,7 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 		Session:     opts.Session,
 		Dir:         opts.Dir,
 		Agent:       opts.Agent,
+		Model:       opts.Model,
 		Prompt:      opts.Prompt,
 		Execute:     opts.Execute,
 		TrustFolder: opts.TrustFolder,
@@ -33,6 +34,16 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	}
 	if !supportedAgents[opts.Agent] {
 		return report, fmt.Errorf("unsupported agent %q; want one of %s", opts.Agent, strings.Join(SupportedAgents(), ", "))
+	}
+	if opts.Model != "" {
+		opts.Model = strings.TrimSpace(opts.Model)
+		if opts.Model == "" {
+			return report, fmt.Errorf("model cannot be blank")
+		}
+		if opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
+			return report, fmt.Errorf("model selection only supports claude or codex, got %q", opts.Agent)
+		}
+		report.Model = opts.Model
 	}
 	if opts.TrustFolder && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
 		return report, fmt.Errorf("trust-folder only supports claude or codex, got %q", opts.Agent)
@@ -81,12 +92,13 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 // agent drops back to a live shell instead of tearing the session down, so a
 // human can take over and run git or other commands.
 func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
+	command := launchCommand(opts)
 	create := Step{
 		Name:   "create-session",
 		Detail: fmt.Sprintf("tmux new-session -d -s %s -c %s (default shell)", opts.Session, opts.Dir),
 		Status: StatusPlanned,
 	}
-	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", opts.Agent), Status: StatusPlanned}
+	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", command), Status: StatusPlanned}
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
 	steps := []Step{create, launch, ready, send}
@@ -110,7 +122,7 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	report.Target = target
 
-	if err := deps.PasteText(target, opts.Agent, true); err != nil {
+	if err := deps.PasteText(target, command, true); err != nil {
 		steps[1].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("launch %s: %w", opts.Agent, err)
@@ -160,6 +172,9 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 
 	switch {
 	case runtime == opts.Agent:
+		if opts.Model != "" {
+			return report, fmt.Errorf("session %s is already running %s; --model only applies when launching a new agent", opts.Session, opts.Agent)
+		}
 		if classified.State == panestate.StateWorking {
 			return report, fmt.Errorf("session %s is already running %s but it is busy working; refusing to dispatch", opts.Session, opts.Agent)
 		}
@@ -223,7 +238,8 @@ func dispatchReuse(opts Options, deps Deps, report Report, target string) (Repor
 }
 
 func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Report, error) {
-	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", opts.Agent), Status: StatusPlanned}
+	command := launchCommand(opts)
+	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", command), Status: StatusPlanned}
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
 	steps := []Step{launch, ready, send}
@@ -233,7 +249,7 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 		return report, nil
 	}
 
-	if err := deps.PasteText(target, opts.Agent, true); err != nil {
+	if err := deps.PasteText(target, command, true); err != nil {
 		steps[0].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("launch %s: %w", opts.Agent, err)
@@ -257,4 +273,18 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	steps[2].Status = StatusOK
 	report.Steps = steps
 	return report, nil
+}
+
+func launchCommand(opts Options) string {
+	if opts.Model == "" {
+		return opts.Agent
+	}
+	return opts.Agent + " --model " + shellQuote(opts.Model)
+}
+
+// shellQuote returns one POSIX-shell argument. dispatch-work pastes the
+// launcher into the user's shell, so model names must never be interpreted as
+// shell syntax.
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

@@ -25,20 +25,21 @@ func TestHandleDispatchWorkRunsInjectedDispatcher(t *testing.T) {
 				Target:  "%8",
 				Dir:     opts.Dir,
 				Agent:   opts.Agent,
+				Model:   opts.Model,
 				Prompt:  opts.Prompt,
 				Execute: opts.Execute,
 				Steps:   []dispatch.Step{{Name: "send-prompt", Status: dispatch.StatusOK}},
 			}, nil
 		},
 	}
-	body := bytes.NewBufferString(`{"session":"work","dir":"/repo","agent":"codex","prompt":"go","execute":true,"ready_timeout":"45s","ready_settle":"2s","trust_folder":true}`)
+	body := bytes.NewBufferString(`{"session":"work","dir":"/repo","agent":"codex","model":"gpt-5.4","prompt":"go","execute":true,"ready_timeout":"45s","ready_settle":"2s","trust_folder":true}`)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/dispatch-work", body))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if got.Session != "work" || got.Dir != "/repo" || got.Agent != "codex" || got.Prompt != "go" || !got.Execute || !got.TrustFolder {
+	if got.Session != "work" || got.Dir != "/repo" || got.Agent != "codex" || got.Model != "gpt-5.4" || got.Prompt != "go" || !got.Execute || !got.TrustFolder {
 		t.Fatalf("opts = %#v", got)
 	}
 	if got.ReadyTimeout != 45*time.Second || got.ReadySettle != 2*time.Second {

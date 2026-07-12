@@ -35,6 +35,7 @@ func runDispatch(args []string) error {
 
 	dir := fs.String("dir", "", "working directory; sets cwd when the session is created")
 	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
+	model := fs.String("model", "", "model to use when launching Claude or Codex")
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
@@ -67,6 +68,7 @@ func runDispatch(args []string) error {
 		Session:      session,
 		Dir:          *dir,
 		Agent:        *agent,
+		Model:        *model,
 		Prompt:       *promptText,
 		Execute:      *execute,
 		ReadyTimeout: *readyTimeout,
