@@ -148,6 +148,37 @@ stages:
 	}
 }
 
+func TestCommandExecutesArgvFromStringListVariable(t *testing.T) {
+	loaded := loadTestWorkflow(t, `version: 2
+workspace: {root: .}
+variables:
+  command: {type: string_list, default: [/usr/bin/touch, generated.txt]}
+defaults: {timeout: 5s}
+stages:
+  - id: generate
+    type: command
+    argv_variable: command
+`)
+	engine, err := NewEngine(loaded, filepath.Join(t.TempDir(), "runs"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, err := engine.Tick(context.Background())
+	if err != nil || !done {
+		t.Fatalf("done=%t err=%v", done, err)
+	}
+	if _, err := os.Stat(filepath.Join(loaded.Config.Workspace.Root, "generated.txt")); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(state.Stages["generate"].Evidence.Argv, "|"); got != "/usr/bin/touch|generated.txt" {
+		t.Fatalf("evidence argv=%q", got)
+	}
+}
+
 func TestActiveProducerRevisionChangeProtectsDependencyChain(t *testing.T) {
 	cfg := Config{Stages: []StageConfig{
 		{ID: "review", BindRevisions: []string{"source"}},

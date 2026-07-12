@@ -113,6 +113,7 @@ type StageConfig struct {
 	Outcomes map[string]string `yaml:"outcomes,omitempty" json:"outcomes,omitempty"`
 
 	Argv             []string          `yaml:"argv,omitempty" json:"argv,omitempty"`
+	ArgvVariable     string            `yaml:"argv_variable,omitempty" json:"argv_variable,omitempty"`
 	Cwd              string            `yaml:"cwd,omitempty" json:"cwd,omitempty"`
 	Env              map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 	InheritEnv       []string          `yaml:"inherit_env,omitempty" json:"inherit_env,omitempty"`
@@ -331,6 +332,12 @@ func parseScalar(kind, raw string) (any, error) {
 	switch kind {
 	case "string":
 		return raw, nil
+	case "string_list":
+		var values []string
+		if err := json.Unmarshal([]byte(raw), &values); err != nil {
+			return nil, fmt.Errorf("must be a JSON array of strings: %w", err)
+		}
+		return values, nil
 	case "bool":
 		return strconv.ParseBool(raw)
 	case "int":
@@ -343,6 +350,24 @@ func parseScalar(kind, raw string) (any, error) {
 }
 func coerceScalar(kind string, v any) (any, error) {
 	switch x := v.(type) {
+	case []string:
+		if kind != "string_list" {
+			return nil, fmt.Errorf("value must be a scalar")
+		}
+		return append([]string{}, x...), nil
+	case []any:
+		if kind != "string_list" {
+			return nil, fmt.Errorf("value must be a scalar")
+		}
+		values := make([]string, len(x))
+		for i, item := range x {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("list item %d must be a string", i)
+			}
+			values[i] = text
+		}
+		return values, nil
 	case string:
 		return parseScalar(kind, x)
 	case int:
@@ -433,7 +458,7 @@ func Validate(cfg Config, vars map[string]any) error {
 		if kind == "" {
 			kind = "string"
 		}
-		if !contains([]string{"string", "bool", "int", "float"}, kind) {
+		if !contains([]string{"string", "string_list", "bool", "int", "float"}, kind) {
 			return fmt.Errorf("variable %q has unsupported type %q", name, kind)
 		}
 	}
@@ -533,7 +558,7 @@ func Validate(cfg Config, vars map[string]any) error {
 		if s.Timeout.Duration <= 0 {
 			return fmt.Errorf("stage %q timeout must be positive", s.ID)
 		}
-		if err := validateStage(cfg, s); err != nil {
+		if err := validateStage(cfg, vars, s); err != nil {
 			return err
 		}
 		if err := validateStageTemplates(s); err != nil {
@@ -554,7 +579,7 @@ func Validate(cfg Config, vars map[string]any) error {
 	return nil
 }
 
-func validateStage(cfg Config, s StageConfig) error {
+func validateStage(cfg Config, vars map[string]any, s StageConfig) error {
 	switch s.Type {
 	case "agent":
 		if _, ok := cfg.Actors[s.Actor]; !ok {
@@ -570,10 +595,28 @@ func validateStage(cfg Config, s StageConfig) error {
 			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
 		}
 	case "command":
-		if len(s.Argv) == 0 || strings.TrimSpace(s.Argv[0]) == "" {
-			return fmt.Errorf("stage %q argv is required", s.ID)
+		if (len(s.Argv) > 0) == (s.ArgvVariable != "") {
+			return fmt.Errorf("stage %q must set exactly one of argv or argv_variable", s.ID)
 		}
-		if strings.ContainsAny(s.Argv[0], "|;&><\n") || contains([]string{"sh", "bash", "zsh", "fish", "dash", "ksh", "cmd", "powershell", "pwsh"}, filepath.Base(s.Argv[0])) {
+		argv := s.Argv
+		if s.ArgvVariable != "" {
+			def, ok := cfg.Variables[s.ArgvVariable]
+			if !ok {
+				return fmt.Errorf("stage %q argv_variable references unknown variable %q", s.ID, s.ArgvVariable)
+			}
+			if def.Type != "string_list" {
+				return fmt.Errorf("stage %q argv_variable %q must have type string_list", s.ID, s.ArgvVariable)
+			}
+			var err error
+			argv, err = stringListValue(vars[s.ArgvVariable])
+			if err != nil {
+				return fmt.Errorf("stage %q argv_variable %q: %w", s.ID, s.ArgvVariable, err)
+			}
+		}
+		if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
+			return fmt.Errorf("stage %q argv must not be empty", s.ID)
+		}
+		if strings.ContainsAny(argv[0], "|;&><\n") || contains([]string{"sh", "bash", "zsh", "fish", "dash", "ksh", "cmd", "powershell", "pwsh"}, filepath.Base(argv[0])) {
 			return fmt.Errorf("stage %q argv must not use a shell", s.ID)
 		}
 		if s.Actor != "" || s.Prompt != "" || s.Condition != nil || len(s.Input) > 0 {
@@ -614,6 +657,27 @@ func validateStage(cfg Config, s StageConfig) error {
 		}
 	}
 	return nil
+}
+
+func stringListValue(value any) ([]string, error) {
+	switch values := value.(type) {
+	case []string:
+		return append([]string{}, values...), nil
+	case []any:
+		out := make([]string, len(values))
+		for i, value := range values {
+			text, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("list item %d must be a string", i)
+			}
+			out[i] = text
+		}
+		return out, nil
+	case nil:
+		return nil, errors.New("value is required")
+	default:
+		return nil, fmt.Errorf("value must be a string list")
+	}
 }
 
 func validateStageTemplates(s StageConfig) error {

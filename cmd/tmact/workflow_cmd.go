@@ -98,7 +98,7 @@ type workflowConfigFlags struct {
 func addWorkflowConfigFlags(fs *flag.FlagSet, jsonFlag bool) workflowConfigFlags {
 	f := workflowConfigFlags{config: fs.String("config", "", "workflow YAML config")}
 	var values repeatedStrings
-	fs.Var(&values, "var", "typed variable assignment key=value (repeatable)")
+	fs.Var(&values, "var", "typed variable assignment key=value; string_list values use JSON arrays (repeatable)")
 	f.vars = &values
 	if jsonFlag {
 		f.json = fs.Bool("json", false, "print JSON output")
