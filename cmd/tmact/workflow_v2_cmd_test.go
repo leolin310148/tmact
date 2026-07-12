@@ -74,7 +74,7 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 		t.Fatalf("archive produces=%v", archive.ProducesRevisions)
 	}
 	overridden, err := workflow.Load(path, map[string]string{
-		"change":           "demo",
+		"change":            "demo",
 		"verification_argv": `["make","test"]`,
 		"verification_cwd":  "internal/web/frontend",
 	})
