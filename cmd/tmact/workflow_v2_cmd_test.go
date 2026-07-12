@@ -19,8 +19,41 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded.Config.Stages) != 11 {
+	if len(loaded.Config.Stages) != 24 {
 		t.Fatalf("stages=%d", len(loaded.Config.Stages))
+	}
+	stages := map[string]workflow.StageConfig{}
+	for _, stage := range loaded.Config.Stages {
+		stages[stage.ID] = stage
+		for outcome, disposition := range stage.Outcomes {
+			if disposition == "retry" && len(stage.ProducesRevisions) == 0 {
+				t.Fatalf("stage %s retries outcome %s without producing a revision", stage.ID, outcome)
+			}
+		}
+	}
+	for _, pair := range [][2]string{{"pm_review", "pm_revision"}, {"swe_review", "swe_revision"}, {"qa_review", "qa_revision"}, {"final_review", "final_revision"}} {
+		review, revision := stages[pair[0]], stages[pair[1]]
+		if review.Outcomes["request_changes"] != "success" {
+			t.Fatalf("%s request_changes=%q", review.ID, review.Outcomes["request_changes"])
+		}
+		if revision.When == nil || revision.When.Stage == nil || revision.When.Stage.ID != review.ID || revision.When.Stage.Outcome != "request_changes" {
+			t.Fatalf("%s remediation condition=%#v", revision.ID, revision.When)
+		}
+		if strings.Join(revision.ProducesRevisions, ",") != "spec" {
+			t.Fatalf("%s produces=%v", revision.ID, revision.ProducesRevisions)
+		}
+	}
+	if stages["final_confirmation"].Outcomes["request_changes"] != "blocked" {
+		t.Fatalf("final confirmation outcomes=%v", stages["final_confirmation"].Outcomes)
+	}
+	if strings.Join(stages["apply"].Needs, ",") != "final_confirmation" {
+		t.Fatalf("apply needs=%v", stages["apply"].Needs)
+	}
+	if stages["qa_verify"].Outcomes["fail"] != "success" || stages["qa_confirmation"].Outcomes["fail"] != "blocked" {
+		t.Fatalf("QA convergence outcomes verify=%v confirmation=%v", stages["qa_verify"].Outcomes, stages["qa_confirmation"].Outcomes)
+	}
+	if strings.Join(stages["repair_implementation"].ProducesRevisions, ",") != "source" {
+		t.Fatalf("repair produces=%v", stages["repair_implementation"].ProducesRevisions)
 	}
 	archive := loaded.Config.Stages[len(loaded.Config.Stages)-1]
 	if archive.ID != "archive" || strings.Join(archive.ProducesRevisions, ",") != "spec,source" {
