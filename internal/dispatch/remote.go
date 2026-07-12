@@ -83,6 +83,11 @@ func (r RemoteRequest) Options() (Options, error) {
 // PostRemote sends dispatch-work to a peer statusd and returns the peer's
 // report. The returned report is annotated with peer metadata for host output.
 func PostRemote(ctx context.Context, client *http.Client, peerName, peerURL string, opts Options) (Report, error) {
+	model, err := ValidateModel(opts.Agent, opts.Model)
+	if err != nil {
+		return Report{}, err
+	}
+	opts.Model = model
 	if client == nil {
 		client = http.DefaultClient
 	}

@@ -35,7 +35,7 @@ func runDispatch(args []string) error {
 
 	dir := fs.String("dir", "", "working directory; sets cwd when the session is created")
 	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
-	model := fs.String("model", "", "model to use when launching Claude or Codex")
+	model := fs.String("model", "", dispatchModelHelp())
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
@@ -90,6 +90,12 @@ func runDispatch(args []string) error {
 	}
 	printDispatchReport(report)
 	return nil
+}
+
+func dispatchModelHelp() string {
+	return fmt.Sprintf("model to use (claude: %s; codex: %s)",
+		strings.Join(dispatch.SupportedModels("claude"), "|"),
+		strings.Join(dispatch.SupportedModels("codex"), "|"))
 }
 
 func runRemoteDispatch(peerName, configPath string, opts dispatch.Options) (dispatch.Report, error) {
