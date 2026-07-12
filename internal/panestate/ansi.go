@@ -31,10 +31,8 @@ func ClassifyANSI(raw, ansi string) Result {
 		return result
 	}
 	if len(input) == 0 {
-		if result.State != StateWorking {
-			result.State = StateWaitingInput
-			result.Signals = appendSignal(result.Signals, "empty_input")
-		}
+		result.State = StateWaitingInput
+		result.Signals = appendSignal(result.Signals, "empty_input")
 		return result
 	}
 	allDim := true
