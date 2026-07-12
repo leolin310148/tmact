@@ -416,6 +416,78 @@ func TestExistingSessionUnknownStateRefusesClear(t *testing.T) {
 	}
 }
 
+func TestExistingSessionReusesDimSuggestionButRejectsOperatorDraft(t *testing.T) {
+	tests := []struct {
+		name    string
+		pane    tmux.Pane
+		agent   string
+		plain   string
+		ansi    string
+		wantErr string
+	}{
+		{
+			name:  "claude suggestion",
+			pane:  claudePane(),
+			agent: "claude",
+			plain: "old working output\n❯ source ~/.zsh_aliases\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+			ansi:  "old working output\n\x1b[39m❯ \x1b[2msource ~/.zsh_aliases\x1b[0m\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+		},
+		{
+			name:    "claude draft",
+			pane:    claudePane(),
+			agent:   "claude",
+			plain:   "❯ source ~/.zsh_aliases\n",
+			ansi:    "\x1b[38;5;239m\x1b[48;5;237m❯ \x1b[38;5;231msource ~/.zsh_aliases\x1b[0m\n",
+			wantErr: "draft_input",
+		},
+		{
+			name:  "codex suggestion",
+			pane:  codexPane(),
+			agent: "codex",
+			plain: "› Write tests for @filename\n~/repo · main · Context 30% used · 353K window\n",
+			ansi:  "\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n~/repo · main · Context 30% used · 353K window\n",
+		},
+		{
+			name:    "codex draft",
+			pane:    codexPane(),
+			agent:   "codex",
+			plain:   "› Write tests for store.go\n",
+			ansi:    "\x1b[0;1m›\x1b[0m \x1b[38;2;205;214;244mWrite tests for store.go\x1b[0m\n",
+			wantErr: "draft_input",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, deps := baseDeps()
+			deps.ListLayout = func() (tmux.Layout, error) {
+				return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+			}
+			deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{tt.pane}, nil }
+			deps.CapturePane = func(string, int) (string, error) { return tt.plain, nil }
+			deps.CapturePaneANSI = func(string, int) (string, error) { return tt.ansi, nil }
+
+			opts := baseOpts()
+			opts.Agent = tt.agent
+			report, err := dispatch.RunWithDeps(opts, deps)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error=%v", err)
+				}
+				if len(rec.pastes) != 0 {
+					t.Fatalf("draft pane received input: %#v", rec.pastes)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !report.AgentWasRunning || stepStatus(t, report, "clear") != dispatch.StatusPlanned {
+				t.Fatalf("report=%#v", report)
+			}
+		})
+	}
+}
+
 func TestExistingSessionReuseClaudePromptAboveIdleFooter(t *testing.T) {
 	rec, deps := baseDeps()
 	deps.ListLayout = func() (tmux.Layout, error) {

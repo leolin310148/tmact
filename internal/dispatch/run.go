@@ -153,7 +153,10 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 		return report, err
 	}
 	runtime := detectRuntime(deps, pane, raw)
-	classified := panestate.Classify(raw)
+	classified, err := classifyPane(deps, target, raw)
+	if err != nil {
+		return report, err
+	}
 
 	switch {
 	case runtime == opts.Agent:

@@ -87,6 +87,7 @@ type Deps struct {
 	ListLayout       func() (tmux.Layout, error)
 	ListSessionPanes func(string) ([]tmux.Pane, error)
 	CapturePane      func(string, int) (string, error)
+	CapturePaneANSI  func(string, int) (string, error)
 	NewSession       func(session, window, cwd string, command []string) error
 	PasteText        func(target, text string, enter bool) error
 	SendKeys         func(target string, keys []string) error
@@ -101,6 +102,7 @@ func DefaultDeps() Deps {
 		ListLayout:       tmux.ListLayout,
 		ListSessionPanes: tmux.ListSessionPanes,
 		CapturePane:      tmux.CapturePane,
+		CapturePaneANSI:  tmux.CapturePaneANSI,
 		NewSession:       tmux.NewSession,
 		PasteText:        tmux.PasteText,
 		SendKeys:         tmux.SendKeys,

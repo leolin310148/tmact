@@ -109,6 +109,7 @@ type processRuntimeFunc func(int) RuntimeDetection
 type inspector struct {
 	options        Options
 	capturePane    captureFunc
+	captureANSI    captureFunc
 	sleep          sleepFunc
 	processRuntime processRuntimeFunc
 	ignore         []*regexp.Regexp
@@ -121,14 +122,24 @@ func Inspect(options Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	return InspectPanes(panes, options, tmux.CapturePane, time.Sleep)
+	return inspectPanesStyled(panes, options, tmux.CapturePane, tmux.CapturePaneANSI, time.Sleep, DetectChildProcessRuntime)
 }
 
 func InspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, sleep sleepFunc) (Report, error) {
 	return inspectPanes(panes, options, capturePane, sleep, DetectChildProcessRuntime)
 }
 
+// InspectPanesStyled is InspectPanes with an additional ANSI-preserving
+// capture used to distinguish generated suggestions from operator drafts.
+func InspectPanesStyled(panes []tmux.Pane, options Options, capturePane, captureANSI captureFunc, sleep sleepFunc) (Report, error) {
+	return inspectPanesStyled(panes, options, capturePane, captureANSI, sleep, DetectChildProcessRuntime)
+}
+
 func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, sleep sleepFunc, processRuntime processRuntimeFunc) (Report, error) {
+	return inspectPanesStyled(panes, options, capturePane, nil, sleep, processRuntime)
+}
+
+func inspectPanesStyled(panes []tmux.Pane, options Options, capturePane, captureANSI captureFunc, sleep sleepFunc, processRuntime processRuntimeFunc) (Report, error) {
 	if options.Lines <= 0 {
 		options.Lines = 120
 	}
@@ -147,6 +158,7 @@ func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, s
 	inspector := inspector{
 		options:        options,
 		capturePane:    capturePane,
+		captureANSI:    captureANSI,
 		sleep:          sleep,
 		processRuntime: processRuntime,
 		ignore:         compiled,
@@ -296,6 +308,16 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	status.Confidence = runtime.Confidence
 	status.Signals = append([]string{}, runtime.Signals...)
 	classified := panestate.Classify(raw)
+	if i.captureANSI != nil && (status.Runtime == RuntimeClaude || status.Runtime == RuntimeCodex) {
+		ansi, captureErr := i.captureANSI(pane.PaneID, i.options.Lines)
+		if captureErr != nil {
+			status.State = panestate.StateBlocked
+			status.Error = captureErr.Error()
+			status.Signals = appendSignal(status.Signals, "ansi_capture_failed")
+			return status
+		}
+		classified = panestate.ClassifyANSI(raw, ansi)
+	}
 	status.LastLine = classified.LastLine
 
 	textState := classified.State
@@ -489,6 +511,12 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	if containsAny(window, "tmact") {
 		return RuntimeDetection{Runtime: RuntimeTmact, Confidence: ConfidenceHigh, Signals: []string{"window_name"}}
 	}
+	if isShellCommand(cmd) && looksLikeClaudeCurrentChrome(raw) {
+		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text", "nested_shell"}}
+	}
+	if isShellCommand(cmd) && looksLikeCodexRunningChrome(raw) {
+		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceMedium, Signals: []string{"pane_text", "nested_shell"}}
+	}
 	if isShellCommand(cmd) {
 		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
 	}
@@ -512,6 +540,27 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 		return RuntimeDetection{Runtime: RuntimeShell, Confidence: ConfidenceLow, Signals: []string{"shell_prompt"}}
 	}
 	return RuntimeDetection{Runtime: RuntimeUnknown, Confidence: ConfidenceLow}
+}
+
+func looksLikeCodexRunningChrome(raw string) bool {
+	hasPrompt := false
+	hasStatus := false
+	for _, line := range panestate.CleanedLines(raw) {
+		lower := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lower, "›") {
+			hasPrompt = true
+		}
+		if strings.Contains(lower, "context ") && strings.Contains(lower, "% used") && strings.Contains(lower, "window") {
+			hasStatus = true
+		}
+	}
+	last := strings.ToLower(panestate.LastMeaningfulLine(raw))
+	return hasPrompt && hasStatus && strings.Contains(last, "context ") && strings.Contains(last, "% used") && strings.Contains(last, "window")
+}
+
+func looksLikeClaudeCurrentChrome(raw string) bool {
+	last := strings.ToLower(panestate.LastMeaningfulLine(raw))
+	return strings.Contains(last, "auto mode on (shift+tab to cycle)") && strings.Contains(last, "for agents")
 }
 
 func looksLikeClaudeRunningChrome(text string) bool {

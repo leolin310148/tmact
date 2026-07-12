@@ -8,6 +8,7 @@ import (
 
 const (
 	StateBlocked           = "blocked"
+	StateDraftInput        = "draft_input"
 	StateIdle              = "idle"
 	StateUnknown           = "unknown"
 	StateWaitingPermission = "waiting_permission"

@@ -59,6 +59,7 @@ type Config struct {
 	Sleep            func(time.Duration)
 	ListPanes        func() ([]tmux.Pane, error)
 	CapturePane      func(string, int) (string, error)
+	CapturePaneANSI  func(string, int) (string, error)
 	SetSessionOption func(string, string, string) error
 	// ListWindowSizes and ResizeWindow are injection points for the pane-width
 	// sweep; default to the live tmux helpers.
@@ -97,6 +98,7 @@ func (c Config) withDefaults() Config {
 	}
 	if c.CapturePane == nil {
 		c.CapturePane = tmux.CapturePane
+		c.CapturePaneANSI = tmux.CapturePaneANSI
 	}
 	if c.SetSessionOption == nil {
 		c.SetSessionOption = tmux.SetSessionOption

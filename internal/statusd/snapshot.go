@@ -143,7 +143,7 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 	if len(mem.panes) == 0 {
 		samples = cfg.InitialSamples
 	}
-	report, err := panestatus.InspectPanes(panes, panestatus.Options{
+	report, err := panestatus.InspectPanesStyled(panes, panestatus.Options{
 		Lines:              cfg.CaptureLines,
 		Samples:            samples,
 		IdleIgnorePatterns: cfg.IdleIgnorePatterns,
@@ -155,7 +155,7 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 		},
 		RuntimeCache:        mem.runtimeCache,
 		ForceCapturePaneIDs: forceCapturePaneIDs,
-	}, cfg.CapturePane, cfg.Sleep)
+	}, cfg.CapturePane, cfg.CapturePaneANSI, cfg.Sleep)
 	if err != nil {
 		snapshot.addError("inspect", "", err)
 		return snapshot, err
