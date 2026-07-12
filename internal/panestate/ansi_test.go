@@ -45,6 +45,18 @@ func TestClassifyANSIDistinguishesSuggestionsAndDrafts(t *testing.T) {
 			ansi: "✽ Choreographing… esc to interrupt\n\x1b[39m❯ \x1b[0m\n",
 			want: StateWorking,
 		},
+		{
+			name: "codex working with dim steering suggestion",
+			raw:  "• Working (46s • esc to interrupt)\n\n› Write tests for @filename\n/private/tmp/repo · main · Context 5% used · 353K window\n",
+			ansi: "• Working (46s • esc to interrupt)\n\n\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n/private/tmp/repo · main · Context 5% used · 353K window\n",
+			want: StateWorking,
+		},
+		{
+			name: "stale working line does not override completed output",
+			raw:  "• Working (46s • esc to interrupt)\n\n• Review complete. No findings.\n\n› Write tests for @filename\n/private/tmp/repo · main · Context 5% used · 353K window\n",
+			ansi: "• Working (46s • esc to interrupt)\n\n• Review complete. No findings.\n\n\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n/private/tmp/repo · main · Context 5% used · 353K window\n",
+			want: StateWaitingInput,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
