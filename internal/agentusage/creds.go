@@ -17,23 +17,30 @@ func homeDir() string {
 	return ""
 }
 
-// claudeCredentialsJSON returns the raw contents of Claude Code's stored OAuth
-// credentials. On Linux/WSL these live in ~/.claude/.credentials.json; on macOS
-// Claude Code stores them in the login keychain instead, so we fall back to the
-// `security` CLI. Returns ("", nil) when no credentials exist anywhere.
-func claudeCredentialsJSON() (string, error) {
+// claudeCredentialCandidates returns every raw OAuth credential blob Claude Code
+// might have stored. On Linux/WSL these live in ~/.claude/.credentials.json; on
+// macOS Claude Code stores them in the login keychain. The two are not mutually
+// exclusive: a macOS box can carry a stale ~/.claude/.credentials.json left over
+// from an earlier setup while the keychain holds the token Claude Code actually
+// keeps refreshed. Returning both lets the caller pick the freshest by
+// expiresAt instead of blindly trusting whichever it reads first. Returns an
+// empty slice when no credentials exist anywhere.
+func claudeCredentialCandidates() ([]string, error) {
+	var out []string
 	if home := homeDir(); home != "" {
 		path := filepath.Join(home, ".claude", ".credentials.json")
 		if data, err := os.ReadFile(path); err == nil {
-			return string(data), nil
+			out = append(out, string(data))
 		} else if !os.IsNotExist(err) {
-			return "", err
+			return nil, err
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		return claudeKeychainJSON()
+		if kc, err := claudeKeychainJSON(); err == nil && kc != "" {
+			out = append(out, kc)
+		}
 	}
-	return "", nil
+	return out, nil
 }
 
 // claudeKeychainJSON reads the "Claude Code-credentials" generic password from

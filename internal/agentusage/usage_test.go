@@ -152,3 +152,44 @@ func TestFlexFloat(t *testing.T) {
 }
 
 func ptr(f float64) *float64 { return &f }
+
+func TestFreshestClaudeCredentials(t *testing.T) {
+	blob := func(token string, expiresAt int64) string {
+		b, _ := json.Marshal(claudeCredentialsFile{ClaudeAiOauth: claudeCredentials{
+			AccessToken: token,
+			ExpiresAt:   expiresAt,
+		}})
+		return string(b)
+	}
+
+	t.Run("prefers latest expiresAt across stores", func(t *testing.T) {
+		// A stale file (expired) alongside a fresh keychain blob: the newer one
+		// must win so the leftover file no longer masks the live token.
+		stale := blob("old", 1000)
+		fresh := blob("new", 5000)
+		got, ok := freshestClaudeCredentials([]string{stale, fresh})
+		if !ok || got.AccessToken != "new" {
+			t.Fatalf("want fresh token, got ok=%v token=%q", ok, got.AccessToken)
+		}
+		// Order must not matter.
+		got, ok = freshestClaudeCredentials([]string{fresh, stale})
+		if !ok || got.AccessToken != "new" {
+			t.Fatalf("order flip: want fresh token, got ok=%v token=%q", ok, got.AccessToken)
+		}
+	})
+
+	t.Run("skips blobs without an access token", func(t *testing.T) {
+		empty := blob("", 9000)
+		valid := blob("real", 3000)
+		got, ok := freshestClaudeCredentials([]string{empty, valid})
+		if !ok || got.AccessToken != "real" {
+			t.Fatalf("want real token, got ok=%v token=%q", ok, got.AccessToken)
+		}
+	})
+
+	t.Run("reports none when no blob carries a token", func(t *testing.T) {
+		if _, ok := freshestClaudeCredentials([]string{blob("", 1), "not json"}); ok {
+			t.Fatal("want ok=false when no candidate has an access token")
+		}
+	})
+}

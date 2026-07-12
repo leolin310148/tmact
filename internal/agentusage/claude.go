@@ -33,6 +33,32 @@ type claudeCredentialsFile struct {
 	ClaudeAiOauth claudeCredentials `json:"claudeAiOauth"`
 }
 
+// freshestClaudeCredentials parses every candidate credential blob and returns
+// the one with the latest expiresAt that carries an access token. When more
+// than one store exists (e.g. a stale ~/.claude/.credentials.json alongside the
+// macOS keychain), the newest token wins so a leftover expired file no longer
+// masks the token Claude Code keeps refreshed. Returns ok=false when none carry
+// an access token.
+func freshestClaudeCredentials(candidates []string) (claudeCredentials, bool) {
+	var best claudeCredentials
+	found := false
+	for _, raw := range candidates {
+		var file claudeCredentialsFile
+		if err := json.Unmarshal([]byte(raw), &file); err != nil {
+			continue
+		}
+		creds := file.ClaudeAiOauth
+		if creds.AccessToken == "" {
+			continue
+		}
+		if !found || creds.ExpiresAt > best.ExpiresAt {
+			best = creds
+			found = true
+		}
+	}
+	return best, found
+}
+
 // claudeUsageResponse mirrors the /api/oauth/usage payload. Each window is
 // optional; absent windows stay nil.
 type claudeUsageResponse struct {
@@ -116,23 +142,18 @@ func isKnownClaudeSevenDayWindow(key string) bool {
 func fetchClaude(ctx context.Context) ProviderUsage {
 	out := ProviderUsage{Provider: "claude"}
 
-	raw, err := claudeCredentialsJSON()
+	candidates, err := claudeCredentialCandidates()
 	if err != nil {
 		out.Error = fmt.Sprintf("read credentials: %v", err)
 		return out
 	}
-	if raw == "" {
+	if len(candidates) == 0 {
 		out.Error = "not logged in (no Claude Code credentials found)"
 		return out
 	}
 
-	var file claudeCredentialsFile
-	if err := json.Unmarshal([]byte(raw), &file); err != nil {
-		out.Error = fmt.Sprintf("parse credentials: %v", err)
-		return out
-	}
-	creds := file.ClaudeAiOauth
-	if creds.AccessToken == "" {
+	creds, ok := freshestClaudeCredentials(candidates)
+	if !ok {
 		out.Error = "credentials missing access token"
 		return out
 	}
