@@ -423,7 +423,7 @@ stages:
 	if strings.Join(durableBeforeSend, ",") != "sending,sending" {
 		t.Fatalf("dispatch durability before send=%v", durableBeforeSend)
 	}
-	for _, want := range []string{"tmact workflow status --id " + state.RunID, "--store-dir \"" + engine.Store.Root + "\" --json", "`desired` 是 `stopped`", "不要回報"} {
+	for _, want := range []string{"tmact workflow status --id " + state.RunID, "--store-dir \"" + engine.Store.Root + "\" --json", "`desired` 是 `stopped`", "不得直接修改 workflow store", "workflow 狀態只能透過指定的 tmact workflow CLI 變更", "不要回報"} {
 		if !strings.Contains(sent[1], want) {
 			t.Fatalf("prompt missing %q: %s", want, sent[1])
 		}

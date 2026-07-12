@@ -892,7 +892,7 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 	}
 	outcomes := sortedKeys(stage.Outcomes)
 	statusCommand := fmt.Sprintf("tmact workflow status --id %s --store-dir %q --json", state.RunID, e.Store.Root)
-	promptText += fmt.Sprintf("\n\n停止協議：執行任何有副作用的動作前，以及回報前，都必須執行 `%s`。若輸出的 `desired` 是 `stopped`，立即停止，不要再執行動作，也不要回報。\n完成後請回報：tmact workflow report --dispatch-id %s --outcome OUTCOME --body \"summary\"\nOUTCOME 必須是：%s", statusCommand, ss.DispatchID, strings.Join(outcomes, ", "))
+	promptText += fmt.Sprintf("\n\n停止協議：執行任何有副作用的動作前，以及回報前，都必須執行 `%s`。若輸出的 `desired` 是 `stopped`，立即停止，不要再執行動作，也不要回報。可以唯讀檢查 workflow evidence，但不得直接修改 workflow store 內的 state、events、dispatches、reports 或 evidence；workflow 狀態只能透過指定的 tmact workflow CLI 變更。\n完成後請回報：tmact workflow report --dispatch-id %s --outcome OUTCOME --body \"summary\"\nOUTCOME 必須是：%s", statusCommand, ss.DispatchID, strings.Join(outcomes, ", "))
 	dispatchRecord := Dispatch{Timestamp: e.Now(), ID: ss.DispatchID, RunID: state.RunID, Stage: stage.ID, Attempt: ss.Attempt, Actor: stage.Actor, Status: "planned", Revisions: bindValues(ss.BoundRevisions, revisionInputs(stage))}
 	last, exists, err := LastDispatch(e.Store, ss.DispatchID)
 	if err != nil {
