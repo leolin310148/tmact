@@ -1,6 +1,7 @@
 package statusd
 
 import (
+	"os"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -39,6 +40,15 @@ type Config struct {
 	PaneCols int
 	PaneRows int
 
+	// SessionSave periodically persists all local tmux sessions. SessionRestore
+	// restores the last valid snapshot once at daemon startup, but only after a
+	// successful capture proves tmux currently has zero sessions.
+	SessionSave              bool
+	SessionRestore           bool
+	SessionSaveInterval      time.Duration
+	SessionSnapshotRetention int
+	SessionSnapshotDir       string
+
 	// Peers is the list of remote statusd instances whose snapshots are
 	// merged into the local one. Empty disables federation.
 	Peers []Peer
@@ -63,9 +73,13 @@ type Config struct {
 	SetSessionOption func(string, string, string) error
 	// ListWindowSizes and ResizeWindow are injection points for the pane-width
 	// sweep; default to the live tmux helpers.
-	ListWindowSizes func() ([]tmux.WindowSize, error)
-	ResizeWindow    func(target string, cols, rows int) error
-	Logf            func(format string, args ...any)
+	ListWindowSizes  func() ([]tmux.WindowSize, error)
+	ResizeWindow     func(target string, cols, rows int) error
+	ListSessionState func() ([]tmux.SessionStatePane, error)
+	RestoreClient    tmux.RestoreClient
+	HomeDir          func() (string, error)
+	DirExists        func(string) bool
+	Logf             func(format string, args ...any)
 }
 
 func (c Config) withDefaults() Config {
@@ -114,6 +128,27 @@ func (c Config) withDefaults() Config {
 	}
 	if c.ResizeWindow == nil {
 		c.ResizeWindow = tmux.ResizeWindow
+	}
+	if c.SessionSaveInterval <= 0 {
+		c.SessionSaveInterval = DefaultSessionSaveInterval
+	}
+	if c.SessionSnapshotRetention <= 0 {
+		c.SessionSnapshotRetention = DefaultSessionSnapshotRetention
+	}
+	if c.SessionSnapshotDir == "" {
+		c.SessionSnapshotDir = DefaultSessionSnapshotDir()
+	}
+	if c.ListSessionState == nil {
+		c.ListSessionState = tmux.ListSessionState
+	}
+	if c.RestoreClient == nil {
+		c.RestoreClient = tmux.LiveRestoreClient{}
+	}
+	if c.HomeDir == nil {
+		c.HomeDir = os.UserHomeDir
+	}
+	if c.DirExists == nil {
+		c.DirExists = directoryExists
 	}
 	return c
 }

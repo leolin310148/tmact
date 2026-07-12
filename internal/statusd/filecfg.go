@@ -20,15 +20,20 @@ const (
 // fields let us tell "absent" from "explicit zero" so CLI flags can override
 // only the keys the user actually set.
 type FileConfig struct {
-	WebAddr     string           `json:"web_addr,omitempty"`
-	Interval    string           `json:"interval,omitempty"`
-	SocketPath  string           `json:"socket_path,omitempty"`
-	LogPath     string           `json:"log_path,omitempty"`
-	TmuxOptions *bool            `json:"tmux_options,omitempty"`
-	PaneCols    *int             `json:"pane_cols,omitempty"`
-	PaneRows    *int             `json:"pane_rows,omitempty"`
-	Peers       []PeerFileConfig `json:"peers,omitempty"`
-	CostPeers   []PeerFileConfig `json:"cost_peers,omitempty"`
+	WebAddr                  string           `json:"web_addr,omitempty"`
+	Interval                 string           `json:"interval,omitempty"`
+	SocketPath               string           `json:"socket_path,omitempty"`
+	LogPath                  string           `json:"log_path,omitempty"`
+	TmuxOptions              *bool            `json:"tmux_options,omitempty"`
+	PaneCols                 *int             `json:"pane_cols,omitempty"`
+	PaneRows                 *int             `json:"pane_rows,omitempty"`
+	SessionSave              *bool            `json:"session_save,omitempty"`
+	SessionRestore           *bool            `json:"session_restore,omitempty"`
+	SessionSaveInterval      string           `json:"session_save_interval,omitempty"`
+	SessionSnapshotRetention *int             `json:"session_snapshot_retention,omitempty"`
+	SessionSnapshotDir       string           `json:"session_snapshot_dir,omitempty"`
+	Peers                    []PeerFileConfig `json:"peers,omitempty"`
+	CostPeers                []PeerFileConfig `json:"cost_peers,omitempty"`
 	// DispatchPeers are remote statusd instances that dispatch-work --peer can
 	// call without also merging their snapshots into this daemon.
 	DispatchPeers []PeerFileConfig `json:"dispatch_peers,omitempty"`
@@ -76,14 +81,19 @@ func DefaultFileConfig() FileConfig {
 	t := true
 	usage := true
 	cols, rows := DefaultPaneCols, DefaultPaneRows
+	retention := DefaultSessionSnapshotRetention
 	return FileConfig{
-		WebAddr:     DefaultWebAddr,
-		Interval:    DefaultFileInterval.String(),
-		SocketPath:  DefaultSocketPath,
-		TmuxOptions: &t,
-		PaneCols:    &cols,
-		PaneRows:    &rows,
-		AgentUsage:  &usage,
+		WebAddr:                  DefaultWebAddr,
+		Interval:                 DefaultFileInterval.String(),
+		SocketPath:               DefaultSocketPath,
+		TmuxOptions:              &t,
+		PaneCols:                 &cols,
+		PaneRows:                 &rows,
+		SessionSave:              &t,
+		SessionRestore:           &t,
+		SessionSaveInterval:      DefaultSessionSaveInterval.String(),
+		SessionSnapshotRetention: &retention,
+		AgentUsage:               &usage,
 	}
 }
 
@@ -114,6 +124,18 @@ func LoadFileConfig(path string) (FileConfig, error) {
 		if _, err := time.ParseDuration(cfg.Interval); err != nil {
 			return FileConfig{}, fmt.Errorf("parse %s: invalid interval %q: %w", path, cfg.Interval, err)
 		}
+	}
+	if cfg.SessionSaveInterval != "" {
+		d, err := time.ParseDuration(cfg.SessionSaveInterval)
+		if err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid session_save_interval %q: %w", path, cfg.SessionSaveInterval, err)
+		}
+		if d <= 0 {
+			return FileConfig{}, fmt.Errorf("parse %s: session_save_interval must be positive", path)
+		}
+	}
+	if cfg.SessionSnapshotRetention != nil && *cfg.SessionSnapshotRetention <= 0 {
+		return FileConfig{}, fmt.Errorf("parse %s: session_snapshot_retention must be positive", path)
 	}
 	if cfg.PeerInterval != "" {
 		if _, err := time.ParseDuration(cfg.PeerInterval); err != nil {
@@ -151,6 +173,17 @@ func (c FileConfig) UsageIntervalDuration() time.Duration {
 func (c FileConfig) SpendIntervalDuration() time.Duration {
 	d, err := time.ParseDuration(c.SpendInterval)
 	if c.SpendInterval == "" || err != nil {
+		return 0
+	}
+	return d
+}
+
+func (c FileConfig) SessionSaveIntervalDuration() time.Duration {
+	if c.SessionSaveInterval == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.SessionSaveInterval)
+	if err != nil {
 		return 0
 	}
 	return d

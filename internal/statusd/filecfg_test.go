@@ -37,6 +37,15 @@ func TestLoadOrCreateFileConfig_SeedsWhenMissing(t *testing.T) {
 	if cfg.AgentUsage == nil || !*cfg.AgentUsage {
 		t.Errorf("AgentUsage should default to true")
 	}
+	if cfg.SessionSave == nil || !*cfg.SessionSave || cfg.SessionRestore == nil || !*cfg.SessionRestore {
+		t.Errorf("session save/restore should default to true")
+	}
+	if cfg.SessionSaveIntervalDuration() != DefaultSessionSaveInterval {
+		t.Errorf("SessionSaveInterval = %v, want %v", cfg.SessionSaveIntervalDuration(), DefaultSessionSaveInterval)
+	}
+	if cfg.SessionSnapshotRetention == nil || *cfg.SessionSnapshotRetention != DefaultSessionSnapshotRetention {
+		t.Errorf("SessionSnapshotRetention = %v", cfg.SessionSnapshotRetention)
+	}
 
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("seed file not written: %v", err)
@@ -226,6 +235,52 @@ func TestLoadFileConfig_BadInterval(t *testing.T) {
 	}
 	if _, err := LoadFileConfig(path); err == nil {
 		t.Fatalf("expected error parsing bad interval")
+	}
+}
+
+func TestLoadFileConfigSessionPersistence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "statusd.json")
+	body := `{
+  "session_save": false,
+  "session_restore": true,
+  "session_save_interval": "10m",
+  "session_snapshot_retention": 7,
+  "session_snapshot_dir": "/tmp/tmact-sessions"
+}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionSave == nil || *cfg.SessionSave || cfg.SessionRestore == nil || !*cfg.SessionRestore {
+		t.Fatalf("session toggles = save:%v restore:%v", cfg.SessionSave, cfg.SessionRestore)
+	}
+	if got := cfg.SessionSaveIntervalDuration(); got != 10*time.Minute {
+		t.Fatalf("save interval = %v", got)
+	}
+	if cfg.SessionSnapshotRetention == nil || *cfg.SessionSnapshotRetention != 7 {
+		t.Fatalf("retention = %v", cfg.SessionSnapshotRetention)
+	}
+	if cfg.SessionSnapshotDir != "/tmp/tmact-sessions" {
+		t.Fatalf("dir = %q", cfg.SessionSnapshotDir)
+	}
+}
+
+func TestLoadFileConfigRejectsInvalidSessionPersistence(t *testing.T) {
+	for _, body := range []string{
+		`{"session_save_interval":"0s"}`,
+		`{"session_save_interval":"nope"}`,
+		`{"session_snapshot_retention":0}`,
+	} {
+		path := filepath.Join(t.TempDir(), "statusd.json")
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadFileConfig(path); err == nil {
+			t.Fatalf("LoadFileConfig(%s) succeeded", body)
+		}
 	}
 }
 
