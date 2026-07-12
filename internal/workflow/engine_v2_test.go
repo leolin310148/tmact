@@ -281,7 +281,8 @@ stages:
 		t.Fatal(err)
 	}
 	engine.ListPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{{CurrentPath: dir, PanePID: 42}}, nil }
-	engine.CapturePane = func(string, int) (string, error) { return "ready", nil }
+	engine.CapturePane = func(string, int) (string, error) { return "›", nil }
+	engine.CapturePaneANSI = nil
 	engine.ProcessRuntime = func(int) panestatus.RuntimeDetection {
 		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
 	}
@@ -311,6 +312,39 @@ stages:
 	}
 }
 
+func TestAgentPreflightAllowsDimSuggestionAndDefersOperatorDraft(t *testing.T) {
+	dir := t.TempDir()
+	workspace, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := &Engine{
+		ListPanes: func(string) ([]tmux.Pane, error) {
+			return []tmux.Pane{{CurrentPath: dir, PanePID: 42}}, nil
+		},
+		ProcessRuntime: func(int) panestatus.RuntimeDetection {
+			return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+		},
+	}
+	plain := "old working output\n› Write tests for @filename\n~/repo · main · Context 30% used · 353K window\n"
+	engine.CapturePane = func(string, int) (string, error) { return plain, nil }
+	engine.CapturePaneANSI = func(string, int) (string, error) {
+		return "old working output\n\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n~/repo · main · Context 30% used · 353K window\n", nil
+	}
+	if err := engine.preflightAgent("work:0.0", panestatus.RuntimeCodex, workspace, 0); err != nil {
+		t.Fatalf("suggestion preflight error=%v", err)
+	}
+
+	engine.CapturePane = func(string, int) (string, error) { return "› Do not erase this\n", nil }
+	engine.CapturePaneANSI = func(string, int) (string, error) {
+		return "\x1b[0;1m›\x1b[0m \x1b[38;2;205;214;244mDo not erase this\x1b[0m\n", nil
+	}
+	err = engine.preflightAgent("work:0.0", panestatus.RuntimeCodex, workspace, 0)
+	if err == nil || !isDeferredDispatch(err) || !strings.Contains(err.Error(), "unsent operator input") {
+		t.Fatalf("draft preflight error=%v", err)
+	}
+}
+
 func TestAgentPermissionPromptNeedsUserWithoutSending(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "agents.yaml"), []byte("agents:\n  - {name: reviewer, target: work:0.0, type: codex}\n"), 0o644); err != nil {
@@ -334,6 +368,7 @@ stages:
 	}
 	engine.ListPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{{CurrentPath: dir, PanePID: 42}}, nil }
 	engine.CapturePane = func(string, int) (string, error) { return "Allow this command?\n  1. Yes\n❯ 2. No\n", nil }
+	engine.CapturePaneANSI = nil
 	engine.ProcessRuntime = func(int) panestatus.RuntimeDetection {
 		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
 	}
@@ -535,7 +570,8 @@ stages:
 		t.Fatal(err)
 	}
 	engine.ListPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{{CurrentPath: dir, PanePID: 1}}, nil }
-	engine.CapturePane = func(string, int) (string, error) { return "ready", nil }
+	engine.CapturePane = func(string, int) (string, error) { return "›", nil }
+	engine.CapturePaneANSI = nil
 	engine.ProcessRuntime = func(int) panestatus.RuntimeDetection {
 		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
 	}

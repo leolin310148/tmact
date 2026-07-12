@@ -18,6 +18,18 @@ func detectRuntime(deps Deps, pane tmux.Pane, raw string) string {
 	return panestatus.ClassifyRuntime(pane, raw).Runtime
 }
 
+func classifyPane(deps Deps, target, raw string) (panestate.Result, error) {
+	classified := panestate.Classify(raw)
+	if deps.CapturePaneANSI == nil {
+		return classified, nil
+	}
+	ansi, err := deps.CapturePaneANSI(target, captureLines)
+	if err != nil {
+		return classified, fmt.Errorf("capture styled pane: %w", err)
+	}
+	return panestate.ClassifyANSI(raw, ansi), nil
+}
+
 func resolveSessionTarget(deps Deps, session string) (string, error) {
 	panes, err := deps.ListSessionPanes(session)
 	if err != nil {

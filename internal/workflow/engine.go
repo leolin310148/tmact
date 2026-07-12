@@ -34,6 +34,7 @@ type Engine struct {
 	ListPanes        func(string) ([]tmux.Pane, error)
 	ListSessionPanes func(string) ([]tmux.Pane, error)
 	CapturePane      func(string, int) (string, error)
+	CapturePaneANSI  func(string, int) (string, error)
 	PasteText        func(string, string, bool) error
 	DispatchAgent    func(dispatch.Options) (dispatch.Report, error)
 	ProcessRuntime   func(int) panestatus.RuntimeDetection
@@ -74,7 +75,7 @@ func BuildPlan(loaded Loaded) (Plan, error) {
 
 func NewEngine(loaded Loaded, storeRoot string, execute bool) (*Engine, error) {
 	id := RunID(loaded.Hash)
-	e := &Engine{Loaded: loaded, Store: NewStore(storeRoot, id), Execute: execute, Now: time.Now, Sleep: time.Sleep, ListLayout: tmux.ListLayout, ListPanes: tmux.ListPanes, ListSessionPanes: tmux.ListSessionPanes, CapturePane: tmux.CapturePane, PasteText: tmux.PasteText, DispatchAgent: dispatch.Run, ProcessRuntime: panestatus.DetectChildProcessRuntime, KillSession: tmux.KillSession}
+	e := &Engine{Loaded: loaded, Store: NewStore(storeRoot, id), Execute: execute, Now: time.Now, Sleep: time.Sleep, ListLayout: tmux.ListLayout, ListPanes: tmux.ListPanes, ListSessionPanes: tmux.ListSessionPanes, CapturePane: tmux.CapturePane, CapturePaneANSI: tmux.CapturePaneANSI, PasteText: tmux.PasteText, DispatchAgent: dispatch.Run, ProcessRuntime: panestatus.DetectChildProcessRuntime, KillSession: tmux.KillSession}
 	e.ActorKeys = e.buildActorKeys()
 	release, err := e.Store.AcquireRunnerLock()
 	if err != nil {
@@ -1037,9 +1038,18 @@ func (e *Engine) preflightAgent(target, runtime, workspace string, idleAfter tim
 	if runtime != "" && det.Runtime != runtime {
 		return fmt.Errorf("target %s runtime is %s, expected %s", target, det.Runtime, runtime)
 	}
-	classified := panestate.Classify(raw)
+	classified, err := e.classifyAgentPane(target, raw)
+	if err != nil {
+		return err
+	}
 	if classified.State == panestate.StateWorking {
 		return deferredDispatchError{fmt.Sprintf("target %s is busy", target)}
+	}
+	if classified.State == panestate.StateDraftInput {
+		return deferredDispatchError{fmt.Sprintf("target %s has unsent operator input", target)}
+	}
+	if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
+		return deferredDispatchError{fmt.Sprintf("target %s is not explicitly input-ready (state=%s)", target, classified.State)}
 	}
 	if idleAfter > 0 {
 		e.Sleep(idleAfter)
@@ -1047,11 +1057,27 @@ func (e *Engine) preflightAgent(target, runtime, workspace string, idleAfter tim
 		if err != nil {
 			return err
 		}
-		if second != raw || panestate.Classify(second).State == panestate.StateWorking {
+		secondClassified, classifyErr := e.classifyAgentPane(target, second)
+		if classifyErr != nil {
+			return classifyErr
+		}
+		if second != raw || (secondClassified.State != panestate.StateWaitingInput && secondClassified.State != panestate.StateIdle) {
 			return deferredDispatchError{fmt.Sprintf("target %s did not remain idle for %s", target, idleAfter)}
 		}
 	}
 	return nil
+}
+
+func (e *Engine) classifyAgentPane(target, raw string) (panestate.Result, error) {
+	classified := panestate.Classify(raw)
+	if e.CapturePaneANSI == nil {
+		return classified, nil
+	}
+	ansi, err := e.CapturePaneANSI(target, 200)
+	if err != nil {
+		return classified, fmt.Errorf("capture styled pane %s: %w", target, err)
+	}
+	return panestate.ClassifyANSI(raw, ansi), nil
 }
 
 func ApplyReport(root, dispatchID, outcome, body string) (Report, error) {

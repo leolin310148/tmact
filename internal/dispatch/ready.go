@@ -26,7 +26,10 @@ func waitReady(opts Options, deps Deps, target string) (bool, error) {
 		if err != nil {
 			return trustedFolder, fmt.Errorf("wait for %s: %w", opts.Agent, err)
 		}
-		classified := panestate.Classify(raw)
+		classified, err := classifyPane(deps, target, raw)
+		if err != nil {
+			return trustedFolder, fmt.Errorf("wait for %s: %w", opts.Agent, err)
+		}
 		runtime := detectRuntime(deps, pane, raw)
 		if classified.Asking {
 			if opts.TrustFolder && classified.InteractivePrompt != nil && classified.InteractivePrompt.Type == prompt.TypeTrustFolder {

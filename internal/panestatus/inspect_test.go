@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agents"
+	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
@@ -41,6 +42,40 @@ func TestClassifyRuntimeDetectsShellCommand(t *testing.T) {
 	}
 }
 
+func TestClassifyRuntimeDetectsNestedCodexFromCurrentChrome(t *testing.T) {
+	pane := tmux.Pane{CurrentCommand: "zsh", WindowName: "zsh"}
+	raw := "› Write tests for @filename\n~/w/ndt/mxcp · main · 5h 89% left · Context 30% used · 353K window\n"
+
+	detected := ClassifyRuntime(pane, raw)
+	if detected.Runtime != RuntimeCodex {
+		t.Fatalf("runtime=%q signals=%v", detected.Runtime, detected.Signals)
+	}
+	if detected.Confidence != ConfidenceMedium {
+		t.Fatalf("confidence=%q", detected.Confidence)
+	}
+}
+
+func TestInspectStyledCodexSuggestionIsInputReady(t *testing.T) {
+	panes := []tmux.Pane{{Session: "work", PaneID: "%1", CurrentCommand: "zsh", WindowName: "zsh"}}
+	plain := "old working output\n› Write tests for @filename\n~/w/ndt/mxcp · main · Context 30% used · 353K window\n"
+	ansi := "old working output\n\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n~/w/ndt/mxcp · main · Context 30% used · 353K window\n"
+	report, err := inspectPanesStyled(
+		panes,
+		Options{},
+		func(string, int) (string, error) { return plain, nil },
+		func(string, int) (string, error) { return ansi, nil },
+		func(time.Duration) {},
+		func(int) RuntimeDetection { return RuntimeDetection{Runtime: RuntimeUnknown} },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := report.Panes[0]
+	if status.Runtime != RuntimeCodex || status.State != panestate.StateWaitingInput || !status.InputReady || !status.Idle {
+		t.Fatalf("status=%#v", status)
+	}
+}
+
 // Claude Code's running UI never prints the literal "claude code" string, so an
 // ssh-wrapped pane (no command/window/process fingerprint) must be recognized
 // by its distinctive chrome instead.
@@ -74,6 +109,19 @@ func TestClassifyRuntimeShellCommandBeatsStaleAgentScrollback(t *testing.T) {
 	}
 	if detected.Confidence != ConfidenceHigh {
 		t.Fatalf("confidence = %q", detected.Confidence)
+	}
+}
+
+func TestClassifyRuntimeShellCommandBeatsStaleFullScreenChrome(t *testing.T) {
+	tests := []string{
+		"❯ old suggestion\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\nproject $",
+		"› old suggestion\n~/repo · main · Context 30% used · 353K window\nproject $",
+	}
+	for _, raw := range tests {
+		detected := ClassifyRuntime(tmux.Pane{CurrentCommand: "zsh", WindowName: "zsh"}, raw)
+		if detected.Runtime != RuntimeShell {
+			t.Fatalf("runtime=%q raw=%q", detected.Runtime, raw)
+		}
 	}
 }
 
