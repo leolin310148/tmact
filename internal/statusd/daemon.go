@@ -3,6 +3,7 @@ package statusd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -11,17 +12,36 @@ import (
 )
 
 type Daemon struct {
-	cfg         Config
-	mem         *Memory
-	store       *Store
-	optionCache *TmuxOptionCache
-	peers       *PeerFetcher
-	hooks       *shellhook.Store
+	cfg             Config
+	mem             *Memory
+	store           *Store
+	optionCache     *TmuxOptionCache
+	peers           *PeerFetcher
+	hooks           *shellhook.Store
+	sessions        SessionPersistence
+	nextSessionSave time.Time
 }
 
 func NewDaemon(cfg Config) *Daemon {
 	cfg = cfg.withDefaults()
-	d := &Daemon{cfg: cfg, mem: NewMemory(), store: NewStore(), optionCache: NewTmuxOptionCache(), hooks: shellhook.NewStore()}
+	d := &Daemon{
+		cfg:         cfg,
+		mem:         NewMemory(),
+		store:       NewStore(),
+		optionCache: NewTmuxOptionCache(),
+		hooks:       shellhook.NewStore(),
+		sessions: SessionPersistence{
+			Store: SessionSnapshotStore{
+				Dir:       cfg.SessionSnapshotDir,
+				Retention: cfg.SessionSnapshotRetention,
+			},
+			Capture:   cfg.ListSessionState,
+			Client:    cfg.RestoreClient,
+			Now:       cfg.Now,
+			HomeDir:   cfg.HomeDir,
+			DirExists: cfg.DirExists,
+		},
+	}
 	if len(cfg.Peers) > 0 {
 		d.peers = NewPeerFetcher(cfg.Peers, cfg.PeerInterval, cfg.PeerTimeout)
 		d.peers.SetLogger(cfg.Logf)
@@ -99,11 +119,13 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
+	d.restoreSessionsAtStartup()
 	if d.peers != nil {
 		d.peers.Start(ctx)
 	}
 	for {
 		_, _ = d.RunOnce(ctx)
+		d.maybeSaveSessions()
 
 		timer := time.NewTimer(d.cfg.Interval)
 		select {
@@ -112,6 +134,50 @@ func (d *Daemon) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-timer.C:
 		}
+	}
+}
+
+func (d *Daemon) restoreSessionsAtStartup() {
+	if !d.cfg.SessionRestore {
+		return
+	}
+	outcome, path, fallbacks, err := d.sessions.RestoreIfEmpty()
+	if err != nil {
+		d.logf("session restore skipped: %v", err)
+		return
+	}
+	switch outcome {
+	case SessionRestoreCompleted:
+		d.logf("restored tmux sessions from %s (cwd fallbacks: %d)", path, fallbacks)
+	case SessionRestoreSkippedNoSnapshot:
+		d.logf("session restore skipped: no valid snapshot")
+	}
+}
+
+func (d *Daemon) maybeSaveSessions() {
+	if !d.cfg.SessionSave {
+		return
+	}
+	now := d.cfg.Now()
+	if !d.nextSessionSave.IsZero() && now.Before(d.nextSessionSave) {
+		return
+	}
+	d.nextSessionSave = now.Add(d.cfg.SessionSaveInterval)
+	path, err := d.sessions.Save()
+	if err != nil {
+		if errors.Is(err, ErrNoSessions) {
+			d.logf("session save skipped: 0 sessions")
+		} else {
+			d.logf("session save skipped: %v", err)
+		}
+		return
+	}
+	d.logf("saved tmux sessions to %s", path)
+}
+
+func (d *Daemon) logf(format string, args ...any) {
+	if d.cfg.Logf != nil {
+		d.cfg.Logf(format, args...)
 	}
 }
 

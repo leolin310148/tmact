@@ -116,6 +116,19 @@ On WSL, statusd auto-start requires `systemd` (set `systemd=true` in
 `/etc/wsl.conf` and `wsl --shutdown`); without it the binary still installs
 fine and you can launch statusd manually with `tmact statusd start &`.
 
+## Tmux Session Persistence
+
+The status daemon saves all local tmux session, window, and pane structure
+every five minutes by default. It records pane working directories and tmux
+window layouts, but deliberately does not save or replay commands. An empty
+tmux server or a failed capture never replaces the last valid snapshot.
+
+At startup, statusd restores the last valid snapshot only when a successful
+tmux query proves that no sessions exist. If any session already exists it
+does nothing. Snapshots default to `~/.tmact/tmux-sessions`; configuration and
+migration instructions for replacing tmux-resurrect/tmux-continuum are in
+[docs/session-persistence.md](docs/session-persistence.md).
+
 ## Web Interface
 
 `statusd` can serve a browser UI for local pane monitoring and input. It shows

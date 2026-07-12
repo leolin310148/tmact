@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/statusd"
@@ -126,6 +127,10 @@ func runStatusdStart(args []string) error {
 
 	cfg := flags.config()
 	applyFileConfig(&cfg, webAddr, fileCfg, set)
+	if *once {
+		cfg.SessionSave = false
+		cfg.SessionRestore = false
+	}
 	// Agent-usage panel: CLI flag wins; otherwise honor the file value.
 	usageEnabled := *agentUsage
 	if !set["agent-usage"] && fileCfg.AgentUsage != nil {
@@ -226,6 +231,23 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 	if !set["pane-rows"] && file.PaneRows != nil {
 		cfg.PaneRows = *file.PaneRows
 	}
+	if !set["session-save"] && file.SessionSave != nil {
+		cfg.SessionSave = *file.SessionSave
+	}
+	if !set["session-restore"] && file.SessionRestore != nil {
+		cfg.SessionRestore = *file.SessionRestore
+	}
+	if !set["session-save-interval"] {
+		if d := file.SessionSaveIntervalDuration(); d > 0 {
+			cfg.SessionSaveInterval = d
+		}
+	}
+	if !set["session-snapshot-retention"] && file.SessionSnapshotRetention != nil {
+		cfg.SessionSnapshotRetention = *file.SessionSnapshotRetention
+	}
+	if !set["session-snapshot-dir"] && file.SessionSnapshotDir != "" {
+		cfg.SessionSnapshotDir = file.SessionSnapshotDir
+	}
 	if len(cfg.Peers) == 0 && len(file.Peers) > 0 {
 		for _, p := range file.Peers {
 			if p.Name == "" || p.URL == "" {
@@ -276,6 +298,8 @@ func runStatusdOnce(args []string) error {
 		return err
 	}
 	cfg := flags.config()
+	cfg.SessionSave = false
+	cfg.SessionRestore = false
 	if err := validateStatusdConfig(cfg); err != nil {
 		return err
 	}
@@ -371,7 +395,7 @@ type statusdFlagValues struct {
 }
 
 func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
-	values := &statusdFlagValues{Config: statusd.Config{TmuxOptions: true}}
+	values := &statusdFlagValues{Config: statusd.Config{TmuxOptions: true, SessionSave: true, SessionRestore: true}}
 	fs.DurationVar(&values.Config.Interval, "interval", statusd.DefaultInterval, "scan interval")
 	fs.StringVar(&values.Config.SocketPath, "socket-path", statusd.DefaultSocketPath, "daemon IPC unix socket")
 	fs.StringVar(&values.Config.LogPath, "log-path", "", "optional JSONL daemon log path")
@@ -383,6 +407,11 @@ func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
 	fs.DurationVar(&values.Config.StaleAfter, "stale-after", statusd.DefaultStaleAfter, "mark snapshot stale after this age")
 	fs.IntVar(&values.Config.PaneCols, "pane-cols", statusd.DefaultPaneCols, "fixed tmux window width (0 disables sweep)")
 	fs.IntVar(&values.Config.PaneRows, "pane-rows", statusd.DefaultPaneRows, "fixed tmux window height (0 disables sweep)")
+	fs.BoolVar(&values.Config.SessionSave, "session-save", true, "periodically save tmux session layout and cwd")
+	fs.BoolVar(&values.Config.SessionRestore, "session-restore", true, "restore sessions at startup when tmux is empty")
+	fs.DurationVar(&values.Config.SessionSaveInterval, "session-save-interval", statusd.DefaultSessionSaveInterval, "tmux session save interval")
+	fs.IntVar(&values.Config.SessionSnapshotRetention, "session-snapshot-retention", statusd.DefaultSessionSnapshotRetention, "number of tmux session snapshots to keep")
+	fs.StringVar(&values.Config.SessionSnapshotDir, "session-snapshot-dir", statusd.DefaultSessionSnapshotDir(), "tmux session snapshot directory")
 	fs.Var(&values.IdleIgnore, "idle-ignore", "regexp for lines ignored by sample hashing; may be repeated")
 	fs.Var(&values.IncludeSession, "session", "include sessions matching glob; may be repeated")
 	fs.Var(&values.ExcludeSession, "exclude-session", "exclude sessions matching glob; may be repeated")
@@ -416,6 +445,15 @@ func validateStatusdConfig(cfg statusd.Config) error {
 	}
 	if cfg.StaleAfter <= 0 {
 		return errors.New("--stale-after must be positive")
+	}
+	if cfg.SessionSave && cfg.SessionSaveInterval <= 0 {
+		return errors.New("--session-save-interval must be positive")
+	}
+	if (cfg.SessionSave || cfg.SessionRestore) && cfg.SessionSnapshotRetention <= 0 {
+		return errors.New("--session-snapshot-retention must be positive")
+	}
+	if (cfg.SessionSave || cfg.SessionRestore) && !filepath.IsAbs(cfg.SessionSnapshotDir) {
+		return errors.New("--session-snapshot-dir must be an absolute path when session persistence is enabled")
 	}
 	if err := validatePeerNames(cfg.Peers, cfg.CostPeers); err != nil {
 		return err
