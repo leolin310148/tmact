@@ -67,7 +67,15 @@ func isNoServerError(err error) bool {
 		return false
 	}
 	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "no server running") || strings.Contains(message, "failed to connect to server")
+	// "no server running" / "failed to connect to server": socket exists but no
+	// server answers. "error connecting to ... (no such file or directory)":
+	// the socket file is absent, which is what macOS tmux reports on a fresh
+	// boot before any server has started. All three mean "no sessions", so the
+	// headless startup restore must treat them as an empty result, not a
+	// failure, or it would skip restoring on exactly the boot it exists for.
+	return strings.Contains(message, "no server running") ||
+		strings.Contains(message, "failed to connect to server") ||
+		strings.Contains(message, "error connecting to")
 }
 
 func ListAllPanes() ([]Pane, error) {
