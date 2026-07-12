@@ -75,35 +75,115 @@ stages:
     actor: pm
     bind_revisions: [spec]
     prompt: Review the OpenSpec change {{ .vars.change }} for product correctness.
-    outcomes: {accept: success, request_changes: retry, blocked: blocked}
+    outcomes: {accept: success, request_changes: success, blocked: blocked}
+
+  - id: pm_revision
+    type: agent
+    needs: [pm_review]
+    when: {stage: {id: pm_review, outcome: request_changes}}
+    actor: pm
+    bind_revisions: [spec]
+    produces_revisions: [spec]
+    prompt: Revise OpenSpec change {{ .vars.change }} to address the PM review feedback in {{ .stages.pm_review.evidence.body }}.
+    outcomes: {complete: success, blocked: blocked}
+
+  - id: validate_pm_revision
+    type: command
+    needs: [pm_revision]
+    when: {stage: {id: pm_review, outcome: request_changes}}
+    argv: ["openspec", "validate", "{{ .vars.change }}", "--strict"]
+    inherit_env: [PATH, HOME]
+    bind_revisions: [spec]
 
   - id: swe_review
     type: agent
-    needs: [pm_review]
+    needs: [validate_pm_revision]
     actor: swe
     bind_revisions: [spec]
     prompt: Review the OpenSpec change {{ .vars.change }} for implementation feasibility.
-    outcomes: {accept: success, request_changes: retry, blocked: blocked}
+    outcomes: {accept: success, request_changes: success, blocked: blocked}
+
+  - id: swe_revision
+    type: agent
+    needs: [swe_review]
+    when: {stage: {id: swe_review, outcome: request_changes}}
+    actor: swe
+    bind_revisions: [spec]
+    produces_revisions: [spec]
+    prompt: Revise OpenSpec change {{ .vars.change }} to address the SWE review feedback in {{ .stages.swe_review.evidence.body }}.
+    outcomes: {complete: success, blocked: blocked}
+
+  - id: validate_swe_revision
+    type: command
+    needs: [swe_revision]
+    when: {stage: {id: swe_review, outcome: request_changes}}
+    argv: ["openspec", "validate", "{{ .vars.change }}", "--strict"]
+    inherit_env: [PATH, HOME]
+    bind_revisions: [spec]
 
   - id: qa_review
     type: agent
-    needs: [swe_review]
+    needs: [validate_swe_revision]
     actor: qa
     bind_revisions: [spec]
     prompt: Review the OpenSpec change {{ .vars.change }} for testability and acceptance criteria.
-    outcomes: {accept: success, request_changes: retry, blocked: blocked}
+    outcomes: {accept: success, request_changes: success, blocked: blocked}
+
+  - id: qa_revision
+    type: agent
+    needs: [qa_review]
+    when: {stage: {id: qa_review, outcome: request_changes}}
+    actor: qa
+    bind_revisions: [spec]
+    produces_revisions: [spec]
+    prompt: Revise OpenSpec change {{ .vars.change }} to address the QA review feedback in {{ .stages.qa_review.evidence.body }}.
+    outcomes: {complete: success, blocked: blocked}
+
+  - id: validate_qa_revision
+    type: command
+    needs: [qa_revision]
+    when: {stage: {id: qa_review, outcome: request_changes}}
+    argv: ["openspec", "validate", "{{ .vars.change }}", "--strict"]
+    inherit_env: [PATH, HOME]
+    bind_revisions: [spec]
 
   - id: final_review
     type: agent
-    needs: [qa_review]
+    needs: [validate_qa_revision]
     actor: reviewer
     bind_revisions: [spec]
     prompt: Perform the final independent review of OpenSpec change {{ .vars.change }}.
-    outcomes: {accept: success, request_changes: retry, blocked: blocked}
+    outcomes: {accept: success, request_changes: success, blocked: blocked}
+
+  - id: final_revision
+    type: agent
+    needs: [final_review]
+    when: {stage: {id: final_review, outcome: request_changes}}
+    actor: swe
+    bind_revisions: [spec]
+    produces_revisions: [spec]
+    prompt: Revise OpenSpec change {{ .vars.change }} to address the final review feedback in {{ .stages.final_review.evidence.body }}.
+    outcomes: {complete: success, blocked: blocked}
+
+  - id: validate_final_revision
+    type: command
+    needs: [final_revision]
+    when: {stage: {id: final_review, outcome: request_changes}}
+    argv: ["openspec", "validate", "{{ .vars.change }}", "--strict"]
+    inherit_env: [PATH, HOME]
+    bind_revisions: [spec]
+
+  - id: final_confirmation
+    type: agent
+    needs: [validate_final_revision]
+    actor: reviewer
+    bind_revisions: [spec]
+    prompt: Independently confirm that OpenSpec change {{ .vars.change }} is ready for implementation. If issues remain, report request_changes so the workflow blocks for operator attention instead of retrying unchanged input.
+    outcomes: {accept: success, request_changes: blocked, blocked: blocked}
 
   - id: apply
     type: agent
-    needs: [final_review]
+    needs: [final_confirmation]
     actor: swe
     bind_revisions: [spec, source]
     produces_revisions: [source]
@@ -130,15 +210,49 @@ stages:
     actor: qa
     bind_revisions: [spec, source]
     prompt: Semantically verify change {{ .vars.change }} using the saved machine evidence.
-    outcomes: {pass: success, fail: retry, blocked: blocked}
+    outcomes: {pass: success, fail: success, blocked: blocked}
+
+  - id: repair_implementation
+    type: agent
+    needs: [qa_verify]
+    when: {stage: {id: qa_verify, outcome: fail}}
+    actor: swe
+    bind_revisions: [spec, source]
+    produces_revisions: [source]
+    prompt: Repair the implementation of OpenSpec change {{ .vars.change }} using the QA feedback in {{ .stages.qa_verify.evidence.body }}.
+    outcomes: {complete: success, blocked: blocked}
+
+  - id: validate_repair
+    type: command
+    needs: [repair_implementation]
+    when: {stage: {id: qa_verify, outcome: fail}}
+    argv: ["openspec", "validate", "{{ .vars.change }}", "--strict"]
+    inherit_env: [PATH, HOME]
+    bind_revisions: [spec, source]
+
+  - id: test_repair
+    type: command
+    needs: [repair_implementation]
+    when: {stage: {id: qa_verify, outcome: fail}}
+    argv: ["go", "test", "./..."]
+    inherit_env: [PATH, HOME, GOCACHE]
+    bind_revisions: [spec, source]
+
+  - id: qa_confirmation
+    type: agent
+    needs: [validate_repair, test_repair]
+    actor: qa
+    bind_revisions: [spec, source]
+    prompt: Independently confirm the implementation of OpenSpec change {{ .vars.change }} using the saved machine evidence. If issues remain, report fail so the workflow blocks for operator attention instead of retrying unchanged input.
+    outcomes: {pass: success, fail: blocked, blocked: blocked}
 
   - id: archive_gate
     type: gate
-    needs: [qa_verify]
+    needs: [qa_confirmation]
     condition:
       all:
-        - revision: {name: spec, stage: final_review}
-        - revision: {name: source, stage: qa_verify}
+        - revision: {name: spec, stage: final_confirmation}
+        - revision: {name: source, stage: qa_confirmation}
 
   - id: archive
     type: agent
