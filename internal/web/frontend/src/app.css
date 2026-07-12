@@ -165,7 +165,6 @@
   }
   .agent-icon.runtime-claude { color: #ffcf8a; border-color: rgba(255,207,138,0.45); background: rgba(255,207,138,0.08); }
   .agent-icon.runtime-codex { color: #79c0ff; border-color: rgba(121,192,255,0.45); background: rgba(121,192,255,0.08); }
-  .agent-icon.runtime-copilot { color: #7ee787; border-color: rgba(126,231,135,0.45); background: rgba(126,231,135,0.08); }
   .agent-icon.runtime-gemini { color: #d2a8ff; border-color: rgba(210,168,255,0.45); background: rgba(210,168,255,0.08); }
   .agent-icon.stale {
     opacity: 0.7;

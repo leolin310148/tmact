@@ -480,7 +480,7 @@ func Validate(cfg Config, vars map[string]any) error {
 			if actor.Launch.Runtime == "" || actor.Launch.Session == "" {
 				return fmt.Errorf("actor %q launch.runtime and launch.session are required", name)
 			}
-			if !contains([]string{"claude", "codex", "gemini", "copilot"}, actor.Launch.Runtime) {
+			if !contains([]string{"claude", "codex", "gemini"}, actor.Launch.Runtime) {
 				return fmt.Errorf("actor %q has unsupported runtime %q", name, actor.Launch.Runtime)
 			}
 			if actor.Launch.TrustFolder && !contains([]string{"claude", "codex"}, actor.Launch.Runtime) {

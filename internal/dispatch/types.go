@@ -31,10 +31,9 @@ const (
 )
 
 var supportedAgents = map[string]bool{
-	panestatus.RuntimeClaude:  true,
-	panestatus.RuntimeCodex:   true,
-	panestatus.RuntimeGemini:  true,
-	panestatus.RuntimeCopilot: true,
+	panestatus.RuntimeClaude: true,
+	panestatus.RuntimeCodex:  true,
+	panestatus.RuntimeGemini: true,
 }
 
 // SupportedAgents lists the agent launchers dispatch-work understands.

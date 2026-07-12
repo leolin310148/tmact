@@ -152,7 +152,7 @@ func stepDetail(t *testing.T, report dispatch.Report, name string) string {
 func TestRunRejectsUnsupportedAgent(t *testing.T) {
 	_, deps := baseDeps()
 	opts := baseOpts()
-	opts.Agent = "rustc"
+	opts.Agent = "copilot"
 	if _, err := dispatch.RunWithDeps(opts, deps); err == nil {
 		t.Fatal("expected error for unsupported agent")
 	}

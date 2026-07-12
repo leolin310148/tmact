@@ -8,7 +8,7 @@ and usage path lives in `README.md`.
 - Go 1.26 or newer
 - `tmux` on `PATH`
 - Optional agent CLIs when testing panel launchers: `codex`, `claude`,
-  `copilot`, or `gemini`
+  `gemini`
 
 ## First Check
 

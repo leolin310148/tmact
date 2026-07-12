@@ -73,7 +73,7 @@ func paneTarget(pane tmux.Pane) string {
 
 func isAgentRuntime(runtime string) bool {
 	switch runtime {
-	case panestatus.RuntimeClaude, panestatus.RuntimeCodex, panestatus.RuntimeGemini, panestatus.RuntimeCopilot:
+	case panestatus.RuntimeClaude, panestatus.RuntimeCodex, panestatus.RuntimeGemini:
 		return true
 	default:
 		return false

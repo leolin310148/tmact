@@ -44,7 +44,7 @@ export const QB_LABEL: Record<QBGroup, string> = {
 };
 
 // Snapshot runtime → quick-button group. A runtime with no group (gemini,
-// copilot, tmact, unknown) falls back to the Common group alone.
+// tmact and unknown runtimes fall back to the Common group alone.
 const RUNTIME_GROUP: Record<string, QBGroup | undefined> = {
   claude: "claude",
   codex: "codex",

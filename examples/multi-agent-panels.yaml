@@ -16,15 +16,6 @@ agents:
     launcher: claude
     role: review
 
-  - name: sample-copilot
-    session: sample-team
-    window: copilot
-    repo: .
-    type: copilot
-    launcher: copilot
-    allow_all_tools: true
-    role: assistance
-
   - name: sample-gemini
     session: sample-team
     window: gemini

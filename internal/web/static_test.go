@@ -175,8 +175,8 @@ func TestBundledStyleHasRuntimeClasses(t *testing.T) {
 	// Class names, keyframe ids and custom properties are not renamed by CSS
 	// minification, so these survive the build verbatim.
 	for _, want := range []string{
-		".agent-icon", "runtime-claude", "runtime-codex", "runtime-copilot",
-		"runtime-gemini", "agent-shine", "agent-rainbow", "--pane-font",
+		".agent-icon", "runtime-claude", "runtime-codex", "runtime-gemini",
+		"agent-shine", "agent-rainbow", "--pane-font",
 		"--tmact-vvh", ".image-preview", ".markdown-preview", ".image-path", ".markdown-path", ".selection-btn",
 		".clear-pane-btn", ".effect-preview",
 	} {
