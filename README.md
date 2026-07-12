@@ -81,6 +81,18 @@ tmact dispatch-work work --dir ~/work/repo --agent codex \
   --prompt "run the tests" --trust-folder --execute
 ```
 
+To select the model for a newly launched Claude or Codex session, pass
+`--model`. The option is also forwarded by remote dispatch:
+
+```sh
+tmact dispatch-work work --dir ~/work/repo --agent codex \
+  --model gpt-5.4 --prompt "run the tests" --execute
+```
+
+Model selection applies when tmact launches the agent. If the named session
+already has that agent running, tmact rejects `--model` instead of silently
+reusing an agent whose model it cannot verify.
+
 For a pane created by another tool, inspect first (dry-run), then execute:
 
 ```sh

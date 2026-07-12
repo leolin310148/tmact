@@ -18,6 +18,7 @@ type RemoteRequest struct {
 	Session      string `json:"session"`
 	Dir          string `json:"dir"`
 	Agent        string `json:"agent"`
+	Model        string `json:"model,omitempty"`
 	Prompt       string `json:"prompt"`
 	Execute      bool   `json:"execute"`
 	ReadyTimeout string `json:"ready_timeout,omitempty"`
@@ -36,6 +37,7 @@ func RemoteRequestFromOptions(opts Options) RemoteRequest {
 		Session:     opts.Session,
 		Dir:         opts.Dir,
 		Agent:       opts.Agent,
+		Model:       opts.Model,
 		Prompt:      opts.Prompt,
 		Execute:     opts.Execute,
 		TrustFolder: opts.TrustFolder,
@@ -56,6 +58,7 @@ func (r RemoteRequest) Options() (Options, error) {
 		Session:     r.Session,
 		Dir:         r.Dir,
 		Agent:       r.Agent,
+		Model:       r.Model,
 		Prompt:      r.Prompt,
 		Execute:     r.Execute,
 		TrustFolder: r.TrustFolder,

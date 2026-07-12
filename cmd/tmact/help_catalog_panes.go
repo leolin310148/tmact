@@ -47,12 +47,13 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
-				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot --prompt TEXT [--trust-folder] [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, gemini, or copilot", Required: true},
+				{Name: "--model", Value: "MODEL", Description: "model used when launching Claude or Codex"},
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
@@ -64,6 +65,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Examples: []string{
 				`tmact dispatch-work work --dir . --agent claude --prompt "review the diff"`,
+				`tmact dispatch-work work --dir . --agent codex --model gpt-5.4 --prompt "review the diff" --execute`,
 				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --trust-folder --execute`,
 				`tmact dispatch-work work --peer peer-a --dir /repo --agent codex --prompt "run the tests" --execute`,
 			},
@@ -76,6 +78,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"The session name is the first positional argument.",
 				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",
+				"--model applies only while launching Claude or Codex; it is rejected if that agent is already running.",
 				"With --peer, --dir is validated on the peer machine, not the host.",
 				"--peer reads dispatch_peers first, then falls back to peers for compatibility.",
 			},

@@ -168,6 +168,16 @@ func TestRunRejectsTrustFolderForUnsupportedAgent(t *testing.T) {
 	}
 }
 
+func TestRunRejectsModelForUnsupportedAgent(t *testing.T) {
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Agent = "gemini"
+	opts.Model = "gemini-2.5-pro"
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "only supports claude or codex") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRunRejectsEmptyPrompt(t *testing.T) {
 	_, deps := baseDeps()
 	opts := baseOpts()
@@ -193,6 +203,22 @@ func TestDryRunNewSessionPlan(t *testing.T) {
 	}
 	if rec.newSessions != 0 || len(rec.pastes) != 0 {
 		t.Fatalf("dry-run touched tmux: newSessions=%d pastes=%d", rec.newSessions, len(rec.pastes))
+	}
+}
+
+func TestDryRunNewClaudeSessionWithModel(t *testing.T) {
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Model = "sonnet"
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Model != "sonnet" {
+		t.Fatalf("model = %q", report.Model)
+	}
+	if detail := stepDetail(t, report, "launch-agent"); !strings.Contains(detail, "claude --model 'sonnet'") {
+		t.Fatalf("launch detail = %q", detail)
 	}
 }
 
@@ -240,6 +266,38 @@ func TestExecuteNewSession(t *testing.T) {
 		if got := stepStatus(t, report, name); got != dispatch.StatusOK {
 			t.Fatalf("step %q status = %q, want ok", name, got)
 		}
+	}
+}
+
+func TestExecuteNewSessionWithModelShellQuotesModel(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{codexPane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) < 2 {
+			return "OpenAI Codex\n› ", nil
+		}
+		return "OpenAI Codex\nWorking... esc to interrupt", nil
+	}
+
+	opts := baseOpts()
+	opts.Agent = "codex"
+	opts.Model = "gpt-5.4'; echo unsafe"
+	opts.Execute = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCommand := "codex --model 'gpt-5.4'\\''; echo unsafe'"
+	if report.Model != opts.Model {
+		t.Fatalf("model = %q, want %q", report.Model, opts.Model)
+	}
+	if len(rec.pastes) < 1 || rec.pastes[0].text != wantCommand {
+		t.Fatalf("launch paste = %#v, want %q", rec.pastes, wantCommand)
+	}
+	if detail := stepDetail(t, report, "launch-agent"); !strings.Contains(detail, "codex --model") {
+		t.Fatalf("launch detail = %q", detail)
 	}
 }
 
@@ -543,6 +601,24 @@ func TestExistingSessionAgentBusy(t *testing.T) {
 
 	if _, err := dispatch.RunWithDeps(baseOpts(), deps); err == nil {
 		t.Fatal("expected error when the agent is busy")
+	}
+}
+
+func TestExistingRunningAgentRejectsModel(t *testing.T) {
+	_, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return "Claude Code\nready for input", nil
+	}
+	opts := baseOpts()
+	opts.Model = "sonnet"
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "--model only applies when launching") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

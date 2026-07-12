@@ -27,6 +27,7 @@ func TestPostRemoteSendsRequestAndPrefixesTarget(t *testing.T) {
 		Session:      "work",
 		Dir:          "/repo",
 		Agent:        "codex",
+		Model:        "gpt-5.4",
 		Prompt:       "go",
 		Execute:      true,
 		ReadyTimeout: 45 * time.Second,
@@ -36,7 +37,7 @@ func TestPostRemoteSendsRequestAndPrefixesTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ReadyTimeout != "45s" || got.ReadySettle != "2s" || !got.TrustFolder {
+	if got.Model != "gpt-5.4" || got.ReadyTimeout != "45s" || got.ReadySettle != "2s" || !got.TrustFolder {
 		t.Fatalf("request durations = %#v", got)
 	}
 	if report.Peer != "peer-a" || report.Target != "peer-a@%9" {
@@ -61,11 +62,11 @@ func TestPostRemoteReportsUnsupportedPeer(t *testing.T) {
 }
 
 func TestRemoteRequestOptionsParsesDurations(t *testing.T) {
-	opts, err := (RemoteRequest{ReadyTimeout: "3s", ReadySettle: "500ms", TrustFolder: true}).Options()
+	opts, err := (RemoteRequest{Model: "sonnet", ReadyTimeout: "3s", ReadySettle: "500ms", TrustFolder: true}).Options()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.ReadyTimeout != 3*time.Second || opts.ReadySettle != 500*time.Millisecond || !opts.TrustFolder {
+	if opts.Model != "sonnet" || opts.ReadyTimeout != 3*time.Second || opts.ReadySettle != 500*time.Millisecond || !opts.TrustFolder {
 		t.Fatalf("opts = %#v", opts)
 	}
 
