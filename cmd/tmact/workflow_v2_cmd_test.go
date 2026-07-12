@@ -49,6 +49,11 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if strings.Join(stages["apply"].Needs, ",") != "final_confirmation" {
 		t.Fatalf("apply needs=%v", stages["apply"].Needs)
 	}
+	for _, id := range []string{"apply", "repair_implementation"} {
+		if !strings.Contains(stages[id].Prompt, "Do not modify or archive any file under openspec/changes/") || !strings.Contains(stages[id].Prompt, "without editing tasks.md") {
+			t.Fatalf("%s prompt does not protect approved OpenSpec artifacts: %q", id, stages[id].Prompt)
+		}
+	}
 	if stages["qa_verify"].Outcomes["fail"] != "success" || stages["qa_confirmation"].Outcomes["fail"] != "blocked" {
 		t.Fatalf("QA convergence outcomes verify=%v confirmation=%v", stages["qa_verify"].Outcomes, stages["qa_confirmation"].Outcomes)
 	}

@@ -187,7 +187,7 @@ stages:
     actor: swe
     bind_revisions: [spec, source]
     produces_revisions: [source]
-    prompt: Implement OpenSpec change {{ .vars.change }} completely. Do not archive it.
+    prompt: Implement OpenSpec change {{ .vars.change }} completely. Do not modify or archive any file under openspec/changes/{{ .vars.change }}; workflow evidence tracks progress without editing tasks.md.
     outcomes: {complete: success, request_changes: retry, blocked: blocked}
 
   - id: validate_implementation
@@ -219,7 +219,7 @@ stages:
     actor: swe
     bind_revisions: [spec, source]
     produces_revisions: [source]
-    prompt: Repair the implementation of OpenSpec change {{ .vars.change }} using the QA feedback in {{ .stages.qa_verify.evidence.body }}.
+    prompt: Repair the implementation of OpenSpec change {{ .vars.change }} using the QA feedback in {{ .stages.qa_verify.evidence.body }}. Do not modify or archive any file under openspec/changes/{{ .vars.change }}; workflow evidence tracks progress without editing tasks.md.
     outcomes: {complete: success, blocked: blocked}
 
   - id: validate_repair
