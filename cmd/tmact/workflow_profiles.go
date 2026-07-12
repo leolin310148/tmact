@@ -40,6 +40,12 @@ variables:
   change:
     type: string
     required: true
+  verification_argv:
+    type: string_list
+    default: ["go", "test", "./..."]
+  verification_cwd:
+    type: string
+    default: "."
 actors:
   pm:
     agent: pm
@@ -200,7 +206,8 @@ stages:
   - id: test_implementation
     type: command
     needs: [apply]
-    argv: ["go", "test", "./..."]
+    argv_variable: verification_argv
+    cwd: "{{ .vars.verification_cwd }}"
     inherit_env: [PATH, HOME, GOCACHE]
     bind_revisions: [spec, source]
 
@@ -234,7 +241,8 @@ stages:
     type: command
     needs: [repair_implementation]
     when: {stage: {id: qa_verify, outcome: fail}}
-    argv: ["go", "test", "./..."]
+    argv_variable: verification_argv
+    cwd: "{{ .vars.verification_cwd }}"
     inherit_env: [PATH, HOME, GOCACHE]
     bind_revisions: [spec, source]
 

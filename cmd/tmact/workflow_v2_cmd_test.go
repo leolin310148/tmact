@@ -22,6 +22,10 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if len(loaded.Config.Stages) != 24 {
 		t.Fatalf("stages=%d", len(loaded.Config.Stages))
 	}
+	verificationArgv, ok := loaded.Variables["verification_argv"].([]string)
+	if !ok || strings.Join(verificationArgv, ",") != "go,test,./..." || loaded.Variables["verification_cwd"] != "." {
+		t.Fatalf("verification variables=%#v", loaded.Variables)
+	}
 	stages := map[string]workflow.StageConfig{}
 	for _, stage := range loaded.Config.Stages {
 		stages[stage.ID] = stage
@@ -49,6 +53,11 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if strings.Join(stages["apply"].Needs, ",") != "final_confirmation" {
 		t.Fatalf("apply needs=%v", stages["apply"].Needs)
 	}
+	for _, id := range []string{"test_implementation", "test_repair"} {
+		if stages[id].ArgvVariable != "verification_argv" || stages[id].Cwd != "{{ .vars.verification_cwd }}" {
+			t.Fatalf("%s command config=%#v", id, stages[id])
+		}
+	}
 	for _, id := range []string{"apply", "repair_implementation"} {
 		if !strings.Contains(stages[id].Prompt, "Do not modify or archive any file under openspec/changes/") || !strings.Contains(stages[id].Prompt, "without editing tasks.md") {
 			t.Fatalf("%s prompt does not protect approved OpenSpec artifacts: %q", id, stages[id].Prompt)
@@ -64,13 +73,27 @@ func TestWorkflowOpenSpecProfileIsStrictlyValid(t *testing.T) {
 	if archive.ID != "archive" || strings.Join(archive.ProducesRevisions, ",") != "spec,source" {
 		t.Fatalf("archive produces=%v", archive.ProducesRevisions)
 	}
+	overridden, err := workflow.Load(path, map[string]string{
+		"change":           "demo",
+		"verification_argv": `["make","test"]`,
+		"verification_cwd":  "internal/web/frontend",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(overridden.Variables["verification_argv"].([]string), ","); got != "make,test" {
+		t.Fatalf("overridden verification_argv=%q", got)
+	}
+	if overridden.Variables["verification_cwd"] != "internal/web/frontend" {
+		t.Fatalf("overridden verification_cwd=%v", overridden.Variables["verification_cwd"])
+	}
 }
 func TestWorkflowExampleAndRemovedCommands(t *testing.T) {
 	out, err := captureRun(t, "workflow", "example", "--profile", "openspec")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"version: 2", "produces_revisions", "archive_gate"} {
+	for _, want := range []string{"version: 2", "produces_revisions", "archive_gate", "type: string_list", "argv_variable: verification_argv"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q", want)
 		}

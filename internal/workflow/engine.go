@@ -785,9 +785,15 @@ func advanceStale(state *State, cfg Config) {
 
 func (e *Engine) executeCommand(parent context.Context, stage StageConfig, state State) (*Evidence, string, error) {
 	data := templateData(state)
-	argv, err := renderList(stage.ID+".argv", stage.Argv, data)
+	var argv []string
+	var err error
+	if stage.ArgvVariable != "" {
+		argv, err = stringListValue(state.Variables[stage.ArgvVariable])
+	} else {
+		argv, err = renderList(stage.ID+".argv", stage.Argv, data)
+	}
 	if err != nil {
-		return nil, "failed", err
+		return nil, "failed", fmt.Errorf("stage %s argv: %w", stage.ID, err)
 	}
 	cwdText, err := Render(stage.ID+".cwd", stage.Cwd, data)
 	if err != nil {

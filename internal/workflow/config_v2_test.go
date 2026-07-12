@@ -80,3 +80,54 @@ func TestVariablesAreTypedAndRequired(t *testing.T) {
 		t.Fatalf("vars=%#v", loaded.Variables)
 	}
 }
+
+func TestStringListVariableAndCommandArgvReference(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, minimalConfig(`variables:
+  verify: {type: string_list, default: [/usr/bin/true]}
+`, "  - {id: verify, type: command, argv_variable: verify}\n"))
+	loaded, err := Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := loaded.Variables["verify"].([]string); !ok || strings.Join(got, ",") != "/usr/bin/true" {
+		t.Fatalf("default verify=%#v", loaded.Variables["verify"])
+	}
+	loaded, err = Load(path, map[string]string{"verify": `["/usr/bin/printf","hello world"]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loaded.Variables["verify"].([]string); strings.Join(got, "|") != "/usr/bin/printf|hello world" {
+		t.Fatalf("override verify=%#v", got)
+	}
+}
+
+func TestCommandArgvVariableValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		variables string
+		stage     string
+		supplied  map[string]string
+		want      string
+	}{
+		{name: "unknown", stage: "  - {id: verify, type: command, argv_variable: missing}\n", want: "unknown variable"},
+		{name: "wrong type", variables: "  verify: {type: string, default: /usr/bin/true}\n", stage: "  - {id: verify, type: command, argv_variable: verify}\n", want: "must have type string_list"},
+		{name: "missing value", variables: "  verify: {type: string_list}\n", stage: "  - {id: verify, type: command, argv_variable: verify}\n", want: "value is required"},
+		{name: "both sources", variables: "  verify: {type: string_list, default: [/usr/bin/true]}\n", stage: "  - {id: verify, type: command, argv: [/usr/bin/true], argv_variable: verify}\n", want: "exactly one"},
+		{name: "shell rejected", variables: "  verify: {type: string_list, default: [sh, -c, echo]}\n", stage: "  - {id: verify, type: command, argv_variable: verify}\n", want: "must not use a shell"},
+		{name: "bad JSON", variables: "  verify: {type: string_list, required: true}\n", stage: "  - {id: verify, type: command, argv_variable: verify}\n", supplied: map[string]string{"verify": "make test"}, want: "JSON array"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			extra := ""
+			if tc.variables != "" {
+				extra = "variables:\n" + tc.variables
+			}
+			path := writeConfig(t, t.TempDir(), minimalConfig(extra, tc.stage))
+			_, err := Load(path, tc.supplied)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v want=%q", err, tc.want)
+			}
+		})
+	}
+}
