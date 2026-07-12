@@ -25,12 +25,13 @@ type SessionStatePane struct {
 const sessionStateFormat = "#{session_name}\t#{window_index}\t#{window_name}\t#{window_layout}\t#{window_width}\t#{window_height}\t#{window_active}\t#{pane_index}\t#{pane_current_path}\t#{pane_active}"
 
 // ListSessionState returns every local tmux pane with its window layout. A
-// missing tmux server is a successful empty result; all other failures remain
-// errors so callers cannot confuse capture failure with zero sessions.
+// missing tmux server, or a running server with no sessions at all, is a
+// successful empty result; all other failures remain errors so callers cannot
+// confuse capture failure with zero sessions.
 func ListSessionState() ([]SessionStatePane, error) {
 	output, err := outputTmux("list-panes", "-a", "-F", sessionStateFormat)
 	if err != nil {
-		if isNoServerError(err) {
+		if isNoServerError(err) || isEmptyServerError(err) {
 			return []SessionStatePane{}, nil
 		}
 		return nil, err
@@ -108,14 +109,27 @@ func (LiveRestoreClient) NewSession(session, window, cwd string, windowIndex int
 		_ = KillSession(session)
 		return err
 	}
-	current, err := outputTmux("display-message", "-p", "-t", exactSessionTarget(session), "#{window_index}")
+	// A freshly created detached session has exactly one window, placed at the
+	// server's base-index. Read that index with list-windows rather than
+	// display-message: with no client attached, display-message resolves
+	// window-scoped formats against no "current window" and returns an empty
+	// string, which would spuriously trigger the move-window below.
+	current, err := outputTmux("list-windows", "-t", exactSessionTarget(session), "-F", "#{window_index}")
 	if err != nil {
 		return cleanup(err)
 	}
-	if strings.TrimSpace(current) == strconv.Itoa(windowIndex) {
+	currentIndex := strings.TrimSpace(current)
+	if i := strings.IndexByte(currentIndex, '\n'); i >= 0 {
+		currentIndex = currentIndex[:i]
+	}
+	if currentIndex == strconv.Itoa(windowIndex) {
 		return nil
 	}
-	if err := runTmux("move-window", "-s", exactSessionTarget(session)+":", "-t", windowTarget(session, windowIndex)); err != nil {
+	src, err := strconv.Atoi(currentIndex)
+	if err != nil {
+		return cleanup(fmt.Errorf("parse window index %q: %w", currentIndex, err))
+	}
+	if err := runTmux("move-window", "-s", windowTarget(session, src), "-t", windowTarget(session, windowIndex)); err != nil {
 		return cleanup(err)
 	}
 	return nil

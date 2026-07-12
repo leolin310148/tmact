@@ -22,6 +22,19 @@ func TestNoServerErrorClassification(t *testing.T) {
 	}
 }
 
+func TestEmptyServerErrorClassification(t *testing.T) {
+	// A running-but-sessionless server: list-panes -a answers "no current
+	// target". That means zero sessions, not a capture failure.
+	if !isEmptyServerError(errors.New("tmux list-panes failed: no current target")) {
+		t.Fatal("expected empty-server classification for 'no current target'")
+	}
+	for _, err := range []error{nil, errors.New("tmux list-panes failed: no server running on /tmp/tmux-501/default")} {
+		if isEmptyServerError(err) {
+			t.Fatalf("unexpected empty-server classification for %v", err)
+		}
+	}
+}
+
 func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	got := shellJoin([]string{"/tmp/tmact test", "loop", "it's.yaml", ""})
 	want := "'/tmp/tmact test' 'loop' 'it'\\''s.yaml' ''"

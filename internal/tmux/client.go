@@ -78,6 +78,20 @@ func isNoServerError(err error) bool {
 		strings.Contains(message, "error connecting to")
 }
 
+// isEmptyServerError reports whether err is tmux refusing a `list-panes -a`
+// (or similar) because the server is running but holds no windows at all. tmux
+// answers "no current target" in that case. For session capture that means
+// zero sessions, not a failure — the same empty result as no server. This
+// state is reachable when a restore attempt cleans up after itself or every
+// session is closed while exit-empty is off, and must not be treated as a hard
+// error or it would wedge periodic saves and startup restore.
+func isEmptyServerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no current target")
+}
+
 func ListAllPanes() ([]Pane, error) {
 	return listPanes([]string{"list-panes", "-a", "-F", paneListFormat})
 }
