@@ -11,7 +11,7 @@ func TestBuildPanelReportPlansSessionAndWindows(t *testing.T) {
 		Agents: []AgentConfig{
 			{Name: "main", Session: "sample-team", Window: "main", Type: "codex"},
 			{Name: "claude", Session: "sample-team", Window: "claude", Type: "claude"},
-			{Name: "copilot", Session: "sample-team", Window: "copilot", Type: "copilot", AllowAllTools: true},
+			{Name: "gemini", Session: "sample-team", Window: "gemini", Type: "gemini"},
 		},
 	}
 
@@ -29,8 +29,8 @@ func TestBuildPanelReportPlansSessionAndWindows(t *testing.T) {
 			t.Fatalf("op %d action = %q", i, report.Operations[i].Action)
 		}
 	}
-	if got := report.Operations[2].Command; len(got) != 2 || got[0] != "copilot" || got[1] != "--allow-all-tools" {
-		t.Fatalf("copilot command = %#v", got)
+	if got := report.Operations[2].Command; len(got) != 1 || got[0] != "gemini" {
+		t.Fatalf("gemini command = %#v", got)
 	}
 }
 

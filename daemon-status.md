@@ -75,7 +75,6 @@ includes:
 - a compact runtime tag:
   - `cc` for Claude
   - `cx` for Codex
-  - `cp` for Copilot
   - `g` for Gemini
   - `$` for shell/unknown
 - a running indicator when pane output changed recently
@@ -308,7 +307,6 @@ Recommended mapping:
 ```text
 claude   -> cc
 codex    -> cx
-copilot  -> cp
 gemini   -> g
 tmact    -> tm
 shell    -> $

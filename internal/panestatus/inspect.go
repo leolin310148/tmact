@@ -17,7 +17,6 @@ import (
 const (
 	RuntimeClaude  = "claude"
 	RuntimeCodex   = "codex"
-	RuntimeCopilot = "copilot"
 	RuntimeGemini  = "gemini"
 	RuntimeShell   = "shell"
 	RuntimeTmact   = "tmact"
@@ -426,8 +425,6 @@ func commandRuntime(command string) (string, bool) {
 		return RuntimeClaude, true
 	case containsAny(cmd, "gemini"):
 		return RuntimeGemini, true
-	case containsAny(cmd, "copilot"):
-		return RuntimeCopilot, true
 	case cmd == "tmact":
 		return RuntimeTmact, true
 	}
@@ -499,12 +496,6 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	if containsAny(window, "gemini") {
 		return RuntimeDetection{Runtime: RuntimeGemini, Confidence: ConfidenceHigh, Signals: []string{"window_name"}}
 	}
-	if containsAny(cmd, "copilot") {
-		return RuntimeDetection{Runtime: RuntimeCopilot, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
-	}
-	if containsAny(window, "copilot") {
-		return RuntimeDetection{Runtime: RuntimeCopilot, Confidence: ConfidenceHigh, Signals: []string{"window_name"}}
-	}
 	if cmd == "tmact" {
 		return RuntimeDetection{Runtime: RuntimeTmact, Confidence: ConfidenceHigh, Signals: []string{"pane_current_command"}}
 	}
@@ -534,8 +525,6 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	case containsAny(text, "gemini"):
 		return RuntimeDetection{Runtime: RuntimeGemini, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
-	case containsAny(text, "github copilot", "copilot"):
-		return RuntimeDetection{Runtime: RuntimeCopilot, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	}
 
 	if looksLikeShellPrompt(panestate.LastMeaningfulLine(raw)) {

@@ -8,8 +8,6 @@ func RuntimeTag(runtime string) string {
 		return "cc"
 	case panestatus.RuntimeCodex:
 		return "cx"
-	case panestatus.RuntimeCopilot:
-		return "cp"
 	case panestatus.RuntimeGemini:
 		return "g"
 	case panestatus.RuntimeTmact:

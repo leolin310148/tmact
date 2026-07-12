@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-`tmact statusd`'s web UI is a single-page, PWA-capable, mobile-first console for driving terminal AI-agent panes (Codex / Claude / Copilot / Gemini) over tmux. It lists tmux panes as chips, streams a selected pane's live output over a WebSocket, classifies runtime + idle/asking/running state, and relays keyboard/text/voice/file input back into the pane. The web UI's input path is an intentional **live-send surface** (unlike the dry-run-by-default CLI), gated by a server-side key allowlist and validated pane ids.
+`tmact statusd`'s web UI is a single-page, PWA-capable, mobile-first console for driving terminal AI-agent panes (Codex / Claude / Gemini) over tmux. It lists tmux panes as chips, streams a selected pane's live output over a WebSocket, classifies runtime + idle/asking/running state, and relays keyboard/text/voice/file input back into the pane. The web UI's input path is an intentional **live-send surface** (unlike the dry-run-by-default CLI), gated by a server-side key allowlist and validated pane ids.
 
 **Full feature list (one bullet per feature):**
 

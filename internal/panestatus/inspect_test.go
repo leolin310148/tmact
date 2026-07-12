@@ -21,6 +21,15 @@ func TestClassifyRuntimeDetectsCodexCommand(t *testing.T) {
 	}
 }
 
+func TestClassifyRuntimeDoesNotDetectCopilot(t *testing.T) {
+	pane := tmux.Pane{CurrentCommand: "copilot", WindowName: "copilot"}
+
+	detected := ClassifyRuntime(pane, "GitHub Copilot")
+	if detected.Runtime != RuntimeUnknown {
+		t.Fatalf("runtime = %q, want unknown", detected.Runtime)
+	}
+}
+
 func TestClassifyRuntimeDetectsClaudeFromPaneText(t *testing.T) {
 	pane := tmux.Pane{CurrentCommand: "2.1.138", WindowName: "2.1.138"}
 
@@ -391,7 +400,7 @@ func TestInspectPaneCapturesSSHWrappedAgent(t *testing.T) {
 		CurrentCommand: "ssh",
 	}}
 	captures := 0
-	report, err := inspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeClaude, RuntimeCodex, RuntimeCopilot, RuntimeGemini}}, func(string, int) (string, error) {
+	report, err := inspectPanes(panes, Options{CaptureRuntimes: []string{RuntimeClaude, RuntimeCodex, RuntimeGemini}}, func(string, int) (string, error) {
 		captures++
 		return "✻ Crunched for 16s\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt\n", nil
 	}, func(time.Duration) {}, func(int) RuntimeDetection {

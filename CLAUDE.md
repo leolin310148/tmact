@@ -8,8 +8,8 @@ this file only covers what would otherwise trip you up.
 
 `tmact` is a Go CLI (single binary, stdlib `flag` parsing; third-party deps:
 `gopkg.in/yaml.v3` for config, `github.com/coder/websocket` for the statusd
-web UI). It exists to drive terminal AI-agent panes (Codex / Claude / Copilot
-/ Gemini) via tmux — list panes, send text/keys, classify runtime + idle
+web UI). It exists to drive terminal AI-agent panes (Codex / Claude / Gemini)
+via tmux — list panes, send text/keys, classify runtime + idle
 state, run config-driven loops, and run multi-stage workflows with allowlisted
 prompt answering.
 

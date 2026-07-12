@@ -31,8 +31,7 @@ agents:
   - name: sample
     session: agents
     window: sample
-    launcher: copilot
-    allow_all_tools: true
+    launcher: gemini
 `)
 
 	cfg, err := LoadConfig(path)
@@ -86,13 +85,12 @@ agents:
 	}
 }
 
-func TestLoadConfigRejectsAllowAllToolsForNonCopilot(t *testing.T) {
+func TestLoadConfigRejectsCopilotLauncher(t *testing.T) {
 	path := writeTempConfig(t, `
 agents:
   - name: sample
     target: sample:0.0
-    launcher: claude
-    allow_all_tools: true
+    launcher: copilot
 `)
 
 	_, err := LoadConfig(path)

@@ -19,17 +19,16 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	Name          string `yaml:"name"`
-	Target        string `yaml:"target"`
-	Session       string `yaml:"session"`
-	Window        string `yaml:"window"`
-	Repo          string `yaml:"repo"`
-	Type          string `yaml:"type"`
-	Role          string `yaml:"role"`
-	Launcher      string `yaml:"launcher"`
-	AllowAllTools bool   `yaml:"allow_all_tools"`
-	TrustFolder   bool   `yaml:"trust_folder"`
-	CaptureLines  int    `yaml:"capture_lines"`
+	Name         string `yaml:"name"`
+	Target       string `yaml:"target"`
+	Session      string `yaml:"session"`
+	Window       string `yaml:"window"`
+	Repo         string `yaml:"repo"`
+	Type         string `yaml:"type"`
+	Role         string `yaml:"role"`
+	Launcher     string `yaml:"launcher"`
+	TrustFolder  bool   `yaml:"trust_folder"`
+	CaptureLines int    `yaml:"capture_lines"`
 }
 
 type Filter struct {
@@ -142,9 +141,6 @@ func validateConfig(cfg Config) error {
 func validateLauncher(agent AgentConfig) error {
 	launcher := agentLauncher(agent)
 	if launcher == "" {
-		if agent.AllowAllTools {
-			return errors.New("allow_all_tools requires launcher or type")
-		}
 		if agent.TrustFolder {
 			return errors.New("trust_folder requires a claude or codex launcher")
 		}
@@ -152,9 +148,6 @@ func validateLauncher(agent AgentConfig) error {
 	}
 	if !isSupportedLauncher(launcher) {
 		return fmt.Errorf("unsupported launcher %q", launcher)
-	}
-	if agent.AllowAllTools && launcher != "copilot" {
-		return fmt.Errorf("allow_all_tools is only supported for copilot, not %s", launcher)
 	}
 	if agent.TrustFolder && launcher != "claude" && launcher != "codex" {
 		return fmt.Errorf("trust_folder is only supported for claude or codex, not %s", launcher)
@@ -177,7 +170,7 @@ func agentLauncher(agent AgentConfig) string {
 
 func isSupportedLauncher(launcher string) bool {
 	switch launcher {
-	case "codex", "claude", "copilot", "gemini":
+	case "codex", "claude", "gemini":
 		return true
 	default:
 		return false

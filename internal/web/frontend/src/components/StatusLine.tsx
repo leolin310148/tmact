@@ -25,7 +25,6 @@ import { MoreChip } from "./MoreChip";
 export const RUNTIME_ICON: Record<string, string> = {
   claude: "cc",
   codex: "cx",
-  copilot: "cp",
   gemini: "g",
 };
 

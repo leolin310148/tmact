@@ -15,7 +15,6 @@ func TestRuntimeTag(t *testing.T) {
 	tests := map[string]string{
 		panestatus.RuntimeClaude:  "cc",
 		panestatus.RuntimeCodex:   "cx",
-		panestatus.RuntimeCopilot: "cp",
 		panestatus.RuntimeGemini:  "g",
 		panestatus.RuntimeTmact:   "tm",
 		panestatus.RuntimeShell:   "$",

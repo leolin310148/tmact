@@ -47,12 +47,12 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini|copilot [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
-				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini|copilot [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
-				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, gemini, or copilot", Required: true},
+				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini", Required: true},
 				{Name: "--model", Value: "MODEL", Description: "model used when launching Claude or Codex"},
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},

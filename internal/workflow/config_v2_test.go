@@ -64,6 +64,17 @@ func TestActorUnionAndReferences(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsCopilotActorRuntime(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, minimalConfig(`actors:
+  worker: {launch: {runtime: copilot, session: work}}
+`, "  - {id: ask, type: agent, actor: worker, prompt: hi, outcomes: {ok: success}}\n"))
+	_, err := Load(path, nil)
+	if err == nil || !strings.Contains(err.Error(), "unsupported runtime") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestVariablesAreTypedAndRequired(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, minimalConfig(`variables:

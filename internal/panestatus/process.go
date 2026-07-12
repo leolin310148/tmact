@@ -152,8 +152,6 @@ func runtimeFromProcess(process Process) string {
 			return RuntimeCodex
 		case "gemini":
 			return RuntimeGemini
-		case "copilot":
-			return RuntimeCopilot
 		case "tmact":
 			return RuntimeTmact
 		}
@@ -166,8 +164,6 @@ func runtimeFromProcess(process Process) string {
 		return RuntimeCodex
 	case strings.Contains(text, "gemini"):
 		return RuntimeGemini
-	case strings.Contains(text, "copilot"):
-		return RuntimeCopilot
 	case strings.Contains(text, "tmact"):
 		return RuntimeTmact
 	}

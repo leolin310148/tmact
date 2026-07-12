@@ -181,12 +181,6 @@ func launchCommand(agent AgentConfig) ([]string, error) {
 	switch launcher {
 	case "codex", "claude", "gemini":
 		return []string{launcher}, nil
-	case "copilot":
-		command := []string{"copilot"}
-		if agent.AllowAllTools {
-			command = append(command, "--allow-all-tools")
-		}
-		return command, nil
 	default:
 		return nil, fmt.Errorf("unsupported launcher %q", launcher)
 	}

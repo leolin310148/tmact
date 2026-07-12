@@ -38,6 +38,16 @@ func TestClassifyProcessRuntimeDetectsGeminiNodeArgs(t *testing.T) {
 	}
 }
 
+func TestClassifyProcessRuntimeDoesNotDetectCopilot(t *testing.T) {
+	detected := ClassifyProcessRuntime([]Process{
+		{PID: 123, PPID: 100, Command: "copilot", Args: "copilot"},
+	})
+
+	if detected.Runtime != RuntimeUnknown {
+		t.Fatalf("runtime = %q, want unknown", detected.Runtime)
+	}
+}
+
 func TestParseProcesses(t *testing.T) {
 	processes := parseProcesses("22247 14018 claude claude\n")
 	if len(processes) != 1 {

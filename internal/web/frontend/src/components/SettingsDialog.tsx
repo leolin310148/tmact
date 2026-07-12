@@ -212,7 +212,6 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             >
               <span className="agent-icon runtime-claude running">cc</span>
               <span className="agent-icon runtime-codex running">cx</span>
-              <span className="agent-icon runtime-copilot running">cp</span>
               <span className="agent-icon runtime-gemini running">g</span>
             </div>
           </label>

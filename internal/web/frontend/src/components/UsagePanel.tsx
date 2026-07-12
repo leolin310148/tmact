@@ -40,7 +40,6 @@ function fmtUSD(n: number): string {
 const RUNTIME_ICON: Record<string, string> = {
   claude: "cc",
   codex: "cx",
-  copilot: "cp",
   gemini: "g",
 };
 

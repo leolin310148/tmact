@@ -150,7 +150,6 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 		CaptureRuntimes: []string{
 			panestatus.RuntimeClaude,
 			panestatus.RuntimeCodex,
-			panestatus.RuntimeCopilot,
 			panestatus.RuntimeGemini,
 		},
 		RuntimeCache:        mem.runtimeCache,
