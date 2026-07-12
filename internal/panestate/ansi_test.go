@@ -46,6 +46,12 @@ func TestClassifyANSIDistinguishesSuggestionsAndDrafts(t *testing.T) {
 			want: StateWorking,
 		},
 		{
+			name: "claude completed output mentioning running with empty input",
+			raw:  "Completed successfully. Workflow remained running.\n❯\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+			ansi: "Completed successfully. Workflow remained running.\n\x1b[39m❯ \x1b[0m\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+			want: StateWaitingInput,
+		},
+		{
 			name: "codex working with dim steering suggestion",
 			raw:  "• Working (46s • esc to interrupt)\n\n› Write tests for @filename\n/private/tmp/repo · main · Context 5% used · 353K window\n",
 			ansi: "• Working (46s • esc to interrupt)\n\n\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n/private/tmp/repo · main · Context 5% used · 353K window\n",
