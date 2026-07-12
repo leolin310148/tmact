@@ -393,7 +393,18 @@ stages:
 	}
 	engine.Sleep = func(time.Duration) {}
 	var sent []string
-	engine.PasteText = func(_ string, text string, _ bool) error { sent = append(sent, text); return nil }
+	var durableBeforeSend []string
+	var durabilityErr error
+	engine.PasteText = func(_ string, text string, _ bool) error {
+		records, readErr := readJSONLines[Dispatch](engine.Store.DispatchesPath())
+		if readErr != nil {
+			durabilityErr = readErr
+			return readErr
+		}
+		durableBeforeSend = append(durableBeforeSend, records[len(records)-1].Status)
+		sent = append(sent, text)
+		return nil
+	}
 	done, err := engine.Tick(context.Background())
 	if err != nil || done {
 		t.Fatalf("done=%t err=%v", done, err)
@@ -405,6 +416,12 @@ stages:
 	}
 	if len(sent) != 2 || sent[0] != "/clear" || !strings.Contains(sent[1], "--dispatch-id "+ss.DispatchID) {
 		t.Fatalf("sent=%#v", sent)
+	}
+	if durabilityErr != nil {
+		t.Fatal(durabilityErr)
+	}
+	if strings.Join(durableBeforeSend, ",") != "sending,sending" {
+		t.Fatalf("dispatch durability before send=%v", durableBeforeSend)
 	}
 	for _, want := range []string{"tmact workflow status --id " + state.RunID, "--store-dir \"" + engine.Store.Root + "\" --json", "`desired` 是 `stopped`", "不要回報"} {
 		if !strings.Contains(sent[1], want) {
@@ -447,6 +464,69 @@ func TestAgentPreflightAllowsDimSuggestionAndDefersOperatorDraft(t *testing.T) {
 	err = engine.preflightAgent("work:0.0", panestatus.RuntimeCodex, workspace, 0)
 	if err == nil || !isDeferredDispatch(err) || !strings.Contains(err.Error(), "unsent operator input") {
 		t.Fatalf("draft preflight error=%v", err)
+	}
+}
+
+func TestDeferredNamedActorDoesNotCreateDispatchRecord(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "agents.yaml"), []byte("agents:\n  - {name: reviewer, target: work:0.0, type: codex}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := writeConfig(t, dir, `version: 2
+workspace: {root: .}
+agents_config: agents.yaml
+actors: {reviewer: {agent: reviewer}}
+defaults: {timeout: 5s}
+stages:
+  - {id: review, type: agent, actor: reviewer, prompt: review, outcomes: {accept: success}}
+`)
+	loaded, err := Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewEngine(loaded, filepath.Join(t.TempDir(), "runs"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine.ListPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{{CurrentPath: dir, PanePID: 42}}, nil
+	}
+	engine.CapturePane = func(string, int) (string, error) { return "› operator draft", nil }
+	engine.CapturePaneANSI = func(string, int) (string, error) {
+		return "\x1b[0;1m›\x1b[0m \x1b[38;2;205;214;244moperator draft\x1b[0m", nil
+	}
+	engine.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	engine.Sleep = func(time.Duration) {}
+	inputSent := false
+	engine.PasteText = func(string, string, bool) error { inputSent = true; return nil }
+
+	if done, err := engine.Tick(context.Background()); err != nil || done {
+		t.Fatalf("done=%t err=%v", done, err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ss := state.Stages["review"]
+	if ss.Status != StagePending || ss.Attempt != 0 || ss.Generation != 0 {
+		t.Fatalf("deferred stage=%#v", ss)
+	}
+	if inputSent {
+		t.Fatal("deferred actor received input")
+	}
+	if _, err := os.Stat(engine.Store.DispatchesPath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deferred preflight created dispatch log: %v", err)
+	}
+	events, err := readJSONLines[Event](engine.Store.EventsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type == "stage_error" {
+			t.Fatalf("deferred stage emitted duplicate error event: %#v", event)
+		}
 	}
 }
 
