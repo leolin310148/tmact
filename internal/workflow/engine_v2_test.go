@@ -148,6 +148,111 @@ stages:
 	}
 }
 
+func TestActiveProducerRevisionChangeProtectsDependencyChain(t *testing.T) {
+	cfg := Config{Stages: []StageConfig{
+		{ID: "review", BindRevisions: []string{"source"}},
+		{ID: "apply", Needs: []string{"review"}, BindRevisions: []string{"source"}, ProducesRevisions: []string{"source"}},
+		{ID: "unrelated", BindRevisions: []string{"source"}},
+	}}
+	now := time.Now()
+	state := State{Stages: map[string]StageState{
+		"review":    {Status: StageSucceeded, BoundRevisions: map[string]string{"source": "v1"}},
+		"apply":     {Status: StageWaitingReport, BoundRevisions: map[string]string{"source": "v1"}},
+		"unrelated": {Status: StageSucceeded, BoundRevisions: map[string]string{"source": "v1"}},
+	}}
+
+	invalidateDrift(&state, cfg, map[string]string{"source": "v1"}, map[string]string{"source": "v2"}, now)
+
+	if got := state.Stages["review"].Status; got != StageSucceeded {
+		t.Fatalf("producer dependency status=%s", got)
+	}
+	if got := state.Stages["apply"].Status; got != StageWaitingReport {
+		t.Fatalf("producer status=%s", got)
+	}
+	if got := state.Stages["unrelated"].Status; got != StageStale {
+		t.Fatalf("unrelated consumer status=%s", got)
+	}
+}
+
+func TestProducerReportAcceptsOutputDriftWithoutInvalidatingDependencies(t *testing.T) {
+	loaded := loadTestWorkflow(t, `version: 2
+workspace: {root: .}
+agents_config: agents.yaml
+actors: {worker: {agent: worker}}
+revisions:
+  source: {files: {paths: [source.txt]}}
+defaults: {timeout: 5s}
+stages:
+  - id: review
+    type: agent
+    actor: worker
+    bind_revisions: [source]
+    prompt: review
+    outcomes: {accept: success}
+  - id: apply
+    type: agent
+    needs: [review]
+    actor: worker
+    bind_revisions: [source]
+    produces_revisions: [source]
+    prompt: apply
+    outcomes: {complete: success}
+  - id: unrelated
+    type: agent
+    actor: worker
+    bind_revisions: [source]
+    prompt: unrelated
+    outcomes: {accept: success}
+`)
+	path := filepath.Join(loaded.Config.Workspace.Root, "source.txt")
+	if err := os.WriteFile(path, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "runs")
+	engine, err := NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := state.Revisions["source"]
+	dispatchID := state.RunID + ".apply.0.1"
+	state.Stages["review"] = StageState{Status: StageSucceeded, BoundRevisions: map[string]string{"source": before}}
+	state.Stages["apply"] = StageState{Status: StageWaitingReport, Attempt: 1, DispatchID: dispatchID, BoundRevisions: map[string]string{"source": before}}
+	state.Stages["unrelated"] = StageState{Status: StageSucceeded, BoundRevisions: map[string]string{"source": before}}
+	if err := engine.Store.Write(state); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Store.Dispatch(Dispatch{ID: dispatchID, RunID: state.RunID, Stage: "apply", Attempt: 1, Actor: "worker", Status: "sent"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ApplyReport(root, dispatchID, "complete", "implemented"); err != nil {
+		t.Fatal(err)
+	}
+	state, err = engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Stages["review"].Status; got != StageSucceeded {
+		t.Fatalf("producer dependency status=%s", got)
+	}
+	if got := state.Stages["apply"].Status; got != StageSucceeded {
+		t.Fatalf("producer status=%s", got)
+	}
+	if got := state.Stages["unrelated"].Status; got != StageStale {
+		t.Fatalf("unrelated consumer status=%s", got)
+	}
+	if got := state.Stages["apply"].BoundRevisions["source"]; got == before || got != state.Revisions["source"] {
+		t.Fatalf("producer bound revision=%q before=%q current=%q", got, before, state.Revisions["source"])
+	}
+}
+
 func TestReportDurabilityStaleAndRecovery(t *testing.T) {
 	loaded := loadTestWorkflow(t, `version: 2
 workspace: {root: .}
