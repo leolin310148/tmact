@@ -116,8 +116,33 @@ func TestApplyCodexUsage(t *testing.T) {
 	if out.Windows[1].WindowMinutes != 10080 {
 		t.Errorf("weekly window minutes = %d, want 10080", out.Windows[1].WindowMinutes)
 	}
+	if out.Windows[1].Name != "weekly" {
+		t.Errorf("secondary window name = %q, want weekly", out.Windows[1].Name)
+	}
 	if out.Cost == nil || out.Cost.Used != 12.5 { // balance parsed from string
 		t.Errorf("cost = %+v, want used 12.5", out.Cost)
+	}
+}
+
+func TestApplyCodexUsageWeeklyPrimaryWithoutSession(t *testing.T) {
+	const body = `{
+		"plan_type": "prolite",
+		"rate_limit": {
+			"primary_window": {"used_percent": 2, "reset_at": 1784489304, "limit_window_seconds": 604800}
+		}
+	}`
+	var resp codexUsageResponse
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	out := ProviderUsage{Provider: "codex"}
+	applyCodexUsage(&out, &resp, time.Now())
+
+	if len(out.Windows) != 1 {
+		t.Fatalf("want 1 window, got %d", len(out.Windows))
+	}
+	if got := out.Windows[0]; got.Name != "weekly" || got.WindowMinutes != 10080 {
+		t.Errorf("weekly primary window wrong: %+v", got)
 	}
 }
 

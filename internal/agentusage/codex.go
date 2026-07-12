@@ -180,12 +180,12 @@ func applyCodexUsage(out *ProviderUsage, resp *codexUsageResponse, now time.Time
 	if out.Plan == "" {
 		out.Plan = resp.PlanType
 	}
-	add := func(name string, w *codexWindow) {
+	add := func(fallbackName string, w *codexWindow) {
 		if w == nil || w.UsedPercent == nil {
 			return
 		}
 		rw := RateWindow{
-			Name:          name,
+			Name:          codexWindowName(fallbackName, w.LimitWindowSeconds),
 			UsedPercent:   *w.UsedPercent,
 			WindowMinutes: w.LimitWindowSeconds / 60,
 		}
@@ -205,5 +205,22 @@ func applyCodexUsage(out *ProviderUsage, resp *codexUsageResponse, now time.Time
 			cost.Used = *c.Balance.Value
 		}
 		out.Cost = cost
+	}
+}
+
+// codexWindowName derives the semantic window name from its duration instead
+// of assuming the API's primary window is always the five-hour session window.
+// OpenAI can temporarily omit the five-hour limit and return the seven-day
+// window as primary; retaining positional names would then label weekly quota
+// as session quota. Unknown durations keep the API-position fallback so future
+// shapes remain visible rather than being discarded.
+func codexWindowName(fallback string, windowSeconds int) string {
+	switch windowSeconds {
+	case 5 * 60 * 60:
+		return "session"
+	case 7 * 24 * 60 * 60:
+		return "weekly"
+	default:
+		return fallback
 	}
 }

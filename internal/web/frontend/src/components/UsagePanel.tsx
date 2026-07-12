@@ -92,9 +92,17 @@ function windowLabel(name: string): string {
   return base.replace(/_/g, " ");
 }
 
-function windowMarker(name: string): string {
-  const label = windowLabel(name).trim();
-  return label.charAt(0).toUpperCase();
+function windowDurationLabel(minutes: number | null | undefined): string {
+  if (!minutes || minutes <= 0) return "";
+  if (minutes % (24 * 60) === 0) return minutes / (24 * 60) + "d";
+  if (minutes % 60 === 0) return minutes / 60 + "h";
+  return minutes + "m";
+}
+
+function extraWindowMarker(w: RateWindow): string {
+  const family = windowLabel(w.name).trim().charAt(0).toUpperCase();
+  const duration = windowDurationLabel(w.window_minutes);
+  return [family, duration].filter(Boolean).join("·");
 }
 
 // WindowCells emits one window's three grid cells (remaining %, pace reserve,
@@ -135,8 +143,9 @@ function WindowCells({
 }
 
 // ProviderRows lays one provider into the grid: icon | % | reserve | time. The
-// first line is the session window, the second is the all-models weekly window,
-// and any model-family weekly windows follow with a compact marker. An errored
+// first available standard window leads, so a weekly-only response does not
+// leave a blank session row; when both exist, session remains above weekly.
+// Any model-family weekly windows follow with a compact marker. An errored
 // provider spans the value columns (u-err, cols 2-4) with its message instead.
 function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   const runtime = (p.provider || "").toLowerCase();
@@ -165,28 +174,46 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
   }
   const byName: Record<string, RateWindow> = {};
   for (const w of p.windows || []) byName[w.name] = w;
+  const firstWindow = byName.session || byName.weekly;
+  const secondWindow = byName.session && byName.weekly ? byName.weekly : undefined;
   const extraWindows = (p.windows || []).filter((w) => w.name !== "session" && w.name !== "weekly");
-  // Dollar-equivalent month-to-date token spend (codeburn-style), tucked under
-  // the runtime badge on the weekly line (column 1, left-aligned).
+  // Dollar-equivalent month-to-date token spend (codeburn-style), placed in
+  // column 1 of the second row when one is needed.
   const spend = p.spend ? fmtUSD(p.spend.month_usd) : "";
   return (
     <>
       <span key={base + ":icon"} className={iconCls} title={title}>
         {icon}
       </span>
-      <WindowCells key={base + ":session"} keyBase={base + ":session"} w={byName.session} stale={stale} />
-      <span
-        key={base + ":spend"}
-        className={"u-spend" + (stale ? " u-stale" : "")}
-        title="month-to-date dollar-equivalent token spend (API rates)"
-      >
-        {spend}
-      </span>
-      <WindowCells key={base + ":weekly"} keyBase={base + ":weekly"} w={byName.weekly} stale={stale} />
+      <WindowCells
+        key={base + ":first"}
+        keyBase={base + ":first"}
+        w={firstWindow}
+        stale={stale}
+        marker={windowDurationLabel(firstWindow?.window_minutes)}
+      />
+      {secondWindow || spend ? (
+        <>
+          <span
+            key={base + ":spend"}
+            className={"u-spend" + (stale ? " u-stale" : "")}
+            title="month-to-date dollar-equivalent token spend (API rates)"
+          >
+            {spend}
+          </span>
+          <WindowCells
+            key={base + ":second"}
+            keyBase={base + ":second"}
+            w={secondWindow}
+            stale={stale}
+            marker={windowDurationLabel(secondWindow?.window_minutes)}
+          />
+        </>
+      ) : null}
       {extraWindows.map((w) => (
         <Fragment key={base + ":" + w.name}>
           <span className="u-window-spacer" aria-hidden="true" />
-          <WindowCells keyBase={base + ":" + w.name} w={w} stale={stale} marker={windowMarker(w.name)} />
+          <WindowCells keyBase={base + ":" + w.name} w={w} stale={stale} marker={extraWindowMarker(w)} />
         </Fragment>
       ))}
     </>
