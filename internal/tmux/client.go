@@ -39,6 +39,9 @@ func ListLayout() (Layout, error) {
 
 	output, err := outputTmux("list-windows", "-a", "-F", "#{session_name}\t#{window_name}")
 	if err != nil {
+		if isNoServerError(err) {
+			return layout, nil
+		}
 		return layout, err
 	}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
@@ -57,6 +60,14 @@ func ListLayout() (Layout, error) {
 		layout.Windows[session][window] = true
 	}
 	return layout, nil
+}
+
+func isNoServerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no server running") || strings.Contains(message, "failed to connect to server")
 }
 
 func ListAllPanes() ([]Pane, error) {

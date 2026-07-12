@@ -1,6 +1,25 @@
 package tmux
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
+
+func TestNoServerErrorClassification(t *testing.T) {
+	for _, message := range []string{
+		"tmux list-windows failed: no server running on /tmp/tmux-501/default",
+		"tmux list-windows failed: failed to connect to server: Connection refused",
+	} {
+		if !isNoServerError(errors.New(message)) {
+			t.Fatalf("expected no-server classification for %q", message)
+		}
+	}
+	for _, err := range []error{nil, errors.New("tmux list-windows failed: permission denied")} {
+		if isNoServerError(err) {
+			t.Fatalf("unexpected no-server classification for %v", err)
+		}
+	}
+}
 
 func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	got := shellJoin([]string{"/tmp/tmact test", "loop", "it's.yaml", ""})
