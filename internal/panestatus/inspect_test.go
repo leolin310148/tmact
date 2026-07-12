@@ -55,6 +55,19 @@ func TestClassifyRuntimeDetectsNestedCodexFromCurrentChrome(t *testing.T) {
 	}
 }
 
+func TestClassifyRuntimeDetectsCodexNodeWrapperFromCurrentChrome(t *testing.T) {
+	pane := tmux.Pane{CurrentCommand: "node", WindowName: "node"}
+	raw := "Reviewed Gemini integration docs in source output.\n› Write tests for @filename\n/private/tmp/repo · main · 5h 89% left · Context 30% used · 353K window\n"
+
+	detected := ClassifyRuntime(pane, raw)
+	if detected.Runtime != RuntimeCodex {
+		t.Fatalf("runtime=%q signals=%v", detected.Runtime, detected.Signals)
+	}
+	if detected.Confidence != ConfidenceMedium {
+		t.Fatalf("confidence=%q", detected.Confidence)
+	}
+}
+
 func TestInspectStyledCodexSuggestionIsInputReady(t *testing.T) {
 	panes := []tmux.Pane{{Session: "work", PaneID: "%1", CurrentCommand: "zsh", WindowName: "zsh"}}
 	plain := "old working output\n› Write tests for @filename\n~/w/ndt/mxcp · main · Context 30% used · 353K window\n"

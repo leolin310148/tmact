@@ -528,6 +528,8 @@ func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
 	switch {
 	case containsAny(text, "openai codex", "codex app"):
 		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
+	case looksLikeCodexRunningChrome(raw):
+		return RuntimeDetection{Runtime: RuntimeCodex, Confidence: ConfidenceMedium, Signals: []string{"pane_text", "wrapper_chrome"}}
 	case containsAny(text, "claude code", "bypass permissions on", "without interrupting claude") || looksLikeClaudeRunningChrome(text):
 		return RuntimeDetection{Runtime: RuntimeClaude, Confidence: ConfidenceMedium, Signals: []string{"pane_text"}}
 	case containsAny(text, "gemini"):
