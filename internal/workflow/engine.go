@@ -376,7 +376,6 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 				if ss.Attempt > 0 {
 					ss.Attempt--
 				}
-				ss.Generation++
 				ss.DispatchID = ""
 				ss.StartedAt = time.Time{}
 				delay := result.stage.Retry.Backoff.Duration
@@ -392,7 +391,9 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 			} else {
 				finishDisposition(&ss, result.stage, "failed", result.evidence, e.Now())
 			}
-			_ = e.Store.Event(Event{Type: "stage_error", Stage: result.stage.ID, Attempt: ss.Attempt, Status: ss.Status, Reason: result.err.Error()})
+			if !isDeferredDispatch(result.err) {
+				_ = e.Store.Event(Event{Type: "stage_error", Stage: result.stage.ID, Attempt: ss.Attempt, Status: ss.Status, Reason: result.err.Error()})
+			}
 		} else if result.stage.Type == "agent" {
 			ss.Status = StageWaitingReport
 			ss.Evidence = result.evidence
@@ -900,11 +901,6 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 	if exists && (last.Status == "sending" || last.Status == "sent") {
 		return &Evidence{Result: "dispatched", Summary: "recovered durable dispatch " + ss.DispatchID}, nil
 	}
-	if !exists {
-		if err := e.Store.Dispatch(dispatchRecord); err != nil {
-			return nil, err
-		}
-	}
 	target, runtime, session, trust, launch, err := e.resolveActor(actor)
 	if err != nil {
 		return nil, err
@@ -921,6 +917,11 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 		}
 		if layout.Sessions[session] {
 			if err := e.validateSessionCWD(session, e.Loaded.Config.Workspace.Root); err != nil {
+				return nil, err
+			}
+		}
+		if !exists {
+			if err := e.Store.Dispatch(dispatchRecord); err != nil {
 				return nil, err
 			}
 		}
@@ -947,33 +948,39 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 		target = report.Target
 	} else {
 		if err := e.preflightAgent(target, runtime, e.Loaded.Config.Workspace.Root, e.Loaded.Config.Defaults.IdleAfter.Duration); err != nil {
-			dispatchRecord.Timestamp = e.Now()
-			dispatchRecord.Status = "failed"
-			dispatchRecord.Target = target
-			_ = e.Store.Dispatch(dispatchRecord)
+			return nil, err
+		}
+		dispatchRecord.Target = target
+		dispatchRecord.Runtime = runtime
+		if !exists {
+			if err := e.Store.Dispatch(dispatchRecord); err != nil {
+				return nil, err
+			}
+		}
+		dispatchRecord.Timestamp = e.Now()
+		dispatchRecord.Status = "sending"
+		if err := e.Store.Dispatch(dispatchRecord); err != nil {
 			return nil, err
 		}
 		if err := e.PasteText(target, "/clear", true); err != nil {
 			dispatchRecord.Timestamp = e.Now()
 			dispatchRecord.Status = "failed"
-			dispatchRecord.Target = target
 			_ = e.Store.Dispatch(dispatchRecord)
 			return nil, err
 		}
 		select {
 		case <-ctx.Done():
+			dispatchRecord.Timestamp = e.Now()
+			dispatchRecord.Status = "failed"
+			_ = e.Store.Dispatch(dispatchRecord)
 			return nil, ctx.Err()
 		default:
 		}
 		e.Sleep(2 * time.Second)
-		dispatchRecord.Timestamp = e.Now()
-		dispatchRecord.Target = target
-		dispatchRecord.Runtime = runtime
-		dispatchRecord.Status = "sending"
-		if err := e.Store.Dispatch(dispatchRecord); err != nil {
-			return nil, err
-		}
 		if err := e.PasteText(target, promptText, true); err != nil {
+			dispatchRecord.Timestamp = e.Now()
+			dispatchRecord.Status = "failed"
+			_ = e.Store.Dispatch(dispatchRecord)
 			return nil, err
 		}
 	}
