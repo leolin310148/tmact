@@ -17,6 +17,12 @@ const EXT_RE = /\.[A-Za-z0-9][A-Za-z0-9._-]*$/;
 // Tokens are split on whitespace plus the box-drawing borders agents wrap
 // tables and banners with, so paths inside │ … │ frames still surface.
 const TOKEN_SPLIT_RE = /[\s│┃║]+/;
+// A terminal UI may hard-wrap a long path and indent the continuation on the
+// next row. Continuations are deliberately limited to common unquoted path
+// characters; /api/files/check remains the authority on whether the joined
+// candidate is a real readable file.
+const PATH_CONTINUATION_RE = /^[A-Za-z0-9._~%+@=/-]+/;
+const MAX_CONTINUATION_LINES = 4;
 
 export const DOWNLOAD_SCAN_LIMIT = 400;
 
@@ -25,8 +31,17 @@ export function scanDownloadablePaths(text: string, limit = DOWNLOAD_SCAN_LIMIT)
   const seen = new Set<string>();
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
+    const joined = joinedWrappedPath(lines, i);
+    if (joined && !seen.has(joined.path)) {
+      seen.add(joined.path);
+      out.push(joined.path);
+      if (out.length >= limit) break;
+    }
     for (const raw of (lines[i] ?? "").split(TOKEN_SPLIT_RE)) {
       const path = candidatePath(raw);
+      // When this token was successfully reconstructed with following rows,
+      // do not waste a server stat on the known-incomplete prefix.
+      if (joined && path === joined.seed) continue;
       if (!path || seen.has(path)) continue;
       seen.add(path);
       out.push(path);
@@ -34,6 +49,26 @@ export function scanDownloadablePaths(text: string, limit = DOWNLOAD_SCAN_LIMIT)
     }
   }
   return out;
+}
+
+type JoinedPath = { path: string; seed: string };
+
+function joinedWrappedPath(lines: string[], lineIndex: number): JoinedPath | null {
+  const tokens = (lines[lineIndex] ?? "").split(TOKEN_SPLIT_RE).filter(Boolean);
+  const seed = candidatePath(tokens.at(-1) ?? "");
+  if (!seed || EXT_RE.test(seed)) return null;
+
+  let joined = seed;
+  const end = Math.min(lines.length, lineIndex + 1 + MAX_CONTINUATION_LINES);
+  for (let i = lineIndex + 1; i < end; i++) {
+    const first = (lines[i] ?? "").split(TOKEN_SPLIT_RE).find(Boolean) ?? "";
+    const unwrapped = first.replace(LEADING_TRIM_RE, "");
+    const continuation = PATH_CONTINUATION_RE.exec(unwrapped)?.[0] ?? "";
+    if (!continuation) return null;
+    joined += continuation;
+    if (EXT_RE.test(joined)) return { path: joined, seed };
+  }
+  return null;
 }
 
 function candidatePath(raw: string): string {
