@@ -426,7 +426,8 @@ those become React renders triggered by `bump()`:
 | `renderStatusline(snap)` | mutate `state.snapshot`/`state.selected`/`state.paneOrder`, `bump()`; `StatusLine` re-renders chips from `state.snapshot`. |
 | `renderMode()` / `syncIndicator()` | `bump()`; `ModeIndicator`/`InputBar`/`ContentWrap` recompute `.direct`/`.selection-mode` classes from `state` + `document.activeElement`. |
 | `syncDraft()` | imperative (`useLayoutEffect` on Draft) — synchronous scrollHeight; may also `bump()` for `.has-text`. |
-| `checkStale()` | `ConnStatus` recomputes freshness from `state.snapshot.ts` on each render / a 1 s timer; stale snapshot delivery is shown in the same connection strip as pane stream reconnects. |
+| `checkStale()` | `ConnStatus` recomputes freshness from `state.snapshot.ts` and `stale_after_ms` on each render / a 1 s timer; stale snapshot delivery is shown in the same fixed top-center overlay as pane stream reconnects. |
+| Missing selected local pane | When an authoritative snapshot no longer contains the selected local pane, App closes its WebSocket, clears selection/content/draft state and persistence, and disables pane-owned controls. Missing peer panes are retained because peer fetch failures can be transient. |
 | `setContent(...)` | App updates ContentPane's text/opts; ContentPane's layout effect rewrites innerHTML imperatively. |
 | `renderOptions(q)` | App stores latest question (ref/state); `OptionBar` renders buttons from it. |
 | `setConnStatus` / `showInputError` / `setInputStatus` | App holds the strings in refs/state and `bump()`; `ConnStatus` / `ModeIndicator` render them (toggling `.show`). |

@@ -12,7 +12,12 @@
 import type { ReactNode } from "react";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppStateProvider, useAppStateStore } from "../store/AppStateContext";
+import {
+  AppStateProvider,
+  useAppStateStore,
+  type AppStateStore,
+} from "../store/AppStateContext";
+import type { Snapshot } from "../types/server";
 import { useSnapshotStream, type SnapshotStreamDeps } from "./useSnapshotStream";
 
 // useSnapshotStream pulls snapshots from api/client; stub both so applySnapshot
@@ -25,8 +30,11 @@ vi.mock("../api/client", () => ({
 
 afterEach(cleanup);
 
+let mountedStore: AppStateStore | null = null;
+
 function wrapper({ children }: { children: ReactNode }) {
   const store = useAppStateStore();
+  mountedStore = store;
   return <AppStateProvider store={store}>{children}</AppStateProvider>;
 }
 
@@ -34,6 +42,7 @@ function makeDeps(renderMode: () => void): SnapshotStreamDeps {
   return {
     paneCache: { current: {} as Record<string, string[]> },
     selectPane: vi.fn(),
+    clearSelection: vi.fn(),
     syncQuickDock: vi.fn(),
     renderMode,
     closeWS: vi.fn(),
@@ -60,5 +69,45 @@ describe("useSnapshotStream applySnapshot", () => {
       await result.current.refreshSnapshot();
     });
     expect(renderMode).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the daemon-provided stale threshold", () => {
+    const { result } = renderHook(() => useSnapshotStream(makeDeps(vi.fn())), {
+      wrapper,
+    });
+    const snapshot = {
+      ts: new Date(Date.now() - 11000).toISOString(),
+      stale_after_ms: 30000,
+    } as Snapshot;
+    if (!mountedStore) throw new Error("store was not mounted");
+    mountedStore.value.state.snapshot = snapshot;
+
+    expect(result.current.checkStale()).toBe(false);
+  });
+
+  it("clears a selected local pane after a snapshot confirms it disappeared", async () => {
+    const deps = makeDeps(vi.fn());
+    const { result } = renderHook(() => useSnapshotStream(deps), { wrapper });
+    if (!mountedStore) throw new Error("store was not mounted");
+    mountedStore.value.state.selected = "%45";
+
+    await act(async () => {
+      await result.current.refreshSnapshot();
+    });
+
+    expect(deps.clearSelection).toHaveBeenCalledWith("%45");
+  });
+
+  it("retains a missing peer pane across a transient peer snapshot failure", async () => {
+    const deps = makeDeps(vi.fn());
+    const { result } = renderHook(() => useSnapshotStream(deps), { wrapper });
+    if (!mountedStore) throw new Error("store was not mounted");
+    mountedStore.value.state.selected = "mini@%45";
+
+    await act(async () => {
+      await result.current.refreshSnapshot();
+    });
+
+    expect(deps.clearSelection).not.toHaveBeenCalled();
   });
 });

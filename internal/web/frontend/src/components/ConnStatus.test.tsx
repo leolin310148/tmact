@@ -30,13 +30,16 @@ function freshSnapshot(): Snapshot {
   };
 }
 
-function mount(text: string, snapshot: Snapshot | null) {
+function mount(
+  paneState: "connecting" | "open" | "reconnecting" | "closed",
+  snapshot: Snapshot | null,
+) {
   function Harness() {
     const store = useAppStateStore();
     store.value.state.snapshot = snapshot;
     return (
       <AppStateProvider store={store}>
-        <ConnStatus text={text} />
+        <ConnStatus paneState={paneState} />
       </AppStateProvider>
     );
   }
@@ -47,14 +50,14 @@ function mount(text: string, snapshot: Snapshot | null) {
 
 describe("ConnStatus", () => {
   it("hides when the pane stream is open and snapshots are fresh", () => {
-    const el = mount("", freshSnapshot());
+    const el = mount("open", freshSnapshot());
 
     expect(el).not.toHaveClass("show");
     expect(el.textContent).toBe("");
   });
 
   it("shows initial snapshot delivery in the same strip", () => {
-    const el = mount("", null);
+    const el = mount("closed", null);
 
     expect(el).toHaveClass("show", "conn-status-connecting");
     expect(el.textContent).toBe("status updates connecting...");
@@ -63,16 +66,25 @@ describe("ConnStatus", () => {
   it("shows stale snapshot delivery in the same strip", () => {
     const staleSnapshot = freshSnapshot();
     staleSnapshot.ts = new Date(Date.now() - 11000).toISOString();
-    const el = mount("", staleSnapshot);
+    const el = mount("open", staleSnapshot);
 
     expect(el).toHaveClass("show", "conn-status-stale");
     expect(el.textContent).toBe("status updates interrupted - retrying...");
   });
 
   it("prefers pane stream reconnect text over stale snapshot text", () => {
-    const el = mount("pane stream reconnecting...", null);
+    const el = mount("reconnecting", null);
 
     expect(el).toHaveClass("show", "conn-status-reconnecting");
     expect(el.textContent).toBe("pane stream reconnecting...");
+  });
+
+  it("uses the snapshot-provided stale threshold", () => {
+    const snapshot = freshSnapshot();
+    snapshot.ts = new Date(Date.now() - 11000).toISOString();
+    snapshot.stale_after_ms = 30000;
+    const el = mount("open", snapshot);
+
+    expect(el).not.toHaveClass("show");
   });
 });

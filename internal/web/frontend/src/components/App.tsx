@@ -149,9 +149,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const [, setTick] = useState(0);
   const renderLocal = useCallback(() => setTick((n) => n + 1), []);
 
-  // conn-status strip text (setConnStatus). mode strings (renderMode/showInputError
+  // pane stream lifecycle (setConnStatus). mode strings (renderMode/showInputError
   // /setInputStatus). option-bar question (renderOptions). All read during render.
-  const connStatusRef = useRef("");
+  const connStatusRef = useRef<ConnState>("closed");
   const modeTextRef = useRef("");
   const inputErrorRef = useRef("");
   const questionRef = useRef<Question | null>(null);
@@ -337,8 +337,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   );
 
   const setConnStatus = useCallback(
-    (msg: string) => {
-      connStatusRef.current = msg;
+    (status: ConnState) => {
+      connStatusRef.current = status;
       renderLocal();
     },
     [renderLocal],
@@ -380,15 +380,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     onQuestion: renderOptions,
     onError: showInputError,
     onStatus: (s: ConnState) => {
-      // Surface the connection state in the strip above the chips; the input-bar
-      // error/upload slot is independent and stays put (app.js onStatus block).
-      if (s === "connecting") {
-        setConnStatus("pane stream connecting...");
-      } else if (s === "reconnecting") {
-        setConnStatus("pane stream reconnecting...");
-      } else if (s === "open") {
-        setConnStatus("");
-      }
+      // ConnStatus combines this pane-stream lifecycle with snapshot freshness.
+      setConnStatus(s);
     },
   });
 
@@ -548,6 +541,60 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       }
     },
     [state],
+  );
+
+  // A selected local pane can disappear when its shell exits. Tear down every
+  // selection-owned surface together so the UI returns to its normal empty
+  // selection state instead of reconnecting forever to a dead pane.
+  const clearSelection = useCallback(
+    (paneID: string) => {
+      if (!paneID || state.selected !== paneID) return;
+      closeWS();
+      state.selected = null;
+      state.selectionMode = false;
+      delete paneCacheRef.current[paneID];
+      delete state.drafts[paneID];
+      paneLinesRef.current = [];
+      streamVisibleLinesRef.current = STREAM_RENDER_LINES;
+      try {
+        localStorage.removeItem(SELECTED_KEY);
+      } catch {
+        /* ignore — private mode / blocked storage */
+      }
+      const draft = draftRef.current;
+      if (draft) {
+        draft.value = "";
+        draft.disabled = true;
+      }
+      if (sendBtnRef.current) sendBtnRef.current.disabled = true;
+      if (directRef.current) {
+        directRef.current.value = "";
+        directRef.current.blur();
+      }
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
+      inputErrorRef.current = "";
+      setContent("");
+      syncDraft();
+      syncRecordButton();
+      syncSelectionButton();
+      closeQuickMenu();
+      syncQuickDock();
+      renderMode();
+    },
+    [
+      state,
+      closeWS,
+      setContent,
+      syncDraft,
+      syncRecordButton,
+      syncSelectionButton,
+      closeQuickMenu,
+      syncQuickDock,
+      renderMode,
+    ],
   );
 
   // ----- selectPane (§4) -----
@@ -933,6 +980,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const snapshot = useSnapshotStream({
     paneCache: paneCacheRef,
     selectPane,
+    clearSelection,
     syncQuickDock,
     renderMode,
     closeWS,
@@ -1114,7 +1162,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         </div>
       </div>
 
-      <ConnStatus text={connStatusRef.current} />
+      <ConnStatus paneState={connStatusRef.current} />
       <OptionBar
         question={questionRef.current}
         onChoose={(n) => {

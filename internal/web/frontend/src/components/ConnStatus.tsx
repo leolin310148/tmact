@@ -4,15 +4,16 @@
 
 import { useEffect, useState } from "react";
 import { useAppState } from "../store/AppStateContext";
+import type { ConnState } from "../ws/usePaneStream";
 
-const STALE_MS = 10000;
+const DEFAULT_STALE_MS = 10000;
 
 interface ConnStatusProps {
-  /** The current connection-status message; "" hides the strip. */
-  text: string;
+  /** Lifecycle state of the selected pane's WebSocket stream. */
+  paneState: ConnState;
 }
 
-export function ConnStatus({ text }: ConnStatusProps) {
+export function ConnStatus({ paneState }: ConnStatusProps) {
   const { state } = useAppState();
 
   // Re-evaluate freshness even when no snapshot arrives; otherwise a stalled
@@ -25,15 +26,21 @@ export function ConnStatus({ text }: ConnStatusProps) {
 
   const snap = state.snapshot;
   const hasSnapshot = !!(snap && snap.ts);
+  const staleAfterMs =
+    snap && Number.isFinite(snap.stale_after_ms) && snap.stale_after_ms > 0
+      ? snap.stale_after_ms
+      : DEFAULT_STALE_MS;
   const stale = !(
     hasSnapshot &&
-    Date.now() - new Date(snap.ts).getTime() <= STALE_MS
+    Date.now() - new Date(snap.ts).getTime() <= staleAfterMs
   );
-  let message = text;
+  let message = "";
   let kind = "";
-  if (text.includes("reconnecting")) {
+  if (paneState === "reconnecting") {
+    message = "pane stream reconnecting...";
     kind = "reconnecting";
-  } else if (text.includes("connecting")) {
+  } else if (paneState === "connecting") {
+    message = "pane stream connecting...";
     kind = "connecting";
   } else if (stale && hasSnapshot) {
     message = "status updates interrupted - retrying...";
@@ -52,6 +59,8 @@ export function ConnStatus({ text }: ConnStatusProps) {
       ].filter(Boolean).join(" ")}
       id="conn-status"
       role={message ? "status" : undefined}
+      aria-live="polite"
+      aria-atomic="true"
     >
       {message ? (
         <>
