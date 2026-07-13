@@ -401,7 +401,7 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 13. WS URL uses `wss:` on https, `ws:` on http; `pane` percent-encoded.
 14. Backoff: first reconnect delay = 1000 ms; doubles AFTER capturing delay; caps at 30000; resets to 1000 after 5000 ms stable OR on pane switch (reset BEFORE socket creation).
 15. Reconnect skipped if `document.hidden`, `currentPane` changed, or `ws !== sock` (stale close).
-16. Connection-status strip shows `connecting…`/`reconnecting…`, cleared on `open`; never reflows chip list.
+16. The fixed top-center connection overlay shows `connecting…`/`reconnecting…`, cleared on `open`; it never participates in layout or reflows the UI.
 17. Malformed WS JSON silently dropped; `{t:"error"}` shown but does NOT close the socket.
 18. `wsSend` returns `false` when not OPEN; all callers check and surface `"not connected — try again"`.
 

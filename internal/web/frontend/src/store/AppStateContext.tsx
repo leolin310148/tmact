@@ -28,6 +28,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Snapshot, InputMsg, PaneStatus } from "../types/server";
+import type { ConnState } from "../ws/usePaneStream";
 
 // ---------------------------------------------------------------------------
 // state.js shapes — field-for-field, names verbatim
@@ -172,12 +173,9 @@ export interface AppCallbacks {
    */
   setInputStatus: (msg: string) => void;
 
-  /**
-   * app.js `setConnStatus(msg)`. Shows the live-connection note in the strip
-   * above the chips (`#conn-status`), toggling `.show`. Empty string hides it.
-   * Never reflows the chip row.
-   */
-  setConnStatus: (msg: string) => void;
+  /** Updates the selected pane stream lifecycle shown by the fixed connection
+   * overlay. ConnStatus combines it with snapshot freshness. */
+  setConnStatus: (status: ConnState) => void;
 
   /**
    * app.js `syncSelectionButton()`. Reconciles `#selection-btn` classes

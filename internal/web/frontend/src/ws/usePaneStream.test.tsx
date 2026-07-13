@@ -81,4 +81,39 @@ describe("usePaneStream logging", () => {
     expect(logFrontend).toHaveBeenCalledWith("error", "pane_ws", "socket error", { pane: "%12" });
     expect(onError).toHaveBeenCalledWith("capture failed");
   });
+
+  it("ignores queued events from a replaced socket", () => {
+    const onPatch = vi.fn();
+    const onStatus = vi.fn();
+    const { result } = renderHook(() =>
+      usePaneStream(callbacks({ onPatch, onStatus })),
+    );
+
+    act(() => {
+      result.current.open("%12");
+      result.current.open("%13");
+    });
+    const oldSocket = FakeWebSocket.instances[0];
+    const currentSocket = FakeWebSocket.instances[1];
+
+    act(() => {
+      oldSocket?.onopen?.();
+      oldSocket?.onmessage?.({
+        data: `{"t":"patch","from":0,"lines":["stale"]}`,
+      } as MessageEvent);
+      oldSocket?.onerror?.();
+    });
+
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(onStatus).not.toHaveBeenCalledWith("open");
+    expect(logFrontend).not.toHaveBeenCalledWith(
+      "error",
+      "pane_ws",
+      "socket error",
+      { pane: "%12" },
+    );
+
+    act(() => currentSocket?.onopen?.());
+    expect(onStatus).toHaveBeenLastCalledWith("open");
+  });
 });

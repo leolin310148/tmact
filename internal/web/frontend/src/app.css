@@ -498,17 +498,35 @@
   /* Shown only when the keys overflow a single row (JS sets .overflowing). */
   .key-toggle { display: none; padding: 5px 10px; }
   .key-area.overflowing .key-toggle { display: inline-block; }
-  /* Connection-status strip — the single status-area indicator for pane stream
-     reconnects and stale snapshot delivery. */
+  /* Connection-status overlay — fixed outside the flex layout so a connection
+     transition never moves the pane, chips, or input controls. */
   .conn-status {
-    flex: 0 0 auto; display: none;
+    position: fixed;
+    z-index: 45;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    display: flex;
     align-items: center; gap: 8px;
-    padding: 5px 10px;
-    background: var(--panel);
-    border-top: 1px solid var(--border);
+    max-width: calc(100vw - 24px);
+    padding: 7px 11px;
+    background: rgba(22, 27, 34, 0.94);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
     font: 11px/1.4 var(--mono); color: var(--fg-dim);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -6px);
+    transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
   }
-  .conn-status.show { display: flex; }
+  .conn-status.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+    transition-delay: 0s;
+  }
   .conn-status-dot {
     flex: 0 0 auto;
     width: 8px; height: 8px;
@@ -519,6 +537,9 @@
   .conn-status-connecting { color: var(--fg-dim); }
   .conn-status-reconnecting { color: var(--amber); }
   .conn-status-stale { color: var(--red); }
+  @media (prefers-reduced-motion: reduce) {
+    .conn-status { transition: none; }
+  }
   /* Quick-answer buttons for a detected menu prompt — one per numbered
      option. Lives above the chips (not in the input bar) so showing/hiding it
      reflows only the pane output, never the chip row. Hidden by default; the

@@ -33,9 +33,10 @@ import { logFrontend } from "../lib/frontendLog";
 import { useAppState } from "../store/AppStateContext";
 import type { PaneStatus, Snapshot } from "../types/server";
 
-// Timing constants — byte-identical to app.js's literals. Do NOT drift.
+// Polling keeps the original cadence. Snapshot freshness prefers the daemon's
+// advertised threshold and falls back for older servers that omit it.
 const POLL_MS = 1000;
-const STALE_MS = 10000;
+const DEFAULT_STALE_MS = 10000;
 // Grace window before a `hidden` tab is torn down. A hidden→visible round-trip
 // shorter than this (mobile scroll / address-bar / brief app switch) is treated
 // as no interruption at all, so the pane WS is never needlessly reconnected.
@@ -85,6 +86,9 @@ export interface SnapshotStreamDeps {
    * first snapshot lands, with the matched pane's `pane_id`.
    */
   selectPane: (paneID: string) => void;
+  /** Clears App's selection and pane stream after an authoritative local
+   * snapshot confirms that the selected tmux pane no longer exists. */
+  clearSelection: (paneID: string) => void;
   /**
    * quick.js `syncQuickDock()`. `applySnapshot` calls it after every snapshot
    * (the FAB's `.ready` state tracks the selection / pane set).
@@ -135,7 +139,8 @@ export interface SnapshotStream {
   stopSnapshotStream: () => void;
   /**
    * app.js `checkStale()` as a pure predicate: `true` when no fresh snapshot has
-   * landed within STALE_MS (the daemon stalled or the connection dropped).
+   * landed within the snapshot's advertised stale threshold (the daemon
+   * stalled or the connection dropped).
    * `Invalid Date` (missing/garbage `ts`) is treated as stale and never throws.
    * ConnStatus calls this same predicate logic each render (and on its own
    * 1 s timer) so stale snapshot delivery is surfaced in the unified
@@ -169,10 +174,14 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   // falls through to "not fresh" → stale, never throwing (spec §6 item 3).
   const checkStale = useCallback((): boolean => {
     const snap = state.snapshot;
+    const staleAfterMs =
+      snap && Number.isFinite(snap.stale_after_ms) && snap.stale_after_ms > 0
+        ? snap.stale_after_ms
+        : DEFAULT_STALE_MS;
     const fresh =
       !!snap &&
       !!snap.ts &&
-      Date.now() - new Date(snap.ts).getTime() <= STALE_MS;
+      Date.now() - new Date(snap.ts).getTime() <= staleAfterMs;
     return !fresh;
   }, [state]);
 
@@ -253,6 +262,16 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
   const applySnapshot = useCallback(
     (snap: Snapshot): void => {
       state.snapshot = snap;
+      const selected = state.selected;
+      // A local snapshot is authoritative for local pane ids. Remote panes can
+      // disappear temporarily when a peer fetch fails, so retain those until a
+      // dedicated peer-liveness signal is available.
+      if (
+        selected?.startsWith("%") &&
+        !Object.values(snap.panes || {}).some((pane) => pane.pane_id === selected)
+      ) {
+        depsRef.current.clearSelection(selected);
+      }
       bump(); // renderStatusline(snap)
       depsRef.current.renderMode(); // renderMode() — old app.js:264 (placeholder + mode-text)
       restoreSelection();

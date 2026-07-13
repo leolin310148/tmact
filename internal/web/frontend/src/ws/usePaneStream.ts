@@ -41,7 +41,7 @@ export interface PaneStreamCallbacks {
   onQuestion: (q: Question | null) => void;
   /** Server-side error text; does NOT close the socket. */
   onError: (msg: string) => void;
-  /** Connection lifecycle for the conn-status strip. */
+  /** Connection lifecycle for the fixed conn-status overlay. */
   onStatus: (s: ConnState) => void;
 }
 
@@ -138,6 +138,9 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
       );
       wsRef.current = sock;
       sock.onopen = () => {
+        // A replaced socket may still dispatch queued events. Only the current
+        // socket is allowed to change connection state or reset retry backoff.
+        if (wsRef.current !== sock || currentPaneRef.current !== paneID) return;
         status("open");
         logFrontend("info", "pane_ws", "open", { pane: paneID });
         // Treat the connection as stable once it has stayed up for STABLE_MS;
@@ -148,6 +151,7 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
         }, STABLE_MS);
       };
       sock.onmessage = (ev: MessageEvent) => {
+        if (wsRef.current !== sock || currentPaneRef.current !== paneID) return;
         let m: OutMsg;
         try {
           m = JSON.parse(ev.data as string) as OutMsg;
@@ -192,6 +196,7 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
         }, delay);
       };
       sock.onerror = () => {
+        if (wsRef.current !== sock || currentPaneRef.current !== paneID) return;
         logFrontend("error", "pane_ws", "socket error", { pane: paneID });
       };
     },
