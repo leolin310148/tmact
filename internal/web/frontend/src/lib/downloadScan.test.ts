@@ -41,6 +41,27 @@ describe("scanDownloadablePaths", () => {
     expect(scanDownloadablePaths(text)).toEqual(["/tmp/inside.txt"]);
   });
 
+  it("reassembles long paths hard-wrapped by terminal agent output", () => {
+    const prefix =
+      "/private/tmp/claude-501/-Users-puni-w-ndt-cymmetrik-cymmetrik-idp/" +
+      "cb8fdbc0-ebf8-421d-925d-1721c39dfb1a/scratchpad/cymmetrik-idp-qas-metada";
+    const text = [
+      "  檔案路徑:",
+      `  ${prefix}`,
+      "  ta.xml",
+      "  不過這是本機臨時目錄",
+    ].join("\n");
+
+    expect(scanDownloadablePaths(text)).toContain(prefix + "ta.xml");
+  });
+
+  it("reassembles wrapped command output with an indented continuation", () => {
+    const prefix = "/private/tmp/job/scratchpad/cymmetrik-idp-qa";
+    const text = [`  ⎿  ${prefix}`, "     s-metadata.xml  5.0K"].join("\n");
+
+    expect(scanDownloadablePaths(text)).toEqual([prefix + "s-metadata.xml"]);
+  });
+
   it("rejects prose, remote URLs, home-relative paths, and bare words", () => {
     const text = [
       "and/or either",
