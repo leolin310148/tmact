@@ -19,7 +19,7 @@ same commit on `main`.
 
 - [x] **06 — Improve helper key bar semantics and feedback.** Add accessible names for symbolic keys, `aria-pressed` for sticky Ctrl, `aria-expanded`/`aria-controls` for the overflow toggle, and visible keyboard focus. Keep soft-keyboard no-blur behavior and test both collapsed and armed states.
 
-- [ ] **07 — Make detected prompt choices understandable and keyboard friendly.** Associate the option bar with the detected question text, expose it as a labelled choice group, keep numbered choices readable to screen readers, and support predictable keyboard traversal/activation on mobile and desktop. Add `OptionBar` tests.
+- [x] **07 — Make detected prompt choices understandable and keyboard friendly.** Associate the option bar with the detected question text, expose it as a labelled choice group, keep numbered choices readable to screen readers, and support predictable keyboard traversal/activation on mobile and desktop. Add `OptionBar` tests.
 
 - [ ] **08 — Make the quick-input dock an accessible popup.** Synchronize `aria-expanded`, popup ownership, focus entry/return, Escape handling, and empty-state announcement with the dock’s existing imperative open/close state. Preserve touch behavior and add regression tests around open, choose, backdrop close, and pane changes.
 

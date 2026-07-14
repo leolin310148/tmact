@@ -552,14 +552,21 @@
   }
   /* Quick-answer buttons for a detected menu prompt — one per numbered
      option. Lives above the chips (not in the input bar) so showing/hiding it
-     reflows only the pane output, never the chip row. Hidden by default; the
-     phone media query reveals it when it holds buttons (mobile-only). */
+     reflows only the pane output, never the chip row. */
   .option-bar {
     flex: 0 0 auto;
     display: none; flex-wrap: wrap; gap: 5px;
     padding: 6px 10px;
     background: var(--panel);
     border-top: 1px solid var(--border);
+  }
+  .option-bar:not(:empty) { display: flex; }
+  .option-bar-question {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0);
+    white-space: nowrap; border: 0;
   }
   .option-bar button {
     flex: 0 1 auto; min-width: 0; max-width: 100%;
@@ -570,6 +577,10 @@
     cursor: pointer; white-space: nowrap; user-select: none;
   }
   .option-bar button:active { background: var(--border); }
+  .option-bar button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .option-bar .opt-num { font-weight: 700; color: var(--accent); }
   .option-bar .opt-label {
     overflow: hidden; text-overflow: ellipsis;
@@ -1458,9 +1469,6 @@
     .content-wrap.upload-ready .gear-btn { bottom: 252px; }
     .content-wrap.upload-ready .help-btn { bottom: 300px; }
     .qb-backdrop.open { display: block; }
-    /* Quick-answer buttons exist for phones: shown only here, and only while
-       a question is actually up (the bar holds buttons). */
-    .option-bar:not(:empty) { display: flex; }
     /* On a phone, direct mode types straight into the pane and the helper-key
        bar already covers the control keys — the draft box would only get in
        the way, so collapse it. On desktop the draft box stays put so a prompt
