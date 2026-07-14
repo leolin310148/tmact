@@ -76,6 +76,27 @@ actions:
 	}
 }
 
+func TestLoadConfigCanDisableSessionQuotaGate(t *testing.T) {
+	path := writeTempConfig(t, `
+target: sample:0.0
+quota:
+  enabled: true
+  provider: codex
+  weekly_skip_at_percent: 95
+  session_gate_enabled: false
+actions:
+  - type: clear
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Quota.SessionGateEnabled == nil || *cfg.Quota.SessionGateEnabled {
+		t.Fatalf("session_gate_enabled = %v, want explicit false", cfg.Quota.SessionGateEnabled)
+	}
+}
+
 func TestLoadConfigParsesPeerTarget(t *testing.T) {
 	path := writeTempConfig(t, `
 peer: peer-a

@@ -514,6 +514,7 @@ func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string
 	if minRemaining <= 0 {
 		minRemaining = defaultSessionMinRemainingPercent
 	}
+	sessionGateEnabled := q.SessionGateEnabled == nil || *q.SessionGateEnabled
 
 	var weekly, session *agentusage.RateWindow
 	for i := range pu.Windows {
@@ -528,7 +529,7 @@ func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string
 	if weekly == nil {
 		return r.quotaUnavailable(now, fetched, "weekly window missing")
 	}
-	if session == nil {
+	if sessionGateEnabled && session == nil {
 		return r.quotaUnavailable(now, fetched, "session window missing")
 	}
 
@@ -547,7 +548,7 @@ func (r *Runner) evaluateQuota(ctx context.Context, now time.Time) (bool, string
 			return true, "quota_weekly_no_headroom", nil
 		}
 	}
-	if 100-session.UsedPercent <= minRemaining {
+	if sessionGateEnabled && 100-session.UsedPercent <= minRemaining {
 		return true, "quota_session_low", nil
 	}
 	return false, "", nil

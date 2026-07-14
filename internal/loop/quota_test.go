@@ -27,6 +27,17 @@ func quotaSnapshot(provider string, sessionUsed, weeklyUsed float64) agentusage.
 	}
 }
 
+func weeklyOnlyQuotaSnapshot(provider string, weeklyUsed float64) agentusage.Snapshot {
+	return agentusage.Snapshot{
+		Providers: []agentusage.ProviderUsage{{
+			Provider: provider,
+			Windows: []agentusage.RateWindow{{
+				Name: "weekly", UsedPercent: weeklyUsed, WindowMinutes: 10080,
+			}},
+		}},
+	}
+}
+
 func quotaSnapshotWithWeeklyHeadroom(provider string, sessionUsed, weeklyUsed, headroom float64) agentusage.Snapshot {
 	snap := quotaSnapshot(provider, sessionUsed, weeklyUsed)
 	weekly := &snap.Providers[0].Windows[1]
@@ -69,6 +80,38 @@ func TestQuotaWeeklyReachedSkips(t *testing.T) {
 	}
 	if !skip || reason != "quota_weekly" {
 		t.Fatalf("skip=%v reason=%q, want skip=true reason=quota_weekly", skip, reason)
+	}
+}
+
+func TestQuotaWeeklyOnlyDoesNotRequireSessionWindow(t *testing.T) {
+	disabled := false
+	tests := []struct {
+		name       string
+		weeklyUsed float64
+		wantSkip   bool
+	}{
+		{name: "more than five percent remains", weeklyUsed: 94, wantSkip: false},
+		{name: "exactly five percent remains", weeklyUsed: 95, wantSkip: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newQuotaRunner(t, QuotaConfig{
+				Provider:            "codex",
+				WeeklySkipAtPercent: 95,
+				SessionGateEnabled:  &disabled,
+				FailClosed:          true,
+			}, weeklyOnlyQuotaSnapshot("codex", tt.weeklyUsed))
+			skip, reason, err := r.evaluateQuota(context.Background(), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if skip != tt.wantSkip {
+				t.Fatalf("skip=%v reason=%q, want skip=%v", skip, reason, tt.wantSkip)
+			}
+			if skip && reason != "quota_weekly" {
+				t.Fatalf("reason=%q, want quota_weekly", reason)
+			}
+		})
 	}
 }
 
