@@ -583,6 +583,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       if (sendBtnRef.current) sendBtnRef.current.disabled = true;
       if (directRef.current) {
         directRef.current.value = "";
+        directRef.current.disabled = true;
         directRef.current.blur();
       }
       if (errorTimerRef.current) {
@@ -643,7 +644,12 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       // The selected chip scrolls itself into view via Chip's layout effect.
       openWS(paneID);
       // Desktop non-selection-mode: drop straight into direct mode.
-      if (!isMobile() && !state.selectionMode && directRef.current) directRef.current.focus();
+      if (!isMobile() && !state.selectionMode && directRef.current) {
+        // React batches the pane-selected render until this handler returns, so
+        // make the newly available control focusable before focusing it.
+        directRef.current.disabled = false;
+        directRef.current.focus();
+      }
     },
     [
       state,
@@ -728,7 +734,10 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const toggleSelectionMode = useCallback(() => {
     if (!state.selected) return;
     state.selectionMode = !state.selectionMode;
-    if (state.selectionMode && directRef.current) directRef.current.blur();
+    if (directRef.current) {
+      directRef.current.disabled = state.selectionMode;
+      if (state.selectionMode) directRef.current.blur();
+    }
     syncSelectionButton();
     renderMode();
   }, [state, syncSelectionButton, renderMode]);
@@ -860,7 +869,12 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         state.selectionMode = false;
         syncSelectionButton();
         const stickToBottom = contentPaneAtBottom(contentPaneElement());
-        if (directRef.current) directRef.current.focus();
+        if (directRef.current) {
+          // Keep the imperative focus transition working before React commits
+          // the matching selection-mode accessibility state.
+          directRef.current.disabled = false;
+          directRef.current.focus();
+        }
         if (stickToBottom) followPaneBottomThroughKeyboard();
         renderMode();
         sendDirect({ t: "key", k: "Enter" });
@@ -1115,6 +1129,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           />
           <DirectInput
             directRef={directRef}
+            paneSelected={!!state.selected}
+            selectionMode={state.selectionMode}
             onDirectKeyDown={onDirectKeyDown}
             onDirectComposition={onDirectComposition}
             onDirectPaste={onDirectPaste}

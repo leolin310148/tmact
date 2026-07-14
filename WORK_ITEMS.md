@@ -15,7 +15,7 @@ same commit on `main`.
 
 - [x] **04 — Add complete keyboard behavior to the “more panes” popover.** Give the trigger/list correct relationships and make Arrow keys, Home/End, Enter/Space, Escape, outside click, and focus return work predictably. Preserve pane selection and add focused component tests.
 
-- [ ] **05 — Give direct terminal input an accessible identity and state.** Ensure the invisible direct-input textarea has an appropriate label/description, exposes whether pane input is available, and does not become a confusing empty control to assistive technology when inactive. Add tests for selected, unselected, and selection-mode states.
+- [x] **05 — Give direct terminal input an accessible identity and state.** Ensure the invisible direct-input textarea has an appropriate label/description, exposes whether pane input is available, and does not become a confusing empty control to assistive technology when inactive. Add tests for selected, unselected, and selection-mode states.
 
 - [ ] **06 — Improve helper key bar semantics and feedback.** Add accessible names for symbolic keys, `aria-pressed` for sticky Ctrl, `aria-expanded`/`aria-controls` for the overflow toggle, and visible keyboard focus. Keep soft-keyboard no-blur behavior and test both collapsed and armed states.
 
