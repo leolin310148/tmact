@@ -20,6 +20,7 @@
 //   the imperative writes. Only the menu CONTENTS are rendered reactively here
 //   (the original rebuilt them in `renderQuickMenu`, keyed off `menuVersion`).
 
+import { useLayoutEffect, useRef } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { UseQuickReturn } from "../hooks/useQuick";
 
@@ -34,13 +35,34 @@ export interface QuickDockProps {
 }
 
 export function QuickDock({ quick }: QuickDockProps) {
-  const { menuVersion, applicableQuick, toggleQuickMenu, onQuickButtonClick, closeQuickMenu } =
-    quick;
+  const {
+    isOpen,
+    menuVersion,
+    applicableQuick,
+    toggleQuickMenu,
+    onQuickButtonClick,
+    closeQuickMenu,
+  } = quick;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   // Recompute the menu items whenever menuVersion changes (the original called
   // renderQuickMenu). Reading it here keeps the dependency explicit.
   void menuVersion;
   const items = applicableQuick();
+
+  // Enter the popup when it opens. The menu contents may have just been
+  // rebuilt for a newly selected pane, so do this after React commits them.
+  // Empty menus focus their status message so it is announced immediately.
+  useLayoutEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      const target = menuRef.current?.querySelector<HTMLElement>(
+        "button:not([disabled]), .qb-empty",
+      );
+      target?.focus({ preventScroll: true });
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, menuVersion]);
 
   // Backdrop click closes only when the click landed on the backdrop itself
   // (e.target === backdrop), verbatim from spec §6 item 53. The original bound
@@ -60,9 +82,22 @@ export function QuickDock({ quick }: QuickDockProps) {
         onClick={onBackdropClick}
       ></div>
       <div className="qb-dock" id="qb-dock">
-        <div className="qb-menu" id="qb-menu">
+        <div
+          ref={menuRef}
+          className="qb-menu"
+          id="qb-menu"
+          role="dialog"
+          aria-labelledby="qb-fab"
+          aria-hidden={!isOpen}
+        >
           {items.length === 0 ? (
-            <div className="qb-empty">
+            <div
+              className="qb-empty"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              tabIndex={-1}
+            >
               No quick buttons for this pane — add some in Settings.
             </div>
           ) : (
@@ -87,6 +122,9 @@ export function QuickDock({ quick }: QuickDockProps) {
           type="button"
           title="quick input"
           aria-label="quick input"
+          aria-haspopup="dialog"
+          aria-controls="qb-menu"
+          aria-expanded={isOpen}
           onPointerDown={onPointerDownNoBlur}
           onClick={toggleQuickMenu}
         >

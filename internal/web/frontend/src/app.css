@@ -1158,6 +1158,12 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.45);
   }
   .qb-menu button:active { background: var(--border); }
+  .qb-menu button:focus-visible,
+  .qb-fab:focus-visible,
+  .qb-empty:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .qb-empty {
     max-width: 78vw; text-align: right;
     background: var(--panel); color: var(--fg-dim);
