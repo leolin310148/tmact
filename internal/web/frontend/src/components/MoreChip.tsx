@@ -3,12 +3,19 @@
 // list stays scannable (the inline chips are the ones that matter: agents,
 // the selection, and panes asking for input — see StatusLine.shouldPinPane).
 //
-// The popover is a plain click-triggered list of Chips reused 1:1 from the
-// statusline. Selecting a row switches to that pane and closes the popover;
-// clicking outside or pressing Escape also closes it.
+// The popover reuses the statusline Chips with menu-item semantics and complete
+// keyboard traversal. Selecting a row switches to that pane and closes the
+// popover; clicking outside or pressing Escape also closes it.
 
-import { useEffect, useRef, useState } from "react";
-import { onPointerDownNoBlur } from "../lib/dom";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { focusMenuEdge, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
 import type { PaneListItem } from "./StatusLine";
 import { Chip } from "./Chip";
 
@@ -21,6 +28,22 @@ interface MoreChipProps {
 export function MoreChip({ items, onSelect }: MoreChipProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const pendingFocusRef = useRef<"first" | "last" | null>(null);
+  const buttonID = useId();
+  const menuID = useId();
+
+  const openFromKeyboard = (edge: "first" | "last") => {
+    pendingFocusRef.current = edge;
+    setOpen(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!open || !pendingFocusRef.current || !menuRef.current) return;
+    focusMenuEdge(menuRef.current, pendingFocusRef.current);
+    pendingFocusRef.current = null;
+  }, [open, items.length]);
 
   // Close on outside pointerdown (capture so it fires before the row click)
   // and on Escape, but only while open.
@@ -32,7 +55,13 @@ export function MoreChip({ items, onSelect }: MoreChipProps) {
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const restoreTrigger = menuRef.current?.contains(document.activeElement) ?? false;
+        pendingFocusRef.current = null;
+        setOpen(false);
+        if (restoreTrigger) buttonRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onDocPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
@@ -50,22 +79,54 @@ export function MoreChip({ items, onSelect }: MoreChipProps) {
 
   const count = items.length;
 
+  const onButtonKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      openFromKeyboard(e.key === "ArrowUp" ? "last" : "first");
+      return;
+    }
+    if (!open && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      openFromKeyboard("first");
+    }
+  };
+
+  const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!moveMenuFocus(e.currentTarget, e.key)) return;
+    e.preventDefault();
+  };
+
   return (
     <div className="more-chip-wrap" ref={wrapRef}>
       <button
+        ref={buttonRef}
+        id={buttonID}
         type="button"
         className={"chip more-chip" + (open ? " open" : "")}
         title={count + " more pane" + (count === 1 ? "" : "s")}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={menuID}
+        aria-label={"Show " + count + " more pane" + (count === 1 ? "" : "s")}
         onPointerDown={onPointerDownNoBlur}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          pendingFocusRef.current = null;
+          setOpen((v) => !v);
+        }}
+        onKeyDown={onButtonKeyDown}
       >
         <span className="chip-label">more</span>
         <span className="more-count">{count}</span>
       </button>
       {open ? (
-        <div className="chip-overflow-pop" role="menu">
+        <div
+          ref={menuRef}
+          id={menuID}
+          className="chip-overflow-pop"
+          role="menu"
+          aria-labelledby={buttonID}
+          onKeyDown={onMenuKeyDown}
+        >
           {items.map(({ pane, label }, i) => (
             <Chip
               key={pane.pane_id || "overflow-" + i}
@@ -73,9 +134,13 @@ export function MoreChip({ items, onSelect }: MoreChipProps) {
               label={label}
               hotkey={undefined}
               selected={false}
+              menuItem
               onSelect={() => {
+                const restoreTrigger =
+                  menuRef.current?.contains(document.activeElement) ?? false;
                 onSelect(pane.pane_id ?? "");
                 setOpen(false);
+                if (restoreTrigger) buttonRef.current?.focus();
               }}
             />
           ))}
