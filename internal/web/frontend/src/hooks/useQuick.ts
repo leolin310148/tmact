@@ -23,7 +23,7 @@
 //   don't own. The menu/editor CONTENTS are rendered reactively by the
 //   components instead of being rebuilt here.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { InputMsg, PaneStatus } from "../types/server";
 import { useAppState } from "../store/AppStateContext";
 
@@ -102,7 +102,8 @@ export interface UseQuickReturn {
   loadQuickConfig: () => void;
   wireQuick: () => void;
   syncQuickDock: () => void;
-  closeQuickMenu: () => void;
+  /** Close the menu and, by default, restore focus to its FAB trigger. */
+  closeQuickMenu: (restoreFocus?: boolean) => void;
 
   // ---- reactive surface for the components (renderQuickMenu / editor) ----
   /** Whether the FAB menu is open (drives `#qb-dock.open` + `#qb-backdrop.open`). */
@@ -219,13 +220,22 @@ export function useQuick(deps: UseQuickDeps): UseQuickReturn {
 
   // ---- menu open/close (imperative DOM class toggles, verbatim) ----
 
-  const closeQuickMenu = useCallback(() => {
+  const closeQuickMenu = useCallback((restoreFocus = true) => {
+    const wasOpen = openRef.current;
     openRef.current = false;
     setIsOpen(false);
     const dock = document.getElementById("qb-dock");
     const backdrop = document.getElementById("qb-backdrop");
     if (dock) dock.classList.remove("open");
     if (backdrop) backdrop.classList.remove("open");
+    if (wasOpen && restoreFocus) {
+      const trigger = document.getElementById("qb-fab") as HTMLButtonElement | null;
+      trigger?.focus({ preventScroll: true });
+    } else if (wasOpen && dock?.contains(document.activeElement)) {
+      // The trigger is about to be hidden (for example, the selected pane was
+      // cleared). Do not leave focus inside the now-hidden popup.
+      (document.activeElement as HTMLElement).blur();
+    }
   }, []);
 
   const openQuickMenu = useCallback(() => {
@@ -288,7 +298,7 @@ export function useQuick(deps: UseQuickDeps): UseQuickReturn {
       if (uploadBtn) uploadBtn.disabled = true;
       if (selectionBtn) selectionBtn.disabled = true;
       if (clearPaneBtn) clearPaneBtn.disabled = true;
-      closeQuickMenu();
+      closeQuickMenu(false);
     }
     syncSelectionButton();
   }, [state, upload, closeQuickMenu, syncSelectionButton]);
@@ -338,6 +348,19 @@ export function useQuick(deps: UseQuickDeps): UseQuickReturn {
     // renderQuickEditor equivalent: trigger the editor's first render.
     bumpEditor();
   }, [closeQuickMenu, bumpEditor]);
+
+  // App calls wireQuick once, but the hook still owns the document listener.
+  // Remove it on unmount so a remounted app cannot retain an Escape handler
+  // that closes or focuses a detached dock.
+  useEffect(
+    () => () => {
+      if (escHandlerRef.current) {
+        document.removeEventListener("keydown", escHandlerRef.current);
+        escHandlerRef.current = null;
+      }
+    },
+    [],
+  );
 
   return {
     loadQuickConfig,

@@ -21,7 +21,7 @@ same commit on `main`.
 
 - [x] **07 — Make detected prompt choices understandable and keyboard friendly.** Associate the option bar with the detected question text, expose it as a labelled choice group, keep numbered choices readable to screen readers, and support predictable keyboard traversal/activation on mobile and desktop. Add `OptionBar` tests.
 
-- [ ] **08 — Make the quick-input dock an accessible popup.** Synchronize `aria-expanded`, popup ownership, focus entry/return, Escape handling, and empty-state announcement with the dock’s existing imperative open/close state. Preserve touch behavior and add regression tests around open, choose, backdrop close, and pane changes.
+- [x] **08 — Make the quick-input dock an accessible popup.** Synchronize `aria-expanded`, popup ownership, focus entry/return, Escape handling, and empty-state announcement with the dock’s existing imperative open/close state. Preserve touch behavior and add regression tests around open, choose, backdrop close, and pane changes.
 
 - [ ] **09 — Improve quick-button editor labelling and destructive actions.** Give every group and row uniquely associated labels, make remove buttons announce which entry they remove, and keep focus in a sensible row after add/delete. Preserve immediate persistence and add tests for repeated labels and deleting the first/middle/last row.
 

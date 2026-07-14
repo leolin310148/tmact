@@ -595,7 +595,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       syncDraft();
       syncRecordButton();
       syncSelectionButton();
-      closeQuickMenu();
+      // The dock is about to become unavailable, so do not restore focus to
+      // its trigger while clearing the pane selection.
+      closeQuickMenu(false);
       syncQuickDock();
       renderMode();
     },
