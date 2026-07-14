@@ -17,7 +17,7 @@ same commit on `main`.
 
 - [x] **05 — Give direct terminal input an accessible identity and state.** Ensure the invisible direct-input textarea has an appropriate label/description, exposes whether pane input is available, and does not become a confusing empty control to assistive technology when inactive. Add tests for selected, unselected, and selection-mode states.
 
-- [ ] **06 — Improve helper key bar semantics and feedback.** Add accessible names for symbolic keys, `aria-pressed` for sticky Ctrl, `aria-expanded`/`aria-controls` for the overflow toggle, and visible keyboard focus. Keep soft-keyboard no-blur behavior and test both collapsed and armed states.
+- [x] **06 — Improve helper key bar semantics and feedback.** Add accessible names for symbolic keys, `aria-pressed` for sticky Ctrl, `aria-expanded`/`aria-controls` for the overflow toggle, and visible keyboard focus. Keep soft-keyboard no-blur behavior and test both collapsed and armed states.
 
 - [ ] **07 — Make detected prompt choices understandable and keyboard friendly.** Associate the option bar with the detected question text, expose it as a labelled choice group, keep numbered choices readable to screen readers, and support predictable keyboard traversal/activation on mobile and desktop. Add `OptionBar` tests.
 
