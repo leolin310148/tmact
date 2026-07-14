@@ -24,7 +24,10 @@ Common commands:
   agent lacks the configured 5-hour reserve or positive weekly pace headroom
   (see `examples/quota-aware-loop.yaml`).
 - `tmact dispatch-work` starts or reuses a tmux session, launches an agent CLI,
-  and sends it a prompt.
+  and sends it a prompt. For a configured remote machine, use
+  `tmact dispatch-work SESSION --peer NAME ...`; this creates or reuses the
+  session on that peer. Do not SSH to the peer to invoke tmact unless the
+  operator explicitly requests SSH.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the browser UI.
 

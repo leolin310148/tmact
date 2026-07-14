@@ -48,6 +48,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"trust-folder", "exact-directory", "--execute", "Default is dry-run", "refuses non-trust prompts"},
 		},
 		{
+			name: "peer dispatch",
+			args: []string{"dispatch-work", "--help"},
+			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH"},
+		},
+		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
 			want: []string{"workflow", "revision-aware DAG", "workflow validate", "workflow start", "durable dispatch IDs", "--execute"},
@@ -188,6 +193,7 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	foundLoopLifecycle := false
 	foundTrustWorkflow := false
 	foundQuotaWorkflow := false
+	foundPeerDispatchWorkflow := false
 	for _, note := range instructions.SafeDefaults {
 		if strings.Contains(note, "untrusted") {
 			foundUntrusted = true
@@ -204,6 +210,9 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 		if strings.Contains(step, "session_min_remaining_percent") && strings.Contains(step, "weekly_require_headroom") {
 			foundQuotaWorkflow = true
 		}
+		if strings.Contains(step, "dispatch-work SESSION --peer NAME") && strings.Contains(step, "Do not SSH") {
+			foundPeerDispatchWorkflow = true
+		}
 	}
 	if !foundUntrusted {
 		t.Fatalf("instructions missing untrusted-pane warning: %#v", instructions.SafeDefaults)
@@ -216,5 +225,8 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	}
 	if !foundQuotaWorkflow {
 		t.Fatalf("instructions missing quota-gated loop workflow: %#v", instructions.RecommendedWorkflow)
+	}
+	if !foundPeerDispatchWorkflow {
+		t.Fatalf("instructions missing peer dispatch workflow: %#v", instructions.RecommendedWorkflow)
 	}
 }
