@@ -32,11 +32,11 @@
 //     `wsSend({ t: "text", s: String(number) })` and surfaces
 //     "not connected — try again" on failure.
 //
-// The bar is CSS-hidden on desktop (`.option-bar { display:none }`) and revealed
-// only on phones when non-empty (`@media … .option-bar:not(:empty){display:flex}`),
-// so this renders unconditionally and the media query gates visibility — exactly
-// like app.js, which ran renderOptions regardless of viewport.
+// The bar remains empty when no valid choices exist, so CSS can hide it without
+// leaving a blank strip. When choices exist it is available at every viewport
+// width and preserves the mobile no-blur behavior described above.
 
+import { useId, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { Question } from "../types/server";
 
@@ -48,13 +48,47 @@ interface OptionBarProps {
 }
 
 export function OptionBar({ question, onChoose }: OptionBarProps) {
-  const choices =
-    question && Array.isArray(question.choices) ? question.choices : [];
+  const questionID = useId();
+  const choices = (question && Array.isArray(question.choices) ? question.choices : []).filter(
+    (choice) => typeof choice.number === "number",
+  );
+
+  const onChoiceKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+
+    const buttons = Array.from(
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    );
+    const current = buttons.indexOf(event.currentTarget);
+    if (current < 0 || buttons.length === 0) return;
+
+    let next = current;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = buttons.length - 1;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      next = (current - 1 + buttons.length) % buttons.length;
+    } else {
+      next = (current + 1) % buttons.length;
+    }
+
+    event.preventDefault();
+    buttons[next]?.focus();
+  };
 
   return (
-    <div className="option-bar" id="option-bar">
+    <div
+      className="option-bar"
+      id="option-bar"
+      role={choices.length > 0 ? "group" : undefined}
+      aria-labelledby={choices.length > 0 ? questionID : undefined}
+    >
+      {choices.length > 0 ? (
+        <span className="option-bar-question" id={questionID}>
+          {question?.prompt?.trim() || "Detected prompt choices"}
+        </span>
+      ) : null}
       {choices.map((c, i) => {
-        if (typeof c.number !== "number") return null;
         const num = c.number;
         return (
           <button
@@ -63,7 +97,9 @@ export function OptionBar({ question, onChoose }: OptionBarProps) {
             key={"opt-" + num + "-" + i}
             type="button"
             title={c.label || "Option " + num}
+            aria-label={c.label ? `Option ${num}: ${c.label}` : `Option ${num}`}
             onPointerDown={onPointerDownNoBlur}
+            onKeyDown={onChoiceKeyDown}
             onClick={() => onChoose(num)}
           >
             <span className="opt-num">{String(num)}</span>
