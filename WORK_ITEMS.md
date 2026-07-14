@@ -9,7 +9,7 @@ same commit on `main`.
 
 - [x] **01 — Prevent stale download-scan results from replacing a newer dialog.** Reproduce the race where `/api/files/check` for pane A finishes after the dialog has been closed or reopened for pane B. Add request identity or cancellation so only the current scan can update state, and cover close/reopen and pane-switch cases with regression tests.
 
-- [ ] **02 — Prevent overlapping usage polling requests.** A slow `/api/usage` response must not overlap the next 60-second poll or let an older response replace a newer one. Use a single-flight or completion-scheduled polling strategy, preserve 404 shutdown behavior, and add fake-timer tests for slow, failed, and unmounted requests.
+- [x] **02 — Prevent overlapping usage polling requests.** A slow `/api/usage` response must not overlap the next 60-second poll or let an older response replace a newer one. Use a single-flight or completion-scheduled polling strategy, preserve 404 shutdown behavior, and add fake-timer tests for slow, failed, and unmounted requests.
 
 - [ ] **03 — Make pane chips fully keyboard operable.** Replace or augment clickable `div` pane chips with correct interactive semantics, Tab focus, Enter/Space activation, selected-state exposure, and visible focus styling without breaking hotkeys, scrolling, or mobile behavior. Extend `Chip` and `StatusLine` tests.
 
