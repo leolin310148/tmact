@@ -45,6 +45,10 @@ import type {
 interface DirectInputProps {
   /** Ref to the #direct-input textarea; owned by App (focus/blur + value clear). */
   directRef: Ref<HTMLTextAreaElement>;
+  /** Whether a pane is selected. Direct input is unavailable without one. */
+  paneSelected: boolean;
+  /** Text-selection mode temporarily disables direct terminal input. */
+  selectionMode: boolean;
   /** Bubble-phase keydown relay (translateKey/sendDirect/IME/selectionMode). */
   onDirectKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
   /** compositionend → sendDirect({t:"text",s:e.data}) then clear value. */
@@ -57,25 +61,42 @@ interface DirectInputProps {
 
 export default function DirectInput({
   directRef,
+  paneSelected,
+  selectionMode,
   onDirectKeyDown,
   onDirectComposition,
   onDirectPaste,
   onDirectInput,
 }: DirectInputProps) {
+  const inputAvailable = paneSelected && !selectionMode;
+  const description = !paneSelected
+    ? "Select a pane to enable direct terminal input."
+    : selectionMode
+      ? "Direct terminal input is unavailable while text selection mode is on."
+      : "Input is available for the selected pane. Keystrokes are sent directly to the terminal.";
+
   // Attributes verbatim from index.html line 20:
   //   <textarea id="direct-input" spellcheck="false" autocapitalize="off"
   //             autocomplete="off"></textarea>
   return (
-    <textarea
-      id="direct-input"
-      ref={directRef}
-      spellCheck={false}
-      autoCapitalize="off"
-      autoComplete="off"
-      onKeyDown={onDirectKeyDown}
-      onCompositionEnd={onDirectComposition}
-      onPaste={onDirectPaste}
-      onInput={onDirectInput}
-    />
+    <>
+      <textarea
+        id="direct-input"
+        ref={directRef}
+        aria-label="Direct terminal input"
+        aria-describedby="direct-input-description"
+        disabled={!inputAvailable}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoComplete="off"
+        onKeyDown={onDirectKeyDown}
+        onCompositionEnd={onDirectComposition}
+        onPaste={onDirectPaste}
+        onInput={onDirectInput}
+      />
+      <span id="direct-input-description" hidden>
+        {description}
+      </span>
+    </>
   );
 }
