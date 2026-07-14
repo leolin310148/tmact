@@ -7,7 +7,7 @@ same commit on `main`.
 
 ## Work items
 
-- [ ] **01 — Prevent stale download-scan results from replacing a newer dialog.** Reproduce the race where `/api/files/check` for pane A finishes after the dialog has been closed or reopened for pane B. Add request identity or cancellation so only the current scan can update state, and cover close/reopen and pane-switch cases with regression tests.
+- [x] **01 — Prevent stale download-scan results from replacing a newer dialog.** Reproduce the race where `/api/files/check` for pane A finishes after the dialog has been closed or reopened for pane B. Add request identity or cancellation so only the current scan can update state, and cover close/reopen and pane-switch cases with regression tests.
 
 - [ ] **02 — Prevent overlapping usage polling requests.** A slow `/api/usage` response must not overlap the next 60-second poll or let an older response replace a newer one. Use a single-flight or completion-scheduled polling strategy, preserve 404 shutdown behavior, and add fake-timer tests for slow, failed, and unmounted requests.
 
