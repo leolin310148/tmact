@@ -71,6 +71,10 @@ type QuotaConfig struct {
 	// window does not have strictly more than this percent remaining
 	// (used-percent >= 100-this). Default 20.
 	SessionMinRemainingPercent float64 `yaml:"session_min_remaining_percent"`
+	// SessionGateEnabled controls whether the session window is required and
+	// checked. It defaults to true; set it explicitly to false for providers or
+	// loops that intentionally use only the weekly gates.
+	SessionGateEnabled *bool `yaml:"session_gate_enabled"`
 	// RefreshInterval bounds how often the rate-limited provider endpoint is
 	// queried; the last snapshot is reused between refreshes. Default 5m.
 	RefreshInterval Duration `yaml:"refresh_interval"`
