@@ -28,7 +28,7 @@
 //     "resize", matching app.js's `window.addEventListener("resize", syncKeyBar)`
 //     and its post-build `syncKeyBar()` call.
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { InputMsg } from "../types/server";
@@ -37,24 +37,25 @@ import type { InputMsg } from "../types/server";
 // flag for the sticky-Ctrl toggle).
 interface HelperKey {
   label: string;
+  accessibleName: string;
   key?: string;
   ctrl?: boolean;
 }
 const HELPER_KEYS: readonly HelperKey[] = [
-  { label: "Esc", key: "Escape" },
-  { label: "^C", key: "C-c" },
-  { label: "Tab", key: "Tab" },
-  { label: "⇧Tab", key: "BTab" },
-  { label: "ctl", ctrl: true },
-  { label: "↵", key: "Enter" },
-  { label: "↑", key: "Up" },
-  { label: "↓", key: "Down" },
-  { label: "←", key: "Left" },
-  { label: "→", key: "Right" },
-  { label: "Home", key: "Home" },
-  { label: "End", key: "End" },
-  { label: "PgUp", key: "PageUp" },
-  { label: "PgDn", key: "PageDown" },
+  { label: "Esc", accessibleName: "Escape", key: "Escape" },
+  { label: "^C", accessibleName: "Control C", key: "C-c" },
+  { label: "Tab", accessibleName: "Tab", key: "Tab" },
+  { label: "⇧Tab", accessibleName: "Shift Tab", key: "BTab" },
+  { label: "ctl", accessibleName: "Control modifier", ctrl: true },
+  { label: "↵", accessibleName: "Enter", key: "Enter" },
+  { label: "↑", accessibleName: "Arrow up", key: "Up" },
+  { label: "↓", accessibleName: "Arrow down", key: "Down" },
+  { label: "←", accessibleName: "Arrow left", key: "Left" },
+  { label: "→", accessibleName: "Arrow right", key: "Right" },
+  { label: "Home", accessibleName: "Home", key: "Home" },
+  { label: "End", accessibleName: "End", key: "End" },
+  { label: "PgUp", accessibleName: "Page up", key: "PageUp" },
+  { label: "PgDn", accessibleName: "Page down", key: "PageDown" },
 ];
 
 export interface KeyBarProps {
@@ -93,6 +94,7 @@ export default function KeyBar({
   const areaRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(false);
 
   // setCtrl mirrors app.js: flip the shared armed flag and re-render so the
   // #ctrl-key button's `.armed` class follows. (app.js toggled the class
@@ -116,10 +118,11 @@ export default function KeyBar({
     const rowH = (firstBtn as HTMLElement).offsetHeight;
     const overflows = rowH > 0 && bar.scrollHeight > rowH + 2;
     if (!overflows) area.classList.remove("expanded");
-    const expanded = area.classList.contains("expanded");
+    const nextExpanded = area.classList.contains("expanded");
     area.classList.toggle("overflowing", overflows);
-    toggle.textContent = expanded ? "⌃" : "⌄";
-    bar.style.maxHeight = overflows && !expanded ? rowH + "px" : "";
+    toggle.textContent = nextExpanded ? "⌃" : "⌄";
+    bar.style.maxHeight = overflows && !nextExpanded ? rowH + "px" : "";
+    setExpanded(nextExpanded);
   };
 
   // app.js wired `window.addEventListener("resize", syncKeyBar)` in buildKeyBar
@@ -167,6 +170,8 @@ export default function KeyBar({
               {...(k.ctrl ? { id: "ctrl-key" } : {})}
               type="button"
               className={k.ctrl && ctrlArmed ? "armed" : undefined}
+              aria-label={k.accessibleName}
+              {...(k.ctrl ? { "aria-pressed": ctrlArmed } : {})}
               onPointerDown={onPointerDownNoBlur}
               onClick={onClick}
             >
@@ -179,7 +184,10 @@ export default function KeyBar({
         className="key-toggle"
         id="key-toggle"
         type="button"
-        title="show/hide all keys"
+        title={expanded ? "Collapse helper keys" : "Show all helper keys"}
+        aria-label={expanded ? "Collapse helper keys" : "Show all helper keys"}
+        aria-controls="key-bar"
+        aria-expanded={expanded}
         ref={toggleRef}
         onPointerDown={onPointerDownNoBlur}
         onClick={onToggleClick}
