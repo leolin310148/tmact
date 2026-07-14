@@ -45,7 +45,7 @@ func paneCommandHelpCatalog() []commandHelp {
 		},
 		{
 			Command: "dispatch-work",
-			Summary: "Create or reuse a tmux session, launch an agent, and send it a prompt.",
+			Summary: "Create or reuse a local or peer tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
 				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
 				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
@@ -58,7 +58,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
 				{Name: "--trust-folder", Description: "opt in to accepting a Claude/Codex trust prompt only when pane cwd exactly matches --dir"},
-				{Name: "--peer", Value: "NAME", Description: "dispatch through the named statusd dispatch_peer from config"},
+				{Name: "--peer", Value: "NAME", Description: "create or reuse the session on the named remote machine from statusd config"},
 				{Name: "--config", Value: "PATH", Description: "statusd config file containing dispatch_peers"},
 				{Name: "--execute", Description: "actually create, launch, and send; default is dry-run"},
 				{Name: "--json", Description: "print JSON output"},
@@ -76,6 +76,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Notes: []string{
 				"The session name is the first positional argument.",
+				"For a configured remote machine, use --peer; tmact dispatches through the peer statusd, so do not SSH there to invoke tmact unless SSH was explicitly requested.",
 				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",
 				"--model applies only while launching Claude or Codex, must match that agent's allowlist, and is rejected if that agent is already running.",
