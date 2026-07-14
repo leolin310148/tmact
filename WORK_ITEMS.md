@@ -11,7 +11,7 @@ same commit on `main`.
 
 - [x] **02 — Prevent overlapping usage polling requests.** A slow `/api/usage` response must not overlap the next 60-second poll or let an older response replace a newer one. Use a single-flight or completion-scheduled polling strategy, preserve 404 shutdown behavior, and add fake-timer tests for slow, failed, and unmounted requests.
 
-- [ ] **03 — Make pane chips fully keyboard operable.** Replace or augment clickable `div` pane chips with correct interactive semantics, Tab focus, Enter/Space activation, selected-state exposure, and visible focus styling without breaking hotkeys, scrolling, or mobile behavior. Extend `Chip` and `StatusLine` tests.
+- [x] **03 — Make pane chips fully keyboard operable.** Replace or augment clickable `div` pane chips with correct interactive semantics, Tab focus, Enter/Space activation, selected-state exposure, and visible focus styling without breaking hotkeys, scrolling, or mobile behavior. Extend `Chip` and `StatusLine` tests.
 
 - [ ] **04 — Add complete keyboard behavior to the “more panes” popover.** Give the trigger/list correct relationships and make Arrow keys, Home/End, Enter/Space, Escape, outside click, and focus return work predictably. Preserve pane selection and add focused component tests.
 

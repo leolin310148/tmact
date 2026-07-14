@@ -2,7 +2,7 @@
 // app.js renderStatusline (MIGRATION_SPEC §6 items 9,10).
 //
 // Layout matches the original h() tree EXACTLY:
-//   <div class="chip[ sel][ stale]" title="...">
+//   <button class="chip[ sel][ stale]" title="..." aria-pressed="...">
 //     [<span class="chip-key">KEY</span>]      // only when a hotkey is assigned
 //     [<span class="peer-badge">PEER</span>]   // only when peer present
 //     [indicator]                              // agent-icon OR dot OR nothing
@@ -70,7 +70,7 @@ function PaneIndicator({ pane }: { pane: PaneStatus }) {
 }
 
 export function Chip({ pane, label, hotkey, selected, onSelect }: ChipProps) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const ref = useRef<HTMLButtonElement | null>(null);
 
   // Scroll the selected chip into view, mirroring app.js selectPane.
   useLayoutEffect(() => {
@@ -90,11 +90,19 @@ export function Chip({ pane, label, hotkey, selected, onSelect }: ChipProps) {
     (hotkey ? " — Option+" + hotkey : "");
 
   return (
-    <div ref={ref} className={className} title={title} onClick={onSelect}>
+    <button
+      ref={ref}
+      type="button"
+      className={className}
+      title={title}
+      aria-pressed={selected}
+      onPointerDown={onPointerDownNoBlur}
+      onClick={onSelect}
+    >
       {hotkey ? <span className="chip-key">{hotkey}</span> : null}
       {peer ? <span className="peer-badge">{peer}</span> : null}
       <PaneIndicator pane={pane} />
       <span className="chip-label">{label}</span>
-    </div>
+    </button>
   );
 }

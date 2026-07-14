@@ -74,9 +74,14 @@
     border-radius: 5px;
     background: var(--panel-2);
     border: 1px solid var(--border);
+    color: inherit;
     cursor: pointer;
     font: 12px/1 var(--mono);
     white-space: nowrap;
+  }
+  .chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .chip-label {
     min-width: 0;

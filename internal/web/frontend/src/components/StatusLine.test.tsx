@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AppStateProvider, useAppStateStore } from "../store/AppStateContext";
@@ -108,6 +115,50 @@ function mount(panes: PaneStatus[], selected: string | null, selectPane = vi.fn(
 }
 
 describe("StatusLine overflow", () => {
+  it("renders inline panes as buttons with the current selection exposed", () => {
+    mount(
+      [
+        pane({
+          target: "a",
+          pane_id: "%1",
+          session: "first",
+          runtime: "claude",
+        }),
+        pane({
+          target: "b",
+          pane_id: "%2",
+          session: "second",
+          runtime: "codex",
+        }),
+      ],
+      "%2",
+    );
+
+    expect(screen.getByRole("button", { name: /first/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: /second/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("selects an inline pane from the keyboard", async () => {
+    const selectPane = vi.fn();
+    const user = userEvent.setup();
+    mount(
+      [pane({ target: "a", pane_id: "%1", session: "work", runtime: "claude" })],
+      null,
+      selectPane,
+    );
+
+    const chip = screen.getByRole("button", { name: /work/ });
+    chip.focus();
+    await user.keyboard("{Enter}");
+    expect(selectPane).toHaveBeenCalledWith("%1");
+  });
+
   it("shows agent/asking/selected panes inline and collapses the rest", () => {
     const { container } = mount(
       [
