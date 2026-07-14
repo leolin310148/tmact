@@ -52,8 +52,6 @@ import {
 import type { AppCallbacks } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
-import { scanDownloadablePaths } from "../lib/downloadScan";
-import { checkDownloadFiles } from "../api/client";
 import { translateKey } from "../lib/keymap";
 import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
@@ -65,7 +63,6 @@ import MarkdownToggle from "./MarkdownToggle";
 import CopyLineBar from "./CopyLineBar";
 import ImagePreview, { buildImageDownloadHref, buildImageSrc } from "./ImagePreview";
 import DownloadList from "./DownloadList";
-import type { DownloadListState } from "./DownloadList";
 import type { MarkdownPreviewTarget } from "./MarkdownPreview";
 // markdown-it (~30-40 kB gzip) only loads when a preview is actually opened.
 const MarkdownPreview = lazy(() => import("./MarkdownPreview"));
@@ -99,6 +96,7 @@ import { useHelp } from "../hooks/useHelp";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { useViewport } from "../hooks/useViewport";
 import { useInputHistory } from "../hooks/useInputHistory";
+import { useDownloadList } from "../hooks/useDownloadList";
 
 // Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
 const SELECTED_KEY = "tmact.selectedPane";
@@ -190,6 +188,21 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const streamVisibleLinesRef = useRef(STREAM_RENDER_LINES);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctrlArmedRef = useRef(false);
+
+  // The upload FAB doubles as a download button while selection mode is on.
+  // A request generation prevents a scan from an older dialog or pane from
+  // replacing the current dialog after it finishes out of order.
+  const getDownloadScanSource = useCallback(() => {
+    const pc = paneContentRef.current;
+    return {
+      text: pc.text,
+      lines: paneLinesRef.current,
+      cwd: pc.cwd,
+      peer: pc.peer,
+    };
+  }, []);
+  const { downloadList, openDownloadList, closeDownloadList } =
+    useDownloadList(getDownloadScanSource);
 
   // Uncontrolled DOM node refs (App mutates .value/.disabled imperatively).
   const contentWrapRef = useRef<HTMLDivElement | null>(null);
@@ -552,6 +565,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       closeWS();
       state.selected = null;
       state.selectionMode = false;
+      closeDownloadList();
       delete paneCacheRef.current[paneID];
       delete state.drafts[paneID];
       paneLinesRef.current = [];
@@ -594,6 +608,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       closeQuickMenu,
       syncQuickDock,
       renderMode,
+      closeDownloadList,
     ],
   );
 
@@ -606,6 +621,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         openWS(paneID);
         return;
       }
+      closeDownloadList();
       state.selected = paneID;
       rememberSelection(paneID);
       const draft = draftRef.current;
@@ -641,6 +657,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       renderMode,
       closeQuickMenu,
       syncQuickDock,
+      closeDownloadList,
     ],
   );
 
@@ -753,48 +770,6 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   }, []);
   const closeMarkdownPreview = useCallback(() => {
     setMarkdownPreviewTarget(null);
-  }, []);
-
-  // ----- selection-mode download list -----
-  // The upload FAB doubles as a download button while selection mode is on:
-  // scan the full pane buffer (not just the rendered tail) for path-looking
-  // tokens, let /api/files/check keep the ones that are real files, then show
-  // the pick-and-download overlay.
-  const [downloadList, setDownloadList] = useState<DownloadListState | null>(null);
-  const closeDownloadList = useCallback(() => setDownloadList(null), []);
-  const openDownloadList = useCallback(() => {
-    const pcCur = paneContentRef.current;
-    const buffer = paneLinesRef.current.length
-      ? paneLinesRef.current.join("\n")
-      : pcCur.text;
-    const base: DownloadListState = {
-      loading: true,
-      error: "",
-      files: [],
-      cwd: pcCur.cwd,
-      peer: pcCur.peer,
-    };
-    const paths = scanDownloadablePaths(buffer);
-    if (!paths.length) {
-      setDownloadList({ ...base, loading: false });
-      return;
-    }
-    setDownloadList(base);
-    checkDownloadFiles(paths, pcCur.cwd, pcCur.peer)
-      .then(({ res, data }) => {
-        setDownloadList((prev) => {
-          if (!prev) return prev; // closed while the check was in flight
-          if (!res.ok) {
-            return { ...base, loading: false, error: data.error || "掃描失敗(HTTP " + res.status + ")" };
-          }
-          return { ...base, loading: false, files: Array.isArray(data.files) ? data.files : [] };
-        });
-      })
-      .catch(() => {
-        setDownloadList((prev) =>
-          prev ? { ...base, loading: false, error: "掃描失敗 — 連線錯誤" } : prev,
-        );
-      });
   }, []);
 
   // ----- ContentPane focus handlers (mouseup refocus / blur) -----
