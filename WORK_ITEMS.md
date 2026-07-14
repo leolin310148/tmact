@@ -13,7 +13,7 @@ same commit on `main`.
 
 - [x] **03 — Make pane chips fully keyboard operable.** Replace or augment clickable `div` pane chips with correct interactive semantics, Tab focus, Enter/Space activation, selected-state exposure, and visible focus styling without breaking hotkeys, scrolling, or mobile behavior. Extend `Chip` and `StatusLine` tests.
 
-- [ ] **04 — Add complete keyboard behavior to the “more panes” popover.** Give the trigger/list correct relationships and make Arrow keys, Home/End, Enter/Space, Escape, outside click, and focus return work predictably. Preserve pane selection and add focused component tests.
+- [x] **04 — Add complete keyboard behavior to the “more panes” popover.** Give the trigger/list correct relationships and make Arrow keys, Home/End, Enter/Space, Escape, outside click, and focus return work predictably. Preserve pane selection and add focused component tests.
 
 - [ ] **05 — Give direct terminal input an accessible identity and state.** Ensure the invisible direct-input textarea has an appropriate label/description, exposes whether pane input is available, and does not become a confusing empty control to assistive technology when inactive. Add tests for selected, unselected, and selection-mode states.
 

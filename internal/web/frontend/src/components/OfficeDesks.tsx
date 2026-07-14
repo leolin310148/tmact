@@ -12,14 +12,16 @@
 import {
   Fragment,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { onPointerDownNoBlur } from "../lib/dom";
+import { focusMenuEdge, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
 import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
@@ -178,6 +180,14 @@ function LampMore({
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
+  const pendingFocusRef = useRef<"first" | "last" | null>(null);
+  const buttonID = useId();
+  const menuID = useId();
+
+  const openFromKeyboard = (edge: "first" | "last") => {
+    pendingFocusRef.current = edge;
+    setOpen(true);
+  };
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -186,6 +196,12 @@ function LampMore({
     // the popover off-screen), clamped to an 8px gutter.
     setPos({ left: Math.max(8, r.left), bottom: window.innerHeight - r.top + 8 });
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !pos || !pendingFocusRef.current || !popRef.current) return;
+    focusMenuEdge(popRef.current, pendingFocusRef.current);
+    pendingFocusRef.current = null;
+  }, [open, pos, items.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -196,7 +212,13 @@ function LampMore({
       if (!inBtn && !inPop) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const restoreTrigger = popRef.current?.contains(document.activeElement) ?? false;
+        pendingFocusRef.current = null;
+        setOpen(false);
+        if (restoreTrigger) btnRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onDocPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
@@ -211,18 +233,41 @@ function LampMore({
   }, [items.length]);
 
   const moreLabel = items.length + " more pane" + (items.length === 1 ? "" : "s");
+  const onButtonKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      openFromKeyboard(e.key === "ArrowUp" ? "last" : "first");
+      return;
+    }
+    if (!open && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      openFromKeyboard("first");
+    }
+  };
+
+  const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!moveMenuFocus(e.currentTarget, e.key)) return;
+    e.preventDefault();
+  };
+
   return (
     <>
       <button
         ref={btnRef}
+        id={buttonID}
         type="button"
         className={"office-lamp office-lamp--more" + (open ? " open" : "")}
         title={moreLabel}
         aria-label={"Show " + moreLabel}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={menuID}
         onPointerDown={onPointerDownNoBlur}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          pendingFocusRef.current = null;
+          setOpen((v) => !v);
+        }}
+        onKeyDown={onButtonKeyDown}
       >
         <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
       </button>
@@ -230,8 +275,11 @@ function LampMore({
         ? createPortal(
             <div
               ref={popRef}
+              id={menuID}
               className="desk-more-pop"
               role="menu"
+              aria-labelledby={buttonID}
+              onKeyDown={onMenuKeyDown}
               style={{ position: "fixed", left: pos.left, bottom: pos.bottom, transform: "none" }}
             >
               {items.map(({ pane, label }, i) => {
@@ -254,8 +302,11 @@ function LampMore({
                     aria-label={"Select pane " + (peer ? peer + " " : "") + label}
                     onPointerDown={onPointerDownNoBlur}
                     onClick={() => {
+                      const restoreTrigger =
+                        popRef.current?.contains(document.activeElement) ?? false;
                       onSelect(pane.pane_id ?? "");
                       setOpen(false);
+                      if (restoreTrigger) btnRef.current?.focus();
                     }}
                   >
                     <span className="desk-more-dot" aria-hidden="true" />

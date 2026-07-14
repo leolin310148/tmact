@@ -46,3 +46,27 @@ export function clamp(n: number, min: number, max: number): number {
 export function onPointerDownNoBlur(e: { preventDefault: () => void }): void {
   e.preventDefault();
 }
+
+function menuItems(menu: ParentNode): HTMLElement[] {
+  return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+}
+
+export function focusMenuEdge(menu: ParentNode | null, edge: "first" | "last"): void {
+  if (!menu) return;
+  const items = menuItems(menu);
+  items[edge === "last" ? items.length - 1 : 0]?.focus();
+}
+
+export function moveMenuFocus(menu: ParentNode, key: string): boolean {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(key)) return false;
+  const items = menuItems(menu);
+  if (items.length === 0) return true;
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  let next = 0;
+  if (key === "End") next = items.length - 1;
+  else if (key === "Home") next = 0;
+  else if (key === "ArrowDown") next = (current + 1) % items.length;
+  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+  items[next]?.focus();
+  return true;
+}

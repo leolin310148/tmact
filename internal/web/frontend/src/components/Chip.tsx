@@ -25,7 +25,11 @@
 // layout effect when it becomes selected — same observable behavior, kept inside
 // the StatusLine cluster (App no longer needs a chips ref / querySelector).
 
-import { useLayoutEffect, useRef } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  type KeyboardEventHandler,
+} from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
 import {
@@ -44,6 +48,9 @@ interface ChipProps {
   hotkey: string | undefined;
   selected: boolean;
   onSelect: () => void;
+  /** Render with menu-item semantics when the chip lives in a popover menu. */
+  menuItem?: boolean;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }
 
 // paneIndicator — verbatim port; returns the indicator element or null.
@@ -69,7 +76,15 @@ function PaneIndicator({ pane }: { pane: PaneStatus }) {
   return <span className={"dot " + dotCls}>?</span>;
 }
 
-export function Chip({ pane, label, hotkey, selected, onSelect }: ChipProps) {
+export function Chip({
+  pane,
+  label,
+  hotkey,
+  selected,
+  onSelect,
+  menuItem = false,
+  onKeyDown,
+}: ChipProps) {
   const ref = useRef<HTMLButtonElement | null>(null);
 
   // Scroll the selected chip into view, mirroring app.js selectPane.
@@ -95,9 +110,12 @@ export function Chip({ pane, label, hotkey, selected, onSelect }: ChipProps) {
       type="button"
       className={className}
       title={title}
-      aria-pressed={selected}
+      role={menuItem ? "menuitem" : undefined}
+      aria-pressed={menuItem ? undefined : selected}
+      tabIndex={menuItem ? -1 : undefined}
       onPointerDown={onPointerDownNoBlur}
       onClick={onSelect}
+      onKeyDown={onKeyDown}
     >
       {hotkey ? <span className="chip-key">{hotkey}</span> : null}
       {peer ? <span className="peer-badge">{peer}</span> : null}

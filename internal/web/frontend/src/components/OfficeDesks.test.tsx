@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PaneStatus } from "../types/server";
@@ -70,5 +71,58 @@ describe("OfficeDesks overflow", () => {
     const remoteRow = screen.getByRole("menuitem", { name: "Select pane peer-a work" });
     expect(remoteRow.querySelector(".desk-more-peer")).toHaveTextContent("peer-a");
     expect(remoteRow).toHaveAttribute("title", expect.stringContaining("peer-a"));
+  });
+
+  it("associates its menu and supports keyboard traversal and activation", async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <OfficeDesks
+        panes={[
+          pane({ target: "a", pane_id: "%1", session: "first" }),
+          pane({ target: "b", pane_id: "%2", session: "second" }),
+          pane({ target: "c", pane_id: "%3", session: "third" }),
+        ]}
+        selected={null}
+        onSelect={onSelect}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+
+    const menu = screen.getByRole("menu");
+    expect(trigger).toHaveAttribute("aria-controls", menu.id);
+    expect(menu).toHaveAttribute("aria-labelledby", trigger.id);
+    const menuItems = screen.getAllByRole("menuitem");
+    expect(menuItems[0]).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(menuItems[2]).toHaveFocus();
+    await user.keyboard("{ArrowUp}{Enter}");
+
+    expect(onSelect).toHaveBeenCalledWith("%2");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("returns focus to the lamp trigger when Escape closes the menu", async () => {
+    const user = userEvent.setup();
+    render(
+      <OfficeDesks
+        panes={[pane({ pane_id: "%1", session: "first" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Show 1 more pane" });
+    trigger.focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("menuitem")).toHaveFocus();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 });
