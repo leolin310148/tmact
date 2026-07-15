@@ -25,7 +25,7 @@ same commit on `main`.
 
 - [x] **09 — Improve quick-button editor labelling and destructive actions.** Give every group and row uniquely associated labels, make remove buttons announce which entry they remove, and keep focus in a sensible row after add/delete. Preserve immediate persistence and add tests for repeated labels and deleting the first/middle/last row.
 
-- [ ] **10 — Complete settings-dialog focus management.** On open, focus a stable control; trap Tab/Shift+Tab inside the modal; on close by button, backdrop, or Escape, restore the invoking control. Avoid stealing focus during async settings loads and add component tests.
+- [x] **10 — Complete settings-dialog focus management.** On open, focus a stable control; trap Tab/Shift+Tab inside the modal; on close by button, backdrop, or Escape, restore the invoking control. Avoid stealing focus during async settings loads and add component tests.
 
 - [ ] **11 — Make the download list a robust modal dialog.** Add dialog labelling, focus entry/trap/return, non-interactive loading/error announcements, and keyboard-accessible file rows while preserving native downloads. Test loading, empty, error, populated, Escape, and backdrop states.
 

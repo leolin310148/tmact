@@ -24,8 +24,12 @@
 // index.html placed it (inside the settings card, between the Quick-buttons
 // note and the Server section).
 
-import { useEffect, useLayoutEffect } from "react";
-import type { ReactNode, MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from "react";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 
@@ -36,8 +40,27 @@ export interface SettingsDialogProps {
   quickEditor?: ReactNode;
 }
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+function focusableElements(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) => !element.hidden && element.getAttribute("aria-hidden") !== "true",
+  );
+}
+
 export default function SettingsDialog({ settings, quickEditor }: SettingsDialogProps) {
   const push = usePushNotifications();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const invokingControlRef = useRef<HTMLElement | null>(null);
+  const wasVisibleRef = useRef(false);
   const {
     visible,
     closeSettings,
@@ -65,15 +88,80 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     syncFormFromSettings();
   }, [syncFormFromSettings]);
 
+  // Capture the control that opened the dialog and move focus exactly once per
+  // open. Async settings responses may re-render the dialog, but `visible`
+  // remains true, so they cannot steal focus from the user's current field.
+  useLayoutEffect(() => {
+    if (visible) {
+      if (!wasVisibleRef.current) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement instanceof HTMLElement &&
+          !dialogRef.current?.contains(activeElement)
+        ) {
+          invokingControlRef.current = activeElement;
+        }
+        closeButtonRef.current?.focus();
+      }
+      wasVisibleRef.current = true;
+      return;
+    }
+
+    if (wasVisibleRef.current) {
+      wasVisibleRef.current = false;
+      const invokingControl = invokingControlRef.current;
+      invokingControlRef.current = null;
+      if (invokingControl?.isConnected) invokingControl.focus();
+    }
+  }, [visible]);
+
+  // If the whole dialog unmounts while open, still return focus to its
+  // invoker. Normal closes are handled above after the hidden state is applied.
+  useEffect(
+    () => () => {
+      const invokingControl = invokingControlRef.current;
+      if (invokingControl?.isConnected) invokingControl.focus();
+    },
+    [],
+  );
+
   // Escape closes only while not hidden — registered on document like the
   // original wireSettings keydown listener.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && visible) closeSettings();
+      if (!visible) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSettings();
+      }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [visible, closeSettings]);
+
+  const onDialogKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = focusableElements(dialog);
+    if (focusable.length === 0) {
+      e.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   // A mousedown on the dim backdrop (but not the card) closes the panel.
   const onBackdropMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
@@ -87,9 +175,17 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
       hidden={!visible}
       onMouseDown={onBackdropMouseDown}
     >
-      <div className="settings-card" role="dialog" aria-modal="true" aria-label="Settings">
+      <div
+        className="settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        ref={dialogRef}
+        tabIndex={-1}
+        onKeyDown={onDialogKeyDown}
+      >
         <div className="settings-head">
-          <span>Settings</span>
+          <span id="settings-title">Settings</span>
           <button
             className="settings-close"
             id="settings-close"
@@ -97,6 +193,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             title="close"
             aria-label="close settings"
             onClick={closeSettings}
+            ref={closeButtonRef}
           >
             <svg
               viewBox="0 0 24 24"
