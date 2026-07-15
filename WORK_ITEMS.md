@@ -27,7 +27,7 @@ same commit on `main`.
 
 - [x] **10 — Complete settings-dialog focus management.** On open, focus a stable control; trap Tab/Shift+Tab inside the modal; on close by button, backdrop, or Escape, restore the invoking control. Avoid stealing focus during async settings loads and add component tests.
 
-- [ ] **11 — Make the download list a robust modal dialog.** Add dialog labelling, focus entry/trap/return, non-interactive loading/error announcements, and keyboard-accessible file rows while preserving native downloads. Test loading, empty, error, populated, Escape, and backdrop states.
+- [x] **11 — Make the download list a robust modal dialog.** Add dialog labelling, focus entry/trap/return, non-interactive loading/error announcements, and keyboard-accessible file rows while preserving native downloads. Test loading, empty, error, populated, Escape, and backdrop states.
 
 - [ ] **12 — Add image-preview loading and failure UX.** Show an explicit loading state, replace broken images with a useful error plus retry action, retain the path/download affordance, and prevent stale load/error events after switching images. Add component tests for load, error, retry, close, and rapid source changes.
 
