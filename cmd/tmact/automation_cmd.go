@@ -154,6 +154,16 @@ func runManagedRunner(runDir string, kind string, configPath string, target stri
 	if err != nil {
 		return err
 	}
+	if kind == "loop" {
+		registryDir, registryErr := loopRegistryDir()
+		if registryErr == nil {
+			registryErr = runmeta.RegisterLocator(registryDir, runDir, record)
+		}
+		if registryErr != nil {
+			_ = runmeta.Finish(runDir, record, "error", "register machine-wide runtime: "+registryErr.Error(), tmactNow())
+			return registryErr
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

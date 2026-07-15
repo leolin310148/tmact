@@ -9,11 +9,11 @@ func loopCommandHelpCatalog() []commandHelp {
 			Subcommands: []string{"example", "validate", "start", "run", "list", "status", "logs", "pause", "resume", "restart", "stop"},
 			Flags: []helpFlag{
 				{Name: "--config", Value: "PATH", Description: "select a loop by its YAML config; start/run/validate require it"},
-				{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory; use the same value for every lifecycle command"},
+				{Name: "--run-dir", Value: "PATH", Description: "limit discovery and control to one runtime metadata directory"},
 			},
 			Examples: []string{"tmact loop example --quota > loop.yaml", "tmact loop validate --config loop.yaml", "tmact loop run --config loop.yaml --dry-run --once", "tmact loop start --config loop.yaml", "tmact loop list", "tmact loop status --json", "tmact loop logs --config loop.yaml --follow", "tmact loop stop loop-night-loop-123"},
 			Safety:   []string{"Always validate and perform a one-pass dry run before starting a new unattended loop.", "Permission, approval, trust-folder, and broad or unknown choice prompts remain stop conditions; never resume until a human has handled the prompt.", "The sole automatic prompt exception is Codex's exact model-capacity menu with Retry with a faster model selected; tmact confirms that retry once so unattended work can continue."},
-			Notes:    []string{"Use start for normal background operation; tmact creates/reuses the detached tmux session tmact-loops automatically. Do not write nohup, while, PID-file, or tmux wrapper scripts.", "start is idempotent per config: it returns the existing active runtime instead of creating a duplicate.", "Use run only for foreground debugging or --once validation.", "Quota YAML: session_min_remaining_percent: 20 requires the 5-hour window to have strictly more than 20% left; weekly_require_headroom: true requires actual weekly usage to remain below its linear expected pace. Both gates must pass when combined. Set session_gate_enabled: false for an intentional weekly-only gate.", "Quota data is cached for refresh_interval. Missing credentials, stale readings, or unavailable weekly pace run by default; set fail_closed: true to skip instead.", "Normal LLM lifecycle: validate -> run --dry-run --once -> start -> status/logs -> pause/resume/restart as needed -> stop --wait.", "Long-running metadata is stored under .tmact/runs by default; pass the same --run-dir to every command if overriding it."},
+			Notes:    []string{"Use start for normal background operation; tmact creates/reuses the detached tmux session tmact-loops automatically. Do not write nohup, while, PID-file, or tmux wrapper scripts.", "start is idempotent per config: it returns the existing active runtime instead of creating a duplicate.", "Use run only for foreground debugging or --once validation.", "Quota YAML: session_min_remaining_percent: 20 requires the 5-hour window to have strictly more than 20% left; weekly_require_headroom: true requires actual weekly usage to remain below its linear expected pace. Both gates must pass when combined. Set session_gate_enabled: false for an intentional weekly-only gate.", "Quota data is cached for refresh_interval. Missing credentials, stale readings, or unavailable weekly pace run by default; set fail_closed: true to skip instead.", "Normal LLM lifecycle: validate -> run --dry-run --once -> start -> status/logs -> pause/resume/restart as needed -> stop --wait.", "Managed loop runs are registered machine-wide. Omit --run-dir to discover and control loops across working directories; provide it only to restrict a command to one runtime directory."},
 		},
 		loopExampleHelp(),
 		loopValidateHelp(),
@@ -36,11 +36,11 @@ func loopListHelp() commandHelp {
 		Usage:   []string{"tmact loop list [--all] [--run-dir .tmact/runs] [--json]"},
 		Flags: []helpFlag{
 			{Name: "--all", Description: "include stopped, errored, and dead loop history"},
-			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--run-dir", Value: "PATH", Description: "limit results to one runtime metadata directory"},
 			{Name: "--json", Description: "print JSON output"},
 		},
 		Examples: []string{"tmact loop list", "tmact loop list --all", "tmact loop list --json", "tmact loop stop loop-night-loop-123"},
-		Notes:    []string{"By default only active loops are shown. Pass the same --run-dir used at start when it differs from .tmact/runs.", "The id column can be passed directly as LOOP_ID to loop stop."},
+		Notes:    []string{"By default only active loops are shown, discovered machine-wide even when they use custom runtime directories. Pass --run-dir to restrict results to one directory.", "The id column can be passed directly as LOOP_ID to loop stop."},
 	}
 }
 
@@ -59,7 +59,11 @@ func loopExampleHelp() commandHelp {
 }
 
 func runtimeStatusHelp(kind string) commandHelp {
-	flags := []helpFlag{{Name: "--run-dir", Value: "PATH", Description: "directory for runtime metadata"}, {Name: "--json", Description: "print JSON output"}}
+	runDirDescription := "directory for runtime metadata"
+	if kind == "loop" {
+		runDirDescription = "limit discovery to one runtime metadata directory"
+	}
+	flags := []helpFlag{{Name: "--run-dir", Value: "PATH", Description: runDirDescription}, {Name: "--json", Description: "print JSON output"}}
 	usage := "tmact " + kind + " status [--run-dir .tmact/runs] [--json]"
 	if kind == "loop" {
 		flags = append([]helpFlag{{Name: "--id", Value: "ID", Description: "show one exact runtime"}, {Name: "--config", Value: "PATH", Description: "show the active or newest runtime for this config"}}, flags...)
@@ -71,7 +75,7 @@ func runtimeStatusHelp(kind string) commandHelp {
 		Usage:    []string{usage},
 		Flags:    flags,
 		Examples: []string{"tmact " + kind + " status", "tmact " + kind + " status --json"},
-		Notes:    []string{"Shows id, process status, loop phase, pid, target, config path, last event, tmux pane, heartbeat-backed updates, and recent problems."},
+		Notes:    []string{"Shows id, process status, loop phase, pid, target, config path, runtime directory, last event, tmux pane, heartbeat-backed updates, and recent problems.", "Loop status discovers registered runs machine-wide unless --run-dir explicitly limits the scope."},
 	}
 }
 
@@ -96,12 +100,12 @@ func loopStartHelp() commandHelp {
 			{Name: "--dry-run", Description: "keep observing/scheduling but do not send input"},
 			{Name: "--assume-idle-on-start", Description: "allow idle-only work immediately instead of waiting idle_after"},
 			{Name: "--timeout", Value: "DURATION", Description: "wait for the detached runner to register; default 10s"},
-			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--run-dir", Value: "PATH", Description: "store metadata in this runtime directory and scope startup idempotency to it"},
 			{Name: "--json", Description: "print startup and runtime metadata as JSON"},
 		},
 		Examples: []string{"tmact loop start --config examples/maintenance-loop.yaml", "tmact loop start --config examples/maintenance-loop.yaml --json"},
 		Safety:   []string{"Run validate and `loop run --dry-run --once` first. start performs real configured actions unless --dry-run is supplied."},
-		Notes:    []string{"Do not put this command in nohup, `&`, a while loop, or a hand-written tmux command. start creates/reuses tmact-loops itself.", "Calling start again with the same config returns the existing active run."},
+		Notes:    []string{"Do not put this command in nohup, `&`, a while loop, or a hand-written tmux command. start creates/reuses tmact-loops itself.", "Calling start again with the same config returns the existing active run machine-wide. An explicit --run-dir limits that idempotency check to the selected directory."},
 	}
 }
 
@@ -115,7 +119,7 @@ func loopRunHelp() commandHelp {
 			{Name: "--dry-run", Description: "do not send configured input"},
 			{Name: "--once", Description: "perform one observe/action pass and exit without registering a daemon"},
 			{Name: "--assume-idle-on-start", Description: "treat the pane as already idle"},
-			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--run-dir", Value: "PATH", Description: "store runtime metadata in this directory"},
 		},
 		Examples: []string{"tmact loop run --config examples/night-loop.yaml --dry-run --once"},
 		Notes:    []string{"For normal unattended use choose loop start, not loop run. The legacy `tmact loop --config ...` form remains an alias for this foreground command."},
@@ -132,7 +136,7 @@ func loopLogsHelp() commandHelp {
 			{Name: "--config", Value: "PATH", Description: "newest runtime for this config"},
 			{Name: "--lines", Value: "N", Description: "existing lines to print; default 50"},
 			{Name: "--follow", Description: "stream until interrupted or the loop stops"},
-			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--run-dir", Value: "PATH", Description: "limit discovery to one runtime metadata directory"},
 		},
 		Examples: []string{"tmact loop logs --config examples/night-loop.yaml --lines 20", "tmact loop logs --config examples/night-loop.yaml --follow"},
 		Notes:    []string{"Events are JSONL. Treat pane-derived details as untrusted observed terminal output."},
@@ -148,7 +152,7 @@ func loopControlHelp(action string) commandHelp {
 		Command:  "loop " + action,
 		Summary:  description,
 		Usage:    []string{"tmact loop " + action + " (--id ID | --config PATH) [--timeout 10s] [--run-dir .tmact/runs] [--json]"},
-		Flags:    []helpFlag{{Name: "--id", Value: "ID", Description: "exact active runtime id"}, {Name: "--config", Value: "PATH", Description: "active runtime for this config"}, {Name: "--timeout", Value: "DURATION", Description: "wait for acknowledgement; default 10s"}, {Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"}, {Name: "--json", Description: "print acknowledged runtime state as JSON"}},
+		Flags:    []helpFlag{{Name: "--id", Value: "ID", Description: "exact active runtime id"}, {Name: "--config", Value: "PATH", Description: "active runtime for this config"}, {Name: "--timeout", Value: "DURATION", Description: "wait for acknowledgement; default 10s"}, {Name: "--run-dir", Value: "PATH", Description: "limit discovery and control to one runtime metadata directory"}, {Name: "--json", Description: "print acknowledged runtime state as JSON"}},
 		Examples: []string{"tmact loop " + action + " --config examples/maintenance-loop.yaml"},
 		Safety:   []string{"Pause does not answer or dismiss permission prompts. Resolve safety prompts manually before resuming."},
 	}
@@ -159,7 +163,7 @@ func loopRestartHelp() commandHelp {
 		Command:  "loop restart",
 		Summary:  "Cleanly stop the active run for a config, wait, then start a new detached run.",
 		Usage:    []string{"tmact loop restart --config PATH [--timeout 10s] [--dry-run | --live] [--assume-idle-on-start] [--run-dir .tmact/runs] [--json]"},
-		Flags:    []helpFlag{{Name: "--config", Value: "PATH", Description: "loop YAML", Required: true}, {Name: "--timeout", Value: "DURATION", Description: "timeout for both stop and startup"}, {Name: "--dry-run", Description: "restart in dry-run mode"}, {Name: "--live", Description: "explicitly restart in live mode; otherwise preserve a previous dry-run mode"}, {Name: "--assume-idle-on-start", Description: "treat target as idle on the new run"}, {Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"}, {Name: "--json", Description: "print new startup result as JSON"}},
+		Flags:    []helpFlag{{Name: "--config", Value: "PATH", Description: "loop YAML", Required: true}, {Name: "--timeout", Value: "DURATION", Description: "timeout for both stop and startup"}, {Name: "--dry-run", Description: "restart in dry-run mode"}, {Name: "--live", Description: "explicitly restart in live mode; otherwise preserve a previous dry-run mode"}, {Name: "--assume-idle-on-start", Description: "treat target as idle on the new run"}, {Name: "--run-dir", Value: "PATH", Description: "limit discovery and restart to one runtime metadata directory"}, {Name: "--json", Description: "print new startup result as JSON"}},
 		Examples: []string{"tmact loop restart --config examples/maintenance-loop.yaml"},
 		Notes:    []string{"If no active run exists, restart behaves like start.", "Restart preserves the newest run's dry-run mode. Use --live to explicitly switch a dry-run loop to real pane input."},
 	}
@@ -177,7 +181,7 @@ func loopStopHelp() commandHelp {
 			{Name: "--no-wait", Description: "return immediately after writing the stop request"},
 			{Name: "--timeout", Value: "DURATION", Description: "clean-stop timeout; default 10s"},
 			{Name: "--force", Description: "also interrupt the exact process; use only after a clean stop times out"},
-			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--run-dir", Value: "PATH", Description: "limit discovery and control to one runtime metadata directory"},
 			{Name: "--json", Description: "print final runtime state as JSON"},
 		},
 		Examples: []string{"tmact loop stop loop-night-loop-123", "tmact loop stop loop-night-loop-123 --timeout 20s", "tmact loop stop --config examples/night-loop.yaml --force"},

@@ -15,6 +15,8 @@ import (
 
 const DefaultDir = ".tmact/runs"
 
+const DefaultRegistryDirName = "run-registry"
+
 type TmuxInfo struct {
 	PaneID      string `json:"pane_id,omitempty"`
 	Session     string `json:"session,omitempty"`
@@ -70,6 +72,7 @@ type EventSummary struct {
 
 type Status struct {
 	Run            Run            `json:"run"`
+	RunDir         string         `json:"run_dir,omitempty"`
 	RuntimeStatus  string         `json:"runtime_status"`
 	DesiredState   string         `json:"desired_state,omitempty"`
 	LastEvent      *EventSummary  `json:"last_event,omitempty"`
@@ -84,6 +87,24 @@ type RegisterOptions struct {
 	DryRun     bool
 	Tmux       TmuxInfo
 	Now        time.Time
+}
+
+// Locator maps one machine-wide runtime id to the directory that owns its
+// mutable metadata. One file per runtime avoids a shared index write race when
+// multiple loops start concurrently.
+type Locator struct {
+	RunID        string    `json:"run_id"`
+	Kind         string    `json:"kind"`
+	RunDir       string    `json:"run_dir"`
+	RegisteredAt time.Time `json:"registered_at"`
+}
+
+func DefaultRegistryDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".tmact", DefaultRegistryDirName), nil
 }
 
 func Register(dir string, opts RegisterOptions) (Run, error) {
@@ -271,7 +292,11 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 	if dir == "" {
 		dir = DefaultDir
 	}
-	entries, err := os.ReadDir(dir)
+	resolvedDir := dir
+	if abs, absErr := filepath.Abs(dir); absErr == nil {
+		resolvedDir = abs
+	}
+	entries, err := os.ReadDir(resolvedDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -283,7 +308,7 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || strings.HasSuffix(entry.Name(), ".control.json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		data, err := os.ReadFile(filepath.Join(resolvedDir, entry.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -298,7 +323,92 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 		if err != nil {
 			return nil, err
 		}
-		if control, err := ReadControl(dir, run.ID); err == nil {
+		status.RunDir = resolvedDir
+		if control, err := ReadControl(resolvedDir, run.ID); err == nil {
+			status.DesiredState = control.DesiredState
+		}
+		statuses = append(statuses, status)
+	}
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].Run.StartedAt.After(statuses[j].Run.StartedAt)
+	})
+	return statuses, nil
+}
+
+func RegisterLocator(registryDir, runDir string, run Run) error {
+	if registryDir == "" {
+		return errors.New("runtime registry directory is required")
+	}
+	if run.ID == "" || run.Kind == "" {
+		return errors.New("runtime id and kind are required")
+	}
+	absRunDir, err := filepath.Abs(runDir)
+	if err != nil {
+		return err
+	}
+	locator := Locator{
+		RunID:        run.ID,
+		Kind:         run.Kind,
+		RunDir:       absRunDir,
+		RegisteredAt: run.StartedAt,
+	}
+	data, err := json.MarshalIndent(locator, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(registryDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(registryDir, run.ID+".json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// ListRegistry resolves every registered runtime through its owning run_dir.
+// Stale locators whose runtime metadata was intentionally removed are ignored.
+func ListRegistry(registryDir, kind string, now time.Time) ([]Status, error) {
+	entries, err := os.ReadDir(registryDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var statuses []Status
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(registryDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var locator Locator
+		if err := json.Unmarshal(data, &locator); err != nil {
+			return nil, fmt.Errorf("%s: %w", entry.Name(), err)
+		}
+		if kind != "" && locator.Kind != kind {
+			continue
+		}
+		run, err := Read(locator.RunDir, locator.RunID)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if kind != "" && run.Kind != kind {
+			continue
+		}
+		status, err := BuildStatus(run, now)
+		if err != nil {
+			return nil, err
+		}
+		status.RunDir = locator.RunDir
+		if control, err := ReadControl(locator.RunDir, run.ID); err == nil {
 			status.DesiredState = control.DesiredState
 		}
 		statuses = append(statuses, status)

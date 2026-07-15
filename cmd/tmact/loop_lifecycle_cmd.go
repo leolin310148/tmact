@@ -12,17 +12,24 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/loop"
 	"github.com/leolin310148/tmact/internal/runmeta"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 const loopSupervisorSession = "tmact-loops"
 
 var loopWindowNameRE = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
+
+var (
+	loopRegistryDir      = runmeta.DefaultRegistryDir
+	loopPaneStartCommand = tmux.PaneStartCommand
+)
 
 func runLoopValidate(args []string) error {
 	if wantsHelp(args) {
@@ -64,21 +71,22 @@ func runLoopStatus(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop status")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit discovery to one runtime metadata directory")
 	id := fs.String("id", "", "show one exact runtime id")
 	configPath := fs.String("config", "", "show the active or newest runtime for this config")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	statuses, err := runmeta.List(*runDir, "loop", tmactNow())
+	statuses, err := listLoopStatuses(*runDir, machineWide)
 	if err != nil {
 		return err
 	}
 	if *id != "" || *configPath != "" {
-		selected, err := selectLoop(*runDir, *id, *configPath)
+		selected, err := selectLoopFromStatuses(statuses, *id, *configPath)
 		if err != nil {
 			return err
 		}
@@ -95,9 +103,10 @@ func runLoopList(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop list")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit results to one runtime metadata directory")
 	all := fs.Bool("all", false, "include stopped, errored, and dead loop history")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 	if err := fs.Parse(args); err != nil {
@@ -106,7 +115,7 @@ func runLoopList(args []string) error {
 	if fs.NArg() != 0 {
 		return errors.New("loop list does not accept positional arguments")
 	}
-	statuses, err := runmeta.List(*runDir, "loop", tmactNow())
+	statuses, err := listLoopStatuses(*runDir, machineWide)
 	if err != nil {
 		return err
 	}
@@ -137,14 +146,167 @@ func runLoopList(args []string) error {
 	return nil
 }
 
+func hasFlag(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func listLoopStatuses(runDir string, machineWide bool) ([]runmeta.Status, error) {
+	if !machineWide {
+		return runmeta.List(runDir, "loop", tmactNow())
+	}
+	registryDir, err := loopRegistryDir()
+	if err != nil {
+		return nil, err
+	}
+	statuses, err := runmeta.ListRegistry(registryDir, "loop", tmactNow())
+	if err != nil {
+		return nil, err
+	}
+	dirs := []string{runDir}
+	legacyDirs, err := discoverLegacyLoopRunDirs()
+	if err != nil {
+		return nil, err
+	}
+	dirs = append(dirs, legacyDirs...)
+	seenDirs := map[string]bool{}
+	for _, dir := range dirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+		if seenDirs[abs] {
+			continue
+		}
+		seenDirs[abs] = true
+		local, err := runmeta.List(abs, "loop", tmactNow())
+		if err != nil {
+			return nil, err
+		}
+		for _, status := range local {
+			if runmeta.Active(status) {
+				if err := runmeta.RegisterLocator(registryDir, status.RunDir, status.Run); err != nil {
+					return nil, err
+				}
+			}
+		}
+		statuses = append(statuses, local...)
+	}
+	statuses = dedupeLoopStatuses(statuses)
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].Run.StartedAt.After(statuses[j].Run.StartedAt)
+	})
+	return statuses, nil
+}
+
+func dedupeLoopStatuses(statuses []runmeta.Status) []runmeta.Status {
+	seen := map[string]bool{}
+	result := make([]runmeta.Status, 0, len(statuses))
+	for _, status := range statuses {
+		key := status.Run.ID + "\x00" + status.RunDir
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, status)
+	}
+	return result
+}
+
+func discoverLegacyLoopRunDirs() ([]string, error) {
+	panes, err := listSessionTmuxPanes(loopSupervisorSession)
+	if err != nil {
+		return nil, nil
+	}
+	var dirs []string
+	for _, pane := range panes {
+		command, err := loopPaneStartCommand(pane.PaneID)
+		if err != nil {
+			continue
+		}
+		dir := runDirFromLoopStartCommand(command)
+		if dir == "" && pane.CurrentPath != "" {
+			dir = filepath.Join(pane.CurrentPath, runmeta.DefaultDir)
+		}
+		if dir != "" {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs, nil
+}
+
+func runDirFromLoopStartCommand(command string) string {
+	words := splitShellWords(command)
+	for i, word := range words {
+		switch {
+		case word == "--run-dir" && i+1 < len(words):
+			return words[i+1]
+		case strings.HasPrefix(word, "--run-dir="):
+			return strings.TrimPrefix(word, "--run-dir=")
+		}
+	}
+	return ""
+}
+
+func splitShellWords(command string) []string {
+	command = strings.TrimSpace(command)
+	if len(command) >= 2 && command[0] == '"' && command[len(command)-1] == '"' {
+		command = command[1 : len(command)-1]
+	}
+	var words []string
+	var current strings.Builder
+	var quote byte
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+				continue
+			}
+			if ch == '\\' && quote == '"' && i+1 < len(command) {
+				i++
+				current.WriteByte(command[i])
+				continue
+			}
+			current.WriteByte(ch)
+			continue
+		}
+		switch ch {
+		case '\'', '"':
+			quote = ch
+		case '\\':
+			if i+1 < len(command) {
+				i++
+				current.WriteByte(command[i])
+			}
+		case ' ', '\t', '\r', '\n':
+			if current.Len() > 0 {
+				words = append(words, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteByte(ch)
+		}
+	}
+	if current.Len() > 0 {
+		words = append(words, current.String())
+	}
+	return words
+}
+
 func runLoopStart(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop start")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop start", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "", "path to loop YAML config")
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "store metadata in this runtime directory and scope startup idempotency to it")
 	dryRun := fs.Bool("dry-run", false, "run the detached loop without sending tmux input")
 	assumeIdle := fs.Bool("assume-idle-on-start", false, "treat the target pane as already idle")
 	timeout := fs.Duration("timeout", 10*time.Second, "how long to wait for startup registration")
@@ -170,13 +332,20 @@ func runLoopStart(args []string) error {
 		return err
 	}
 
-	release, err := acquireLoopStartLock(absRunDir, absConfig)
+	lockDir := absRunDir
+	if machineWide {
+		lockDir, err = loopRegistryDir()
+		if err != nil {
+			return err
+		}
+	}
+	release, err := acquireLoopStartLock(lockDir, absConfig)
 	if err != nil {
 		return err
 	}
 	defer release()
 
-	if active, ok, err := activeLoopForConfig(absRunDir, absConfig); err != nil {
+	if active, ok, err := activeLoopForConfig(absRunDir, machineWide, absConfig); err != nil {
 		return err
 	} else if ok {
 		return printLoopStartResult(active, true, *jsonOutput)
@@ -252,9 +421,10 @@ func runLoopControl(args []string, desired string) error {
 	if wantsHelp(args) {
 		return printCommandHelp(topic)
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet(topic, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit discovery and control to one runtime metadata directory")
 	id := fs.String("id", "", "runtime id")
 	configPath := fs.String("config", "", "select the active runtime for this config")
 	timeout := fs.Duration("timeout", 10*time.Second, "how long to wait for the state change")
@@ -262,18 +432,18 @@ func runLoopControl(args []string, desired string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	selected, err := selectActiveLoop(*runDir, *id, *configPath)
+	selected, err := selectActiveLoop(*runDir, machineWide, *id, *configPath)
 	if err != nil {
 		return err
 	}
-	if err := runmeta.WriteControl(*runDir, selected.Run.ID, runmeta.Control{
+	if err := runmeta.WriteControl(selected.RunDir, selected.Run.ID, runmeta.Control{
 		DesiredState: desired,
 		Reason:       strings.TrimPrefix(topic, "loop "),
 		UpdatedAt:    tmactNow(),
 	}); err != nil {
 		return err
 	}
-	status, err := waitForLoopPhase(*runDir, selected.Run.ID, desired, *timeout)
+	status, err := waitForLoopPhase(selected.RunDir, selected.Run.ID, desired, *timeout)
 	if err != nil {
 		return err
 	}
@@ -288,9 +458,10 @@ func runLoopStop(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop stop")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop stop", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit discovery and control to one runtime metadata directory")
 	id := fs.String("id", "", "runtime id to stop")
 	configPath := fs.String("config", "", "stop the active runtime for this config")
 	wait := fs.Bool("wait", true, "wait until the runner has stopped")
@@ -325,11 +496,11 @@ func runLoopStop(args []string) error {
 	if *id == "" && *configPath == "" {
 		return errors.New("LOOP_ID, --id, or --config is required")
 	}
-	selected, err := selectActiveLoop(*runDir, *id, *configPath)
+	selected, err := selectActiveLoop(*runDir, machineWide, *id, *configPath)
 	if err != nil {
 		return err
 	}
-	if err := requestLoopStop(*runDir, selected.Run, *force); err != nil {
+	if err := requestLoopStop(selected.RunDir, selected.Run, *force); err != nil {
 		return err
 	}
 	if *noWait {
@@ -345,7 +516,7 @@ func runLoopStop(args []string) error {
 		fmt.Printf("requested stop for loop %s\n", selected.Run.ID)
 		return nil
 	}
-	status, err := waitForLoopTerminal(*runDir, selected.Run.ID, *timeout)
+	status, err := waitForLoopTerminal(selected.RunDir, selected.Run.ID, *timeout)
 	if err != nil {
 		if !*force {
 			return fmt.Errorf("%w; retry with --force if the runner is stuck", err)
@@ -384,10 +555,11 @@ func runLoopRestart(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop restart")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop restart", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "", "path to loop YAML config")
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit discovery and restart to one runtime metadata directory")
 	dryRun := fs.Bool("dry-run", false, "run the restarted loop without sending tmux input")
 	live := fs.Bool("live", false, "restart in live mode even if the previous run was dry-run")
 	assumeIdle := fs.Bool("assume-idle-on-start", false, "treat the target pane as already idle")
@@ -407,17 +579,20 @@ func runLoopRestart(args []string) error {
 		return err
 	}
 	restartDryRun := false
-	if previous, err := selectLoop(*runDir, "", absConfig); err == nil {
+	selectedRunDir := *runDir
+	if previous, err := selectLoop(*runDir, machineWide, "", absConfig); err == nil {
 		restartDryRun = previous.Run.DryRun
+		selectedRunDir = previous.RunDir
 	}
-	if active, ok, err := activeLoopForConfig(*runDir, absConfig); err != nil {
+	if active, ok, err := activeLoopForConfig(*runDir, machineWide, absConfig); err != nil {
 		return err
 	} else if ok {
 		restartDryRun = active.Run.DryRun
-		if err := requestLoopStop(*runDir, active.Run, false); err != nil {
+		selectedRunDir = active.RunDir
+		if err := requestLoopStop(active.RunDir, active.Run, false); err != nil {
 			return err
 		}
-		if _, err := waitForLoopTerminal(*runDir, active.Run.ID, *timeout); err != nil {
+		if _, err := waitForLoopTerminal(active.RunDir, active.Run.ID, *timeout); err != nil {
 			return err
 		}
 	}
@@ -427,7 +602,7 @@ func runLoopRestart(args []string) error {
 	if *live {
 		restartDryRun = false
 	}
-	startArgs := []string{"--config", absConfig, "--run-dir", *runDir, "--timeout", timeout.String()}
+	startArgs := []string{"--config", absConfig, "--run-dir", selectedRunDir, "--timeout", timeout.String()}
 	if restartDryRun {
 		startArgs = append(startArgs, "--dry-run")
 	}
@@ -444,9 +619,10 @@ func runLoopLogs(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop logs")
 	}
+	machineWide := !hasFlag(args, "--run-dir")
 	fs := flag.NewFlagSet("loop logs", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "limit discovery to one runtime metadata directory")
 	id := fs.String("id", "", "runtime id")
 	configPath := fs.String("config", "", "select the newest runtime for this config")
 	lines := fs.Int("lines", 50, "number of existing log lines to print")
@@ -457,7 +633,7 @@ func runLoopLogs(args []string) error {
 	if *lines < 0 {
 		return errors.New("--lines cannot be negative")
 	}
-	selected, err := selectLoop(*runDir, *id, *configPath)
+	selected, err := selectLoop(*runDir, machineWide, *id, *configPath)
 	if err != nil {
 		return err
 	}
@@ -473,7 +649,7 @@ func runLoopLogs(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return followLoopLog(ctx, *runDir, selected.Run.ID, selected.Run.LogPath, offset)
+	return followLoopLog(ctx, selected.RunDir, selected.Run.ID, selected.Run.LogPath, offset)
 }
 
 func printLogTail(path string, count int) (int64, error) {
@@ -544,11 +720,15 @@ func followLoopLog(ctx context.Context, runDir, id, path string, offset int64) e
 	}
 }
 
-func selectLoop(runDir, id, configPath string) (runmeta.Status, error) {
-	statuses, err := runmeta.List(runDir, "loop", tmactNow())
+func selectLoop(runDir string, machineWide bool, id, configPath string) (runmeta.Status, error) {
+	statuses, err := listLoopStatuses(runDir, machineWide)
 	if err != nil {
 		return runmeta.Status{}, err
 	}
+	return selectLoopFromStatuses(statuses, id, configPath)
+}
+
+func selectLoopFromStatuses(statuses []runmeta.Status, id, configPath string) (runmeta.Status, error) {
 	if id == "" && configPath != "" {
 		abs, err := filepath.Abs(configPath)
 		if err != nil {
@@ -556,23 +736,37 @@ func selectLoop(runDir, id, configPath string) (runmeta.Status, error) {
 		}
 		// List is newest-first. Prefer an active run, otherwise let read-only
 		// commands such as logs select the newest historical run.
+		var active []runmeta.Status
+		var newest *runmeta.Status
 		for _, status := range statuses {
-			if status.Run.ConfigPath == abs && runmeta.Active(status) {
-				return status, nil
+			if status.Run.ConfigPath != abs {
+				continue
+			}
+			if newest == nil {
+				candidate := status
+				newest = &candidate
+			}
+			if runmeta.Active(status) {
+				active = append(active, status)
 			}
 		}
-		for _, status := range statuses {
-			if status.Run.ConfigPath == abs {
-				return status, nil
+		switch len(active) {
+		case 1:
+			return active[0], nil
+		case 0:
+			if newest != nil {
+				return *newest, nil
 			}
+			return runmeta.Status{}, errors.New("run not found")
+		default:
+			return runmeta.Status{}, errors.New("multiple active runs matched; use --id")
 		}
-		return runmeta.Status{}, errors.New("run not found")
 	}
 	return runmeta.SelectStatus(statuses, id, configPath)
 }
 
-func selectActiveLoop(runDir, id, configPath string) (runmeta.Status, error) {
-	status, err := selectLoop(runDir, id, configPath)
+func selectActiveLoop(runDir string, machineWide bool, id, configPath string) (runmeta.Status, error) {
+	status, err := selectLoop(runDir, machineWide, id, configPath)
 	if err != nil {
 		return runmeta.Status{}, err
 	}
@@ -582,21 +776,29 @@ func selectActiveLoop(runDir, id, configPath string) (runmeta.Status, error) {
 	return status, nil
 }
 
-func activeLoopForConfig(runDir, configPath string) (runmeta.Status, bool, error) {
+func activeLoopForConfig(runDir string, machineWide bool, configPath string) (runmeta.Status, bool, error) {
 	abs, err := filepath.Abs(configPath)
 	if err != nil {
 		return runmeta.Status{}, false, err
 	}
-	statuses, err := runmeta.List(runDir, "loop", tmactNow())
+	statuses, err := listLoopStatuses(runDir, machineWide)
 	if err != nil {
 		return runmeta.Status{}, false, err
 	}
+	var matches []runmeta.Status
 	for _, status := range statuses {
 		if status.Run.ConfigPath == abs && runmeta.Active(status) {
-			return status, true, nil
+			matches = append(matches, status)
 		}
 	}
-	return runmeta.Status{}, false, nil
+	switch len(matches) {
+	case 0:
+		return runmeta.Status{}, false, nil
+	case 1:
+		return matches[0], true, nil
+	default:
+		return runmeta.Status{}, false, errors.New("multiple active runs matched; use --id")
+	}
 }
 
 func waitForLoopRegistration(runDir, configPath string, startedAfter time.Time, timeout time.Duration) (runmeta.Status, error) {
@@ -673,6 +875,9 @@ func buildLoopStatus(runDir string, run runmeta.Run) (runmeta.Status, error) {
 	}
 	if control, err := runmeta.ReadControl(runDir, run.ID); err == nil {
 		status.DesiredState = control.DesiredState
+	}
+	if abs, err := filepath.Abs(runDir); err == nil {
+		status.RunDir = abs
 	}
 	return status, nil
 }
