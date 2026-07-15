@@ -20,7 +20,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "loop",
 			args: []string{"loop", "--help"},
-			want: []string{"loop", "Subcommands:", "tmact loop start", "--dry-run", "Permission", "Do not write nohup", "session_min_remaining_percent", "weekly_require_headroom"},
+			want: []string{"loop", "Subcommands:", "tmact loop start", "--dry-run", "Permission", "Do not write nohup", "session_min_remaining_percent", "weekly_require_headroom", "machine-wide"},
 		},
 		{
 			name: "loop start",
@@ -30,7 +30,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "loop list",
 			args: []string{"loop", "list", "--help"},
-			want: []string{"loop list", "active managed loops", "--all", "id column", "loop stop"},
+			want: []string{"loop list", "active managed loops", "--all", "id column", "loop stop", "machine-wide"},
 		},
 		{
 			name: "loop example",

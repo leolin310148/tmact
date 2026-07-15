@@ -51,7 +51,7 @@ tmact loop run --config loop.yaml --dry-run --once
 # 2. Start an idempotent detached runtime in the tmact-loops tmux session.
 tmact loop start --config loop.yaml
 
-# 3. Observe or control it from any shell using the same --run-dir.
+# 3. Observe or control it from any shell; discovery is machine-wide by default.
 tmact loop list
 tmact loop status --json
 tmact loop logs --config loop.yaml --follow
@@ -65,9 +65,12 @@ tmact loop stop LOOP_ID
 
 `loop start` validates the config before launching, creates or reuses the
 detached `tmact-loops` session, waits for runtime registration, and returns an
-existing active runtime instead of starting a duplicate. `loop run` is the
-foreground/debugging form; the legacy `tmact loop --config ...` syntax remains
-an alias for it. Permission and approval prompts are never auto-confirmed.
+existing active runtime instead of starting a duplicate. Managed runs register
+their runtime directory machine-wide, including custom `--run-dir` locations;
+pass `--run-dir` to a lifecycle command only when intentionally limiting its
+scope to that directory. `loop run` is the foreground/debugging form; the
+legacy `tmact loop --config ...` syntax remains an alias for it. Permission and
+approval prompts are never auto-confirmed.
 
 For machine-readable flags, safety notes, and the exact lifecycle contract,
 use `tmact help loop --json` or `tmact llm instructions --json`.

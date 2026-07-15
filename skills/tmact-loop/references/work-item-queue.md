@@ -47,8 +47,10 @@ consume context on every cycle and are harder to revise safely.
 
 Validate, dry-run once, then start through the managed lifecycle. Keep the
 config and log under `.tmact/` and use the default run directory when possible.
-If a custom `--run-dir` is necessary, record it beside the config and pass it to
-every list, status, logs, pause, resume, restart, and stop command.
+Managed runs with a custom `--run-dir` are still discoverable machine-wide, so
+omit that flag for normal list, status, logs, pause, resume, restart, and stop
+commands. Pass it only when intentionally restricting a command to one runtime
+directory.
 
 When requirements change mid-run:
 

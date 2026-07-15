@@ -190,3 +190,45 @@ func TestSelectRunByConfigPrefersActiveRun(t *testing.T) {
 		t.Fatalf("selected id = %q", selected.ID)
 	}
 }
+
+func TestRegistryListsRunsAcrossDirectoriesAndIgnoresStaleLocators(t *testing.T) {
+	registryDir := t.TempDir()
+	now := time.Date(2026, 7, 15, 8, 0, 0, 0, time.UTC)
+	var want []Run
+	for i, dir := range []string{t.TempDir(), t.TempDir()} {
+		run, err := Register(dir, RegisterOptions{
+			Kind:       "loop",
+			ConfigPath: filepath.Join(dir, []string{"loop-a.yaml", "loop-b.yaml"}[i]),
+			Target:     "demo:0.0",
+			Now:        now.Add(time.Duration(len(want)) * time.Minute),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := RegisterLocator(registryDir, dir, run); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, run)
+	}
+	stale := Run{ID: "loop-stale-999", Kind: "loop", StartedAt: now}
+	if err := RegisterLocator(registryDir, t.TempDir(), stale); err != nil {
+		t.Fatal(err)
+	}
+
+	statuses, err := ListRegistry(registryDir, "loop", now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 2 {
+		t.Fatalf("statuses = %#v", statuses)
+	}
+	seen := map[string]string{}
+	for _, status := range statuses {
+		seen[status.Run.ID] = status.RunDir
+	}
+	for _, run := range want {
+		if seen[run.ID] == "" || !filepath.IsAbs(seen[run.ID]) {
+			t.Fatalf("run %s missing absolute run_dir: %#v", run.ID, seen)
+		}
+	}
+}

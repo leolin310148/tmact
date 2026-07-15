@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -256,6 +257,180 @@ func TestLoopListJSONUsesEmptyArray(t *testing.T) {
 	}
 	if strings.TrimSpace(out) != "[]" {
 		t.Fatalf("output = %q", out)
+	}
+}
+
+func TestLoopListDiscoversRegisteredRunsMachineWide(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	listSessionTmuxPanes = func(string) ([]tmux.Pane, error) { return nil, errors.New("missing") }
+	oldCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldCWD) }()
+
+	var runs []runmeta.Run
+	for i, runDir := range []string{t.TempDir(), t.TempDir()} {
+		run, err := runmeta.Register(runDir, runmeta.RegisterOptions{
+			Kind:       "loop",
+			ConfigPath: filepath.Join(runDir, []string{"first.yaml", "second.yaml"}[i]),
+			Target:     "demo:0.0",
+			Now:        time.Now().Add(time.Duration(i) * time.Second),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := runmeta.RegisterLocator(registryDir, runDir, run); err != nil {
+			t.Fatal(err)
+		}
+		runs = append(runs, run)
+	}
+
+	out, err := captureRun(t, "loop", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range runs {
+		if !strings.Contains(out, run.ID) || !strings.Contains(out, `"run_dir":`) {
+			t.Fatalf("machine-wide output missing %s or run_dir: %s", run.ID, out)
+		}
+	}
+}
+
+func TestLoopStopResolvesMachineWideRunDir(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	listSessionTmuxPanes = func(string) ([]tmux.Pane, error) { return nil, errors.New("missing") }
+	runDir := t.TempDir()
+	run, err := runmeta.Register(runDir, runmeta.RegisterOptions{
+		Kind:       "loop",
+		ConfigPath: filepath.Join(t.TempDir(), "machine.yaml"),
+		Target:     "demo:0.0",
+		Now:        time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runmeta.RegisterLocator(registryDir, runDir, run); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := captureRun(t, "loop", "stop", run.ID, "--no-wait"); err != nil {
+		t.Fatal(err)
+	}
+	control, err := runmeta.ReadControl(runDir, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if control.DesiredState != runmeta.DesiredStopped {
+		t.Fatalf("control = %#v", control)
+	}
+}
+
+func TestLoopListExplicitRunDirKeepsLocalScope(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	registeredDir := t.TempDir()
+	run, err := runmeta.Register(registeredDir, runmeta.RegisterOptions{
+		Kind:       "loop",
+		ConfigPath: filepath.Join(t.TempDir(), "machine.yaml"),
+		Target:     "demo:0.0",
+		Now:        time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runmeta.RegisterLocator(registryDir, registeredDir, run); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureRun(t, "loop", "list", "--run-dir", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, run.ID) || !strings.Contains(out, "no active loops") {
+		t.Fatalf("explicit run-dir leaked machine registry: %s", out)
+	}
+}
+
+func TestSelectLoopRejectsMultipleMachineWideActiveRunsForConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "shared.yaml")
+	statuses := []runmeta.Status{
+		{Run: runmeta.Run{ID: "loop-new", ConfigPath: configPath}, RunDir: "/tmp/new", RuntimeStatus: "running"},
+		{Run: runmeta.Run{ID: "loop-old", ConfigPath: configPath}, RunDir: "/tmp/old", RuntimeStatus: "running"},
+	}
+
+	if _, err := selectLoopFromStatuses(statuses, "", configPath); err == nil || !strings.Contains(err.Error(), "multiple active runs") {
+		t.Fatalf("expected an ambiguous active-run error, got %v", err)
+	}
+}
+
+func TestLoopListAdoptsLegacySupervisorRunDir(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	runDir := filepath.Join(t.TempDir(), "runtime metadata")
+	run, err := runmeta.Register(runDir, runmeta.RegisterOptions{
+		Kind:       "loop",
+		ConfigPath: filepath.Join(t.TempDir(), "legacy.yaml"),
+		Target:     "demo:0.0",
+		Now:        time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listSessionTmuxPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{{PaneID: "%7", CurrentPath: t.TempDir()}}, nil
+	}
+	loopPaneStartCommand = func(string) (string, error) {
+		return `"'/usr/local/bin/tmact' 'loop' 'run' '--config' '/tmp/loop.yaml' '--run-dir' '` + runDir + `'"`, nil
+	}
+
+	out, err := captureRun(t, "loop", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, run.ID) {
+		t.Fatalf("legacy active loop not discovered: %s", out)
+	}
+	registered, err := runmeta.ListRegistry(registryDir, "loop", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registered) != 1 || registered[0].Run.ID != run.ID {
+		t.Fatalf("legacy loop not adopted: %#v", registered)
+	}
+}
+
+func TestManagedLoopRegistersMachineWideLocator(t *testing.T) {
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	runDir := t.TempDir()
+	err := runManagedRunner(runDir, "loop", filepath.Join(t.TempDir(), "managed.yaml"), "demo:0.0", "", false, func(context.Context, runmeta.Run) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statuses, err := runmeta.ListRegistry(registryDir, "loop", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 1 || statuses[0].RunDir != runDir {
+		t.Fatalf("registered statuses = %#v", statuses)
 	}
 }
 
