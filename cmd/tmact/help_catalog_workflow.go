@@ -5,13 +5,13 @@ func loopCommandHelpCatalog() []commandHelp {
 		{
 			Command:     "loop",
 			Summary:     "Manage the complete lifecycle of a configurable single-pane automation loop.",
-			Usage:       []string{"tmact loop example [--quota]", "tmact loop validate --config PATH", "tmact loop start --config PATH", "tmact loop status [--json]", "tmact loop logs (--id ID | --config PATH) [--follow]", "tmact loop pause|resume --config PATH", "tmact loop restart --config PATH", "tmact loop stop --config PATH [--wait]", "tmact loop run --config PATH [--dry-run] [--once]"},
-			Subcommands: []string{"example", "validate", "start", "run", "status", "logs", "pause", "resume", "restart", "stop"},
+			Usage:       []string{"tmact loop example [--quota]", "tmact loop validate --config PATH", "tmact loop start --config PATH", "tmact loop list [--all]", "tmact loop status [--json]", "tmact loop logs (--id ID | --config PATH) [--follow]", "tmact loop pause|resume --config PATH", "tmact loop restart --config PATH", "tmact loop stop LOOP_ID [--wait]", "tmact loop run --config PATH [--dry-run] [--once]"},
+			Subcommands: []string{"example", "validate", "start", "run", "list", "status", "logs", "pause", "resume", "restart", "stop"},
 			Flags: []helpFlag{
 				{Name: "--config", Value: "PATH", Description: "select a loop by its YAML config; start/run/validate require it"},
 				{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory; use the same value for every lifecycle command"},
 			},
-			Examples: []string{"tmact loop example --quota > loop.yaml", "tmact loop validate --config loop.yaml", "tmact loop run --config loop.yaml --dry-run --once", "tmact loop start --config loop.yaml", "tmact loop status --json", "tmact loop logs --config loop.yaml --follow", "tmact loop stop --config loop.yaml --wait"},
+			Examples: []string{"tmact loop example --quota > loop.yaml", "tmact loop validate --config loop.yaml", "tmact loop run --config loop.yaml --dry-run --once", "tmact loop start --config loop.yaml", "tmact loop list", "tmact loop status --json", "tmact loop logs --config loop.yaml --follow", "tmact loop stop loop-night-loop-123"},
 			Safety:   []string{"Always validate and perform a one-pass dry run before starting a new unattended loop.", "Permission, approval, trust-folder, and broad or unknown choice prompts remain stop conditions; never resume until a human has handled the prompt.", "The sole automatic prompt exception is Codex's exact model-capacity menu with Retry with a faster model selected; tmact confirms that retry once so unattended work can continue."},
 			Notes:    []string{"Use start for normal background operation; tmact creates/reuses the detached tmux session tmact-loops automatically. Do not write nohup, while, PID-file, or tmux wrapper scripts.", "start is idempotent per config: it returns the existing active runtime instead of creating a duplicate.", "Use run only for foreground debugging or --once validation.", "Quota YAML: session_min_remaining_percent: 20 requires the 5-hour window to have strictly more than 20% left; weekly_require_headroom: true requires actual weekly usage to remain below its linear expected pace. Both gates must pass when combined. Set session_gate_enabled: false for an intentional weekly-only gate.", "Quota data is cached for refresh_interval. Missing credentials, stale readings, or unavailable weekly pace run by default; set fail_closed: true to skip instead.", "Normal LLM lifecycle: validate -> run --dry-run --once -> start -> status/logs -> pause/resume/restart as needed -> stop --wait.", "Long-running metadata is stored under .tmact/runs by default; pass the same --run-dir to every command if overriding it."},
 		},
@@ -19,12 +19,28 @@ func loopCommandHelpCatalog() []commandHelp {
 		loopValidateHelp(),
 		loopStartHelp(),
 		loopRunHelp(),
+		loopListHelp(),
 		runtimeStatusHelp("loop"),
 		loopLogsHelp(),
 		loopControlHelp("pause"),
 		loopControlHelp("resume"),
 		loopRestartHelp(),
 		loopStopHelp(),
+	}
+}
+
+func loopListHelp() commandHelp {
+	return commandHelp{
+		Command: "loop list",
+		Summary: "List active managed loops and their IDs for lifecycle commands.",
+		Usage:   []string{"tmact loop list [--all] [--run-dir .tmact/runs] [--json]"},
+		Flags: []helpFlag{
+			{Name: "--all", Description: "include stopped, errored, and dead loop history"},
+			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
+			{Name: "--json", Description: "print JSON output"},
+		},
+		Examples: []string{"tmact loop list", "tmact loop list --all", "tmact loop list --json", "tmact loop stop loop-night-loop-123"},
+		Notes:    []string{"By default only active loops are shown. Pass the same --run-dir used at start when it differs from .tmact/runs.", "The id column can be passed directly as LOOP_ID to loop stop."},
 	}
 }
 
@@ -153,7 +169,7 @@ func loopStopHelp() commandHelp {
 	return commandHelp{
 		Command: "loop stop",
 		Summary: "Request a cooperative stop and, by default, wait for final runner state.",
-		Usage:   []string{"tmact loop stop (--id ID | --config PATH) [--wait] [--timeout 10s] [--force] [--run-dir .tmact/runs] [--json]"},
+		Usage:   []string{"tmact loop stop (LOOP_ID | --id ID | --config PATH) [--wait] [--timeout 10s] [--force] [--run-dir .tmact/runs] [--json]"},
 		Flags: []helpFlag{
 			{Name: "--id", Value: "ID", Description: "exact active runtime id"},
 			{Name: "--config", Value: "PATH", Description: "active runtime for this config"},
@@ -164,7 +180,7 @@ func loopStopHelp() commandHelp {
 			{Name: "--run-dir", Value: "PATH", Description: "runtime metadata directory"},
 			{Name: "--json", Description: "print final runtime state as JSON"},
 		},
-		Examples: []string{"tmact loop stop --config examples/night-loop.yaml --wait", "tmact loop stop --id loop-night-loop-123 --timeout 20s", "tmact loop stop --config examples/night-loop.yaml --force"},
+		Examples: []string{"tmact loop stop loop-night-loop-123", "tmact loop stop loop-night-loop-123 --timeout 20s", "tmact loop stop --config examples/night-loop.yaml --force"},
 		Safety:   []string{"Prefer the cooperative default. --force is a fallback for a stuck process and may interrupt an in-progress action."},
 		Notes:    []string{"A successful default invocation means the loop reached stopped, error, or dead state; callers do not need a Bash polling loop."},
 	}

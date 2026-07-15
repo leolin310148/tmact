@@ -28,6 +28,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"loop start", "Idempotently", "tmact-loops", "Do not put this command in nohup", "--timeout"},
 		},
 		{
+			name: "loop list",
+			args: []string{"loop", "list", "--help"},
+			want: []string{"loop list", "active managed loops", "--all", "id column", "loop stop"},
+		},
+		{
 			name: "loop example",
 			args: []string{"loop", "example", "--help"},
 			want: []string{"loop example", "complete loop YAML", "--quota", "loop validate", "self-contained"},
@@ -117,6 +122,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 		t.Fatalf("manifest = %#v", manifest)
 	}
 	foundLoopStatus := false
+	foundLoopList := false
 	foundLoopStart := false
 	foundLoopExample := false
 	foundTrustFolder := false
@@ -127,6 +133,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 			foundLoopStatus = true
 			if len(command.Examples) == 0 || len(command.Notes) == 0 {
 				t.Fatalf("loop status help is too sparse: %#v", command)
+			}
+		}
+		if command.Command == "loop list" {
+			foundLoopList = true
+			if len(command.Examples) < 2 || len(command.Notes) < 2 {
+				t.Fatalf("loop list help is too sparse: %#v", command)
 			}
 		}
 		if command.Command == "loop start" {
@@ -159,6 +171,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundLoopStatus {
 		t.Fatalf("loop status missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundLoopList {
+		t.Fatalf("loop list missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundLoopStart {
 		t.Fatalf("loop start missing from manifest: %#v", manifest.Commands)
