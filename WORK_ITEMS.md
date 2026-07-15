@@ -23,7 +23,7 @@ same commit on `main`.
 
 - [x] **08 — Make the quick-input dock an accessible popup.** Synchronize `aria-expanded`, popup ownership, focus entry/return, Escape handling, and empty-state announcement with the dock’s existing imperative open/close state. Preserve touch behavior and add regression tests around open, choose, backdrop close, and pane changes.
 
-- [ ] **09 — Improve quick-button editor labelling and destructive actions.** Give every group and row uniquely associated labels, make remove buttons announce which entry they remove, and keep focus in a sensible row after add/delete. Preserve immediate persistence and add tests for repeated labels and deleting the first/middle/last row.
+- [x] **09 — Improve quick-button editor labelling and destructive actions.** Give every group and row uniquely associated labels, make remove buttons announce which entry they remove, and keep focus in a sensible row after add/delete. Preserve immediate persistence and add tests for repeated labels and deleting the first/middle/last row.
 
 - [ ] **10 — Complete settings-dialog focus management.** On open, focus a stable control; trap Tab/Shift+Tab inside the modal; on close by button, backdrop, or Escape, restore the invoking control. Avoid stealing focus during async settings loads and add component tests.
 
