@@ -1,0 +1,4 @@
+interface:
+  display_name: "tmact Dispatch"
+  short_description: "Dispatch agents into tmux sessions"
+  default_prompt: "Use $tmact-dispatch to delegate this task to an agent in another tmux session."

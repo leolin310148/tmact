@@ -52,14 +52,15 @@ tmact loop run --config loop.yaml --dry-run --once
 tmact loop start --config loop.yaml
 
 # 3. Observe or control it from any shell using the same --run-dir.
+tmact loop list
 tmact loop status --json
 tmact loop logs --config loop.yaml --follow
 tmact loop pause --config loop.yaml
 tmact loop resume --config loop.yaml
 tmact loop restart --config loop.yaml
 
-# 4. Request a cooperative stop and wait for final state.
-tmact loop stop --config loop.yaml --wait
+# 4. Copy an id from list, then request a cooperative stop and wait for final state.
+tmact loop stop LOOP_ID
 ```
 
 `loop start` validates the config before launching, creates or reuses the
@@ -70,6 +71,23 @@ an alias for it. Permission and approval prompts are never auto-confirmed.
 
 For machine-readable flags, safety notes, and the exact lifecycle contract,
 use `tmact help loop --json` or `tmact llm instructions --json`.
+
+### Agent skills
+
+tmact-owned agent skills live under `skills/` as the canonical source. The
+project-local `.agents/skills` and `.claude/skills` entries, plus optional
+global installations, are symlinks to those directories so Claude and Codex do
+not drift into separate copies.
+
+```sh
+# Preview, install with backups for conflicts, then verify.
+scripts/install-skills.sh
+scripts/install-skills.sh --execute --backup-existing
+scripts/install-skills.sh --check
+```
+
+The links are intended for a developer checkout. Binary-only machines should
+not receive links to a repository that is absent.
 
 ### Exact-directory workspace trust
 

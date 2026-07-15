@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Review Loop"
+  short_description: "Converge implementation through agent review"
+  default_prompt: "Use $agent-loop to run an implementation and review loop until it converges."

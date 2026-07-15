@@ -38,6 +38,8 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
 - Run metadata for long processes: `.tmact/runs/`.
 - Status daemon snapshot: `/tmp/tmact-status.json`.
 - Agent-inbox handoff files: `.agent-inbox/features/<name>/`.
+- Canonical tmact-owned agent skills: `skills/`; provider discovery paths are
+  symlinks and must not become separate edited copies.
 
 ## Safety Rules That Must Not Slip
 
@@ -76,11 +78,11 @@ loop. Use `tmact loop run` only for foreground debugging or `--dry-run --once`.
 Use the runmeta commands to inspect/stop rather than killing tmux windows:
 
 ```sh
-tmact loop status
+tmact loop list
 tmact loop logs --config <path> --follow
 tmact loop pause --config <path>
 tmact loop resume --config <path>
-tmact loop stop --id <id> --wait
+tmact loop stop <loop-id>
 tmact workflow stop --config <path>
 ```
 

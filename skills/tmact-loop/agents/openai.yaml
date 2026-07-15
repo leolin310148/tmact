@@ -1,0 +1,4 @@
+interface:
+  display_name: "tmact Loop"
+  short_description: "Create and manage tmact automation loops"
+  default_prompt: "Use $tmact-loop to create, validate, start, list, and monitor a safe tmact automation loop."
