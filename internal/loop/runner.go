@@ -24,6 +24,7 @@ import (
 type Options struct {
 	DryRun    bool
 	Once      bool
+	RunID     string
 	Control   func() (string, error)
 	Heartbeat func(string) error
 }
@@ -80,6 +81,7 @@ type paneState struct {
 
 type event struct {
 	Timestamp string      `json:"ts"`
+	RunID     string      `json:"run_id,omitempty"`
 	Type      string      `json:"type"`
 	Target    string      `json:"target"`
 	Action    string      `json:"action,omitempty"`
@@ -779,6 +781,9 @@ func (r *Runner) configurePeerTarget(ctx context.Context) error {
 }
 
 func (r *Runner) emit(e event) error {
+	if e.RunID == "" {
+		e.RunID = r.options.RunID
+	}
 	data, err := json.Marshal(e)
 	if err != nil {
 		return err

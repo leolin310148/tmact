@@ -40,7 +40,7 @@ func TestRegisterAndListRunStatus(t *testing.T) {
 		t.Fatalf("control = %#v", control)
 	}
 
-	statuses, err := List(dir, "loop", now)
+	statuses, err := List(dir, "loop", now.Add(2*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,48 @@ func TestRegisterAndListRunStatus(t *testing.T) {
 	}
 	if len(status.RecentProblems) != 0 {
 		t.Fatalf("problems = %#v", status.RecentProblems)
+	}
+}
+
+func TestBuildStatusScopesSharedLogToRunWindowAndTarget(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "shared.jsonl")
+	start := time.Date(2026, 7, 15, 1, 0, 0, 500_000_000, time.UTC)
+	run := Run{
+		ID:         "loop-first-1",
+		Kind:       "loop",
+		Target:     "work:0.0",
+		LogPath:    logPath,
+		StartedAt:  start,
+		StoppedAt:  start.Add(10 * time.Minute),
+		Status:     "stopped",
+		Reason:     "requested",
+		PID:        1,
+		ConfigPath: filepath.Join(dir, "loop.yaml"),
+	}
+	lines := []string{
+		`{"ts":"2026-07-15T00:59:59Z","type":"error","target":"work:0.0","reason":"before run"}`,
+		`{"ts":"2026-07-15T01:00:00Z","type":"state","target":"work:0.0","status":"ready"}`,
+		`{"ts":"2026-07-15T01:05:00Z","type":"action","target":"other:0.0","status":"failed","reason":"other target"}`,
+		`{"ts":"2026-07-15T01:06:00Z","type":"action","target":"work:0.0","action":"prompt","status":"ok"}`,
+		`{"ts":"2026-07-15T01:10:00Z","type":"stop","target":"work:0.0","reason":"requested"}`,
+		`{"ts":"2026-07-15T01:10:00Z","run_id":"loop-second-2","type":"stop","target":"work:0.0","reason":"permission_prompt"}`,
+		`{"ts":"2026-07-15T01:10:00Z","type":"flow","target":"work:0.0","status":"ok"}`,
+		`{"ts":"2026-07-15T01:20:00Z","type":"stop","target":"work:0.0","reason":"permission_prompt"}`,
+	}
+	if err := os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := BuildStatus(run, start.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LastEvent == nil || status.LastEvent.Reason != "requested" {
+		t.Fatalf("last event = %#v", status.LastEvent)
+	}
+	if len(status.RecentProblems) != 0 {
+		t.Fatalf("later or other-target problems leaked into run: %#v", status.RecentProblems)
 	}
 }
 

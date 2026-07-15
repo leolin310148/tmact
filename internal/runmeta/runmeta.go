@@ -58,6 +58,7 @@ const (
 
 type EventSummary struct {
 	Timestamp time.Time `json:"ts,omitempty"`
+	RunID     string    `json:"run_id,omitempty"`
 	Type      string    `json:"type,omitempty"`
 	Target    string    `json:"target,omitempty"`
 	Action    string    `json:"action,omitempty"`
@@ -311,9 +312,27 @@ func List(dir string, kind string, now time.Time) ([]Status, error) {
 func BuildStatus(run Run, now time.Time) (Status, error) {
 	status := Status{Run: run, RuntimeStatus: RuntimeStatus(run)}
 	if run.LogPath != "" {
-		last, problems, err := ReadLogSummary(run.LogPath)
+		end := now
+		if !run.StoppedAt.IsZero() {
+			end = run.StoppedAt
+		}
+		last, problems, err := readLogSummary(run.LogPath, run.ID, run.Target, run.StartedAt, end)
 		if err != nil {
 			problems = append(problems, EventSummary{Type: "error", Reason: err.Error()})
+		}
+		// Older shared logs have no run_id and second-only timestamps. A restart
+		// in the same second can therefore appear after this run's requested stop.
+		// Runtime metadata is authoritative for operator-requested/interrupted
+		// termination, so preserve that terminal event in status output.
+		if !run.StoppedAt.IsZero() && (run.Reason == "requested" || run.Reason == "interrupted") &&
+			(last == nil || last.Type != "stop" || last.Reason != run.Reason) {
+			last = &EventSummary{
+				Timestamp: run.StoppedAt,
+				RunID:     run.ID,
+				Type:      "stop",
+				Target:    run.Target,
+				Reason:    run.Reason,
+			}
 		}
 		status.LastEvent = last
 		status.RecentProblems = problems
@@ -399,6 +418,19 @@ func SelectStatus(statuses []Status, id string, configPath string) (Status, erro
 }
 
 func ReadLogSummary(path string) (*EventSummary, []EventSummary, error) {
+	return readLogSummary(path, "", "", time.Time{}, time.Time{})
+}
+
+// readLogSummary limits shared log files to the selected runtime. Loop configs
+// are commonly restarted with the same log_path, so an unbounded tail would
+// make historical runs report events and problems from a later run.
+func readLogSummary(path, runID, target string, start, end time.Time) (*EventSummary, []EventSummary, error) {
+	// Loop events are currently emitted with RFC3339 second precision while
+	// runtime registration keeps sub-second precision. Include the whole second
+	// in which the run registered so its first event is not lost.
+	if !start.IsZero() {
+		start = start.Truncate(time.Second)
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil, nil
@@ -418,6 +450,23 @@ func ReadLogSummary(path string) (*EventSummary, []EventSummary, error) {
 		if err != nil {
 			continue
 		}
+		if runID != "" && event.RunID != "" && event.RunID != runID {
+			continue
+		}
+		if target != "" && event.Target != target {
+			continue
+		}
+		if !start.IsZero() || !end.IsZero() {
+			if event.Timestamp.IsZero() {
+				continue
+			}
+			if !start.IsZero() && event.Timestamp.Before(start) {
+				continue
+			}
+			if !end.IsZero() && event.Timestamp.After(end) {
+				continue
+			}
+		}
 		last = &event
 		if isProblem(event) {
 			problems = append(problems, event)
@@ -432,6 +481,7 @@ func ReadLogSummary(path string) (*EventSummary, []EventSummary, error) {
 func parseEvent(line string) (EventSummary, error) {
 	var raw struct {
 		Timestamp string `json:"ts"`
+		RunID     string `json:"run_id"`
 		Type      string `json:"type"`
 		Target    string `json:"target"`
 		Action    string `json:"action"`
@@ -444,6 +494,7 @@ func parseEvent(line string) (EventSummary, error) {
 		return EventSummary{}, err
 	}
 	event := EventSummary{
+		RunID:  raw.RunID,
 		Type:   raw.Type,
 		Target: raw.Target,
 		Action: raw.Action,

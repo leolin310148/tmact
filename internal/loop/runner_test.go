@@ -17,6 +17,21 @@ import (
 	"github.com/leolin310148/tmact/internal/prompt"
 )
 
+func TestLoopEventsIncludeManagedRunID(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "loop.jsonl")
+	runner := NewRunner(Config{LogPath: logPath}, Options{RunID: "loop-demo-123"})
+	if err := runner.emit(event{Timestamp: "2026-07-15T01:00:00Z", Type: "state", Target: "demo:0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"run_id":"loop-demo-123"`) {
+		t.Fatalf("event missing managed run id: %s", data)
+	}
+}
+
 func TestLoopStopsCooperativelyWhileWaitingForNextPoll(t *testing.T) {
 	calls := 0
 	runner := NewRunner(Config{
