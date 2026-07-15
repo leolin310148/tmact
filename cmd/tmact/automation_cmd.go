@@ -94,6 +94,7 @@ func runLoopForeground(args []string) error {
 	}
 
 	return runManagedRunner(*runDir, "loop", *configPath, cfg.Target, cfg.LogPath, *dryRun, func(ctx context.Context, record runmeta.Run) error {
+		options.RunID = record.ID
 		options.Control = func() (string, error) {
 			control, err := runmeta.ReadControl(*runDir, record.ID)
 			if errors.Is(err, os.ErrNotExist) {
