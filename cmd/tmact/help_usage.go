@@ -36,10 +36,11 @@ Usage:
   tmact loop validate --config examples/night-loop.yaml
   tmact loop run --config examples/night-loop.yaml --dry-run --once
   tmact loop start --config examples/night-loop.yaml
+  tmact loop list [--all] [--json]
   tmact loop status [--run-dir .tmact/runs] [--json]
   tmact loop logs (--id ID | --config path) [--follow]
   tmact loop pause|resume|restart --config examples/night-loop.yaml
-  tmact loop stop (--id ID | --config path) [--wait]
+  tmact loop stop (LOOP_ID | --id ID | --config path) [--wait]
   tmact workflow example [--profile openspec]
   tmact workflow validate --config workflow.yaml [--var key=value] [--json]
   tmact workflow plan --config workflow.yaml [--var key=value] [--json]

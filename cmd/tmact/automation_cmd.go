@@ -34,6 +34,8 @@ func runLoop(args []string) error {
 			return runLoopValidate(args[1:])
 		case "status":
 			return runLoopStatus(args[1:])
+		case "list":
+			return runLoopList(args[1:])
 		case "stop":
 			return runLoopStop(args[1:])
 		case "pause":

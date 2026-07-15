@@ -91,6 +91,52 @@ func runLoopStatus(args []string) error {
 	return nil
 }
 
+func runLoopList(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("loop list")
+	}
+	fs := flag.NewFlagSet("loop list", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	runDir := fs.String("run-dir", runmeta.DefaultDir, "directory for runtime metadata")
+	all := fs.Bool("all", false, "include stopped, errored, and dead loop history")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("loop list does not accept positional arguments")
+	}
+	statuses, err := runmeta.List(*runDir, "loop", tmactNow())
+	if err != nil {
+		return err
+	}
+	if !*all {
+		active := statuses[:0]
+		for _, status := range statuses {
+			if runmeta.Active(status) {
+				active = append(active, status)
+			}
+		}
+		statuses = active
+	}
+	if statuses == nil {
+		statuses = []runmeta.Status{}
+	}
+	if *jsonOutput {
+		return printJSON(statuses)
+	}
+	if len(statuses) == 0 {
+		if *all {
+			fmt.Println("no registered loops")
+			return nil
+		}
+		fmt.Println("no active loops")
+		return nil
+	}
+	printRuntimeStatuses(statuses)
+	return nil
+}
+
 func runLoopStart(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("loop start")
@@ -252,8 +298,32 @@ func runLoopStop(args []string) error {
 	timeout := fs.Duration("timeout", 10*time.Second, "maximum wait for a clean stop")
 	force := fs.Bool("force", false, "also interrupt the exact process after requesting a clean stop")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
+	positionalID := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		positionalID = args[0]
+		args = args[1:]
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	remaining := fs.Args()
+	if len(remaining) > 1 || (positionalID != "" && len(remaining) != 0) {
+		return errors.New("loop stop accepts at most one positional LOOP_ID")
+	}
+	if positionalID == "" && len(remaining) == 1 {
+		positionalID = remaining[0]
+	}
+	if positionalID != "" {
+		if *id != "" {
+			return errors.New("LOOP_ID and --id are mutually exclusive")
+		}
+		*id = positionalID
+	}
+	if *id != "" && *configPath != "" {
+		return errors.New("LOOP_ID/--id and --config are mutually exclusive")
+	}
+	if *id == "" && *configPath == "" {
+		return errors.New("LOOP_ID, --id, or --config is required")
 	}
 	selected, err := selectActiveLoop(*runDir, *id, *configPath)
 	if err != nil {

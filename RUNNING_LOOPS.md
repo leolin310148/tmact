@@ -17,14 +17,14 @@ stop time, and stop command.
 Check managed loop state:
 
 ```sh
-tmact loop status
+tmact loop list
 ```
 
 Follow events and stop cleanly:
 
 ```sh
 tmact loop logs --config PATH --follow
-tmact loop stop --config PATH --wait
+tmact loop stop LOOP_ID
 ```
 
 Inspect target panes:
