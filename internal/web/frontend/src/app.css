@@ -1428,7 +1428,7 @@
 
   /* Quick-button editor in the settings panel — one block per runtime group,
      each a list of label/text rows with add + remove controls. */
-  .qb-group { margin-bottom: 14px; }
+  .qb-group { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; }
   .qb-group:last-child { margin-bottom: 0; }
   .qb-group-head {
     font: 700 11px/1 var(--mono); color: var(--fg-dim); margin-bottom: 7px;

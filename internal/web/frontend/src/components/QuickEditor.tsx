@@ -14,9 +14,9 @@
 // (`item.label`/`item.text`) and is updated in the entry on every keystroke —
 // this is an "uncontrolled-by-mutation" pattern matching the original DOM.
 
-import { useRef } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { QuickEntry, UseQuickReturn } from "../hooks/useQuick";
-import { QB_GROUPS, QB_LABEL } from "../hooks/useQuick";
+import { QB_GROUPS, QB_LABEL, type QBGroup } from "../hooks/useQuick";
 
 /**
  * Props. App passes the live `useQuick(...)` return value; QuickEditor reads
@@ -36,6 +36,20 @@ export function QuickEditor({ quick }: QuickEditorProps) {
     addQuickRow,
     deleteQuickRow,
   } = quick;
+  const editorId = useId();
+  const pendingFocusId = useRef<string | null>(null);
+
+  const rowId = (group: QBGroup, index: number) =>
+    `${editorId}-${group}-button-${index + 1}`;
+  const labelInputId = (group: QBGroup, index: number) =>
+    `${rowId(group, index)}-label`;
+  const addButtonId = (group: QBGroup) => `${editorId}-${group}-add`;
+
+  useLayoutEffect(() => {
+    if (!pendingFocusId.current) return;
+    document.getElementById(pendingFocusId.current)?.focus();
+    pendingFocusId.current = null;
+  }, [editorVersion]);
 
   // editorVersion changes whenever the original would have called
   // renderQuickEditor (add/delete). It is folded into each row's key below so a
@@ -44,8 +58,8 @@ export function QuickEditor({ quick }: QuickEditorProps) {
   return (
     <div id="qb-editor">
       {QB_GROUPS.map((g) => (
-        <div className="qb-group" key={g}>
-          <div className="qb-group-head">{QB_LABEL[g]}</div>
+        <fieldset className="qb-group" key={g}>
+          <legend className="qb-group-head">{QB_LABEL[g]}</legend>
           <div className="qb-rows">
             {quickConfig[g].map((item, i) => (
               <QuickRow
@@ -57,27 +71,45 @@ export function QuickEditor({ quick }: QuickEditorProps) {
                 // uncontrolled inputs would reuse a deleted row's DOM (and its
                 // stale typed value); the version-namespaced key avoids that.
                 key={editorVersion + "-" + g + "-" + i}
+                id={rowId(g, i)}
+                groupLabel={QB_LABEL[g]}
+                index={i}
                 item={item}
                 saveQuickConfig={saveQuickConfig}
                 bumpMenu={bumpMenu}
-                onDelete={() => deleteQuickRow(g, item)}
+                onDelete={() => {
+                  const remainingLength = quickConfig[g].length - 1;
+                  pendingFocusId.current =
+                    remainingLength === 0
+                      ? addButtonId(g)
+                      : labelInputId(g, Math.min(i, remainingLength - 1));
+                  deleteQuickRow(g, item);
+                }}
               />
             ))}
           </div>
           <button
+            id={addButtonId(g)}
             className="qb-add"
             type="button"
-            onClick={() => addQuickRow(g)}
+            aria-label={`Add button to ${QB_LABEL[g]}`}
+            onClick={() => {
+              pendingFocusId.current = labelInputId(g, quickConfig[g].length);
+              addQuickRow(g);
+            }}
           >
             + Add button
           </button>
-        </div>
+        </fieldset>
       ))}
     </div>
   );
 }
 
 interface QuickRowProps {
+  id: string;
+  groupLabel: string;
+  index: number;
   item: QuickEntry;
   saveQuickConfig: () => void;
   bumpMenu: () => void;
@@ -89,16 +121,29 @@ interface QuickRowProps {
 // uncontrolled (defaultValue = the entry's value at mount); each keystroke
 // mutates the entry in place, persists, and re-renders the live menu — matching
 // the original `label.addEventListener("input", …)` handlers exactly.
-function QuickRow({ item, saveQuickConfig, bumpMenu, onDelete }: QuickRowProps) {
+function QuickRow({
+  id,
+  groupLabel,
+  index,
+  item,
+  saveQuickConfig,
+  bumpMenu,
+  onDelete,
+}: QuickRowProps) {
   // Hold the initial values so the uncontrolled inputs seed from the entry once
   // (the original set `label.value = item.label` after creating the element).
   const initial = useRef({ label: item.label, text: item.text });
+  const [entryLabel, setEntryLabel] = useState(item.label);
+  const rowLabel = `${groupLabel} button ${index + 1}`;
+  const removeTarget = entryLabel.trim() || "unnamed button";
 
   return (
-    <div className="qb-row">
+    <div className="qb-row" role="group" aria-label={rowLabel}>
       <input
+        id={`${id}-label`}
         className="qb-label"
         type="text"
+        aria-label={`${rowLabel} label`}
         placeholder="label"
         spellCheck={false}
         autoCapitalize="off"
@@ -106,13 +151,16 @@ function QuickRow({ item, saveQuickConfig, bumpMenu, onDelete }: QuickRowProps) 
         defaultValue={initial.current.label}
         onInput={(e) => {
           item.label = (e.target as HTMLInputElement).value;
+          setEntryLabel(item.label);
           saveQuickConfig();
           bumpMenu();
         }}
       />
       <input
+        id={`${id}-text`}
         className="qb-text"
         type="text"
+        aria-label={`${rowLabel} text sent to the pane`}
         placeholder="text sent to the pane (Enter is added)"
         spellCheck={false}
         autoCapitalize="off"
@@ -127,7 +175,8 @@ function QuickRow({ item, saveQuickConfig, bumpMenu, onDelete }: QuickRowProps) 
       <button
         className="qb-del"
         type="button"
-        title="remove button"
+        aria-label={`Remove "${removeTarget}" from ${rowLabel}`}
+        title={`Remove ${removeTarget}`}
         onClick={onDelete}
       >
         ✕
