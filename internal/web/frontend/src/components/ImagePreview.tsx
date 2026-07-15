@@ -19,7 +19,7 @@
 //   - closing clears <img>.src (the original did img.removeAttribute("src")).
 //     Here `src == null` means hidden, so the <img> simply isn't given a src.
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // buildImageSrc mirrors app.js previewImagePath's URL construction exactly:
@@ -50,6 +50,51 @@ export interface ImagePreviewProps {
   path?: string;
   /** Invoked on backdrop click / close button / Escape — App clears `src`. */
   onClose: () => void;
+}
+
+type ImageLoadStatus = "loading" | "loaded" | "error";
+
+function PreviewImage({ src }: { src: string }) {
+  const [status, setStatus] = useState<ImageLoadStatus>("loading");
+  const [attempt, setAttempt] = useState(0);
+  const attemptRef = useRef(0);
+
+  const settleAttempt = (settledAttempt: number, nextStatus: ImageLoadStatus): void => {
+    if (settledAttempt === attemptRef.current) setStatus(nextStatus);
+  };
+
+  const retry = (): void => {
+    const nextAttempt = attemptRef.current + 1;
+    attemptRef.current = nextAttempt;
+    setStatus("loading");
+    setAttempt(nextAttempt);
+  };
+
+  return (
+    <div className="image-preview-media" data-state={status} aria-busy={status === "loading"}>
+      {status === "loading" ? (
+        <div className="image-preview-message" role="status">
+          Loading image…
+        </div>
+      ) : null}
+      {status === "error" ? (
+        <div className="image-preview-message image-preview-error" role="alert">
+          <span>Unable to load image.</span>
+          <button type="button" onClick={retry}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+      <img
+        key={attempt}
+        alt="preview"
+        src={src}
+        hidden={status !== "loaded"}
+        onLoad={() => settleAttempt(attempt, "loaded")}
+        onError={() => settleAttempt(attempt, "error")}
+      />
+    </div>
+  );
 }
 
 export default function ImagePreview({ src, downloadHref, path, onClose }: ImagePreviewProps) {
@@ -117,8 +162,8 @@ export default function ImagePreview({ src, downloadHref, path, onClose }: Image
             </svg>
           </a>
         ) : null}
-        {/* No src attribute when closed mirrors removeAttribute("src"). */}
-        {src == null ? <img alt="preview" /> : <img alt="preview" src={src} />}
+        {/* Keying by src discards all load state and handlers from the previous image. */}
+        {src == null ? <img alt="preview" /> : <PreviewImage key={src} src={src} />}
         <div className="image-preview-path">{path ?? ""}</div>
       </div>
     </div>
