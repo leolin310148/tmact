@@ -29,7 +29,7 @@ same commit on `main`.
 
 - [x] **11 — Make the download list a robust modal dialog.** Add dialog labelling, focus entry/trap/return, non-interactive loading/error announcements, and keyboard-accessible file rows while preserving native downloads. Test loading, empty, error, populated, Escape, and backdrop states.
 
-- [ ] **12 — Add image-preview loading and failure UX.** Show an explicit loading state, replace broken images with a useful error plus retry action, retain the path/download affordance, and prevent stale load/error events after switching images. Add component tests for load, error, retry, close, and rapid source changes.
+- [x] **12 — Add image-preview loading and failure UX.** Show an explicit loading state, replace broken images with a useful error plus retry action, retain the path/download affordance, and prevent stale load/error events after switching images. Add component tests for load, error, retry, close, and rapid source changes.
 
 - [ ] **13 — Complete markdown-preview dialog semantics and focus behavior.** Add a labelled modal boundary, initial focus, focus trap/return, accessible loading/error status, and safe focus handling while Mermaid rendering finishes. Preserve request cancellation and add regression tests.
 
