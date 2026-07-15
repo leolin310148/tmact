@@ -1,0 +1,4 @@
+interface:
+  display_name: "tmact Handoff"
+  short_description: "Brief and dispatch work to a fresh agent"
+  default_prompt: "Use $handoff to package this session and dispatch a fresh agent with complete context."

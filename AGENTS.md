@@ -70,6 +70,15 @@ Its production build is emitted into `internal/web/static/` (embedded via
   websocket packages, and Web Push/VAPID support. The frontend's npm deps live
   in `internal/web/frontend/`.
 
+## Agent Skills
+
+Canonical tmact-owned skills live under `skills/`. The matching entries in
+`.agents/skills/`, `.claude/skills/`, `~/.codex/skills/`, and
+`~/.claude/skills/` are symlinks; edit only the canonical directories. After a
+skill change, run the skill-creator `quick_validate.py` and
+`scripts/install-skills.sh --check`. Keep machine-specific `local-*` skills
+ignored unless their host and path configuration has first been externalized.
+
 ## Safety
 
 This tool presses keys in live tmux panes. Default to dry-runs, keep targets
