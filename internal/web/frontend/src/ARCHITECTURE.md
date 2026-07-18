@@ -303,7 +303,7 @@ the originals (seed defaults / fall back to `{}`/`null`).
 - `#qb-fab` (quick FAB).
 - Quick-menu buttons (`renderQuickMenu`).
 - `#help-btn` and `#help-overlay`.
-- `#copyline-join`, `#copyline-space`.
+- `#copyline-join`, `#copyline-space`, `#copyline-run`.
 
 **Exact parity note:** the set of buttons that get `pointerdown` preventDefault
 is load-bearing for the mobile soft keyboard (spec §6 item 30). Re-derive each

@@ -1,5 +1,6 @@
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import CopyLineBar, { buildFileDownloadHref, selectedDownloadPath } from "./CopyLineBar";
 
 afterEach(() => {
@@ -57,5 +58,30 @@ describe("CopyLineBar download action", () => {
     expect(link?.getAttribute("href")).toBe(
       "/api/file?path=dist%2Freport.txt&cwd=%2Fwork%2Fapp&peer=peer-a",
     );
+  });
+});
+
+describe("CopyLineBar run command action", () => {
+  it("joins terminal wraps and runs the command in the selected session", () => {
+    const pre = document.createElement("pre");
+    pre.id = "content";
+    pre.textContent = "npm run te\n  st";
+    document.body.appendChild(pre);
+    const onRunCommand = vi.fn(() => true);
+
+    render(<CopyLineBar onRunCommand={onRunCommand} />);
+
+    const text = pre.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, text.textContent?.length ?? 0);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    fireEvent.click(document.getElementById("copyline-run") as HTMLButtonElement);
+
+    expect(onRunCommand).toHaveBeenCalledWith("npm run test");
   });
 });

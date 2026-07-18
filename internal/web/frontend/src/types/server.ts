@@ -293,12 +293,13 @@ export interface VersionInfo {
 // ---------------------------------------------------------------------------
 
 /**
- * Client → server. `inputMsg`. Empty `s` for "text"/"send" is ignored by the
- * server; "resize" is a legacy no-op.
+ * Client → server. `inputMsg`. Empty `s` for "text"/"send"/"run" is ignored
+ * by the server; "resize" is a legacy no-op.
  */
 export type InputMsg =
   | { t: "text"; s: string } // paste literal text, NO Enter
   | { t: "send"; s: string } // paste text + Enter
+  | { t: "run"; s: string } // run command in a shell window in this tmux session
   | { t: "key"; k: string } // single allowlisted tmux key
   | { t: "clear" } // clear pane + scrollback
   | { t: "resize" }; // legacy, silently ignored

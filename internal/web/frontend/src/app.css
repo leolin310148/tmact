@@ -1319,7 +1319,7 @@
   .copyline-bar {
     display: none;
     position: absolute; right: 58px; bottom: 12px; z-index: 31;
-    flex-direction: row; align-items: center; gap: 6px;
+    flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px;
     max-width: calc(100% - 70px);
   }
   .copyline-bar.visible { display: flex; }

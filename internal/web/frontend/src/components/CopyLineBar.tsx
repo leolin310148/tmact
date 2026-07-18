@@ -1,7 +1,7 @@
 // CopyLineBar — the React port of app.js's "copy as one line" bar
 // (#copyline-bar) + wireCopyLine. A multi-line selection of wrapped pane output
 // copies with the terminal's soft-wrap newlines + continuation indent baked in;
-// these two buttons re-join the selection:
+// the copy and run actions re-join the selection:
 //   joinGlue  — drops the wrap entirely (paths / URLs / commands)
 //   joinSpace — collapses each wrap to a single space (prose)
 //
@@ -14,7 +14,7 @@
 //                anchorNode/focusNode are inside #content.
 //   - visible when paneSelectionText().trim() non-empty OR Date.now() <
 //                copyFlashUntil (the 900 ms green flash).
-//   - both buttons get pointerdown preventDefault (keeps the pane selection
+//   - all action buttons get pointerdown preventDefault (keeps the pane selection
 //                alive while the tap is processed — focus would otherwise move
 //                to the button and collapse the selection before click runs).
 //   - one document `selectionchange` listener drives syncCopyLineBar.
@@ -119,13 +119,15 @@ function paneSelectionText(): string {
 export interface CopyLineBarProps {
   cwd?: string | null;
   peer?: string | null;
+  onRunCommand?: (command: string) => boolean;
 }
 
-export default function CopyLineBar({ cwd, peer }: CopyLineBarProps) {
+export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
   const joinRef = useRef<HTMLButtonElement | null>(null);
   const spaceRef = useRef<HTMLButtonElement | null>(null);
   const downloadRef = useRef<HTMLAnchorElement | null>(null);
+  const runRef = useRef<HTMLButtonElement | null>(null);
   const copyFlashUntil = useRef(0);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -170,6 +172,7 @@ export default function CopyLineBar({ cwd, peer }: CopyLineBarProps) {
       copyFlashUntil.current = Date.now() + FLASH_MS;
       joinRef.current?.classList.remove("copied");
       spaceRef.current?.classList.remove("copied");
+      runRef.current?.classList.remove("copied");
       btnRef.current?.classList.add("copied");
       syncCopyLineBar.current();
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -178,6 +181,22 @@ export default function CopyLineBar({ cwd, peer }: CopyLineBarProps) {
         syncCopyLineBar.current();
       }, FLASH_MS);
     };
+
+  const runCommand = (): void => {
+    const text = paneSelectionText();
+    if (!text || !onRunCommand) return;
+    if (!onRunCommand(joinGlue(text))) return;
+    copyFlashUntil.current = Date.now() + FLASH_MS;
+    joinRef.current?.classList.remove("copied");
+    spaceRef.current?.classList.remove("copied");
+    runRef.current?.classList.add("copied");
+    syncCopyLineBar.current();
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => {
+      runRef.current?.classList.remove("copied");
+      syncCopyLineBar.current();
+    }, FLASH_MS);
+  };
 
   return (
     <div className="copyline-bar" id="copyline-bar" aria-hidden="true" ref={barRef}>
@@ -216,6 +235,17 @@ export default function CopyLineBar({ cwd, peer }: CopyLineBarProps) {
         onClick={run(spaceRef, joinSpace)}
       >
         接空白
+      </button>
+      <button
+        className="copyline-btn alt"
+        id="copyline-run"
+        type="button"
+        title="在目前 tmux session 的新 shell window 執行選取的指令"
+        ref={runRef}
+        onPointerDown={onPointerDownNoBlur}
+        onClick={runCommand}
+      >
+        Run command
       </button>
       <a
         className="copyline-btn alt"

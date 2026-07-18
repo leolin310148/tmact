@@ -174,6 +174,42 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 	return runTmux(args...)
 }
 
+// RunCommandInSession opens a detached shell window in the tmux session that
+// owns target, starts it in the target pane's current directory, and runs the
+// literal command there. The shell stays open after the command finishes so
+// its output remains available in the session and the statusd web UI.
+func RunCommandInSession(target string, command string) error {
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("target cannot be empty")
+	}
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("command cannot be empty")
+	}
+
+	location, err := outputTmux("display-message", "-p", "-t", target, "#{session_name}\t#{pane_current_path}")
+	if err != nil {
+		return err
+	}
+	parts := strings.SplitN(strings.TrimSuffix(location, "\n"), "\t", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return fmt.Errorf("tmux returned an invalid session location for %q", target)
+	}
+
+	args := []string{"new-window", "-d", "-P", "-F", "#{pane_id}", "-t", parts[0] + ":", "-n", "command"}
+	if parts[1] != "" {
+		args = append(args, "-c", parts[1])
+	}
+	pane, err := outputTmux(args...)
+	if err != nil {
+		return err
+	}
+	pane = strings.TrimSpace(pane)
+	if pane == "" {
+		return fmt.Errorf("tmux new-window returned no pane id")
+	}
+	return PasteText(pane, command, true)
+}
+
 func shellJoin(args []string) string {
 	quoted := make([]string, 0, len(args))
 	for _, arg := range args {
