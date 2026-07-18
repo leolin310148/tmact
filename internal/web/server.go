@@ -81,6 +81,9 @@ type Server struct {
 	SendKey func(target, key string) error
 	// ClearPane clears the visible pane and its tmux scrollback history.
 	ClearPane func(target string) error
+	// RunCommand opens a shell window in the target pane's tmux session and
+	// executes the selected command there.
+	RunCommand func(target, command string) error
 	// STTProviderPath is the local provider config path; defaults to
 	// ~/.tmact/stt_provider.json.
 	STTProviderPath string
@@ -225,6 +228,13 @@ func (s *Server) clearPane() func(string) error {
 		return s.ClearPane
 	}
 	return tmux.ClearPane
+}
+
+func (s *Server) runCommand() func(string, string) error {
+	if s.RunCommand != nil {
+		return s.RunCommand
+	}
+	return tmux.RunCommandInSession
 }
 
 func (s *Server) sttProvider() (stt.ProviderConfig, error) {

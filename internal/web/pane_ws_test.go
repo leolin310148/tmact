@@ -57,6 +57,30 @@ func TestApplyInputSendUsesEnter(t *testing.T) {
 	}
 }
 
+func TestApplyInputRunCommand(t *testing.T) {
+	var gotTarget, gotCommand string
+	s := &Server{RunCommand: func(target, command string) error {
+		gotTarget, gotCommand = target, command
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "run", S: "make test"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotTarget != "%7" || gotCommand != "make test" {
+		t.Fatalf("RunCommand got (%q, %q)", gotTarget, gotCommand)
+	}
+}
+
+func TestApplyInputRunIgnoresBlankCommand(t *testing.T) {
+	s := &Server{RunCommand: func(_, _ string) error {
+		t.Fatal("RunCommand must not run for blank input")
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "run", S: " \t"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestApplyInputKeyAllowed(t *testing.T) {
 	var gotKey string
 	s := &Server{SendKey: func(_, key string) error {

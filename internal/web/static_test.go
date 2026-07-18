@@ -153,7 +153,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	for _, want := range []string{
 		"record-btn", "rec-send", "upload-btn", "selection-btn", "clear-pane-btn",
 		"file-upload", "gear-btn", "settings-overlay", "running-effect", "build-time",
-		"qb-fab", "help-btn", "conn-status", "option-bar", "direct-input",
+		"qb-fab", "help-btn", "conn-status", "option-bar", "direct-input", "copyline-run",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("bundled app missing control id %q", want)

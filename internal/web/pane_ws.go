@@ -28,8 +28,8 @@ var paneIDPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`)
 // statusd daemon enforces a fixed tmux window size so the scrollback grid
 // stays consistent across devices, and the browser does the visual wrap.
 type inputMsg struct {
-	T string `json:"t"`           // "text", "send", "key", "clear" (or legacy "resize", ignored)
-	S string `json:"s,omitempty"` // literal text for "text"/"send"
+	T string `json:"t"`           // "text", "send", "run", "key", "clear" (or legacy "resize", ignored)
+	S string `json:"s,omitempty"` // literal text for "text"/"send"/"run"
 	K string `json:"k,omitempty"` // tmux key name for "key"
 }
 
@@ -186,6 +186,11 @@ func (s *Server) applyInput(target string, m inputMsg) error {
 			return nil
 		}
 		return s.sendText()(target, m.S, true)
+	case "run":
+		if strings.TrimSpace(m.S) == "" {
+			return nil
+		}
+		return s.runCommand()(target, m.S)
 	case "key":
 		if !keyAllowed(m.K) {
 			return fmt.Errorf("key not allowed: %q", m.K)
