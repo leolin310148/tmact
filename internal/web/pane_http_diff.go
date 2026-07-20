@@ -204,6 +204,9 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 				s.logf("peer pane stream browser read ended peer=%s pane=%s err=%v", peer.Name, pane, err)
 				return
 			}
+			// Input bound for a peer pane is still a human acting in this
+			// server's web UI.
+			s.recordHumanActivity()
 			if err := s.postPeerPaneInput(ctx, peer, pane, m); err != nil {
 				_ = write(outMsg{T: "error", S: err.Error()})
 				continue

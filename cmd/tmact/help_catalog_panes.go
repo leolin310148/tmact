@@ -147,6 +147,23 @@ func paneUtilityCommandHelpCatalog() []commandHelp {
 			Safety:   []string{"Watcher configs must keep allow_paths or allow_path_patterns checks in place."},
 		},
 		{
+			Command: "human-active",
+			Summary: "Report whether a human recently used the statusd web UI.",
+			Usage:   []string{"tmact human-active [--socket-path PATH] [--threshold DURATION] [--json | --quiet]"},
+			Flags: []helpFlag{
+				{Name: "--socket-path", Value: "PATH", Description: "daemon IPC unix socket"},
+				{Name: "--threshold", Value: "DURATION", Description: "inactivity cutoff; 0 uses the server default of 10m"},
+				{Name: "--json", Description: "print JSON output"},
+				{Name: "--quiet", Description: "no output; the exit code alone reports active (0) or inactive (1)"},
+			},
+			Examples: []string{"tmact human-active", "tmact human-active --threshold 30m --json", "tmact human-active --quiet && echo watching"},
+			Notes: []string{
+				"A human counts as active when the web UI saw a pane switch or any input within the threshold (default 10 minutes).",
+				"Exit code is 0 when active and 1 when inactive, so the command works directly as a shell guard.",
+				"Requires a running statusd daemon; the state resets when the daemon restarts.",
+			},
+		},
+		{
 			Command: "commands",
 			Summary: "Print the command catalog for humans or LLM/tooling consumers.",
 			Usage:   []string{"tmact commands [--json]"},

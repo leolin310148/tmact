@@ -90,6 +90,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send")
 		}
 		return runUsage(args[1:])
+	case "human-active":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send")
+		}
+		return runHumanActive(args[1:])
 	case "stt-set":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send")

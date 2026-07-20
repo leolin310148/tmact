@@ -185,6 +185,24 @@ export function checkDownloadFiles(
   });
 }
 
+// reportHumanActivity tells the server a human just acted in the UI (pane
+// switch). Fire-and-forget: activity tracking must never surface errors or
+// block interaction, so failures are swallowed after a debug log. Input
+// activity needs no report — it already reaches the server via the pane
+// WebSocket / input endpoints.
+export function reportHumanActivity(): void {
+  try {
+    void fetch("/api/human-activity", { method: "POST" }).catch((e) => {
+      logFrontend("warn", "api_error", "human-activity report failed", {
+        url: "/api/human-activity",
+        error: errorSummary(e),
+      });
+    });
+  } catch {
+    // fetch unavailable (tests, ancient browsers) — activity is best-effort.
+  }
+}
+
 export function loadSTTConfig(): Promise<JsonResponse<STTSettings>> {
   return jsonResponse("/api/settings/stt", { cache: "no-store" });
 }

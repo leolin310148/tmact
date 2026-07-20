@@ -171,6 +171,12 @@ type Server struct {
 	paneDiff paneDiffCache
 	// pushMu serializes reads/writes to the subscription JSON file.
 	pushMu sync.Mutex
+
+	// humanActivity remembers the last human web-UI action (pane switch or
+	// input) for /api/human-active.
+	humanActivity humanActivityTracker
+	// humanNow overrides the activity clock in tests; nil means time.Now.
+	humanNow func() time.Time
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -332,6 +338,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/hook-state", s.handleHookState)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
+	mux.HandleFunc("/api/human-active", s.handleHumanActive)
+	mux.HandleFunc("/api/human-activity", s.handleHumanActivity)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
 	return mux
 }
