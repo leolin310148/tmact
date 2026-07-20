@@ -109,6 +109,14 @@ func (s *Server) handlePaneInput(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	// Requests default to human activity: they come from a browser (HTTP
+	// fallback) or from a peer relaying its own browser. tmact's automation
+	// (loops, dispatch acting on peer panes via internal/peerpane) tags
+	// itself with ?origin=automation so it never masquerades as a human;
+	// untagged requests from older peers err on the human side.
+	if r.URL.Query().Get("origin") != "automation" {
+		s.recordHumanActivity()
+	}
 	if err := s.applyInput(pane, m); err != nil {
 		s.logf("pane input apply error pane=%s type=%s err=%v", pane, m.T, err)
 		writeJSONError(w, http.StatusBadRequest, err.Error())

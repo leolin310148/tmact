@@ -122,6 +122,9 @@ func (c Client) Clear(ctx context.Context, pane string) error {
 func (c Client) postInput(ctx context.Context, pane string, msg inputMsg) error {
 	q := url.Values{}
 	q.Set("pane", pane)
+	// This client is tmact automation (loops, dispatch, CLI send) — not a
+	// human — so tell the peer's /api/human-active tracking to ignore it.
+	q.Set("origin", "automation")
 	upstream, err := peerHTTPURL(c.Peer.URL, "/api/pane/input", q)
 	if err != nil {
 		return fmt.Errorf("invalid peer URL %q: %v", c.Peer.URL, err)

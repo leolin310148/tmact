@@ -101,3 +101,18 @@ func TestPaneInputCountsAsHumanActivity(t *testing.T) {
 		t.Fatalf("pane input did not mark human active: %+v", status)
 	}
 }
+
+func TestAutomationPaneInputIsNotHumanActivity(t *testing.T) {
+	server := &Server{
+		SendText: func(target, text string, enter bool) error { return nil },
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/pane/input?pane=%257&origin=automation", strings.NewReader(`{"t":"send","s":"go"}`))
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("input status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, status := getHumanActive(t, server, ""); status.Active || status.LastActivity != nil {
+		t.Fatalf("automation input marked human active: %+v", status)
+	}
+}

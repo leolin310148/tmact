@@ -116,6 +116,9 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			if err := wsjson.Read(ctx, conn, &m); err != nil {
 				return
 			}
+			// WS input frames only come from a browser, so they count as
+			// human activity even when the message itself is rejected.
+			s.recordHumanActivity()
 			if err := s.applyInput(pane, m); err != nil {
 				_ = write(outMsg{T: "error", S: err.Error()})
 			}
@@ -173,12 +176,11 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// applyInput validates and relays one browser input message into the pane.
+// applyInput validates and relays one input message into the pane. Callers
+// decide whether the message counts as human activity: WS frames always come
+// from a browser, while /api/pane/input also serves tmact's own automation
+// (loops, dispatch) acting on peer panes.
 func (s *Server) applyInput(target string, m inputMsg) error {
-	// Every message here originated from a browser interaction (directly, or
-	// relayed by a peer for its own browser), so it counts as human activity
-	// for /api/human-active even when the message itself is rejected.
-	s.recordHumanActivity()
 	switch m.T {
 	case "text":
 		if m.S == "" {
