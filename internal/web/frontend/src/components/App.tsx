@@ -52,6 +52,7 @@ import {
 import type { AppCallbacks } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
+import { reportHumanActivity } from "../api/client";
 import { translateKey } from "../lib/keymap";
 import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
@@ -619,6 +620,10 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const selectPane = useCallback(
     (paneID: string) => {
       if (!paneID) return;
+      // Pane selection is a human action the server can't otherwise observe
+      // (a WS reconnect is not reliably human) — report it for
+      // /api/human-active. Fire-and-forget, never blocks selection.
+      reportHumanActivity();
       if (paneID === state.selected) {
         // Re-selecting forces a reconnect; keep the cached output on screen.
         openWS(paneID);

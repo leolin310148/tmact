@@ -175,6 +175,10 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 
 // applyInput validates and relays one browser input message into the pane.
 func (s *Server) applyInput(target string, m inputMsg) error {
+	// Every message here originated from a browser interaction (directly, or
+	// relayed by a peer for its own browser), so it counts as human activity
+	// for /api/human-active even when the message itself is rejected.
+	s.recordHumanActivity()
 	switch m.T {
 	case "text":
 		if m.S == "" {
