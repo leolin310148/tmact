@@ -43,6 +43,29 @@ func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	}
 }
 
+func TestReusableCommandPaneChoosesActivePaneFromNewestWindow(t *testing.T) {
+	panes := []Pane{
+		{WindowIndex: 1, WindowName: "command", PaneID: "%1", Active: true},
+		{WindowIndex: 4, WindowName: "agent", PaneID: "%2", Active: true},
+		{WindowIndex: 3, WindowName: "command", PaneID: "%3"},
+		{WindowIndex: 3, WindowName: "command", PaneID: "%4", Active: true},
+	}
+
+	pane, ok := reusableCommandPane(panes)
+	if !ok {
+		t.Fatal("expected a reusable command pane")
+	}
+	if pane.PaneID != "%4" {
+		t.Fatalf("pane = %q, want %%4", pane.PaneID)
+	}
+}
+
+func TestReusableCommandPaneReturnsFalseWithoutCommandWindow(t *testing.T) {
+	if _, ok := reusableCommandPane([]Pane{{WindowName: "agent", PaneID: "%1"}}); ok {
+		t.Fatal("unexpected reusable command pane")
+	}
+}
+
 func TestParsePanes(t *testing.T) {
 	raw := "sample|$1|0|codex-aarch64-a|0|%14|70365|codex-aarch64-a|/tmp/tmact-sample/project|1|0|1\n"
 
