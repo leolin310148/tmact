@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -174,10 +175,10 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 	return runTmux(args...)
 }
 
-// RunCommandInSession opens a detached shell window in the tmux session that
-// owns target, starts it in the target pane's current directory, and runs the
-// literal command there. The shell stays open after the command finishes so
-// its output remains available in the session and the statusd web UI.
+// RunCommandInSession runs command in the fixed "command" window belonging to
+// target's tmux session. The window is created in the target pane's current
+// directory on first use, then reused so its shell history, output, and cwd are
+// preserved across commands.
 func RunCommandInSession(target string, command string) error {
 	if strings.TrimSpace(target) == "" {
 		return fmt.Errorf("target cannot be empty")
@@ -194,8 +195,32 @@ func RunCommandInSession(target string, command string) error {
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		return fmt.Errorf("tmux returned an invalid session location for %q", target)
 	}
+	session := parts[0]
 
-	args := []string{"new-window", "-d", "-P", "-F", "#{pane_id}", "-t", parts[0] + ":", "-n", "command"}
+	panes, err := ListSessionPanes(session)
+	if err != nil {
+		return err
+	}
+	if pane, ok := reusableCommandPane(panes); ok {
+		if pane.InMode {
+			return fmt.Errorf("command window is in tmux mode; exit it before running another command")
+		}
+		shellState, err := outputTmux("display-message", "-p", "-t", pane.PaneID, "#{pane_current_command}\t#{default-shell}")
+		if err != nil {
+			return err
+		}
+		shellParts := strings.SplitN(strings.TrimSuffix(shellState, "\n"), "\t", 2)
+		if len(shellParts) != 2 || shellParts[0] == "" || shellParts[0] != filepath.Base(shellParts[1]) {
+			current := pane.CurrentCommand
+			if len(shellParts) > 0 && shellParts[0] != "" {
+				current = shellParts[0]
+			}
+			return fmt.Errorf("command window is busy running %q; wait for it to finish", current)
+		}
+		return PasteText(pane.PaneID, command, true)
+	}
+
+	args := []string{"new-window", "-d", "-P", "-F", "#{pane_id}", "-t", session + ":", "-n", "command"}
 	if parts[1] != "" {
 		args = append(args, "-c", parts[1])
 	}
@@ -208,6 +233,26 @@ func RunCommandInSession(target string, command string) error {
 		return fmt.Errorf("tmux new-window returned no pane id")
 	}
 	return PasteText(pane, command, true)
+}
+
+// reusableCommandPane returns the active pane from the newest window named
+// "command". Choosing the newest lets an installation upgraded from the old
+// create-per-command behavior converge on one window without deleting any of
+// the user's existing windows.
+func reusableCommandPane(panes []Pane) (Pane, bool) {
+	var selected Pane
+	found := false
+	for _, pane := range panes {
+		if pane.WindowName != "command" {
+			continue
+		}
+		if !found || pane.WindowIndex > selected.WindowIndex ||
+			(pane.WindowIndex == selected.WindowIndex && pane.Active && !selected.Active) {
+			selected = pane
+			found = true
+		}
+	}
+	return selected, found
 }
 
 func shellJoin(args []string) string {
