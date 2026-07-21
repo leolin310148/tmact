@@ -289,6 +289,24 @@ export interface VersionInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Closed sessions (GET /api/sessions/closed, POST /api/session/kill,
+// POST /api/session/reopen) — internal/web/session_handlers.go
+// ---------------------------------------------------------------------------
+
+/** One recently closed tmux session offered for reopening. */
+export interface ClosedSession {
+  session: string;
+  /** Go: `cwd,omitempty` — the last active pane's cwd. */
+  cwd?: string;
+  /** Go: `runtime,omitempty` — runtime seen when the session closed. */
+  runtime?: string;
+  /** Close time, ISO8601. */
+  closed_at: string;
+  /** Empty/absent for local entries; the peer name for merged remotes. */
+  peer?: string;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket protocol (/ws/pane?pane=<id|peer@id>) — internal/web/pane_ws.go
 // ---------------------------------------------------------------------------
 

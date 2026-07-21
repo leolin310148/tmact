@@ -112,21 +112,103 @@
     min-width: 8px; text-align: center;
   }
   .more-chip.open .more-count { color: #fff; border-color: var(--accent); }
+  /* Positioning only — the popover's look lives in the shared .ovf-pop (the
+     office lamp's .desk-more-pop is the other positioning wrapper). */
   .chip-overflow-pop {
     position: absolute;
     bottom: calc(100% + 6px);
     right: 0;
     z-index: 40;
-    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  /* Shared overflow popover — rendered by OverflowMenuContent for both the
+     statusline "more" chip and the office layout's floor lamp. Rows: state
+     dot + peer badge + session label + runtime badge, an exit (kill-session)
+     button with a two-stage confirm, then the recently-closed section. */
+  .ovf-pop {
+    display: flex; flex-direction: column; gap: 2px;
     max-height: 50vh; overflow-y: auto;
-    min-width: 160px; max-width: min(320px, 90vw);
+    min-width: 210px; max-width: min(340px, 92vw);
     padding: 6px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 7px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
   }
-  .chip-overflow-pop .chip { max-width: 100%; }
+  .ovf-row { display: flex; align-items: stretch; gap: 2px; min-width: 0; }
+  .ovf-row.busy { opacity: 0.5; pointer-events: none; }
+  .ovf-main {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 7px;
+    border: 0; border-radius: 5px;
+    background: transparent;
+    color: var(--fg);
+    font: 12px/1 var(--mono);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .ovf-main:hover { background: var(--panel-2); }
+  .ovf-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .ovf-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--fg-dim); }
+  .ovf-row.state-running .ovf-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .ovf-row.state-asking .ovf-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .ovf-row.state-stale .ovf-dot { opacity: 0.5; }
+  .ovf-row.state-stale .ovf-main { opacity: 0.72; }
+  .ovf-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .ovf-rt {
+    flex: 0 0 auto; margin-left: auto;
+    font: 700 8px/1 var(--mono);
+    color: var(--fg-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 3px;
+  }
+  .ovf-kill {
+    flex: 0 0 auto;
+    min-width: 26px;
+    padding: 0 5px;
+    border: 0; border-radius: 5px;
+    background: transparent;
+    color: var(--fg-dim);
+    font: 12px/1 var(--mono);
+    cursor: pointer;
+  }
+  .ovf-kill:hover, .ovf-kill:focus-visible { background: rgba(248,81,73,0.14); color: var(--red); }
+  .ovf-kill.armed {
+    background: var(--red);
+    color: #fff;
+    font: 700 9px/1 var(--mono);
+  }
+  .ovf-sep {
+    display: flex; align-items: center; gap: 6px;
+    margin: 6px 2px 2px;
+    color: var(--fg-dim);
+    font: 700 9px/1 var(--mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .ovf-sep::before, .ovf-sep::after {
+    content: ""; flex: 1 1 auto; height: 1px; background: var(--border);
+  }
+  .ovf-reopen { flex: 0 0 auto; color: var(--fg-dim); font: 12px/1 var(--mono); }
+  .ovf-closed .ovf-main:hover .ovf-reopen { color: var(--green); }
+  .ovf-cwd {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis;
+    text-align: right;
+    color: var(--fg-dim);
+    font: 10px/1 var(--mono);
+  }
+  .ovf-empty { color: var(--fg-dim); font: 11px/1.4 var(--mono); padding: 4px 6px; }
+  .ovf-error {
+    margin-top: 4px; padding: 4px 6px;
+    border-top: 1px solid var(--border);
+    color: var(--red);
+    font: 10px/1.4 var(--mono);
+    white-space: normal;
+  }
   .peer-badge {
     flex: 0 0 auto;
     font: 700 9px/1 var(--mono);

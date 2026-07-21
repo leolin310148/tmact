@@ -11,6 +11,7 @@
 import type {
   Snapshot,
   AgentUsage,
+  ClosedSession,
   STTSettings,
   STTSettingsInput,
   VersionInfo,
@@ -201,6 +202,39 @@ export function reportHumanActivity(): void {
   } catch {
     // fetch unavailable (tests, ancient browsers) — activity is best-effort.
   }
+}
+
+// loadClosedSessions returns recently closed sessions, newest first — the
+// server merges its local log with every configured peer's.
+export function loadClosedSessions(): Promise<
+  JsonResponse<{ sessions?: ClosedSession[]; error?: string }>
+> {
+  return jsonResponse("/api/sessions/closed", { cache: "no-store" });
+}
+
+// killSession kills one exact tmux session (must exist in the snapshot).
+export function killSession(
+  session: string,
+  peer?: string,
+): Promise<JsonResponse<{ ok?: boolean; error?: string }>> {
+  return jsonResponse("/api/session/kill" + peerQuery(peer), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session }),
+  });
+}
+
+// reopenSession recreates a closed session at its old cwd with a plain shell.
+export function reopenSession(
+  session: string,
+  cwd: string,
+  peer?: string,
+): Promise<JsonResponse<{ ok?: boolean; error?: string }>> {
+  return jsonResponse("/api/session/reopen" + peerQuery(peer), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session, cwd }),
+  });
 }
 
 export function loadSTTConfig(): Promise<JsonResponse<STTSettings>> {

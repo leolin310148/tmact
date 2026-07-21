@@ -17,11 +17,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { focusMenuEdge, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
+import { onPointerDownNoBlur } from "../lib/dom";
+import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
 import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
@@ -163,9 +163,10 @@ function Desk({
 }
 
 // LampMore — the leading floor lamp at the far left doubles as the overflow
-// trigger. Clicking it opens the same "more" popover the old far-right "+N"
-// door used to (the door art is gone, and so is the +N count badge). When there
-// is no overflow the caller renders a plain decorative lamp instead.
+// trigger. Clicking it opens the shared overflow popover (OverflowMenuContent,
+// the same rows as the statusline's "more" chip: select, session exit with
+// confirm, and the recently-closed history). The lamp is always clickable —
+// with no hidden panes the popover still offers the history.
 function LampMore({
   items,
   onSelect,
@@ -173,151 +174,67 @@ function LampMore({
   items: PaneListItem[];
   onSelect: (paneID: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   // The popover is portaled to <body> with fixed coords because the office bar
   // (.office-desks-floor) is an overflow scroll container that would otherwise
-  // clip a popover popping up out of it. Anchored above the lamp button.
+  // clip a popover popping up out of it. Anchored above the lamp button. The
+  // menu only mounts once pos is measured, so pos doubles as the hook's
+  // menuReady signal (pending keyboard focus re-runs when the menu appears).
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const popRef = useRef<HTMLDivElement | null>(null);
-  const pendingFocusRef = useRef<"first" | "last" | null>(null);
+  const pop = useMenuPopover(pos);
   const buttonID = useId();
   const menuID = useId();
 
-  const openFromKeyboard = (edge: "first" | "last") => {
-    pendingFocusRef.current = edge;
-    setOpen(true);
-  };
-
   useLayoutEffect(() => {
-    if (!open || !btnRef.current) return;
-    const r = btnRef.current.getBoundingClientRect();
+    if (!pop.open || !pop.buttonRef.current) return;
+    const r = pop.buttonRef.current.getBoundingClientRect();
     // Left-anchor to the lamp (it lives at the far left, so centering would push
     // the popover off-screen), clamped to an 8px gutter.
     setPos({ left: Math.max(8, r.left), bottom: window.innerHeight - r.top + 8 });
-  }, [open]);
+  }, [pop.open]);
 
-  useLayoutEffect(() => {
-    if (!open || !pos || !pendingFocusRef.current || !popRef.current) return;
-    focusMenuEdge(popRef.current, pendingFocusRef.current);
-    pendingFocusRef.current = null;
-  }, [open, pos, items.length]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocPointerDown = (e: Event) => {
-      const t = e.target as Node;
-      const inBtn = btnRef.current?.contains(t);
-      const inPop = popRef.current?.contains(t);
-      if (!inBtn && !inPop) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        const restoreTrigger = popRef.current?.contains(document.activeElement) ?? false;
-        pendingFocusRef.current = null;
-        setOpen(false);
-        if (restoreTrigger) btnRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onDocPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onDocPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (items.length === 0) setOpen(false);
-  }, [items.length]);
-
-  const moreLabel = items.length + " more pane" + (items.length === 1 ? "" : "s");
-  const onButtonKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      openFromKeyboard(e.key === "ArrowUp" ? "last" : "first");
-      return;
-    }
-    if (!open && (e.key === "Enter" || e.key === " ")) {
-      e.preventDefault();
-      openFromKeyboard("first");
-    }
-  };
-
-  const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!moveMenuFocus(e.currentTarget, e.key)) return;
-    e.preventDefault();
-  };
+  const moreLabel =
+    items.length > 0
+      ? "Show " +
+        items.length +
+        " more pane" +
+        (items.length === 1 ? "" : "s") +
+        " and recently closed sessions"
+      : "Show recently closed sessions";
 
   return (
     <>
       <button
-        ref={btnRef}
+        ref={pop.buttonRef}
         id={buttonID}
         type="button"
-        className={"office-lamp office-lamp--more" + (open ? " open" : "")}
+        className={"office-lamp office-lamp--more" + (pop.open ? " open" : "")}
         title={moreLabel}
-        aria-label={"Show " + moreLabel}
+        aria-label={moreLabel}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={pop.open}
         aria-controls={menuID}
         onPointerDown={onPointerDownNoBlur}
-        onClick={() => {
-          pendingFocusRef.current = null;
-          setOpen((v) => !v);
-        }}
-        onKeyDown={onButtonKeyDown}
+        onClick={pop.onTriggerClick}
+        onKeyDown={pop.onTriggerKeyDown}
       >
         <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
       </button>
-      {open && pos
+      {pop.open && pos
         ? createPortal(
             <div
-              ref={popRef}
+              ref={pop.menuRef}
               id={menuID}
-              className="desk-more-pop"
+              className="desk-more-pop ovf-pop"
               role="menu"
               aria-labelledby={buttonID}
-              onKeyDown={onMenuKeyDown}
+              onKeyDown={pop.onMenuKeyDown}
               style={{ position: "fixed", left: pos.left, bottom: pos.bottom, transform: "none" }}
             >
-              {items.map(({ pane, label }, i) => {
-                const runtime = paneRuntime(pane);
-                const peer = panePeer(pane);
-                const title =
-                  (peer ? peer + " — " : "") +
-                  label +
-                  " — " +
-                  (runtime || "idle") +
-                  " — " +
-                  paneStateLabel(pane);
-                return (
-                  <button
-                    key={pane.pane_id || "overflow-" + i}
-                    type="button"
-                    className={"desk-more-row state-" + paneStateClass(pane)}
-                    role="menuitem"
-                    title={title}
-                    aria-label={"Select pane " + (peer ? peer + " " : "") + label}
-                    onPointerDown={onPointerDownNoBlur}
-                    onClick={() => {
-                      const restoreTrigger =
-                        popRef.current?.contains(document.activeElement) ?? false;
-                      onSelect(pane.pane_id ?? "");
-                      setOpen(false);
-                      if (restoreTrigger) btnRef.current?.focus();
-                    }}
-                  >
-                    <span className="desk-more-dot" aria-hidden="true" />
-                    {peer ? <span className="desk-more-peer">{peer}</span> : null}
-                    <span className="desk-more-label">{label}</span>
-                    {RUNTIME_ICON[runtime] ? (
-                      <span className="desk-more-rt">{RUNTIME_ICON[runtime]}</span>
-                    ) : null}
-                  </button>
-                );
-              })}
+              <OverflowMenuContent
+                items={items}
+                onSelect={onSelect}
+                closeRestoring={pop.closeRestoring}
+              />
             </div>,
             document.body,
           )
@@ -417,22 +334,21 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           }
         />
         {visible.length === 0 && overflow.length === 0 ? (
-          <div className="office-desks-empty">No panes</div>
+          <div className="office-desks-empty">
+            {/* The statusline (and its "more" chip) is hidden in office mode,
+                so the lamp must stay as the way back to recently closed
+                sessions even when every pane is gone. */}
+            <LampMore items={[]} onSelect={onSelect} />
+            <span>No panes</span>
+          </div>
         ) : (
           <div className="desk-row">
             {/* The leading floor lamp at the far left doubles as the overflow
-                trigger: when panes spill past the visible desks, clicking it
-                opens the "+N" menu (replacing the old far-right door). With no
-                overflow it stays plain decor. It lives outside the group loop so
-                it still appears (as the lone entry point) when nothing is pinned
-                and everything sits in overflow. */}
-            {overflow.length > 0 ? (
-              <LampMore items={overflow} onSelect={onSelect} />
-            ) : (
-              <span className="office-lamp" aria-hidden="true">
-                <img className="office-lamp-img" src={floorLampUrl} alt="" draggable={false} />
-              </span>
-            )}
+                trigger: clicking it opens the shared "more" menu (hidden panes
+                + recently closed sessions). It lives outside the group loop so
+                it still appears (as the lone entry point) when nothing is
+                pinned and everything sits in overflow. */}
+            <LampMore items={overflow} onSelect={onSelect} />
             {deskGroups.map((group, gi) => {
               const startIdx = gi * 3; // global index of this group's first desk
               // A floor lamp also stands every six desks (groups are size three,

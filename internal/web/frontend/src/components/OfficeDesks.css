@@ -258,9 +258,12 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   image-rendering: pixelated;
 }
 .office-desks-empty {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
   color: var(--fg-dim);
   font: 11px/1.4 var(--mono);
-  padding: 16px 6px;
+  padding: 16px 6px 8px;
 }
 .desk-row {
   display: flex;
@@ -647,68 +650,15 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
 
 /* "more" overflow popover, opened from the leading floor lamp (.office-lamp--more).
    Portaled to <body> at fixed coords so the office bar's scroll overflow can't
-   clip it. */
+   clip it. Positioning only — the rows and the popover's look come from the
+   shared .ovf-pop styles in app.css (same menu as the statusline's chip). */
 .desk-more-pop {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(100% + 8px);
   z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 150px;
   max-height: 60vh;
-  overflow-y: auto;
-  padding: 6px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-}
-.desk-more-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 7px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--fg);
-  font: 11px/1 var(--mono);
-  cursor: pointer;
-  text-align: left;
-}
-.desk-more-row:hover { background: var(--panel-2); }
-.desk-more-dot {
-  flex: 0 0 auto;
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--fg-dim);
-}
-.desk-more-row.state-running .desk-more-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.desk-more-row.state-asking .desk-more-dot { background: var(--amber); }
-.desk-more-peer {
-  flex: 0 0 auto;
-  max-width: 72px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 2px 4px;
-  border: 1px solid rgba(210,153,34,0.45);
-  border-radius: 3px;
-  background: rgba(210,153,34,0.12);
-  color: var(--amber);
-  font: 700 9px/1 var(--mono);
-}
-.desk-more-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.desk-more-rt {
-  flex: 0 0 auto;
-  font: 700 8px/1 var(--mono);
-  color: var(--fg-dim);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 2px 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {

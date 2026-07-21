@@ -5,6 +5,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PaneStatus } from "../types/server";
 import { MoreChip } from "./MoreChip";
 
+// The shared menu content fetches the recently-closed history on open; keep
+// these tests offline and history-less.
+vi.mock("../api/client", () => ({
+  loadClosedSessions: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { sessions: [] } }),
+  ),
+  killSession: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { ok: true } }),
+  ),
+  reopenSession: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { ok: true } }),
+  ),
+  reportHumanActivity: vi.fn(),
+}));
+
 afterEach(cleanup);
 
 function pane(paneID: string, session: string): PaneStatus {
@@ -36,7 +51,7 @@ describe("MoreChip keyboard menu", () => {
     const user = userEvent.setup();
     render(<MoreChip items={items} onSelect={vi.fn()} />);
 
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     expect(trigger).toHaveAttribute("aria-haspopup", "menu");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
 
@@ -58,7 +73,7 @@ describe("MoreChip keyboard menu", () => {
     const user = userEvent.setup();
     render(<MoreChip items={items} onSelect={vi.fn()} />);
 
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     trigger.focus();
     await user.keyboard("{ArrowDown}");
 
@@ -81,7 +96,7 @@ describe("MoreChip keyboard menu", () => {
     const user = userEvent.setup();
     render(<MoreChip items={items} onSelect={onSelect} />);
 
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     trigger.focus();
     await user.keyboard(" ");
     expect(screen.getAllByRole("menuitem")[0]).toHaveFocus();
@@ -101,7 +116,7 @@ describe("MoreChip keyboard menu", () => {
       </>,
     );
 
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     trigger.focus();
     await user.keyboard("{ArrowUp}");
     expect(screen.getAllByRole("menuitem")[2]).toHaveFocus();
@@ -127,7 +142,7 @@ describe("MoreChip keyboard menu", () => {
     );
 
     const draft = screen.getByRole("textbox", { name: "draft" });
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     draft.focus();
     fireEvent.pointerDown(trigger);
     fireEvent.click(trigger);
