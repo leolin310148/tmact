@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/shellhook"
@@ -20,6 +21,12 @@ type Daemon struct {
 	hooks           *shellhook.Store
 	sessions        SessionPersistence
 	nextSessionSave time.Time
+
+	closed *ClosedSessionLog
+	// prevSessions is the last poll's local session set (name → reopen info)
+	// used to detect sessions that disappeared; nil until the first poll so a
+	// daemon restart never mass-records sessions it simply hasn't seen yet.
+	prevSessions map[string]ClosedSession
 }
 
 func NewDaemon(cfg Config) *Daemon {
@@ -42,6 +49,7 @@ func NewDaemon(cfg Config) *Daemon {
 			DirExists: cfg.DirExists,
 		},
 	}
+	d.closed = NewClosedSessionLog(cfg.ClosedSessionsPath, cfg.ClosedSessionsMax)
 	if len(cfg.Peers) > 0 {
 		d.peers = NewPeerFetcher(cfg.Peers, cfg.PeerInterval, cfg.PeerTimeout)
 		d.peers.SetLogger(cfg.Logf)
@@ -59,6 +67,79 @@ func (d *Daemon) Hooks() *shellhook.Store { return d.hooks }
 // server and IPC handlers read from this; nothing is written to disk.
 func (d *Daemon) Store() *Store {
 	return d.store
+}
+
+// ClosedSessions returns the recently-closed-session log the web UI reads for
+// its reopen history.
+func (d *Daemon) ClosedSessions() *ClosedSessionLog {
+	return d.closed
+}
+
+// trackClosedSessions diffs the local sessions in snapshot against the
+// previous poll: sessions that disappeared are recorded as recently closed
+// (with the cwd of their last active pane, so they can be reopened in place),
+// and entries whose name is live again are pruned. Runs only from the Start
+// loop — one-shot scans must not mutate the shared history file.
+func (d *Daemon) trackClosedSessions(snapshot Snapshot, scanErr error) {
+	if d.closed == nil {
+		return
+	}
+	// A failed scan can report a partial (or empty) session set; diffing
+	// against it would record sessions that are still alive.
+	if scanErr != nil {
+		return
+	}
+	current := make(map[string]ClosedSession, len(snapshot.Sessions))
+	live := make(map[string]bool, len(snapshot.Sessions))
+	for name, sess := range snapshot.Sessions {
+		if sess.Peer != "" {
+			continue
+		}
+		live[name] = true
+		current[name] = ClosedSession{
+			Session: name,
+			Runtime: sess.Runtime,
+			CWD:     sessionCWD(snapshot, sess),
+		}
+	}
+	if d.prevSessions != nil {
+		var closedNow []ClosedSession
+		for name, entry := range d.prevSessions {
+			if !live[name] {
+				entry.ClosedAt = d.cfg.Now()
+				closedNow = append(closedNow, entry)
+			}
+		}
+		if len(closedNow) > 0 {
+			sort.Slice(closedNow, func(i, j int) bool {
+				return closedNow[i].Session < closedNow[j].Session
+			})
+			d.closed.Record(closedNow...)
+		}
+	}
+	d.closed.PruneLive(live)
+	d.prevSessions = current
+}
+
+// sessionCWD picks the reopen cwd for a session: its active pane's cwd, else
+// the first pane (by window/pane index) that reports one.
+func sessionCWD(snapshot Snapshot, sess SessionStatus) string {
+	if pane, ok := snapshot.Panes[sess.ActiveTarget]; ok && pane.CWD != "" {
+		return pane.CWD
+	}
+	best := ""
+	bestWindow, bestPane := 0, 0
+	for _, pane := range snapshot.Panes {
+		if pane.Peer != "" || pane.Session != sess.Session || pane.CWD == "" {
+			continue
+		}
+		if best == "" || pane.WindowIndex < bestWindow ||
+			(pane.WindowIndex == bestWindow && pane.PaneIndex < bestPane) {
+			best = pane.CWD
+			bestWindow, bestPane = pane.WindowIndex, pane.PaneIndex
+		}
+	}
+	return best
 }
 
 func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
@@ -124,7 +205,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.peers.Start(ctx)
 	}
 	for {
-		_, _ = d.RunOnce(ctx)
+		snapshot, scanErr := d.RunOnce(ctx)
+		d.trackClosedSessions(snapshot, scanErr)
 		d.maybeSaveSessions()
 
 		timer := time.NewTimer(d.cfg.Interval)

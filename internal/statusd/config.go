@@ -49,6 +49,12 @@ type Config struct {
 	SessionSnapshotRetention int
 	SessionSnapshotDir       string
 
+	// ClosedSessionsPath is where the daemon records recently closed local
+	// sessions (for the web UI's reopen history). Empty keeps the log in
+	// memory only; ClosedSessionsMax caps the retained entries.
+	ClosedSessionsPath string
+	ClosedSessionsMax  int
+
 	// Peers is the list of remote statusd instances whose snapshots are
 	// merged into the local one. Empty disables federation.
 	Peers []Peer
@@ -137,6 +143,12 @@ func (c Config) withDefaults() Config {
 	}
 	if c.SessionSnapshotDir == "" {
 		c.SessionSnapshotDir = DefaultSessionSnapshotDir()
+	}
+	if c.ClosedSessionsPath == "" {
+		c.ClosedSessionsPath = DefaultClosedSessionsPath()
+	}
+	if c.ClosedSessionsMax <= 0 {
+		c.ClosedSessionsMax = DefaultClosedSessionsMax
 	}
 	if c.ListSessionState == nil {
 		c.ListSessionState = tmux.ListSessionState
