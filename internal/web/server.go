@@ -84,6 +84,17 @@ type Server struct {
 	// RunCommand opens a shell window in the target pane's tmux session and
 	// executes the selected command there.
 	RunCommand func(target, command string) error
+	// KillSession kills one exact tmux session (the overflow menu's exit
+	// button); defaults to tmux.KillSession.
+	KillSession func(session string) error
+	// NewSession creates a detached tmux session (reopen-from-history);
+	// defaults to tmux.NewSession.
+	NewSession func(session, window, cwd string, command []string) error
+	// DirExists reports whether a reopen cwd still exists; defaults to os.Stat.
+	DirExists func(path string) bool
+	// ClosedSessions is the daemon's recently-closed-session log backing
+	// /api/sessions/closed. Nil serves an empty (local) list.
+	ClosedSessions *statusd.ClosedSessionLog
 	// STTProviderPath is the local provider config path; defaults to
 	// ~/.tmact/stt_provider.json.
 	STTProviderPath string
@@ -334,6 +345,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/file", s.handleFile)
 	mux.HandleFunc("/api/files/check", s.handleFilesCheck)
 	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
+	mux.HandleFunc("/api/session/kill", s.handleSessionKill)
+	mux.HandleFunc("/api/session/reopen", s.handleSessionReopen)
+	mux.HandleFunc("/api/sessions/closed", s.handleSessionsClosed)
 	mux.HandleFunc("/api/hook-event", s.handleHookEvent)
 	mux.HandleFunc("/api/hook-state", s.handleHookState)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
