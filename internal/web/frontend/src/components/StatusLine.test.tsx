@@ -180,12 +180,16 @@ describe("StatusLine overflow", () => {
     expect(container.querySelector(".chip-overflow-pop")).toBeNull();
   });
 
-  it("omits the more chip when nothing collapses", () => {
+  it("keeps the more chip without a count when nothing collapses", () => {
+    // The chip stays as the entry point to the recently-closed history even
+    // with no hidden panes — it just drops the overflow count badge.
     const { container } = mount(
       [pane({ target: "a", pane_id: "%1", runtime: "claude" })],
       "%1",
     );
-    expect(container.querySelector(".more-chip")).toBeNull();
+    const more = container.querySelector(".more-chip");
+    expect(more).not.toBeNull();
+    expect(more!.querySelector(".more-count")).toBeNull();
   });
 
   it("freezes paneOrder to the inline chips only", () => {

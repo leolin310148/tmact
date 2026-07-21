@@ -5,6 +5,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PaneStatus } from "../types/server";
 import { OfficeDesks } from "./OfficeDesks";
 
+// The shared menu content fetches the recently-closed history on open; keep
+// these tests offline and history-less.
+vi.mock("../api/client", () => ({
+  loadClosedSessions: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { sessions: [] } }),
+  ),
+  killSession: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { ok: true } }),
+  ),
+  reopenSession: vi.fn(() =>
+    Promise.resolve({ res: { ok: true } as Response, data: { ok: true } }),
+  ),
+  reportHumanActivity: vi.fn(),
+}));
+
 afterEach(cleanup);
 
 function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
@@ -69,7 +84,7 @@ describe("OfficeDesks overflow", () => {
     fireEvent.click(screen.getByRole("button", { name: /show 2 more panes/i }));
 
     const remoteRow = screen.getByRole("menuitem", { name: "Select pane peer-a work" });
-    expect(remoteRow.querySelector(".desk-more-peer")).toHaveTextContent("peer-a");
+    expect(remoteRow.querySelector(".peer-badge")).toHaveTextContent("peer-a");
     expect(remoteRow).toHaveAttribute("title", expect.stringContaining("peer-a"));
   });
 
@@ -88,7 +103,7 @@ describe("OfficeDesks overflow", () => {
       />,
     );
 
-    const trigger = screen.getByRole("button", { name: "Show 3 more panes" });
+    const trigger = screen.getByRole("button", { name: /show 3 more panes/i });
     trigger.focus();
     await user.keyboard("{ArrowDown}");
 
@@ -116,7 +131,7 @@ describe("OfficeDesks overflow", () => {
       />,
     );
 
-    const trigger = screen.getByRole("button", { name: "Show 1 more pane" });
+    const trigger = screen.getByRole("button", { name: /show 1 more pane/i });
     trigger.focus();
     await user.keyboard(" ");
     expect(screen.getByRole("menuitem")).toHaveFocus();

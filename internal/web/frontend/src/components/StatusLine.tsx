@@ -135,6 +135,9 @@ export function StatusLine() {
     return (
       <div className="chips" id="chips">
         <span className="empty">No tmux panes.</span>
+        {/* History stays reachable even with nothing running — the last
+            closed session would otherwise be unrecoverable from the UI. */}
+        <MoreChip items={[]} onSelect={callbacks.selectPane} />
       </div>
     );
   }
@@ -168,9 +171,9 @@ export function StatusLine() {
           />
         );
       })}
-      {overflow.length > 0 ? (
-        <MoreChip items={overflow} onSelect={callbacks.selectPane} />
-      ) : null}
+      {/* Always rendered: with no hidden panes it still opens the
+          recently-closed history. */}
+      <MoreChip items={overflow} onSelect={callbacks.selectPane} />
     </div>
   );
 }
