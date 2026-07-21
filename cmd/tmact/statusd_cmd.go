@@ -173,6 +173,7 @@ func runStatusdStart(args []string) error {
 		Addr:                     *webAddr,
 		SocketPath:               cfg.SocketPath,
 		Store:                    daemon.Store(),
+		ClosedSessions:           daemon.ClosedSessions(),
 		CapturePane:              tmux.CapturePaneANSI,
 		HookRecord:               daemon.Hooks().Record,
 		HookStates:               daemon.Hooks().States,
