@@ -36,7 +36,9 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
   `panestatus`, `state`, `agents`, `runmeta`, `tmux`, `web`).
 - Configs: `examples/*.yaml` (agents, loops, watches, workflows).
 - Run metadata for long processes: `.tmact/runs/`.
-- Status daemon snapshot: `/tmp/tmact-status.json`.
+- Status daemon IPC socket: `/tmp/tmact-statusd.sock` (`tmact statusd read`);
+  snapshots live in daemon memory, not a file.
+- Closed-session history (web UI reopen): `~/.tmact/closed-sessions.json`.
 - Agent-inbox handoff files: `.agent-inbox/features/<name>/`.
 - Canonical tmact-owned agent skills: `skills/`; provider discovery paths are
   symlinks and must not become separate edited copies.
@@ -94,8 +96,11 @@ tmact workflow stop --config <path>
 - Linux/WSL: systemd `--user` unit from `systemd/tmact-statusd.service.in`
   (skipped on WSL when `systemd=true` is not enabled in `/etc/wsl.conf`)
 
-It writes `/tmp/tmact-status.json` so the tmux status line stays cheap. Design notes and
-the tmux integration plan are in `daemon-status.md`. If you change pane
+It keeps the pane snapshot in memory, serves it over the IPC socket
+`/tmp/tmact-statusd.sock` (`tmact statusd read`), and publishes `@ai-*` /
+`@row-bucket` tmux options so the status line stays cheap. (`daemon-status.md`
+still describes the older `/tmp/tmact-status.json` file design.) Design notes
+and the tmux integration plan are in `daemon-status.md`. If you change pane
 classification, run `go test ./internal/panestate/... ./internal/panestatus/...`
 and consider how the snapshot consumers will react.
 
