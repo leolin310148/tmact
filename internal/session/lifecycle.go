@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
@@ -27,21 +28,26 @@ type Result struct {
 	Action          string `json:"action"`
 	Status          string `json:"status"`
 	Session         string `json:"session"`
+	Target          string `json:"target,omitempty"`
 	CWD             string `json:"cwd,omitempty"`
 	Runtime         string `json:"runtime,omitempty"`
+	SessionID       string `json:"session_id,omitempty"`
+	SessionExisted  bool   `json:"session_existed,omitempty"`
 	RuntimeRestored bool   `json:"runtime_restored"`
 	Executed        bool   `json:"executed"`
 }
 
 // Dependencies isolates tmux and filesystem effects for service tests.
 type Dependencies struct {
-	ListPanes     func() ([]tmux.Pane, error)
-	FetchSnapshot func() (statusd.Snapshot, error)
-	KillSession   func(string) error
-	NewSession    func(session, window, cwd string, command []string) error
-	PasteText     func(target, text string, enter bool) error
-	DirExists     func(string) bool
-	Now           func() time.Time
+	ListPanes      func() ([]tmux.Pane, error)
+	FetchSnapshot  func() (statusd.Snapshot, error)
+	KillSession    func(string) error
+	NewSession     func(session, window, cwd string, command []string) error
+	PasteText      func(target, text string, enter bool) error
+	CapturePane    func(target string, lines int) (string, error)
+	ProcessRuntime func(pid int) panestatus.RuntimeDetection
+	DirExists      func(string) bool
+	Now            func() time.Time
 }
 
 // Manager shares the same ClosedSessionLog used by statusd and the web UI.
@@ -59,9 +65,11 @@ func NewManager(history *statusd.ClosedSessionLog) *Manager {
 			FetchSnapshot: func() (statusd.Snapshot, error) {
 				return statusd.FetchSnapshot(statusd.DefaultSocketPath)
 			},
-			KillSession: tmux.KillSession,
-			NewSession:  tmux.NewSession,
-			PasteText:   tmux.PasteText,
+			KillSession:    tmux.KillSession,
+			NewSession:     tmux.NewSession,
+			PasteText:      tmux.PasteText,
+			CapturePane:    tmux.CapturePane,
+			ProcessRuntime: panestatus.DetectChildProcessRuntime,
 			DirExists: func(path string) bool {
 				info, err := os.Stat(path)
 				return err == nil && info.IsDir()

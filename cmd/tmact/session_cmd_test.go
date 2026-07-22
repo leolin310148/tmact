@@ -11,11 +11,24 @@ import (
 )
 
 type fakeSessionLifecycle struct {
+	createName    string
+	createDir     string
+	createExecute bool
 	closed        []statusd.ClosedSession
 	closeName     string
 	closeExecute  bool
 	reopenName    string
 	reopenExecute bool
+	resumeName    string
+	resumeDir     string
+	resumeAgent   string
+	resumeID      string
+	resumeExecute bool
+}
+
+func (f *fakeSessionLifecycle) Create(name, dir string, execute bool) (sessionlife.Result, error) {
+	f.createName, f.createDir, f.createExecute = name, dir, execute
+	return sessionlife.Result{Action: "create", Status: sessionlife.StatusPlanned, Session: name, CWD: dir, Runtime: "shell", Executed: execute}, nil
 }
 
 func (f *fakeSessionLifecycle) Close(name string, execute bool) (sessionlife.Result, error) {
@@ -28,6 +41,11 @@ func (f *fakeSessionLifecycle) Closed() []statusd.ClosedSession { return f.close
 func (f *fakeSessionLifecycle) Reopen(name string, execute bool) (sessionlife.Result, error) {
 	f.reopenName, f.reopenExecute = name, execute
 	return sessionlife.Result{Action: "reopen", Status: sessionlife.StatusPlanned, Session: name, CWD: "/repo", Runtime: "codex", RuntimeRestored: true, Executed: execute}, nil
+}
+
+func (f *fakeSessionLifecycle) Resume(name, dir, agent, sessionID string, execute bool) (sessionlife.Result, error) {
+	f.resumeName, f.resumeDir, f.resumeAgent, f.resumeID, f.resumeExecute = name, dir, agent, sessionID, execute
+	return sessionlife.Result{Action: "resume", Status: sessionlife.StatusPlanned, Session: name, CWD: dir, Runtime: agent, SessionID: sessionID, Executed: execute}, nil
 }
 
 func withFakeSessionLifecycle(t *testing.T, fake sessionLifecycle) {
@@ -61,6 +79,24 @@ func TestSessionCloseIsDryRunUnlessExecute(t *testing.T) {
 	}
 	if result.Action != "close" || result.Session != "work" || !result.Executed {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestSessionCreateIsDryRunUnlessExecute(t *testing.T) {
+	fake := &fakeSessionLifecycle{}
+	withFakeSessionLifecycle(t, fake)
+	out, err := captureRun(t, "session", "create", "work", "--dir", "/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.createName != "work" || fake.createDir != "/repo" || fake.createExecute || !strings.Contains(out, "dry-run session create work") {
+		t.Fatalf("call=(%q,%q,%t) output=%q", fake.createName, fake.createDir, fake.createExecute, out)
+	}
+	if _, err := captureRun(t, "session", "create", "work", "--dir", "/repo", "--execute"); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.createExecute {
+		t.Fatal("--execute was not passed to create service")
 	}
 }
 
@@ -101,14 +137,42 @@ func TestSessionReopenIsPreviewable(t *testing.T) {
 	}
 }
 
+func TestSessionResumeRequiresExplicitProviderIDAndIsPreviewable(t *testing.T) {
+	fake := &fakeSessionLifecycle{}
+	withFakeSessionLifecycle(t, fake)
+	args := []string{"session", "resume", "work", "--dir", "/repo", "--agent", "codex", "--session-id", "019c-example"}
+	out, err := captureRun(t, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.resumeName != "work" || fake.resumeDir != "/repo" || fake.resumeAgent != "codex" || fake.resumeID != "019c-example" || fake.resumeExecute {
+		t.Fatalf("fake = %#v", fake)
+	}
+	if !strings.Contains(out, "dry-run session resume work") || !strings.Contains(out, "session-id=019c-example") {
+		t.Fatalf("output = %q", out)
+	}
+	if _, err := captureRun(t, append(args, "--execute")...); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.resumeExecute {
+		t.Fatal("--execute was not passed to resume service")
+	}
+	if _, err := captureRun(t, "session", "resume", "work", "--dir", "/repo", "--agent", "codex"); err == nil || !strings.Contains(err.Error(), "never infers") {
+		t.Fatalf("missing id error = %v", err)
+	}
+}
+
 func TestSessionCommandsRequireExactOneName(t *testing.T) {
 	fake := &fakeSessionLifecycle{}
 	withFakeSessionLifecycle(t, fake)
 	for _, args := range [][]string{
+		{"session", "create"},
+		{"session", "create", "work"},
 		{"session", "close"},
 		{"session", "close", "one", "two"},
 		{"session", "reopen"},
 		{"session", "closed", "work"},
+		{"session", "resume", "work", "--dir", "/repo", "--agent", "codex"},
 	} {
 		if _, err := captureRun(t, args...); err == nil {
 			t.Fatalf("%v unexpectedly succeeded", args)
