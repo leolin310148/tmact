@@ -73,6 +73,16 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"privacy-safe", "--provider", "--since", "--cwd", "--kind", "--limit", "--show-content", "parse coverage", "full arguments"},
 		},
 		{
+			name: "log stats",
+			args: []string{"log", "stats", "--help"},
+			want: []string{"privacy-safe", "--since", "--json", "provider", "tool", "command verb", "parser version", "atomic plain-file", "coverage"},
+		},
+		{
+			name: "log doctor",
+			args: []string{"log", "doctor", "--help"},
+			want: []string{"file counts", "skipped records", "schema coverage", "cache health", "--json", "privacy-safe"},
+		},
+		{
 			name: "session",
 			args: []string{"session", "--help"},
 			want: []string{"guarded local tmux sessions", "Subcommands:", "create", "close", "closed", "reopen", "resume", "dry-run by default", "canonical cwd"},

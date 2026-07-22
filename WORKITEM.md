@@ -121,7 +121,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   providers through WI-008 and report provider parse coverage/errors. Add help
   and fixture-based tests.
 
-- [ ] **WI-010 — Add `tmact log stats` and an incremental plain-file index.**
+- [x] **WI-010 — Add `tmact log stats` and an incremental plain-file index.**
   Aggregate by provider, tool, command, and subcommand with `--since` and JSON.
   Cache safe normalized fields under the tmact config directory, keyed by source
   path, size, mtime, and parser version. Use atomic plain-file writes and rebuild

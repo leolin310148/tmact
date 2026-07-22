@@ -4,12 +4,12 @@ func logCommandHelpCatalog() []commandHelp {
 	return []commandHelp{
 		{
 			Command:     "log",
-			Summary:     "Search normalized local Claude and Codex session logs with privacy-safe output defaults.",
-			Usage:       []string{"tmact log search QUERY [--provider claude|codex] [--since DURATION|RFC3339] [--cwd DIR] [--kind KIND] [--limit N] [--json] [--show-content]"},
-			Subcommands: []string{"search"},
-			Examples:    []string{`tmact log search "failing test"`, `tmact log search "git status" --provider codex --since 24h --json`},
-			Safety:      []string{"Read-only. Raw prompts, tool output, environment values, and full command arguments are omitted unless content is explicitly requested."},
-			Notes:       []string{"Searches both Claude and Codex by default through their normalized streaming readers.", "Every result includes provider parse coverage and errors so partial scans are visible."},
+			Summary:     "Search and summarize normalized local Claude and Codex session logs with privacy-safe defaults.",
+			Usage:       []string{"tmact log search QUERY [--provider claude|codex] [--since DURATION|RFC3339] [--cwd DIR] [--kind KIND] [--limit N] [--json] [--show-content]", "tmact log stats [--since DURATION|RFC3339] [--json]", "tmact log doctor [--json]"},
+			Subcommands: []string{"search", "stats", "doctor"},
+			Examples:    []string{`tmact log search "failing test"`, `tmact log stats --since 24h --json`, `tmact log doctor`},
+			Safety:      []string{"Read-only toward provider logs. Raw prompts, tool output, environment values, and full command arguments are omitted unless search content is explicitly requested."},
+			Notes:       []string{"Searches both Claude and Codex by default through their normalized streaming readers.", "Search and doctor expose parser coverage and errors so partial scans are visible.", "Stats and doctor maintain a privacy-safe plain-file index under ~/.tmact; the index never stores prompt or tool content."},
 		},
 		{
 			Command: "log search",
@@ -37,6 +37,41 @@ func logCommandHelpCatalog() []commandHelp {
 				"QUERY matching is case-insensitive across normalized metadata, full in-memory command text, and normalized content even when content is hidden from output.",
 				"Results are newest-first and memory-bounded by --limit; content is not copied to an index or persisted.",
 				"Coverage reports source, line, record, malformed, unknown, oversized, and error counts independently for each selected provider.",
+			},
+		},
+		{
+			Command: "log stats",
+			Summary: "Aggregate privacy-safe session-log metadata through an incremental plain-file index.",
+			Usage:   []string{"tmact log stats [--since DURATION|RFC3339] [--json]"},
+			Flags: []helpFlag{
+				{Name: "--since", Value: "DURATION|RFC3339", Description: "include records at or after a relative duration such as 24h or an RFC3339 timestamp"},
+				{Name: "--json", Description: "print aggregates and index activity as JSON"},
+			},
+			Examples: []string{`tmact log stats`, `tmact log stats --since 7d --json`},
+			Safety: []string{
+				"Provider logs are read-only; the index stores only timestamp, provider, kind, tool, and reduced command verb/subcommand fields.",
+				"Beyond the required source-path key, raw prompts, tool output, environment values, normalized cwd/session-id fields, and full command arguments are never cached or printed.",
+			},
+			Notes: []string{
+				"Aggregates are grouped independently by provider, tool, command verb, and recognized subcommand.",
+				"The index at ~/.tmact/log-index.json is keyed by source path, size, mtime, and parser version; unchanged files are reused and verified append-only growth is parsed incrementally.",
+				"Missing, corrupt, or parser-stale indexes are rebuilt with an atomic plain-file write; use log doctor for coverage and cache health.",
+			},
+		},
+		{
+			Command:  "log doctor",
+			Summary:  "Report session-log file counts, skipped records, schema coverage, and cache health.",
+			Usage:    []string{"tmact log doctor [--json]"},
+			Flags:    []helpFlag{{Name: "--json", Description: "print file, record, schema-coverage, cache-health, and error details as JSON"}},
+			Examples: []string{`tmact log doctor`, `tmact log doctor --json`},
+			Safety: []string{
+				"Read-only toward provider logs; cache repair writes only privacy-safe normalized fields under ~/.tmact.",
+				"Doctor never prints or persists raw prompt, tool-output, environment, or full-argument content.",
+			},
+			Notes: []string{
+				"Skipped is malformed plus oversized JSONL records; unknown records are reported separately as schema coverage.",
+				"A missing, corrupt, or parser-version-stale cache is rebuilt before healthy=true is reported.",
+				"Discovery and stream errors remain visible instead of silently claiming complete coverage.",
 			},
 		},
 	}
