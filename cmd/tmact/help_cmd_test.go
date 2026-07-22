@@ -70,12 +70,22 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "session",
 			args: []string{"session", "--help"},
-			want: []string{"recoverable local tmux sessions", "Subcommands:", "close", "closed", "reopen", "dry-run by default", "exact local session", "plain shell"},
+			want: []string{"guarded local tmux sessions", "Subcommands:", "create", "close", "closed", "reopen", "resume", "dry-run by default", "canonical cwd"},
+		},
+		{
+			name: "session create",
+			args: []string{"session", "create", "--help"},
+			want: []string{"session create", "idle shell", "--dir DIR", "--execute", "canonical cwd", "prompts are refused"},
 		},
 		{
 			name: "session reopen",
 			args: []string{"session", "reopen", "--help"},
 			want: []string{"session reopen", "--execute", "refuses an existing session", "allowlisted", "never accepts trust"},
+		},
+		{
+			name: "session resume",
+			args: []string{"session", "resume", "--help"},
+			want: []string{"session resume", "--agent claude|codex", "--session-id ID", "never read or inferred", "busy/different runtimes", "fixed provider resume command"},
 		},
 		{
 			name: "workflow",
@@ -150,6 +160,8 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	foundLLM := false
 	foundCapture := false
 	foundWait := false
+	foundSessionCreate := false
+	foundSessionResume := false
 	for _, command := range manifest.Commands {
 		if command.Command == "loop status" {
 			foundLoopStatus = true
@@ -196,6 +208,18 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 				t.Fatalf("wait help is too sparse: %#v", command)
 			}
 		}
+		if command.Command == "session create" {
+			foundSessionCreate = true
+			if len(command.Flags) < 3 || len(command.Safety) < 2 {
+				t.Fatalf("session create help is too sparse: %#v", command)
+			}
+		}
+		if command.Command == "session resume" {
+			foundSessionResume = true
+			if len(command.Flags) < 5 || len(command.Safety) < 3 || len(command.Notes) < 2 {
+				t.Fatalf("session resume help is too sparse: %#v", command)
+			}
+		}
 		if command.Command == "llm instructions" {
 			foundLLM = true
 			if len(command.Safety) == 0 {
@@ -227,6 +251,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	if !foundWait {
 		t.Fatalf("wait missing from manifest: %#v", manifest.Commands)
 	}
+	if !foundSessionCreate || !foundSessionResume {
+		t.Fatalf("guarded session commands missing from manifest: create=%t resume=%t", foundSessionCreate, foundSessionResume)
+	}
 	if !foundLLM {
 		t.Fatalf("llm instructions missing from manifest: %#v", manifest.Commands)
 	}
@@ -249,6 +276,7 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	foundTrustWorkflow := false
 	foundQuotaWorkflow := false
 	foundPeerDispatchWorkflow := false
+	foundExplicitResumeWorkflow := false
 	for _, note := range instructions.SafeDefaults {
 		if strings.Contains(note, "untrusted") {
 			foundUntrusted = true
@@ -268,6 +296,9 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 		if strings.Contains(step, "dispatch-work SESSION --peer NAME") && strings.Contains(step, "Do not SSH") {
 			foundPeerDispatchWorkflow = true
 		}
+		if strings.Contains(step, "tmact session resume") && strings.Contains(step, "Never infer") {
+			foundExplicitResumeWorkflow = true
+		}
 	}
 	if !foundUntrusted {
 		t.Fatalf("instructions missing untrusted-pane warning: %#v", instructions.SafeDefaults)
@@ -283,5 +314,8 @@ func TestLLMInstructionsJSONIncludesPolicyAndCatalog(t *testing.T) {
 	}
 	if !foundPeerDispatchWorkflow {
 		t.Fatalf("instructions missing peer dispatch workflow: %#v", instructions.RecommendedWorkflow)
+	}
+	if !foundExplicitResumeWorkflow {
+		t.Fatalf("instructions missing explicit session resume workflow: %#v", instructions.RecommendedWorkflow)
 	}
 }

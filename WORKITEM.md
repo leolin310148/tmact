@@ -98,7 +98,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   and broad deletion is out of scope. Reopen restores recorded name/cwd/runtime
   intent where safely supported and refuses conflicts. Add service and CLI tests.
 
-- [ ] **WI-007 — Add guarded session create and agent resume.**
+- [x] **WI-007 — Add guarded session create and agent resume.**
   Add `tmact session create NAME --dir DIR` for an idle shell and
   `tmact session resume NAME --dir DIR --agent claude|codex --session-id ID`.
   Both are dry-run by default, validate canonical cwd, refuse busy/different

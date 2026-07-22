@@ -227,11 +227,15 @@ migration instructions for replacing tmux-resurrect/tmux-continuum are in
 For intentional one-session lifecycle operations, use the recoverable CLI:
 
 ```sh
+tmact session create work --dir .          # dry-run idle shell
+tmact session create work --dir . --execute
 tmact session close work                 # dry-run
 tmact session close work --execute       # exact local name only
 tmact session closed --json
 tmact session reopen work                # dry-run
 tmact session reopen work --execute
+tmact session resume work --dir . --agent codex --session-id 019c-example
+tmact session resume work --dir . --agent codex --session-id 019c-example --execute
 ```
 
 Close history is shared with statusd and the web UI in
@@ -240,6 +244,13 @@ intent, and close time, never pane contents. Reopen refuses conflicts and
 missing recorded directories. It restores `claude`, `codex`, or `gemini`
 runtime intent only through a fixed allowlist; unknown or custom runtime values
 open a plain shell. Close and reopen both require `--execute` to mutate tmux.
+
+Create and resume also default to dry-run. They canonicalize the requested cwd
+and only reuse an existing session when it contains one idle shell in that exact
+directory. Busy panes, different runtimes, tmux modes, and interactive prompts
+are refused. Resume supports only Claude and Codex and requires an explicit
+provider session id; tmact never infers that id from pane text. The fixed launch
+forms are `claude --resume ID` and `codex resume ID`.
 
 ## Web Interface
 

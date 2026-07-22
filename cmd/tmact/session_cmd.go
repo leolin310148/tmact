@@ -13,9 +13,11 @@ import (
 )
 
 type sessionLifecycle interface {
+	Create(name, dir string, execute bool) (sessionlife.Result, error)
 	Close(name string, execute bool) (sessionlife.Result, error)
 	Closed() []statusd.ClosedSession
 	Reopen(name string, execute bool) (sessionlife.Result, error)
+	Resume(name, dir, agent, sessionID string, execute bool) (sessionlife.Result, error)
 }
 
 var newSessionLifecycle = func() (sessionLifecycle, error) {
@@ -32,17 +34,48 @@ func runSession(args []string) error {
 		return printCommandHelp("session")
 	}
 	switch args[0] {
+	case "create":
+		return runSessionCreate(args[1:])
 	case "close":
 		return runSessionClose(args[1:])
 	case "closed":
 		return runSessionClosed(args[1:])
 	case "reopen":
 		return runSessionReopen(args[1:])
+	case "resume":
+		return runSessionResume(args[1:])
 	case "help":
 		return printCommandHelp("session")
 	default:
 		return fmt.Errorf("unknown session subcommand %q", args[0])
 	}
+}
+
+func runSessionCreate(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("session create")
+	}
+	fs := flag.NewFlagSet("session create", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dir := fs.String("dir", "", "canonical directory for the idle shell")
+	execute := fs.Bool("execute", false, "create the exact session; default is dry-run")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	name, err := parseSessionActionArgs(fs, args, "create")
+	if err != nil {
+		return err
+	}
+	if *dir == "" {
+		return errors.New("session create requires --dir")
+	}
+	manager, err := newSessionLifecycle()
+	if err != nil {
+		return err
+	}
+	result, err := manager.Create(name, *dir, *execute)
+	if err != nil {
+		return err
+	}
+	return printSessionResult(result, *jsonOutput)
 }
 
 func runSessionClose(args []string) error {
@@ -124,6 +157,41 @@ func runSessionReopen(args []string) error {
 	return printSessionResult(result, *jsonOutput)
 }
 
+func runSessionResume(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("session resume")
+	}
+	fs := flag.NewFlagSet("session resume", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dir := fs.String("dir", "", "exact canonical directory for the agent session")
+	agent := fs.String("agent", "", "provider to resume: claude or codex")
+	sessionID := fs.String("session-id", "", "explicit provider session id")
+	execute := fs.Bool("execute", false, "resume the exact provider session; default is dry-run")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	name, err := parseSessionActionArgs(fs, args, "resume")
+	if err != nil {
+		return err
+	}
+	if *dir == "" {
+		return errors.New("session resume requires --dir")
+	}
+	if *agent == "" {
+		return errors.New("session resume requires --agent claude|codex")
+	}
+	if *sessionID == "" {
+		return errors.New("session resume requires --session-id; tmact never infers it from pane text")
+	}
+	manager, err := newSessionLifecycle()
+	if err != nil {
+		return err
+	}
+	result, err := manager.Resume(name, *dir, *agent, *sessionID, *execute)
+	if err != nil {
+		return err
+	}
+	return printSessionResult(result, *jsonOutput)
+}
+
 func parseSessionActionArgs(fs *flag.FlagSet, args []string, action string) (string, error) {
 	if len(args) == 0 || len(args) > 1 && !strings.HasPrefix(args[1], "-") {
 		return "", fmt.Errorf("session %s requires exactly one session name", action)
@@ -155,6 +223,15 @@ func printSessionResult(result sessionlife.Result, jsonOutput bool) error {
 	}
 	if result.Runtime != "" {
 		fmt.Fprintf(os.Stdout, " [runtime=%s]", result.Runtime)
+	}
+	if result.Target != "" {
+		fmt.Fprintf(os.Stdout, " [target=%s]", result.Target)
+	}
+	if result.SessionID != "" {
+		fmt.Fprintf(os.Stdout, " [session-id=%s]", result.SessionID)
+	}
+	if result.SessionExisted {
+		fmt.Fprint(os.Stdout, " [existing=true]")
 	}
 	if result.Action == "reopen" && !result.RuntimeRestored {
 		fmt.Fprint(os.Stdout, " [runtime=shell-fallback]")
