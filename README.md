@@ -164,7 +164,10 @@ scripts/install-skills.sh --check
 ```
 
 The links are intended for a developer checkout. Binary-only machines should
-not receive links to a repository that is absent.
+not receive links to a repository that is absent. `--check` is read-only and
+also warns about loadable `*.backup-*` skill directories: a duplicate matches a
+managed canonical skill, while an orphan has no managed canonical counterpart.
+The check reports these paths but never deletes them.
 
 ### Exact-directory workspace trust
 
