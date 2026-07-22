@@ -497,7 +497,8 @@ func extractResultMetadata(raw json.RawMessage, record *Record) {
 		return
 	}
 	var text string
-	if json.Unmarshal(raw, &text) != nil {
+	unwrapped := json.Unmarshal(raw, &text) == nil
+	if !unwrapped {
 		text = string(raw)
 	}
 	if record.ExitCode == nil {
@@ -507,8 +508,11 @@ func extractResultMetadata(raw json.RawMessage, record *Record) {
 			}
 		}
 	}
+	// Recurse only when a JSON string layer was actually removed; the raw
+	// fallback leaves the bytes unchanged and would recurse forever on
+	// malformed input that starts with "{".
 	trimmed := strings.TrimSpace(text)
-	if strings.HasPrefix(trimmed, "{") {
+	if unwrapped && strings.HasPrefix(trimmed, "{") {
 		extractResultMetadata(json.RawMessage(trimmed), record)
 	}
 }
