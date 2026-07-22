@@ -298,7 +298,7 @@ func normalizeCodex(env envelope, record *Record, state *parseState) bool {
 		case "local_shell_call", "shell_call":
 			record.Kind, record.Role, record.Tool = KindToolCall, "assistant", "shell"
 			if len(payload.Action.Command) > 0 {
-				record.Command = strings.Join(payload.Action.Command, " ")
+				record.Command = joinCommandWords(payload.Action.Command)
 			} else {
 				record.Command = strings.Join(payload.Action.Commands, "\n")
 			}

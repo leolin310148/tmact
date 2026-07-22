@@ -7,7 +7,7 @@ import "time"
 
 // ParserVersion changes whenever normalized safe fields may be interpreted
 // differently. Persistent consumers include it in their cache identity.
-const ParserVersion = 1
+const ParserVersion = 2
 
 // Provider identifies a supported on-disk session-log format.
 type Provider string
