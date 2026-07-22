@@ -76,6 +76,19 @@ func TestComputeCacheReusesParse(t *testing.T) {
 	approx(t, "cache value", b["claude"].WeekUSD, 0.005)
 }
 
+func TestClaudeSpendStillRequiresModelOnUsageRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	writeFixture(t, path, []string{
+		`{"type":"assistant","timestamp":"2026-05-29T10:00:00Z","message":{"id":"m1","role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":1000}}}`,
+		`{"type":"assistant","timestamp":"2026-05-29T10:00:01Z","message":{"id":"m2","role":"assistant","usage":{"input_tokens":1000}}}`,
+	})
+
+	rows := (claudeScanner{}).parseFile(path)
+	if len(rows) != 1 || rows[0].dedup != "m1" {
+		t.Fatalf("rows = %#v", rows)
+	}
+}
+
 // helpers
 
 func writeFixture(t *testing.T, path string, lines []string) {

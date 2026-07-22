@@ -1,179 +1,72 @@
 package agentspend
 
-import (
-	"bufio"
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-)
+import "github.com/leolin310148/tmact/internal/sessionlog"
 
-// codexScanner reads Codex CLI rollout logs from ~/.codex/sessions/**.jsonl.
-// Token usage arrives as event_msg/token_count records carrying a
-// last_token_usage delta and a cumulative total_token_usage; the cumulative is
-// used as the per-session dedup key (codeburn's codex.ts approach). The
-// char-estimate fallback codeburn uses when a turn has no token info is
-// intentionally omitted here — real sessions report info.
+// codexScanner prices normalized Codex token_count records. The cumulative
+// baseline remains here because it is spend-specific rather than log parsing.
 type codexScanner struct{}
 
-func (codexScanner) provider() string { return "codex" }
-
-func codexSessionsDir() string {
-	if d := os.Getenv("CODEX_HOME"); d != "" {
-		return filepath.Join(d, "sessions")
-	}
-	if h, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(h, ".codex", "sessions")
-	}
-	return ""
-}
+func (codexScanner) provider() string { return string(sessionlog.ProviderCodex) }
 
 func (codexScanner) discover() []string {
-	base := codexSessionsDir()
-	if base == "" {
-		return nil
-	}
-	var files []string
-	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() && strings.HasSuffix(path, ".jsonl") {
-			if abs, e := filepath.Abs(path); e == nil {
-				path = abs
-			}
-			files = append(files, path)
-		}
-		return nil
-	})
-	return files
-}
-
-type codexTokenUsage struct {
-	InputTokens           int `json:"input_tokens"`
-	CachedInputTokens     int `json:"cached_input_tokens"`
-	OutputTokens          int `json:"output_tokens"`
-	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
-	TotalTokens           int `json:"total_tokens"`
-}
-
-type codexLine struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
-	Payload   struct {
-		Type      string `json:"type"`
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-		Info      *struct {
-			Model           string           `json:"model"`
-			ModelName       string           `json:"model_name"`
-			LastTokenUsage  *codexTokenUsage `json:"last_token_usage"`
-			TotalTokenUsage *codexTokenUsage `json:"total_token_usage"`
-		} `json:"info"`
-	} `json:"payload"`
-}
-
-func (codexScanner) parseFile(path string) []pricedRow {
-	f, err := os.Open(path)
+	discovery, err := sessionlog.Discover(sessionlog.ProviderCodex)
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	files := make([]string, 0, len(discovery.Sources))
+	for _, source := range discovery.Sources {
+		files = append(files, source.Path)
+	}
+	return files
+}
 
-	sessionID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-	sessionModel := ""
+func (codexScanner) parseFile(path string) []pricedRow {
 	havePrevCumulative := false
 	prevCumulative := 0
 	var prevInput, prevCached, prevOutput int
-
 	var rows []pricedRow
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for sc.Scan() {
-		b := sc.Bytes()
-		if len(b) == 0 {
-			continue
-		}
-		var ln codexLine
-		if err := json.Unmarshal(b, &ln); err != nil {
-			continue
-		}
 
-		switch {
-		case ln.Type == "session_meta":
-			if ln.Payload.SessionID != "" {
-				sessionID = ln.Payload.SessionID
-			}
-			if ln.Payload.Model != "" {
-				sessionModel = ln.Payload.Model
-			}
-			continue
-		case ln.Type == "turn_context" && ln.Payload.Model != "":
-			sessionModel = ln.Payload.Model
-			continue
-		case ln.Type == "event_msg" && ln.Payload.Type == "token_count":
-			// handled below
-		default:
-			continue
+	_, _ = sessionlog.Stream(sessionlog.Source{Provider: sessionlog.ProviderCodex, Path: path}, func(record sessionlog.Record) error {
+		if record.Kind != sessionlog.KindUsage || record.TotalUsage == nil {
+			return nil
 		}
-
-		info := ln.Payload.Info
-		if info == nil || info.TotalTokenUsage == nil {
-			continue
-		}
-		cumulative := info.TotalTokenUsage.TotalTokens
+		total := record.TotalUsage
+		cumulative := total.TotalTokens
 		if havePrevCumulative && cumulative == prevCumulative {
-			continue // duplicate / replayed event
+			return nil
 		}
 
 		var input, cached, output int
-		if last := info.LastTokenUsage; last != nil {
+		if last := record.Usage; last != nil {
 			input, cached, output = last.InputTokens, last.CachedInputTokens, last.OutputTokens
 		} else if cumulative > 0 {
-			t := info.TotalTokenUsage
-			input = t.InputTokens - prevInput
-			cached = t.CachedInputTokens - prevCached
-			output = t.OutputTokens - prevOutput
+			input = total.InputTokens - prevInput
+			cached = total.CachedInputTokens - prevCached
+			output = total.OutputTokens - prevOutput
 		}
 
-		// Advance cumulative baseline regardless of which branch produced the
-		// delta (codeburn note: otherwise mixed last/no-last sessions
-		// double-count).
-		t := info.TotalTokenUsage
-		prevInput, prevCached, prevOutput = t.InputTokens, t.CachedInputTokens, t.OutputTokens
+		prevInput, prevCached, prevOutput = total.InputTokens, total.CachedInputTokens, total.OutputTokens
 		havePrevCumulative = true
 		prevCumulative = cumulative
-
-		if input+cached+output == 0 {
-			continue
+		if input+cached+output == 0 || record.Timestamp.IsZero() {
+			return nil
 		}
 
-		model := sessionModel
-		if info.Model != "" {
-			model = info.Model
-		} else if info.ModelName != "" {
-			model = info.ModelName
-		}
+		model := record.Model
 		if model == "" {
 			model = "gpt-5"
 		}
-
-		ts, err := time.Parse(time.RFC3339, ln.Timestamp)
-		if err != nil {
-			continue
-		}
-
 		cost, ok := calculateCodexTokenCost(model, input, cached, output)
 		if !ok {
-			continue
+			return nil
 		}
 		rows = append(rows, pricedRow{
-			ts:    ts,
+			ts:    record.Timestamp,
 			cost:  cost,
-			dedup: "codex:" + sessionID + ":" + itoa(cumulative),
+			dedup: "codex:" + record.SessionID + ":" + itoa(cumulative),
 		})
-	}
+		return nil
+	})
 	return rows
 }
 

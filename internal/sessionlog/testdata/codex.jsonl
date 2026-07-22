@@ -1,0 +1,10 @@
+{"type":"session_meta","timestamp":"2026-07-20T10:00:00Z","payload":{"id":"codex-session-redacted","cwd":"/workspace/redacted"}}
+{"type":"turn_context","timestamp":"2026-07-20T10:00:01Z","payload":{"cwd":"/workspace/redacted","model":"gpt-5.6-codex"}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:02Z","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"go test ./internal/example\"}","call_id":"call-redacted"}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:03Z","payload":{"type":"function_call_output","name":"exec_command","output":"{\"output\":\"synthetic output\",\"exit_code\":0,\"wall_time_seconds\":1.25}"}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:04Z","payload":{"type":"custom_tool_call","name":"shell","input":{"command":["git","status","--short"]}}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:05Z","payload":{"type":"custom_tool_call_output","name":"shell","output":"Process exited with code 7\nFinal output:\nsynthetic failure"}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:05.100Z","payload":{"type":"local_shell_call","action":{"type":"exec","command":["go","test","./internal/example"]}}}
+{"type":"response_item","timestamp":"2026-07-20T10:00:05.200Z","payload":{"type":"local_shell_call_output","output":"{\"exit_code\":0,\"duration_ms\":50,\"output\":\"synthetic output\"}"}}
+{"type":"event_msg","timestamp":"2026-07-20T10:00:06Z","payload":{"type":"token_count","info":{"model_name":"gpt-5.6-codex","last_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":40,"reasoning_output_tokens":10,"total_tokens":140},"total_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":40,"reasoning_output_tokens":10,"total_tokens":140}}}}
+{"type":"event_msg","timestamp":"2026-07-20T10:00:07Z","payload":{"type":"future-event"}}
