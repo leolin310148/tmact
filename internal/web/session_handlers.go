@@ -7,7 +7,10 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -64,6 +67,90 @@ func (s *Server) localSession(name string) (statusd.SessionStatus, bool) {
 	return sess, true
 }
 
+// localClosedSession resolves one exact local history entry. Closed-session
+// logs are normally deduplicated, but requiring exactly one match keeps a
+// corrupt or hand-edited history file from selecting an arbitrary cwd.
+func (s *Server) localClosedSession(name string) (statusd.ClosedSession, bool) {
+	if s.ClosedSessions == nil {
+		return statusd.ClosedSession{}, false
+	}
+	var (
+		match statusd.ClosedSession
+		count int
+	)
+	for _, entry := range s.ClosedSessions.List() {
+		if entry.Session == name && entry.Peer == "" {
+			match = entry
+			count++
+		}
+	}
+	return match, count == 1
+}
+
+// requireSessionMutationRequest rejects browser cross-site requests and
+// CORS-safelisted body types before a destructive session mutation can run.
+// Requests without browser origin metadata remain supported for local API
+// clients and configured server-to-server peer proxying.
+func requireSessionMutationRequest(w http.ResponseWriter, r *http.Request) bool {
+	switch site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); site {
+	case "", "none", "same-origin":
+	default:
+		writeJSONError(w, http.StatusForbidden, "cross-site session mutation rejected")
+		return false
+	}
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && !requestOriginMatches(origin, r) {
+		writeJSONError(w, http.StatusForbidden, "cross-origin session mutation rejected")
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || !strings.EqualFold(mediaType, "application/json") {
+		writeJSONError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return false
+	}
+	return true
+}
+
+func requestOriginMatches(origin string, r *http.Request) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return strings.EqualFold(u.Scheme, scheme) && strings.EqualFold(u.Host, r.Host)
+}
+
+func decodeSessionMutationJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: trailing data")
+		return false
+	}
+	return true
+}
+
+// maybeProxyPeerSessionMutation validates browser metadata at the local hub,
+// then removes it from the configured server-to-server hop. Authorization and
+// all other end-to-end headers remain available to an authenticated peer.
+func (s *Server) maybeProxyPeerSessionMutation(w http.ResponseWriter, r *http.Request, path string) bool {
+	if r.URL.Query().Get("peer") == "" {
+		return false
+	}
+	proxied := r.Clone(r.Context())
+	proxied.Header = r.Header.Clone()
+	for _, name := range []string{"Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest", "Sec-Fetch-User"} {
+		proxied.Header.Del(name)
+	}
+	return s.maybeProxyPeerHTTP(w, proxied, path)
+}
+
 // handleSessionKill kills one exact local tmux session. The name must match a
 // session in the current snapshot — the web surface only ever acts on sessions
 // statusd knows about, never on arbitrary tmux targets.
@@ -73,15 +160,17 @@ func (s *Server) handleSessionKill(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.maybeProxyPeerHTTP(w, r, "/api/session/kill") {
+	if !requireSessionMutationRequest(w, r) {
+		return
+	}
+	if s.maybeProxyPeerSessionMutation(w, r, "/api/session/kill") {
 		return
 	}
 	defer r.Body.Close()
 	var req struct {
 		Session string `json:"session"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+	if !decodeSessionMutationJSON(w, r, &req) {
 		return
 	}
 	name := strings.TrimSpace(req.Session)
@@ -109,16 +198,18 @@ func (s *Server) handleSessionReopen(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.maybeProxyPeerHTTP(w, r, "/api/session/reopen") {
+	if !requireSessionMutationRequest(w, r) {
+		return
+	}
+	if s.maybeProxyPeerSessionMutation(w, r, "/api/session/reopen") {
 		return
 	}
 	defer r.Body.Close()
 	var req struct {
-		Session string `json:"session"`
-		CWD     string `json:"cwd"`
+		Session string          `json:"session"`
+		CWD     json.RawMessage `json:"cwd,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+	if !decodeSessionMutationJSON(w, r, &req) {
 		return
 	}
 	name := strings.TrimSpace(req.Session)
@@ -131,13 +222,29 @@ func (s *Server) handleSessionReopen(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid session name "+name)
 		return
 	}
+	entry, ok := s.localClosedSession(name)
+	if !ok {
+		writeJSONError(w, http.StatusNotFound, "unknown closed session "+name)
+		return
+	}
 	if _, ok := s.localSession(name); ok {
 		writeJSONError(w, http.StatusConflict, "session "+name+" already exists")
 		return
 	}
-	cwd := strings.TrimSpace(req.CWD)
+	cwd := entry.CWD
+	if req.CWD != nil {
+		var requestedCWD *string
+		if err := json.Unmarshal(req.CWD, &requestedCWD); err != nil || requestedCWD == nil {
+			writeJSONError(w, http.StatusBadRequest, "cwd must be a JSON string")
+			return
+		}
+		if *requestedCWD != cwd {
+			writeJSONError(w, http.StatusConflict, "cwd does not match closed-session history")
+			return
+		}
+	}
 	if cwd != "" && !filepath.IsAbs(cwd) {
-		writeJSONError(w, http.StatusBadRequest, "cwd must be absolute")
+		writeJSONError(w, http.StatusBadRequest, "recorded cwd must be absolute")
 		return
 	}
 	if cwd != "" && !s.dirExists()(cwd) {
