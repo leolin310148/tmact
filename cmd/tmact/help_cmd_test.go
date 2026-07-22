@@ -68,6 +68,16 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "condition_met", "needs_human", "does not prove", "never sends keys"},
 		},
 		{
+			name: "session",
+			args: []string{"session", "--help"},
+			want: []string{"recoverable local tmux sessions", "Subcommands:", "close", "closed", "reopen", "dry-run by default", "exact local session", "plain shell"},
+		},
+		{
+			name: "session reopen",
+			args: []string{"session", "reopen", "--help"},
+			want: []string{"session reopen", "--execute", "refuses an existing session", "allowlisted", "never accepts trust"},
+		},
+		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
 			want: []string{"workflow", "revision-aware DAG", "workflow validate", "workflow start", "durable dispatch IDs", "--execute"},

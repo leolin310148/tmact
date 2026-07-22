@@ -15,6 +15,9 @@ Use the CLI when you want scriptable tmux control:
   an opaque cursor for incremental captures.
 - `tmact wait --target session:0.0 --until input-ready --timeout 5m` performs a
   bounded, read-only wait for a pane state or terminal blocker.
+- `tmact session close work` previews closing one exact local session;
+  `tmact session closed` lists recoverable history, and
+  `tmact session reopen work` previews restoring it.
 - `tmact inspect --all` classifies panes by runtime and idle/running/asking
   state.
 - `tmact -t 0 send --text "status?" --enter` previews input; add `--execute`
@@ -220,6 +223,23 @@ tmux query proves that no sessions exist. If any session already exists it
 does nothing. Snapshots default to `~/.tmact/tmux-sessions`; configuration and
 migration instructions for replacing tmux-resurrect/tmux-continuum are in
 [docs/session-persistence.md](docs/session-persistence.md).
+
+For intentional one-session lifecycle operations, use the recoverable CLI:
+
+```sh
+tmact session close work                 # dry-run
+tmact session close work --execute       # exact local name only
+tmact session closed --json
+tmact session reopen work                # dry-run
+tmact session reopen work --execute
+```
+
+Close history is shared with statusd and the web UI in
+`~/.tmact/closed-sessions.json`; it contains the session name, cwd, runtime
+intent, and close time, never pane contents. Reopen refuses conflicts and
+missing recorded directories. It restores `claude`, `codex`, or `gemini`
+runtime intent only through a fixed allowlist; unknown or custom runtime values
+open a plain shell. Close and reopen both require `--execute` to mutate tmux.
 
 ## Web Interface
 

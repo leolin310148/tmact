@@ -71,6 +71,11 @@ func run(args []string) error {
 		return runCapture(args[1:], globals)
 	case "wait":
 		return runWait(args[1:], globals)
+	case "session":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is not valid with session; pass one exact session name")
+		}
+		return runSession(args[1:])
 	case "detect":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")

@@ -15,8 +15,9 @@ const (
 	DefaultClosedSessionsMax  = 30
 )
 
-// ClosedSession is one recently-closed local tmux session the web UI can offer
-// to reopen (same name, same cwd, plain shell).
+// ClosedSession is one recently-closed local tmux session shared by statusd,
+// the web UI, and the CLI. Runtime is intent metadata; consumers must use an
+// explicit allowlist before launching anything from it.
 type ClosedSession struct {
 	Session  string    `json:"session"`
 	CWD      string    `json:"cwd,omitempty"`

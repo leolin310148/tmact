@@ -19,6 +19,9 @@ Usage:
   tmact -t peer-a@%7 send --text "status?" --enter --execute
   tmact capture --target sample:0.0 [--lines 120] [--non-empty] [--after CURSOR] [--json]
   tmact wait (--target sample:0.0 | --session sample) --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]
+  tmact session close SESSION [--execute] [--json]
+  tmact session closed [--json]
+  tmact session reopen SESSION [--execute] [--json]
   tmact detect [--target sample:0.0] [--lines 120] [--json]
   tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
@@ -66,6 +69,7 @@ Commands:
   send          preview or send text, commands, or keys to one tmux target
   capture       capture plain text from one exact local tmux pane
   wait          wait read-only for a bounded pane state transition or blocker
+  session       close, list, and reopen recoverable local tmux sessions
   detect        capture a pane and detect directory-access prompts
   inspect       classify panes by runtime and idle/running/asking state
   status        summarize configured agent panes
