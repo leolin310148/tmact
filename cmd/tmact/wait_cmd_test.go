@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panewait"
+	"github.com/leolin310148/tmact/internal/tmux"
 )
 
 func TestWaitJSONIncludesTerminalReasonAndOptions(t *testing.T) {
@@ -85,6 +86,34 @@ func TestWaitAcceptsExactSessionAndPrintsText(t *testing.T) {
 	}
 }
 
+func TestWaitNumberedTargetDefersLiveResolutionToBoundedWait(t *testing.T) {
+	t.Chdir(t.TempDir())
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	tmactNow = func() time.Time { return time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC) }
+	if err := writeTargetCache(targetCache{
+		GeneratedAt: tmactNow(),
+		Panes:       []listPaneRow{{Index: 0, Target: "%42"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	listTargetTmuxPanes = func(string) ([]tmux.Pane, error) {
+		t.Fatal("wait must not issue an unbounded cache-validation tmux call")
+		return nil, nil
+	}
+	paneWaitRun = func(_ context.Context, options panewait.Options) (panewait.Report, error) {
+		if options.Selector != "%42" {
+			t.Fatalf("selector = %q", options.Selector)
+		}
+		return panewait.Report{Selector: options.Selector, Target: "work:0.0", PaneID: "%42", Until: options.Until, State: panewait.UntilWorking, RawState: "working", Reason: panewait.ReasonConditionMet, ConditionMet: true}, nil
+	}
+
+	if _, err := captureRun(t, "-t", "0", "wait", "--until", "working", "--timeout", "1s"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWaitReturnsReportAndErrorForTerminalBlocker(t *testing.T) {
 	resetCLIHooks := stubCLIHooks(t)
 	defer resetCLIHooks()
@@ -110,6 +139,32 @@ func TestWaitReturnsReportAndErrorForTerminalBlocker(t *testing.T) {
 		t.Fatal(jsonErr)
 	}
 	if report.Reason != panewait.ReasonNeedsHuman || report.ConditionMet {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestWaitTimeoutPrintsStructuredReport(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	paneWaitRun = func(_ context.Context, options panewait.Options) (panewait.Report, error) {
+		now := time.Now()
+		return panewait.Report{
+			Selector: options.Selector, Target: options.Selector, Until: options.Until,
+			State: panewait.StateUnknown, RawState: panewait.StateUnknown,
+			Reason: panewait.ReasonTimeout, StartedAt: now, FinishedAt: now,
+		}, nil
+	}
+
+	out, err := captureRun(t, "wait", "--target", "%7", "--until", "working", "--timeout", "1ms", "--json")
+	if err == nil || !strings.Contains(err.Error(), panewait.ReasonTimeout) {
+		t.Fatalf("err = %v", err)
+	}
+	var report waitCommandReport
+	if jsonErr := json.Unmarshal([]byte(out), &report); jsonErr != nil {
+		t.Fatal(jsonErr)
+	}
+	if report.Reason != panewait.ReasonTimeout || report.ConditionMet {
 		t.Fatalf("report = %#v", report)
 	}
 }

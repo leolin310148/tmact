@@ -57,7 +57,7 @@ func runWait(args []string, globals globalOptions) error {
 	requireTransition := fs.Bool("require-transition", false, "require an observed state change before matching the requested condition")
 	settle := fs.Duration("settle", defaultWaitSettle, "continuous matching time before returning")
 	pollInterval := fs.Duration("poll-interval", defaultWaitPollInterval, "delay between pane observations")
-	timeout := fs.Duration("timeout", defaultWaitTimeout, "maximum total wait")
+	timeout := fs.Duration("timeout", defaultWaitTimeout, "wall-clock deadline including target resolution, capture, settling, and polling")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
@@ -103,7 +103,7 @@ func runWait(args []string, globals globalOptions) error {
 		selectorKind = "session"
 	}
 	if selectorKind == "target" {
-		resolved, err := resolveTarget(selector)
+		resolved, err := resolveWaitTarget(selector)
 		if err != nil {
 			return err
 		}

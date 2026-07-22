@@ -55,7 +55,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "peer dispatch",
 			args: []string{"dispatch-work", "--help"},
-			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "--wait-settle DURATION", "--result-lines N", "local-only", "not proof"},
+			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "wall-clock deadline", "--wait-settle DURATION", "--result-lines N", "local-only", "not proof"},
 		},
 		{
 			name: "capture",
@@ -65,7 +65,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "wait",
 			args: []string{"wait", "--help"},
-			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "condition_met", "needs_human", "does not prove", "never sends keys"},
+			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "wall-clock deadline", "condition_met", "needs_human", "does not prove", "never sends keys"},
 		},
 		{
 			name: "log search",

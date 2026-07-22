@@ -500,10 +500,16 @@ func CapturePane(target string, lines int) (string, error) {
 // CapturePaneInfoForTarget resolves one tmux target to its canonical pane
 // target and stable pane id, and reports the available scrollback size.
 func CapturePaneInfoForTarget(target string) (CapturePaneInfo, error) {
+	return CapturePaneInfoForTargetContext(context.Background(), target)
+}
+
+// CapturePaneInfoForTargetContext is CapturePaneInfoForTarget with
+// cancellation support for bounded callers.
+func CapturePaneInfoForTargetContext(ctx context.Context, target string) (CapturePaneInfo, error) {
 	if target == "" {
 		return CapturePaneInfo{}, fmt.Errorf("target cannot be empty")
 	}
-	output, err := outputTmux("display-message", "-p", "-t", target, "#{session_name}:#{window_index}.#{pane_index}\t#{pane_id}\t#{history_size}")
+	output, err := outputTmuxContext(ctx, "display-message", "-p", "-t", target, "#{session_name}:#{window_index}.#{pane_index}\t#{pane_id}\t#{history_size}")
 	if err != nil {
 		return CapturePaneInfo{}, err
 	}
@@ -736,11 +742,18 @@ func runTmux(args ...string) error {
 }
 
 func outputTmux(args ...string) (string, error) {
-	cmd := exec.Command("tmux", tmuxArgs(args)...)
+	return outputTmuxContext(context.Background(), args...)
+}
+
+func outputTmuxContext(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "tmux", tmuxArgs(args)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", fmt.Errorf("tmux %s failed: %w", args[0], ctxErr)
+		}
 		if stderr.Len() > 0 {
 			return "", fmt.Errorf("tmux %s failed: %s", args[0], stderr.String())
 		}

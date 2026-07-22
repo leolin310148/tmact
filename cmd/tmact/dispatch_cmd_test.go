@@ -131,6 +131,30 @@ func TestDispatchWaitBlockerPrintsStructuredJSONBeforeError(t *testing.T) {
 	}
 }
 
+func TestDispatchWaitTimeoutPrintsStructuredJSONBeforeError(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{
+			Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt,
+			Wait: &dispatch.WaitReport{
+				Status: dispatch.StatusFailed, Baseline: &dispatch.WaitBaseline{Accepted: true},
+				Outcome: &dispatch.WaitOutcome{Reason: "timeout"},
+			},
+		}, errors.New("dispatch wait ended before input-ready: timeout")
+	}
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", t.TempDir(), "--agent", "codex", "--prompt", "go", "--wait", "--wait-timeout", "1ms", "--json")
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("err = %v", err)
+	}
+	var got dispatch.Report
+	if jsonErr := json.Unmarshal([]byte(out), &got); jsonErr != nil {
+		t.Fatal(jsonErr)
+	}
+	if got.Wait == nil || got.Wait.Outcome == nil || got.Wait.Outcome.Reason != "timeout" {
+		t.Fatalf("report = %#v", got)
+	}
+}
+
 func TestDispatchPeerReadsConfigAndUsesRemoteRun(t *testing.T) {
 	defer stubCLIHooks(t)()
 

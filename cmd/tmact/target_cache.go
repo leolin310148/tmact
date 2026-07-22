@@ -20,6 +20,17 @@ type targetCache struct {
 const targetCacheMaxAge = 30 * time.Minute
 
 func resolveTarget(selector string) (string, error) {
+	return resolveCachedTarget(selector, true)
+}
+
+// resolveWaitTarget resolves numeric cache selectors without issuing a tmux
+// probe. The bounded wait resolves the returned exact target itself with its
+// deadline-bearing context.
+func resolveWaitTarget(selector string) (string, error) {
+	return resolveCachedTarget(selector, false)
+}
+
+func resolveCachedTarget(selector string, verifyAvailable bool) (string, error) {
 	index, err := strconv.Atoi(selector)
 	if err != nil {
 		return selector, nil
@@ -41,8 +52,10 @@ func resolveTarget(selector string) (string, error) {
 	if peer, _ := statusd.SplitPeerTarget(row.Target); peer != "" {
 		return row.Target, nil
 	}
-	if _, err := listTargetTmuxPanes(row.Target); err != nil {
-		return "", fmt.Errorf("cached target %d (%s) is no longer available; run `tmact ls` again: %w", index, row.Target, err)
+	if verifyAvailable {
+		if _, err := listTargetTmuxPanes(row.Target); err != nil {
+			return "", fmt.Errorf("cached target %d (%s) is no longer available; run `tmact ls` again: %w", index, row.Target, err)
+		}
 	}
 	return row.Target, nil
 }

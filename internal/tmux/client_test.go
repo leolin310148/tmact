@@ -1,9 +1,19 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
+
+func TestCapturePaneInfoForTargetContextHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := CapturePaneInfoForTargetContext(ctx, "%7")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v", err)
+	}
+}
 
 func TestNoServerErrorClassification(t *testing.T) {
 	for _, message := range []string{

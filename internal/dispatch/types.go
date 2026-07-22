@@ -148,32 +148,34 @@ type Report struct {
 
 // Deps holds the tmux side effects so callers can be tested without a live session.
 type Deps struct {
-	ListLayout       func() (tmux.Layout, error)
-	ListSessionPanes func(string) ([]tmux.Pane, error)
-	CapturePane      func(string, int) (string, error)
-	CapturePaneANSI  func(string, int) (string, error)
-	NewSession       func(session, window, cwd string, command []string) error
-	PasteText        func(target, text string, enter bool) error
-	SendKeys         func(target string, keys []string) error
-	ProcessRuntime   func(int) panestatus.RuntimeDetection
-	Sleep            func(time.Duration)
-	Now              func() time.Time
-	WaitPane         func(context.Context, panewait.Options) (panewait.Report, error)
+	ListLayout         func() (tmux.Layout, error)
+	ListSessionPanes   func(string) ([]tmux.Pane, error)
+	CapturePane        func(string, int) (string, error)
+	CapturePaneContext func(context.Context, string, int) (string, error)
+	CapturePaneANSI    func(string, int) (string, error)
+	NewSession         func(session, window, cwd string, command []string) error
+	PasteText          func(target, text string, enter bool) error
+	SendKeys           func(target string, keys []string) error
+	ProcessRuntime     func(int) panestatus.RuntimeDetection
+	Sleep              func(time.Duration)
+	Now                func() time.Time
+	WaitPane           func(context.Context, panewait.Options) (panewait.Report, error)
 }
 
 // DefaultDeps wires Deps to the real tmux helpers.
 func DefaultDeps() Deps {
 	return Deps{
-		ListLayout:       tmux.ListLayout,
-		ListSessionPanes: tmux.ListSessionPanes,
-		CapturePane:      tmux.CapturePane,
-		CapturePaneANSI:  tmux.CapturePaneANSI,
-		NewSession:       tmux.NewSession,
-		PasteText:        tmux.PasteText,
-		SendKeys:         tmux.SendKeys,
-		ProcessRuntime:   panestatus.DetectChildProcessRuntime,
-		Sleep:            time.Sleep,
-		Now:              time.Now,
-		WaitPane:         panewait.Run,
+		ListLayout:         tmux.ListLayout,
+		ListSessionPanes:   tmux.ListSessionPanes,
+		CapturePane:        tmux.CapturePane,
+		CapturePaneContext: tmux.CapturePaneContext,
+		CapturePaneANSI:    tmux.CapturePaneANSI,
+		NewSession:         tmux.NewSession,
+		PasteText:          tmux.PasteText,
+		SendKeys:           tmux.SendKeys,
+		ProcessRuntime:     panestatus.DetectChildProcessRuntime,
+		Sleep:              time.Sleep,
+		Now:                time.Now,
+		WaitPane:           panewait.Run,
 	}
 }
