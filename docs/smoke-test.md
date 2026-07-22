@@ -119,6 +119,22 @@ Markdown table view (bottom-left `#markdown-btn` toggle):
    `localStorage["tmact.settings"].markdownView` track the state across reloads.
    Default is off, so the first paint is always the raw terminal view.
 
+Live pane interaction stability:
+
+8. Select an isolated pane that continuously prints a changing counter and an
+   existing image path. While it is updating, select the path text and copy it.
+   Expect the selection and its DOM nodes to remain intact, with the accessible
+   “Live updates paused while selecting” indicator visible.
+9. Collapse the selection. Expect the indicator to disappear and only the
+   newest pending frame to render once. Then hold pointer-down on a previewable
+   path while output changes and Ctrl/Cmd-click it. Expect the click target to
+   remain connected through click dispatch and the preview to open.
+
+Last run 2026-07-22: verified steps 8–9 with `borz` against a rapidly changing
+isolated local tmux pane. Range text copied intact; the path node kept identity
+while frames arrived; selection collapse flushed the latest frame; and the
+preview opened before the deferred repaint replaced the clicked node.
+
 ## Notes Template
 
 ```text

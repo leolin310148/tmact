@@ -62,7 +62,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   `needs_human`, not be confirmed. Add cancellation and fake-clock/dependency
   tests without live tmux.
 
-- [ ] **WI-004 — Keep pane DOM stable during selection and clicks.**
+- [x] **WI-004 — Keep pane DOM stable during selection and clicks.**
   Stop live pane repaints from invalidating browser Selection/Range objects or
   click targets. Keep receiving WebSocket patches and updating the pane
   buffer/cache, but defer `pre#content` DOM commits while any pointer
