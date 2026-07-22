@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +13,8 @@ import (
 )
 
 func TestCloseDryRunAndExecuteRecordExactSessionIntent(t *testing.T) {
-	history := statusd.NewClosedSessionLog(filepath.Join(t.TempDir(), "closed.json"), 10)
+	historyPath := filepath.Join(t.TempDir(), "closed.json")
+	history := statusd.NewClosedSessionLog(historyPath, 10)
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 	panes := []tmux.Pane{
 		{Session: "work-old", SessionID: "$1", PaneID: "%1", CurrentPath: "/old"},
@@ -32,8 +34,15 @@ func TestCloseDryRunAndExecuteRecordExactSessionIntent(t *testing.T) {
 				},
 			}, nil
 		},
-		KillSession: func(name string) error { killed = append(killed, name); return nil },
-		Now:         func() time.Time { return now },
+		KillSession: func(name string) error {
+			persisted := statusd.NewClosedSessionLog(historyPath, 10).List()
+			if len(persisted) != 1 || persisted[0].Session != "work" || !persisted[0].ClosedAt.Equal(now) {
+				t.Fatalf("history was not durable before kill: %#v", persisted)
+			}
+			killed = append(killed, name)
+			return nil
+		},
+		Now: func() time.Time { return now },
 	}}
 
 	preview, err := manager.Close("work", false)
@@ -57,6 +66,73 @@ func TestCloseDryRunAndExecuteRecordExactSessionIntent(t *testing.T) {
 	entries := history.List()
 	if len(entries) != 1 || entries[0].Session != "work" || entries[0].Runtime != "codex" || entries[0].CWD != "/repo" || !entries[0].ClosedAt.Equal(now) {
 		t.Fatalf("history = %#v", entries)
+	}
+}
+
+func TestCloseDoesNotKillWhenHistoryPersistenceFails(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	killed := 0
+	manager := &Manager{
+		History: statusd.NewClosedSessionLog(filepath.Join(parent, "closed.json"), 10),
+		Deps: Dependencies{
+			ListPanes:   func() ([]tmux.Pane, error) { return []tmux.Pane{{Session: "work", CurrentPath: "/repo"}}, nil },
+			KillSession: func(string) error { killed++; return nil },
+		},
+	}
+	if _, err := manager.Close("work", true); err == nil || !strings.Contains(err.Error(), "stage reopen intent") {
+		t.Fatalf("error = %v", err)
+	}
+	if killed != 0 {
+		t.Fatalf("KillSession calls = %d, want 0", killed)
+	}
+}
+
+func TestCloseKillFailureRollsBackDurableHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "closed.json")
+	history := statusd.NewClosedSessionLog(path, 10)
+	previous := statusd.ClosedSession{Session: "work", CWD: "/old", Runtime: "shell", ClosedAt: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)}
+	if err := history.Record(previous); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{
+		History: history,
+		Deps: Dependencies{
+			ListPanes:   func() ([]tmux.Pane, error) { return []tmux.Pane{{Session: "work", CurrentPath: "/repo"}}, nil },
+			KillSession: func(string) error { return errors.New("tmux kill failed") },
+		},
+	}
+	if _, err := manager.Close("work", true); err == nil || !strings.Contains(err.Error(), "tmux kill failed") {
+		t.Fatalf("error = %v", err)
+	}
+	if got := statusd.NewClosedSessionLog(path, 10).List(); len(got) != 1 || got[0] != previous {
+		t.Fatalf("rollback was not durable: %#v", got)
+	}
+}
+
+func TestCloseKillFailureReportsRollbackFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "closed.json")
+	manager := &Manager{
+		History: statusd.NewClosedSessionLog(path, 10),
+		Deps: Dependencies{
+			ListPanes: func() ([]tmux.Pane, error) { return []tmux.Pane{{Session: "work", CurrentPath: "/repo"}}, nil },
+			KillSession: func(string) error {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(path, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				return errors.New("tmux kill failed")
+			},
+		},
+	}
+	_, err := manager.Close("work", true)
+	if err == nil || !strings.Contains(err.Error(), "tmux kill failed") || !strings.Contains(err.Error(), "rollback staged reopen intent failed") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -195,5 +271,34 @@ func TestReopenRuntimeFailureRollsBackAndKeepsHistory(t *testing.T) {
 	}
 	if killed != 1 || len(history.List()) != 1 {
 		t.Fatalf("rollback/history = %d/%#v", killed, history.List())
+	}
+}
+
+func TestReopenHistoryRemovalFailureCleansUpSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "closed.json")
+	history := statusd.NewClosedSessionLog(path, 10)
+	if err := history.Record(statusd.ClosedSession{Session: "work", CWD: "/repo", Runtime: "shell", ClosedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	killed := 0
+	manager := &Manager{History: history, Deps: Dependencies{
+		ListPanes: func() ([]tmux.Pane, error) { return nil, nil },
+		DirExists: func(string) bool { return true },
+		NewSession: func(string, string, string, []string) error {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		},
+		KillSession: func(string) error { killed++; return nil },
+	}}
+	if _, err := manager.Reopen("work", true); err == nil || !strings.Contains(err.Error(), "remove reopened session") {
+		t.Fatalf("error = %v", err)
+	}
+	if killed != 1 {
+		t.Fatalf("cleanup KillSession calls = %d, want 1", killed)
 	}
 }

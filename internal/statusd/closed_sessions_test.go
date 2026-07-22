@@ -2,7 +2,9 @@ package statusd
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,14 +49,101 @@ func TestClosedSessionLogPersistsAcrossInstances(t *testing.T) {
 		t.Fatalf("reloaded = %#v", got)
 	}
 
-	if !reloaded.Remove("work") {
+	removed, err := reloaded.Remove("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !removed {
 		t.Fatal("Remove returned false for existing entry")
 	}
-	if reloaded.Remove("work") {
+	removed, err = reloaded.Remove("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed {
 		t.Fatal("Remove returned true for missing entry")
 	}
 	if got := NewClosedSessionLog(path, 10).List(); len(got) != 0 {
 		t.Fatalf("after remove, reloaded = %#v", got)
+	}
+}
+
+func TestClosedSessionLogRecordDurableRequiresPath(t *testing.T) {
+	log := NewClosedSessionLog("", 10)
+	err := log.RecordDurable(ClosedSession{Session: "work", ClosedAt: closedAt(1)})
+	if !errors.Is(err, ErrClosedSessionPersistenceDisabled) {
+		t.Fatalf("error = %v, want ErrClosedSessionPersistenceDisabled", err)
+	}
+	if got := log.List(); len(got) != 0 {
+		t.Fatalf("failed durable record changed memory: %#v", got)
+	}
+}
+
+func TestClosedSessionLogRecordSurfacesWriteFailures(t *testing.T) {
+	t.Run("unwritable path", func(t *testing.T) {
+		parent := filepath.Join(t.TempDir(), "not-a-directory")
+		if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		log := NewClosedSessionLog(filepath.Join(parent, "closed.json"), 10)
+		err := log.Record(ClosedSession{Session: "work", ClosedAt: closedAt(1)})
+		if err == nil || !strings.Contains(err.Error(), "prepare closed-session history directory") {
+			t.Fatalf("error = %v", err)
+		}
+		if got := log.List(); len(got) != 0 {
+			t.Fatalf("failed record changed memory: %#v", got)
+		}
+	})
+
+	t.Run("write", func(t *testing.T) {
+		log := NewClosedSessionLog(filepath.Join(t.TempDir(), "closed.json"), 10)
+		log.writeFile = func(string, []byte, os.FileMode) error {
+			return errors.New("disk full")
+		}
+		err := log.Record(ClosedSession{Session: "work", ClosedAt: closedAt(1)})
+		if err == nil || !strings.Contains(err.Error(), "disk full") {
+			t.Fatalf("error = %v", err)
+		}
+		if got := log.List(); len(got) != 0 {
+			t.Fatalf("failed record changed memory: %#v", got)
+		}
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "closed.json")
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		log := NewClosedSessionLog(path, 10)
+		err := log.Record(ClosedSession{Session: "work", ClosedAt: closedAt(1)})
+		if err == nil || !strings.Contains(err.Error(), "write closed-session history") {
+			t.Fatalf("error = %v", err)
+		}
+		if got := log.List(); len(got) != 0 {
+			t.Fatalf("failed record changed memory: %#v", got)
+		}
+	})
+}
+
+func TestClosedSessionLogRemoveSurfacesWriteFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "closed.json")
+	log := NewClosedSessionLog(path, 10)
+	entry := ClosedSession{Session: "work", ClosedAt: closedAt(1)}
+	if err := log.Record(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := log.Remove("work")
+	if err == nil || removed {
+		t.Fatalf("removed=%v error=%v", removed, err)
+	}
+	if got := log.List(); len(got) != 1 || got[0] != entry {
+		t.Fatalf("failed remove changed memory: %#v", got)
 	}
 }
 
@@ -64,7 +153,9 @@ func TestClosedSessionLogPruneLive(t *testing.T) {
 		ClosedSession{Session: "gone", ClosedAt: closedAt(1)},
 		ClosedSession{Session: "back", ClosedAt: closedAt(1)},
 	)
-	log.PruneLive(map[string]bool{"back": true, "other": true})
+	if err := log.PruneLive(map[string]bool{"back": true, "other": true}); err != nil {
+		t.Fatal(err)
+	}
 	got := log.List()
 	if len(got) != 1 || got[0].Session != "gone" {
 		t.Fatalf("after prune = %#v", got)

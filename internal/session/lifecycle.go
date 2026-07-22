@@ -106,12 +106,20 @@ func (m *Manager) Close(name string, execute bool) (Result, error) {
 	if m.Deps.KillSession == nil {
 		return Result{}, errors.New("session close is unavailable")
 	}
-	if err := m.Deps.KillSession(name); err != nil {
-		return Result{}, fmt.Errorf("close session %q: %w", name, err)
+	if m.History == nil {
+		return Result{}, errors.New("session close requires durable closed-session history")
 	}
 	entry.ClosedAt = m.now()()
-	if m.History != nil {
-		m.History.Record(entry)
+	rollback, err := m.History.StageDurable(entry)
+	if err != nil {
+		return Result{}, fmt.Errorf("stage reopen intent for session %q: %w", name, err)
+	}
+	if err := m.Deps.KillSession(name); err != nil {
+		rollbackErr := rollback()
+		if rollbackErr != nil {
+			return Result{}, fmt.Errorf("close session %q: %v (rollback staged reopen intent failed: %v)", name, err, rollbackErr)
+		}
+		return Result{}, fmt.Errorf("close session %q: %w", name, err)
 	}
 	result.Status = StatusClosed
 	result.Executed = true
@@ -191,7 +199,12 @@ func (m *Manager) Reopen(name string, execute bool) (Result, error) {
 		}
 	}
 	if m.History != nil {
-		m.History.Remove(name)
+		if _, err := m.History.Remove(name); err != nil {
+			if cleanupErr := m.cleanupReopen(name); cleanupErr != nil {
+				return Result{}, fmt.Errorf("remove reopened session %q from history: %v (cleanup failed: %v)", name, err, cleanupErr)
+			}
+			return Result{}, fmt.Errorf("remove reopened session %q from history: %w", name, err)
+		}
 	}
 	result.Status = StatusReopened
 	result.Executed = true

@@ -267,6 +267,9 @@ intent, and close time, never pane contents. Reopen refuses conflicts and
 missing recorded directories. It restores `claude`, `codex`, or `gemini`
 runtime intent only through a fixed allowlist; unknown or custom runtime values
 open a plain shell. Close and reopen both require `--execute` to mutate tmux.
+An executed close atomically persists its reopen entry before killing the exact
+session; a history write failure leaves tmux unchanged, and a kill failure
+rolls the staged entry back.
 
 Create and resume also default to dry-run. They canonicalize the requested cwd
 and only reuse an existing session when it contains one idle shell in that exact
