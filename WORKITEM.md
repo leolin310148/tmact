@@ -105,7 +105,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   runtimes and prompts, and require `--execute`. Never infer a resume id from
   pane text. Keep provider command construction unit-testable and update help.
 
-- [ ] **WI-008 — Extract normalized Claude/Codex session-log readers.**
+- [x] **WI-008 — Extract normalized Claude/Codex session-log readers.**
   Create a shared internal package for provider discovery and streaming JSONL,
   factoring path resolution out of `internal/agentspend` without changing spend
   results. Normalize timestamp, provider, session id, cwd, role, event kind,
