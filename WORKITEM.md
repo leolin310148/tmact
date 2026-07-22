@@ -43,7 +43,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   rather than silently treating them as local. Add command/help tests and unit
   tests that do not require live tmux.
 
-- [ ] **WI-002 — Add opaque incremental cursors to `tmact capture`.**
+- [x] **WI-002 — Add opaque incremental cursors to `tmact capture`.**
   Add `--after CURSOR` and return a new opaque cursor in JSON. A repeated capture
   should emit only newly observed terminal rows when overlap can be established;
   if history rolled or the cursor cannot be reconciled, return a documented

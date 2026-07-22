@@ -19,6 +19,10 @@ type captureReport struct {
 	Text           string `json:"text"`
 	HistorySize    int    `json:"history_size"`
 	Truncated      bool   `json:"truncated"`
+	Cursor         string `json:"cursor"`
+	FullSnapshot   bool   `json:"full_snapshot"`
+	Reset          bool   `json:"reset"`
+	ResetReason    string `json:"reset_reason,omitempty"`
 }
 
 func runCapture(args []string, globals globalOptions) error {
@@ -31,11 +35,18 @@ func runCapture(args []string, globals globalOptions) error {
 	targetFlag := fs.String("target", "", "exact tmux pane target")
 	lines := fs.Int("lines", 120, "number of pane history lines to capture")
 	nonEmpty := fs.Bool("non-empty", false, "omit blank rows from captured text")
+	after := fs.String("after", "", "opaque cursor from a previous JSON capture")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	afterProvided := false
+	fs.Visit(func(current *flag.Flag) {
+		if current.Name == "after" {
+			afterProvided = true
+		}
+	})
 	if fs.NArg() != 0 {
 		return fmt.Errorf("capture does not accept positional arguments: %q", fs.Arg(0))
 	}
@@ -51,6 +62,12 @@ func runCapture(args []string, globals globalOptions) error {
 	}
 	if *lines <= 0 {
 		return errors.New("--lines must be positive")
+	}
+	if afterProvided && *after == "" {
+		return errors.New("--after cursor cannot be empty")
+	}
+	if afterProvided && !*jsonOutput {
+		return errors.New("--after requires --json")
 	}
 
 	target, err := resolveTarget(selector)
@@ -75,15 +92,30 @@ func runCapture(args []string, globals globalOptions) error {
 	if *nonEmpty {
 		text = omitBlankRows(text)
 	}
+	delta := captureDelta{Text: text, FullSnapshot: true}
+	if afterProvided {
+		delta, err = incrementalCapture(*after, info, *lines, *nonEmpty, text)
+		if err != nil {
+			return err
+		}
+	}
+	cursor, err := newCaptureCursor(info, *lines, *nonEmpty, text)
+	if err != nil {
+		return err
+	}
 
 	report := captureReport{
 		Selector:       selector,
 		Target:         info.Target,
 		PaneID:         info.PaneID,
 		RequestedLines: *lines,
-		Text:           text,
+		Text:           delta.Text,
 		HistorySize:    info.HistorySize,
 		Truncated:      info.HistorySize > *lines,
+		Cursor:         cursor,
+		FullSnapshot:   delta.FullSnapshot,
+		Reset:          delta.Reset,
+		ResetReason:    delta.ResetReason,
 	}
 	if *jsonOutput {
 		return printJSON(report)

@@ -61,7 +61,7 @@ func buildLLMInstructions() llmInstructions {
 		},
 		RecommendedWorkflow: []string{
 			"Start with read-only commands: `tmact ls --json`, `tmact inspect --all --json`, `tmact statusd read --json`, or configured-agent status commands.",
-			"Use `tmact capture --target EXACT_PANE --json` for bounded plain-text output from one local pane; add `--non-empty` only when blank terminal rows are irrelevant.",
+			"Use `tmact capture --target EXACT_PANE --json` for bounded plain-text output from one local pane; reuse its opaque cursor with `--after CURSOR --json` for incremental rows, and replace local state whenever reset and full_snapshot are true.",
 			"For work on a configured remote machine, use `tmact dispatch-work SESSION --peer NAME --dir REMOTE_DIR --agent AGENT --prompt TEXT`; this creates or reuses the session on that peer. Do not SSH to the peer to invoke tmact unless the operator explicitly requests SSH.",
 			"For a new loop YAML, start with `tmact loop example > loop.yaml` or `tmact loop example --quota > loop.yaml`; edit target and prompt, then use this exact lifecycle: `tmact loop validate --config PATH`; `tmact loop run --config PATH --dry-run --once`; `tmact loop start --config PATH`; monitor with `tmact loop status --json` and `tmact loop logs --config PATH`; finish with `tmact loop stop --config PATH --wait`.",
 			"For quota-gated loops, put `quota: {enabled: true, provider: codex, session_min_remaining_percent: 20, weekly_require_headroom: true}` in YAML. A cycle runs only with strictly more than 20% of the 5-hour window remaining and positive weekly headroom (expected linear usage is greater than actual usage). Use provider: claude for Claude.",

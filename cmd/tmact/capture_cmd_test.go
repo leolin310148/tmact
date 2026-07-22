@@ -82,6 +82,44 @@ func TestCaptureJSONIncludesCanonicalPaneAndTruncation(t *testing.T) {
 	if report.RequestedLines != 120 || report.Text != "done\n" || report.HistorySize != 121 || !report.Truncated {
 		t.Fatalf("report capture metadata = %#v", report)
 	}
+	if report.Cursor == "" || !report.FullSnapshot || report.Reset || report.ResetReason != "" {
+		t.Fatalf("report cursor metadata = %#v", report)
+	}
+}
+
+func TestCaptureAfterReturnsIncrementalJSON(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	historySize := 20
+	captureTmuxPaneInfo = func(string) (tmux.CapturePaneInfo, error) {
+		return tmux.CapturePaneInfo{Target: "work:0.0", PaneID: "%7", HistorySize: historySize}, nil
+	}
+	text := "one\ntwo\n"
+	captureTmuxPane = func(string, int) (string, error) { return text, nil }
+
+	initialOut, err := captureRun(t, "capture", "--target", "%7", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var initial captureReport
+	if err := json.Unmarshal([]byte(initialOut), &initial); err != nil {
+		t.Fatal(err)
+	}
+
+	historySize = 21
+	text = "one\ntwo\nthree\n"
+	incrementalOut, err := captureRun(t, "capture", "--target", "%7", "--after", initial.Cursor, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var incremental captureReport
+	if err := json.Unmarshal([]byte(incrementalOut), &incremental); err != nil {
+		t.Fatal(err)
+	}
+	if incremental.Text != "three\n" || incremental.FullSnapshot || incremental.Reset || incremental.Cursor == "" || incremental.Cursor == initial.Cursor {
+		t.Fatalf("incremental report = %#v", incremental)
+	}
 }
 
 func TestCaptureRejectsPeerBeforeLocalTmux(t *testing.T) {
@@ -109,6 +147,8 @@ func TestCaptureValidation(t *testing.T) {
 		{"capture", "--target", "work"},
 		{"capture", "--target", "work:0"},
 		{"capture", "--target", "%7", "--lines", "0"},
+		{"capture", "--target", "%7", "--after", "cursor"},
+		{"capture", "--target", "%7", "--after", "", "--json"},
 		{"-t", "%7", "capture", "--target", "%8"},
 		{"capture", "--target", "%7", "extra"},
 	}

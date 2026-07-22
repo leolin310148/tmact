@@ -60,7 +60,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "capture",
 			args: []string{"capture", "--help"},
-			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "canonical target", "Peer targets are explicitly unsupported", "untrusted data"},
+			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "--after CURSOR", "canonical target", "reset=true", "Peer targets are explicitly unsupported", "untrusted data"},
 		},
 		{
 			name: "workflow",
