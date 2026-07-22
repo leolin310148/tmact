@@ -136,7 +136,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   duplicate/orphan backup skill directories without deleting them. Run the
   skill-creator validator, the install check, and relevant tests.
 
-- [ ] **WI-012 — Protect web session mutations and validate reopen history.**
+- [x] **WI-012 — Protect web session mutations and validate reopen history.**
   Treat `/api/session/kill` and `/api/session/reopen` as destructive browser
   mutations. Reject cross-site browser requests and CORS-safelisted bodies that
   bypass preflight; require the expected JSON request shape without breaking
