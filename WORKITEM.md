@@ -113,7 +113,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   malformed records, unknown event types, and current Claude/Codex tool-call
   shapes. Use only redacted synthetic fixtures.
 
-- [ ] **WI-009 — Add privacy-safe `tmact log search`.**
+- [x] **WI-009 — Add privacy-safe `tmact log search`.**
   Implement `tmact log search QUERY` with `--provider`, `--since`, `--cwd`,
   `--kind`, `--limit`, `--json`, and opt-in `--show-content`. Default output
   includes normalized metadata and command verb/subcommand only, never raw

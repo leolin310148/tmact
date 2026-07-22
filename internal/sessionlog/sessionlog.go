@@ -1,6 +1,6 @@
 // Package sessionlog discovers and streams normalized Claude Code and Codex
-// CLI session-log records. It deliberately exposes metadata and usage fields,
-// not provider credentials or persisted copies of log content.
+// CLI session-log records. Content is retained only in memory for explicitly
+// privacy-opted-in consumers; this package never persists copied log content.
 package sessionlog
 
 import "time"
@@ -80,6 +80,9 @@ type Record struct {
 	Command       string
 	ExitCode      *int
 	Duration      *time.Duration
+	// Content is normalized message/tool text and may contain private prompts or
+	// tool output. Callers must not display it without an explicit user opt-in.
+	Content string
 
 	ID         string
 	Model      string

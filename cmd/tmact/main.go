@@ -101,6 +101,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runUsage(args[1:])
+	case "log":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runLog(args[1:])
 	case "human-active":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
