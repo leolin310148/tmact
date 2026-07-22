@@ -128,7 +128,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   after missing/corrupt cache. Add `tmact log doctor` for file counts, skipped
   records, schema coverage, and cache health. Do not add SQLite.
 
-- [ ] **WI-011 — Update canonical skills for the new CLI workflow.**
+- [x] **WI-011 — Update canonical skills for the new CLI workflow.**
   Edit only canonical `skills/`. Change `tmact-dispatch` and `agent-loop` to use
   bounded `tmact wait`/`capture` and guarded `tmact send`, not raw capture-pane,
   polling loops, or send-keys. Make routine preflight concise and document log

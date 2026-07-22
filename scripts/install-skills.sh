@@ -12,7 +12,7 @@ usage: scripts/install-skills.sh [--check | --execute] [--backup-existing]
 Link tmact-owned skills from this checkout into ~/.codex/skills and
 ~/.claude/skills. The default is a read-only plan.
 
-  --check            verify every expected link; make no changes
+  --check            verify links and report active backup skills; make no changes
   --execute          create missing links
   --backup-existing  with --execute, move conflicting paths to timestamped backups
 EOF
@@ -54,6 +54,35 @@ SKILLS=(tmact-loop tmact-dispatch agent-loop handoff)
 DESTINATIONS=("$HOME/.codex/skills" "$HOME/.claude/skills")
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FAILED=0
+
+is_managed_skill() {
+  local candidate="$1"
+  local skill
+  for skill in "${SKILLS[@]}"; do
+    if [[ "$candidate" == "$skill" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+report_active_backup_skills() {
+  local destination_root backup backup_name skill_name
+  shopt -s nullglob
+  for destination_root in "${DESTINATIONS[@]}"; do
+    for backup in "$destination_root"/*.backup-*; do
+      [[ -f "$backup/SKILL.md" ]] || continue
+      backup_name="${backup##*/}"
+      skill_name="${backup_name%%.backup-*}"
+      if is_managed_skill "$skill_name"; then
+        echo "warning: active duplicate backup skill: $backup (duplicates $destination_root/$skill_name)" >&2
+      else
+        echo "warning: active orphan backup skill: $backup (no managed canonical skill named $skill_name)" >&2
+      fi
+    done
+  done
+  shopt -u nullglob
+}
 
 for skill in "${SKILLS[@]}"; do
   source_path="$REPO_ROOT/skills/$skill"
@@ -107,5 +136,9 @@ for skill in "${SKILLS[@]}"; do
     echo "linked: $destination -> $source_path"
   done
 done
+
+if [[ "$MODE" == "check" ]]; then
+  report_active_backup_skills
+fi
 
 exit "$FAILED"

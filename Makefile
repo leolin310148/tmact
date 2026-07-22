@@ -12,7 +12,7 @@ GO ?= go
 FRONTEND_DIR := internal/web/frontend
 STATIC_DIR := internal/web/static
 
-.PHONY: all build test go-test web-test web web-deps web-dev web-clean run vet fmt clean
+.PHONY: all build test go-test web-test skills-test web web-deps web-dev web-clean run vet fmt clean
 
 all: build
 
@@ -36,6 +36,10 @@ web-dev: web-deps
 web-test: web-deps
 	cd $(FRONTEND_DIR) && npm test
 
+## skills-test: run canonical skill installer checks
+skills-test:
+	bash scripts/install-skills_test.sh
+
 ## web-clean: remove built UI assets but keep the embed placeholder
 web-clean:
 	find $(STATIC_DIR) -mindepth 1 ! -name .gitkeep -delete
@@ -50,7 +54,7 @@ go-test:
 	$(GO) test ./...
 
 ## test: build the frontend, then run frontend + Go tests
-test: web web-test
+test: web web-test skills-test
 	$(GO) test ./...
 
 ## run: build the frontend, then run statusd (pass ARGS="statusd start --web-addr :8080")
