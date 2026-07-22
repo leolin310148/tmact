@@ -72,7 +72,7 @@ func commandManifest() helpManifest {
 		Name:    "tmact",
 		Summary: "Local tmux automation CLI for inspecting panes, sending guarded input, and running loop daemons.",
 		GlobalFlags: []helpFlag{
-			{Name: "-t, --target", Value: "TARGET", Description: "target selector for send; may be a tmux target or a numbered index from tmact ls"},
+			{Name: "-t, --target", Value: "TARGET", Description: "target selector for send or capture; may be a tmux target or a numbered index from tmact ls"},
 		},
 		Commands: commandHelpCatalog(),
 	}

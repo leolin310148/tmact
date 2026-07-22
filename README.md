@@ -10,6 +10,8 @@ publish a live pane-status snapshot.
 Use the CLI when you want scriptable tmux control:
 
 - `tmact ls` lists panes and creates numbered targets like `-t 0`.
+- `tmact capture --target session:0.0 --lines 120` prints plain text from one
+  exact local pane; add `--json` for canonical pane and truncation metadata.
 - `tmact inspect --all` classifies panes by runtime and idle/running/asking
   state.
 - `tmact -t 0 send --text "status?" --enter` previews input; add `--execute`

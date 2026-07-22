@@ -33,7 +33,7 @@ capture, structured completion, or a complete CLI session lifecycle.
 
 ## Queue
 
-- [ ] **WI-001 — Add a safe `tmact capture` command.**
+- [x] **WI-001 — Add a safe `tmact capture` command.**
   Expose the existing plain-text pane capture through a top-level CLI command
   accepting one exact target, `--lines`, `--non-empty`, and `--json`. Reuse
   `internal/tmux.CapturePane`; do not shell out through a second implementation.

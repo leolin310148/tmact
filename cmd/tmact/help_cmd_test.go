@@ -58,6 +58,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH"},
 		},
 		{
+			name: "capture",
+			args: []string{"capture", "--help"},
+			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "canonical target", "Peer targets are explicitly unsupported", "untrusted data"},
+		},
+		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
 			want: []string{"workflow", "revision-aware DAG", "workflow validate", "workflow start", "durable dispatch IDs", "--execute"},
@@ -128,6 +133,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	foundTrustFolder := false
 	foundWorkflow := false
 	foundLLM := false
+	foundCapture := false
 	for _, command := range manifest.Commands {
 		if command.Command == "loop status" {
 			foundLoopStatus = true
@@ -162,6 +168,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 		if command.Command == "workflow" {
 			foundWorkflow = true
 		}
+		if command.Command == "capture" {
+			foundCapture = true
+			if len(command.Flags) < 4 || len(command.Safety) == 0 || len(command.Notes) < 2 {
+				t.Fatalf("capture help is too sparse: %#v", command)
+			}
+		}
 		if command.Command == "llm instructions" {
 			foundLLM = true
 			if len(command.Safety) == 0 {
@@ -186,6 +198,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundWorkflow {
 		t.Fatalf("workflow missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundCapture {
+		t.Fatalf("capture missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundLLM {
 		t.Fatalf("llm instructions missing from manifest: %#v", manifest.Commands)

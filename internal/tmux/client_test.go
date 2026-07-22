@@ -35,6 +35,22 @@ func TestEmptyServerErrorClassification(t *testing.T) {
 	}
 }
 
+func TestParseCapturePaneInfo(t *testing.T) {
+	info, err := parseCapturePaneInfo("work:2.1\t%42\t180\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Target != "work:2.1" || info.PaneID != "%42" || info.HistorySize != 180 {
+		t.Fatalf("info = %#v", info)
+	}
+
+	for _, input := range []string{"", "work:0.0\t%7", "work:0.0\t%7\tbad", "work:0.0\t%7\t-1"} {
+		if _, err := parseCapturePaneInfo(input); err == nil {
+			t.Fatalf("expected error for %q", input)
+		}
+	}
+}
+
 func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	got := shellJoin([]string{"/tmp/tmact test", "loop", "it's.yaml", ""})
 	want := "'/tmp/tmact test' 'loop' 'it'\\''s.yaml' ''"

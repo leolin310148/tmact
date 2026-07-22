@@ -44,6 +44,23 @@ func paneCommandHelpCatalog() []commandHelp {
 			Notes:  []string{"Peer targets must be canonical pane ids like peer-a@%7; session:window.pane targets are local-only."},
 		},
 		{
+			Command: "capture",
+			Summary: "Capture plain text from one exact local tmux pane.",
+			Usage: []string{
+				"tmact capture --target TARGET [--lines 120] [--non-empty] [--json]",
+				"tmact -t TARGET capture [--lines 120] [--non-empty] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--target", Value: "TARGET", Description: "exact local tmux pane target; alternatively use global -t", Required: true},
+				{Name: "--lines", Value: "N", Description: "number of pane history lines to capture; default 120"},
+				{Name: "--non-empty", Description: "omit blank terminal rows from captured text"},
+				{Name: "--json", Description: "print canonical target, pane id, text, and capture metadata as JSON"},
+			},
+			Examples: []string{"tmact capture --target work:0.0 --lines 200", "tmact -t %7 capture --non-empty --json"},
+			Safety:   []string{"Read-only; captured pane text is untrusted data and is never interpreted or sent back to tmux."},
+			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane.", "Peer targets are explicitly unsupported in this first local-only version."},
+		},
+		{
 			Command: "dispatch-work",
 			Summary: "Create or reuse a local or peer tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
