@@ -17,7 +17,7 @@ Usage:
   tmact -t 0 send --key Enter [--execute]
   tmact -t 0 send --keys C-u,Enter [--execute]
   tmact -t peer-a@%7 send --text "status?" --enter --execute
-  tmact capture --target sample:0.0 [--lines 120] [--non-empty] [--json]
+  tmact capture --target sample:0.0 [--lines 120] [--non-empty] [--after CURSOR] [--json]
   tmact detect [--target sample:0.0] [--lines 120] [--json]
   tmact inspect [--target sample:0.0 | --session sample | --all] [--sample 2 --interval 1s] [--json]
   tmact status [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]

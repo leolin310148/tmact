@@ -11,7 +11,8 @@ Use the CLI when you want scriptable tmux control:
 
 - `tmact ls` lists panes and creates numbered targets like `-t 0`.
 - `tmact capture --target session:0.0 --lines 120` prints plain text from one
-  exact local pane; add `--json` for canonical pane and truncation metadata.
+  exact local pane; add `--json` for canonical pane, truncation metadata, and
+  an opaque cursor for incremental captures.
 - `tmact inspect --all` classifies panes by runtime and idle/running/asking
   state.
 - `tmact -t 0 send --text "status?" --enter` previews input; add `--execute`
@@ -38,6 +39,26 @@ Use the CLI when you want scriptable tmux control:
   reach the daemon over the local IPC socket only.
 - `tmact commands --json` exposes command metadata for tooling, and
   `tmact llm instructions` prints an LLM-facing operating guide.
+
+### Incremental pane capture
+
+JSON captures include a bounded, versioned `cursor`. Pass it back unchanged to
+the same pane and with the same `--lines` / `--non-empty` settings to request
+only newly observed terminal rows:
+
+```sh
+tmact capture --target work:0.0 --json
+tmact capture --target work:0.0 --after CURSOR_FROM_PREVIOUS_RESULT --json
+```
+
+An initial capture has `full_snapshot: true`. A reconciled incremental capture
+has `full_snapshot: false` and may return an empty `text` when nothing changed.
+If scrollback rolled, the screen was rewritten, the cursor belongs to another
+pane/options set, or overlap is ambiguous, tmact returns the current full text
+with `reset: true`, `full_snapshot: true`, and a `reset_reason`; replace the
+consumer's snapshot before continuing with the newly returned cursor. Invalid
+or unsupported-version cursors are rejected. Cursors contain only bounded row
+fingerprints and metadata, never pane text, and are not persisted by tmact.
 
 ### Managed loop lifecycle
 
