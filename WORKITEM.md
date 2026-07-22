@@ -62,7 +62,27 @@ capture, structured completion, or a complete CLI session lifecycle.
   `needs_human`, not be confirmed. Add cancellation and fake-clock/dependency
   tests without live tmux.
 
-- [ ] **WI-004 — Integrate bounded waiting into `dispatch-work`.**
+- [ ] **WI-004 — Keep pane DOM stable during selection and clicks.**
+  Stop live pane repaints from invalidating browser Selection/Range objects or
+  click targets. Keep receiving WebSocket patches and updating the pane
+  buffer/cache, but defer `pre#content` DOM commits while any pointer
+  interaction is in progress, selection mode is enabled, or a non-collapsed
+  browser selection belongs to the pane. Hold the pointer lock through click
+  dispatch; on unlock, render only the newest pending frame once. A pane switch
+  must clear the old interaction/selection and immediately render the newly
+  selected pane, never flush stale content from the prior pane. Preserve the
+  imperative terminal renderer, path marking, Mermaid rendering, scroll
+  behavior, and rAF coalescing; do not throttle or reconnect the WebSocket.
+  Show an unobtrusive, accessible "Live updates paused while selecting"
+  indicator while a frame is deferred. Add focused `ContentPane`/App tests for
+  DOM identity during pointer-to-click, selection retention across incoming
+  text, latest-frame flush on selection collapse, selection-mode locking, and
+  pane switching. Run frontend Vitest and `make test`, then use `borz` against a
+  rapidly changing local pane to verify that text can be selected/copied and a
+  previewable path can be clicked without the target disappearing; record the
+  manual case in `docs/smoke-test.md` when appropriate.
+
+- [ ] **WI-005 — Integrate bounded waiting into `dispatch-work`.**
   Add opt-in `--wait`, `--wait-timeout`, `--wait-settle`, and `--result-lines`
   flags. Record the post-submit baseline, require evidence that the submission
   was accepted, then wait for stable input-ready or a terminal blocker. Preserve
@@ -71,21 +91,21 @@ capture, structured completion, or a complete CLI session lifecycle.
   is unavailable. Test immediate-idle, working-to-idle, permission, timeout, and
   disappeared-pane cases.
 
-- [ ] **WI-005 — Add recoverable CLI session close/history/reopen.**
+- [ ] **WI-006 — Add recoverable CLI session close/history/reopen.**
   Introduce `tmact session close`, `tmact session closed`, and
   `tmact session reopen`, reusing statusd/web closed-session persistence.
   Closing is dry-run by default and requires `--execute`; targets must be exact
   and broad deletion is out of scope. Reopen restores recorded name/cwd/runtime
   intent where safely supported and refuses conflicts. Add service and CLI tests.
 
-- [ ] **WI-006 — Add guarded session create and agent resume.**
+- [ ] **WI-007 — Add guarded session create and agent resume.**
   Add `tmact session create NAME --dir DIR` for an idle shell and
   `tmact session resume NAME --dir DIR --agent claude|codex --session-id ID`.
   Both are dry-run by default, validate canonical cwd, refuse busy/different
   runtimes and prompts, and require `--execute`. Never infer a resume id from
   pane text. Keep provider command construction unit-testable and update help.
 
-- [ ] **WI-007 — Extract normalized Claude/Codex session-log readers.**
+- [ ] **WI-008 — Extract normalized Claude/Codex session-log readers.**
   Create a shared internal package for provider discovery and streaming JSONL,
   factoring path resolution out of `internal/agentspend` without changing spend
   results. Normalize timestamp, provider, session id, cwd, role, event kind,
@@ -93,22 +113,22 @@ capture, structured completion, or a complete CLI session lifecycle.
   malformed records, unknown event types, and current Claude/Codex tool-call
   shapes. Use only redacted synthetic fixtures.
 
-- [ ] **WI-008 — Add privacy-safe `tmact log search`.**
+- [ ] **WI-009 — Add privacy-safe `tmact log search`.**
   Implement `tmact log search QUERY` with `--provider`, `--since`, `--cwd`,
   `--kind`, `--limit`, `--json`, and opt-in `--show-content`. Default output
   includes normalized metadata and command verb/subcommand only, never raw
   prompts, tool output, environment values, or full arguments. Search both
-  providers through WI-007 and report provider parse coverage/errors. Add help
+  providers through WI-008 and report provider parse coverage/errors. Add help
   and fixture-based tests.
 
-- [ ] **WI-009 — Add `tmact log stats` and an incremental plain-file index.**
+- [ ] **WI-010 — Add `tmact log stats` and an incremental plain-file index.**
   Aggregate by provider, tool, command, and subcommand with `--since` and JSON.
   Cache safe normalized fields under the tmact config directory, keyed by source
   path, size, mtime, and parser version. Use atomic plain-file writes and rebuild
   after missing/corrupt cache. Add `tmact log doctor` for file counts, skipped
   records, schema coverage, and cache health. Do not add SQLite.
 
-- [ ] **WI-010 — Update canonical skills for the new CLI workflow.**
+- [ ] **WI-011 — Update canonical skills for the new CLI workflow.**
   Edit only canonical `skills/`. Change `tmact-dispatch` and `agent-loop` to use
   bounded `tmact wait`/`capture` and guarded `tmact send`, not raw capture-pane,
   polling loops, or send-keys. Make routine preflight concise and document log
