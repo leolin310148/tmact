@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,6 +39,95 @@ func TestDispatchWithoutPeerUsesLocalRun(t *testing.T) {
 	}
 	if !strings.Contains(out, "model=gpt-5.4") {
 		t.Fatalf("output = %s", out)
+	}
+}
+
+func TestDispatchWaitFlagsAndStructuredJSON(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dir := t.TempDir()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		if !opts.Wait || !opts.Execute || opts.WaitTimeout != 2*time.Minute || opts.WaitSettle != 3*time.Second || opts.ResultLines != 44 || opts.Context == nil {
+			t.Fatalf("opts = %#v", opts)
+		}
+		return dispatch.Report{
+			Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt, Execute: true,
+			Wait:   &dispatch.WaitReport{Status: dispatch.StatusOK, Timeout: "2m0s", Settle: "3s", ResultLines: 44, Outcome: &dispatch.WaitOutcome{Reason: "condition_met", ConditionMet: true}},
+			Result: &dispatch.ResultReport{Lines: 44, Text: "done\n"},
+		}, nil
+	}
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", dir, "--agent", "codex", "--prompt", "go", "--wait", "--wait-timeout", "2m", "--wait-settle", "3s", "--result-lines", "44", "--execute", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["wait"] == nil || got["result"] == nil {
+		t.Fatalf("JSON missing wait/result: %s", out)
+	}
+}
+
+func TestDispatchJSONWithoutWaitKeepsWaitFieldsAbsent(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dir := t.TempDir()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt}, nil
+	}
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", dir, "--agent", "codex", "--prompt", "go", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["wait"]; ok {
+		t.Fatalf("unexpected wait field: %s", out)
+	}
+	if _, ok := got["result"]; ok {
+		t.Fatalf("unexpected result field: %s", out)
+	}
+}
+
+func TestDispatchWaitRejectsPeerBeforeRequest(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dispatchRemoteRun = func(context.Context, *http.Client, string, string, dispatch.Options) (dispatch.Report, error) {
+		t.Fatal("peer request must not be made")
+		return dispatch.Report{}, nil
+	}
+	_, err := captureRun(t, "dispatch-work", "work", "--peer", "peer-a", "--dir", "/repo", "--agent", "codex", "--prompt", "go", "--wait")
+	if err == nil || !strings.Contains(err.Error(), "does not support peer waiting") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDispatchWaitSpecificFlagsRequireWait(t *testing.T) {
+	defer stubCLIHooks(t)()
+	_, err := captureRun(t, "dispatch-work", "work", "--dir", t.TempDir(), "--agent", "codex", "--prompt", "go", "--result-lines", "20")
+	if err == nil || !strings.Contains(err.Error(), "requires --wait") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDispatchWaitBlockerPrintsStructuredJSONBeforeError(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{
+			Session: opts.Session, Dir: opts.Dir, Agent: opts.Agent, Prompt: opts.Prompt,
+			Wait: &dispatch.WaitReport{
+				Status: dispatch.StatusFailed, Baseline: &dispatch.WaitBaseline{Accepted: true},
+				Outcome: &dispatch.WaitOutcome{Reason: "needs_human"},
+			},
+		}, errors.New("dispatch wait ended before input-ready: needs_human")
+	}
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", t.TempDir(), "--agent", "codex", "--prompt", "go", "--wait", "--json")
+	if err == nil || !strings.Contains(err.Error(), "needs_human") {
+		t.Fatalf("err = %v", err)
+	}
+	var got map[string]any
+	if jsonErr := json.Unmarshal([]byte(out), &got); jsonErr != nil || got["wait"] == nil {
+		t.Fatalf("output = %q, JSON error = %v", out, jsonErr)
 	}
 }
 

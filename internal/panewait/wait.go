@@ -170,7 +170,7 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 		}
 
 		classified := panestate.Classify(raw)
-		state := normalizedState(classified)
+		state := NormalizeState(classified)
 		now := deps.Now()
 		report.Samples++
 		report.State = state
@@ -246,7 +246,10 @@ func validate(options Options, deps Dependencies) error {
 	return nil
 }
 
-func normalizedState(result panestate.Result) string {
+// NormalizeState maps pane classification onto the public wait conditions.
+// Callers that already captured a baseline can use the same state vocabulary
+// as Run without duplicating prompt/blocker rules.
+func NormalizeState(result panestate.Result) string {
 	if result.Asking || result.State == panestate.StateBlocked || result.State == panestate.StateWaitingPermission {
 		return UntilNeedsHuman
 	}

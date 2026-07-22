@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,6 +70,32 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	if opts.ReadySettle < 0 {
 		return report, fmt.Errorf("ready settle cannot be negative")
 	}
+	if opts.WaitTimeout < 0 {
+		return report, fmt.Errorf("wait timeout must be positive")
+	}
+	if opts.WaitSettle < 0 {
+		return report, fmt.Errorf("wait settle cannot be negative")
+	}
+	if opts.ResultLines < 0 {
+		return report, fmt.Errorf("result lines must be positive")
+	}
+	if opts.Wait {
+		if opts.WaitTimeout == 0 {
+			opts.WaitTimeout = DefaultWaitTimeout
+		}
+		if opts.ResultLines == 0 {
+			opts.ResultLines = DefaultResultLines
+		}
+		if opts.Context == nil {
+			opts.Context = context.Background()
+		}
+		report.Wait = &WaitReport{
+			Status:      StatusPlanned,
+			Timeout:     opts.WaitTimeout.String(),
+			Settle:      opts.WaitSettle.String(),
+			ResultLines: opts.ResultLines,
+		}
+	}
 
 	layout, err := deps.ListLayout()
 	if err != nil {
@@ -98,6 +125,7 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
 	steps := []Step{create, launch, ready, send}
+	steps = appendWaitStep(opts, steps)
 
 	if !opts.Execute {
 		report.Steps = steps
@@ -134,14 +162,15 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	steps[2].Status = StatusOK
 
-	if err := submitPrompt(opts, deps, target); err != nil {
+	submission, err := submitPrompt(opts, deps, target)
+	if err != nil {
 		steps[3].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
 	}
 	steps[3].Status = StatusOK
 	report.Steps = steps
-	return report, nil
+	return finishDispatch(opts, deps, report, target, submission)
 }
 
 func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
@@ -209,6 +238,7 @@ func dispatchReuse(opts Options, deps Deps, report Report, target string) (Repor
 	clear := Step{Name: "clear", Detail: "/clear", Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
 	steps := []Step{clear, send}
+	steps = appendWaitStep(opts, steps)
 
 	if !opts.Execute {
 		report.Steps = steps
@@ -223,14 +253,15 @@ func dispatchReuse(opts Options, deps Deps, report Report, target string) (Repor
 	steps[0].Status = StatusOK
 	deps.Sleep(clearDelay)
 
-	if err := submitPrompt(opts, deps, target); err != nil {
+	submission, err := submitPrompt(opts, deps, target)
+	if err != nil {
 		steps[1].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
 	}
 	steps[1].Status = StatusOK
 	report.Steps = steps
-	return report, nil
+	return finishDispatch(opts, deps, report, target, submission)
 }
 
 func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Report, error) {
@@ -239,6 +270,7 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
 	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
 	steps := []Step{launch, ready, send}
+	steps = appendWaitStep(opts, steps)
 
 	if !opts.Execute {
 		report.Steps = steps
@@ -261,14 +293,26 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	}
 	steps[1].Status = StatusOK
 
-	if err := submitPrompt(opts, deps, target); err != nil {
+	submission, err := submitPrompt(opts, deps, target)
+	if err != nil {
 		steps[2].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
 	}
 	steps[2].Status = StatusOK
 	report.Steps = steps
-	return report, nil
+	return finishDispatch(opts, deps, report, target, submission)
+}
+
+func appendWaitStep(opts Options, steps []Step) []Step {
+	if !opts.Wait {
+		return steps
+	}
+	return append(steps, Step{
+		Name:   "wait-result",
+		Detail: fmt.Sprintf("wait up to %s for stable input-ready, then capture %d lines", opts.WaitTimeout, opts.ResultLines),
+		Status: StatusPlanned,
+	})
 }
 
 func launchCommand(opts Options) string {

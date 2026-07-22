@@ -35,6 +35,22 @@ func printDispatchReport(report dispatch.Report) {
 		}
 		fmt.Println(line)
 	}
+	if report.Wait != nil {
+		fmt.Printf("  wait: %s timeout=%s settle=%s result-lines=%d\n", report.Wait.Status, report.Wait.Timeout, report.Wait.Settle, report.Wait.ResultLines)
+		if report.Wait.Baseline != nil {
+			fmt.Printf("  baseline: accepted=%t evidence=%s state=%s\n", report.Wait.Baseline.Accepted, report.Wait.Baseline.Evidence, report.Wait.Baseline.State)
+		}
+		if report.Wait.Outcome != nil {
+			fmt.Printf("  outcome: reason=%s state=%s condition-met=%t elapsed=%s\n", report.Wait.Outcome.Reason, report.Wait.Outcome.State, report.Wait.Outcome.ConditionMet, report.Wait.Outcome.Elapsed)
+		}
+	}
+	if report.Result != nil {
+		fmt.Printf("  result (%d lines):\n", report.Result.Lines)
+		fmt.Print(report.Result.Text)
+		if !strings.HasSuffix(report.Result.Text, "\n") {
+			fmt.Println()
+		}
+	}
 }
 
 func printStatusReport(report agents.Report) {
