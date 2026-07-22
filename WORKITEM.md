@@ -135,3 +135,51 @@ capture, structured completion, or a complete CLI session lifecycle.
   privacy defaults. Extend `scripts/install-skills.sh --check` to report active
   duplicate/orphan backup skill directories without deleting them. Run the
   skill-creator validator, the install check, and relevant tests.
+
+- [ ] **WI-012 — Protect web session mutations and validate reopen history.**
+  Treat `/api/session/kill` and `/api/session/reopen` as destructive browser
+  mutations. Reject cross-site browser requests and CORS-safelisted bodies that
+  bypass preflight; require the expected JSON request shape without breaking
+  same-origin PWA use or authenticated/configured peer proxying. A rejected
+  request must never call `KillSession` or `NewSession`. Reopen must resolve one
+  exact local entry from `ClosedSessions` and use its recorded cwd; reject an
+  unknown name or a caller-supplied cwd that differs from history. Keep exact
+  local-session and peer boundaries. Add handler tests for cross-origin and
+  `text/plain` POSTs, valid same-origin JSON, unknown history, cwd tampering,
+  and the peer path. Run focused web tests and `go test ./...`.
+
+- [ ] **WI-013 — Make command summaries fail closed around environment values.**
+  Replace the `strings.Fields` command-summary parsing that can turn part of a
+  quoted environment value into the reported executable. Parse only enough
+  shell-word structure to safely skip complete leading assignments and common
+  `env` forms; never evaluate expansions, and return an empty/conservative
+  summary for malformed or ambiguous syntax. Cover single/double quotes,
+  escaped spaces, multiple assignments, option-bearing `env`, unbalanced
+  quotes, and `SECRET='alpha beta' git status`. Verify both default `log search`
+  output and the plain-file stats index contain neither complete nor partial
+  environment values. Bump the parser/cache identity so an existing index made
+  by the vulnerable parser is rebuilt instead of reused. Run focused log tests
+  and `go test ./...`.
+
+- [ ] **WI-014 — Make recoverable session close durable before killing.**
+  A successful `tmact session close --execute` must guarantee its reopen intent
+  survived an atomic disk write. Expose persistence errors from
+  `ClosedSessionLog` instead of silently ignoring them, durably stage the exact
+  history entry before `KillSession`, and do not kill when staging fails. If
+  killing fails, roll back the staged entry and report any rollback failure
+  without hiding the original error. Preserve explicit best-effort behavior
+  only for non-destructive daemon tracking where it is intentional. Add tests
+  for unwritable/write/rename failure, kill-not-called on persistence failure,
+  kill rollback, and visibility from a newly constructed history instance.
+  Check other mutation callers for the updated error contract, then run focused
+  session/statusd/web tests and `go test ./...`.
+
+- [ ] **WI-015 — Enforce a real wall-clock deadline for `tmact wait`.**
+  Make `--timeout` bound target resolution, pane capture, settling, and polling,
+  not just the gaps between completed tmux calls. Thread a deadline-bearing
+  context through target resolution as well as capture using cancellable tmux
+  subprocesses; do not leak goroutines. Expiration must still return the
+  structured `timeout` terminal reason/report, while operator cancellation
+  remains distinguishable. Add deterministic blocking dependency tests for
+  resolve, capture, and poll waits, plus CLI and `dispatch-work --wait`
+  regression coverage. Run focused wait/dispatch/CLI tests and `go test ./...`.
