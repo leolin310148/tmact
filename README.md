@@ -23,6 +23,9 @@ Use the CLI when you want scriptable tmux control:
 - `tmact -t 0 send --text "status?" --enter` previews input; add `--execute`
   to actually send it.
 - `tmact detect --target session:0.0 --json` detects directory-access prompts.
+- `tmact log search`, `log stats`, and `log doctor` search privacy-safe local
+  session-log metadata, summarize provider/tool/command activity, and report
+  parser/index health.
 - `tmact status`, `inbox`, `summarize`, `broadcast`, and `panels` work from an
   agent YAML config.
 - `tmact loop` validates, starts, observes, pauses, resumes, restarts, and stops
@@ -90,6 +93,23 @@ the wait, and `--settle` requires the requested state to remain continuously
 matched. `condition_met` means only that the pane state was observed; an
 input-ready or idle-looking pane does not prove its task succeeded. Peer waits
 are explicitly unsupported.
+
+### Privacy-safe log statistics
+
+`tmact log stats --since 24h` aggregates normalized records independently by
+provider, tool, safe command verb, and recognized subcommand. Add `--json` for
+machine-readable output. `tmact log doctor` reports discovered/indexed file
+counts, malformed and oversized skipped records, unknown-schema coverage, and
+cache health.
+
+Stats and doctor maintain `~/.tmact/log-index.json`, an atomic plain JSON cache
+keyed by source path, size, modification time, and parser version. Unchanged
+files are reused and verified append-only growth is parsed from the prior byte
+offset; missing, corrupt, rewritten, or parser-stale data is rebuilt. Beyond
+the required source-path key, the cache contains only timestamps,
+provider/kind/tool names, and reduced command verb/subcommand fields—never
+prompts, tool output, environment values, normalized cwd/session-id fields, or
+full command arguments. Provider log files are never modified.
 
 ### Managed loop lifecycle
 

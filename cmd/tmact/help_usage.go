@@ -34,6 +34,8 @@ Usage:
   tmact hook state [--pane-id %5] [--json]
   tmact usage [--provider claude|codex] [--json]
   tmact log search QUERY [--provider claude|codex] [--since 24h] [--cwd DIR] [--kind KIND] [--limit 100] [--json] [--show-content]
+  tmact log stats [--since 24h] [--json]
+  tmact log doctor [--json]
   tmact human-active [--threshold 10m] [--json | --quiet]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
@@ -79,7 +81,7 @@ Commands:
   statusd       maintain/read the cached pane snapshot and optional web UI
   hook          opt-in shell preexec/precmd hooks that sharpen statusd state
   usage         fetch Claude / Codex quota, rate-limit, and spend usage
-  log           privacy-safe search over normalized Claude / Codex session logs
+  log           privacy-safe search, statistics, and health for Claude / Codex logs
   human-active  report whether a human recently used the statusd web UI
   stt-set       configure statusd web UI voice transcription
   inbox         list agent panes that need human intervention

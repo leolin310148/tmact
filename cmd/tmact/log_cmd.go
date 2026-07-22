@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/logsearch"
+	"github.com/leolin310148/tmact/internal/logstats"
 	"github.com/leolin310148/tmact/internal/sessionlog"
 )
 
@@ -19,9 +20,66 @@ func runLog(args []string) error {
 	switch args[0] {
 	case "search":
 		return runLogSearch(args[1:])
+	case "stats":
+		return runLogStats(args[1:])
+	case "doctor":
+		return runLogDoctor(args[1:])
 	default:
-		return fmt.Errorf("unknown log subcommand %q (want search)", args[0])
+		return fmt.Errorf("unknown log subcommand %q (want search, stats, or doctor)", args[0])
 	}
+}
+
+func runLogStats(args []string) error {
+	if wantsHelp(args) || containsHelpFlag(args) {
+		return printCommandHelp("log stats")
+	}
+	fs := flag.NewFlagSet("log stats", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	sinceValue := fs.String("since", "", "relative duration or RFC3339 lower timestamp bound")
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("log stats does not accept positional arguments")
+	}
+	since, err := parseLogSince(*sinceValue, tmactNow())
+	if err != nil {
+		return err
+	}
+	report, err := logstats.Stats(logstats.Options{Since: since})
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(report)
+	}
+	printLogStatsReport(report)
+	return nil
+}
+
+func runLogDoctor(args []string) error {
+	if wantsHelp(args) || containsHelpFlag(args) {
+		return printCommandHelp("log doctor")
+	}
+	fs := flag.NewFlagSet("log doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	jsonOutput := fs.Bool("json", false, "print JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("log doctor does not accept positional arguments")
+	}
+	report, err := logstats.Doctor(logstats.Options{})
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return printJSON(report)
+	}
+	printLogDoctorReport(report)
+	return nil
 }
 
 func runLogSearch(args []string) error {
@@ -211,5 +269,67 @@ func printLogSearchReport(report logsearch.Report, showContent bool) {
 			}
 			fmt.Printf("    %s %s: %s\n", coverageErr.Stage, path, coverageErr.Error)
 		}
+	}
+}
+
+func printLogStatsReport(report logstats.Report) {
+	if report.Since != "" {
+		fmt.Printf("Since: %s\n", report.Since)
+	}
+	fmt.Printf("Records: %d\n", report.Records)
+	printLogBuckets("Providers", report.Providers)
+	printLogBuckets("Tools", report.Tools)
+	printLogBuckets("Commands", report.Commands)
+	printLogBuckets("Subcommands", report.Subcommands)
+	fmt.Printf("Index: status=%s entries=%d hits=%d misses=%d appended=%d rebuilt=%d removed=%d\n",
+		report.Index.Status, report.Index.Entries, report.Index.Hits, report.Index.Misses,
+		report.Index.Appended, report.Index.Rebuilt, report.Index.Removed)
+	printLogScanErrors(report.Errors)
+}
+
+func printLogDoctorReport(report logstats.DoctorReport) {
+	fmt.Printf("Files: discovered=%d indexed=%d cache_hits=%d parsed=%d failed=%d\n",
+		report.Files.Discovered, report.Files.Indexed, report.Files.CacheHits,
+		report.Files.Parsed, report.Files.Failed)
+	fmt.Printf("Records: lines=%d records=%d known=%d unknown=%d malformed=%d oversized=%d skipped=%d\n",
+		report.Records.Lines, report.Records.Records, report.Records.Known,
+		report.Records.Unknown, report.Records.Malformed, report.Records.Oversized, report.Records.Skipped)
+	fmt.Println("Schema coverage:")
+	for _, coverage := range report.SchemaCoverage {
+		fmt.Printf("  %s files=%d records=%d known=%d unknown=%d malformed=%d oversized=%d skipped=%d\n",
+			coverage.Provider, coverage.Files, coverage.Records, coverage.Known,
+			coverage.Unknown, coverage.Malformed, coverage.Oversized, coverage.Skipped)
+	}
+	fmt.Printf("Cache: healthy=%t status=%s entries=%d hits=%d misses=%d appended=%d rebuilt=%d removed=%d path=%s\n",
+		report.Cache.Healthy, report.Cache.Status, report.Cache.Entries, report.Cache.Hits,
+		report.Cache.Misses, report.Cache.Appended, report.Cache.Rebuilt, report.Cache.Removed, report.Cache.Path)
+	printLogScanErrors(report.Errors)
+}
+
+func printLogBuckets(title string, buckets []logstats.Bucket) {
+	fmt.Printf("%s:\n", title)
+	if len(buckets) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	for _, bucket := range buckets {
+		fmt.Printf("  %s %d\n", bucket.Name, bucket.Count)
+	}
+}
+
+func printLogScanErrors(errors []logstats.ScanError) {
+	if len(errors) == 0 {
+		return
+	}
+	fmt.Println("Errors:")
+	for _, scanErr := range errors {
+		fields := []string{scanErr.Stage}
+		if scanErr.Provider != "" {
+			fields = append(fields, string(scanErr.Provider))
+		}
+		if scanErr.Path != "" {
+			fields = append(fields, scanErr.Path)
+		}
+		fmt.Printf("  %s: %s\n", strings.Join(fields, " "), scanErr.Error)
 	}
 }

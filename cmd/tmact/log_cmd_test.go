@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/logsearch"
+	"github.com/leolin310148/tmact/internal/logstats"
 )
 
 func TestLogSearchJSONUsesPrivateDefaultsAndAcceptsFlagsAfterQuery(t *testing.T) {
@@ -87,20 +88,78 @@ func TestLogSearchCanSearchFlagLikeQueryAfterDelimiter(t *testing.T) {
 	}
 }
 
-func TestLogHelpDocumentsPrivacyAndCoverage(t *testing.T) {
-	for _, args := range [][]string{{"log", "--help"}, {"log", "search", "--help"}} {
+func TestLogStatsJSONAggregatesSafeFieldsAndUsesIndex(t *testing.T) {
+	setupCLILogFixtures(t)
+	out, err := captureRun(t, "log", "stats", "--since", "48h", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report logstats.Report
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Records != 2 || report.Index.Status != "rebuilt_missing" {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(report.Providers) != 2 || report.Commands[0].Name != "git" || report.Commands[0].Count != 1 {
+		t.Fatalf("aggregates = %#v", report)
+	}
+	for _, private := range []string{"topsecret", "private argument", "needle private prompt"} {
+		if strings.Contains(out, private) {
+			t.Fatalf("stats leaked %q: %s", private, out)
+		}
+	}
+
+	second, err := captureRun(t, "log", "stats", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(second), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Index.Status != "healthy" || report.Index.Hits != 2 {
+		t.Fatalf("cached report = %#v", report.Index)
+	}
+}
+
+func TestLogDoctorRebuildsCorruptCacheAndReportsHealth(t *testing.T) {
+	setupCLILogFixtures(t)
+	cachePath := filepath.Join(os.Getenv("HOME"), ".tmact", logstats.DefaultCacheName)
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, []byte("not-json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "log", "doctor", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report logstats.DoctorReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.Cache.Healthy || report.Cache.Status != "rebuilt_corrupt" || report.Files.Discovered != 2 || report.Records.Known != 2 {
+		t.Fatalf("doctor = %#v", report)
+	}
+}
+
+func TestLogHelpDocumentsPrivacyCoverageAndIndex(t *testing.T) {
+	for _, args := range [][]string{{"log", "--help"}, {"log", "search", "--help"}, {"log", "stats", "--help"}, {"log", "doctor", "--help"}} {
 		out, err := captureRun(t, args...)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"privacy", "coverage", "--show-content"} {
+		for _, want := range []string{"privacy", "coverage"} {
 			if !strings.Contains(strings.ToLower(out), want) {
 				t.Fatalf("help %v missing %q: %s", args, want, out)
 			}
 		}
 	}
-	if _, ok := commandHelpFor("log search"); !ok {
-		t.Fatal("command catalog missing log search")
+	for _, topic := range []string{"log search", "log stats", "log doctor"} {
+		if _, ok := commandHelpFor(topic); !ok {
+			t.Fatalf("command catalog missing %s", topic)
+		}
 	}
 }
 
@@ -110,6 +169,7 @@ func setupCLILogFixtures(t *testing.T) {
 	t.Cleanup(reset)
 	tmactNow = func() time.Time { return time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC) }
 	root := t.TempDir()
+	t.Setenv("HOME", root)
 	claudeRoot := filepath.Join(root, "claude")
 	codexRoot := filepath.Join(root, "codex")
 	writeCLILog(t, filepath.Join(claudeRoot, "projects", "fixture", "session.jsonl"), strings.Join([]string{

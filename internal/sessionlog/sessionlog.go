@@ -5,6 +5,10 @@ package sessionlog
 
 import "time"
 
+// ParserVersion changes whenever normalized safe fields may be interpreted
+// differently. Persistent consumers include it in their cache identity.
+const ParserVersion = 1
+
 // Provider identifies a supported on-disk session-log format.
 type Provider string
 

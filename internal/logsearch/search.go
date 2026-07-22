@@ -5,7 +5,6 @@ package logsearch
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -200,7 +199,7 @@ func matchesQuery(record sessionlog.Record, query string) bool {
 }
 
 func safeMatch(record sessionlog.Record, showContent bool) Match {
-	verb, subcommand := commandSummary(record.Command)
+	verb, subcommand := sessionlog.SafeCommandSummary(record.Command)
 	match := Match{
 		Provider:          record.Provider,
 		SessionID:         record.SessionID,
@@ -262,56 +261,8 @@ func candidateNewer(left, right candidate) bool {
 	return left.timestamp.After(right.timestamp)
 }
 
-var (
-	environmentAssignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-	safeCommandWord       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
-)
-
-var subcommandVerbs = map[string]bool{
-	"az": true, "aws": true, "bun": true, "cargo": true, "docker": true,
-	"docker-compose": true, "gh": true, "git": true, "gcloud": true,
-	"go": true, "helm": true, "kubectl": true, "npm": true, "npx": true,
-	"pnpm": true, "terraform": true, "tmact": true, "tofu": true, "yarn": true,
-}
-
 func commandSummary(command string) (string, string) {
-	line := command
-	if newline := strings.IndexByte(line, '\n'); newline >= 0 {
-		line = line[:newline]
-	}
-	fields := strings.Fields(line)
-	index := 0
-	for index < len(fields) && environmentAssignment.MatchString(fields[index]) {
-		index++
-	}
-	if index >= len(fields) {
-		return "", ""
-	}
-	verb := cleanCommandWord(filepath.Base(fields[index]))
-	index++
-	if verb == "rtk" && index < len(fields) {
-		if fields[index] == "proxy" {
-			index++
-		} else if fields[index] == "gain" {
-			return "rtk", "gain"
-		}
-		if index < len(fields) {
-			verb = cleanCommandWord(filepath.Base(fields[index]))
-			index++
-		}
-	}
-	if verb == "" || !subcommandVerbs[verb] || index >= len(fields) || strings.HasPrefix(fields[index], "-") {
-		return verb, ""
-	}
-	return verb, cleanCommandWord(fields[index])
-}
-
-func cleanCommandWord(value string) string {
-	value = strings.Trim(value, "'\"")
-	if !safeCommandWord.MatchString(value) {
-		return ""
-	}
-	return value
+	return sessionlog.SafeCommandSummary(command)
 }
 
 func truncateUTF8(value string, limit int) (string, bool) {
