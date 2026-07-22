@@ -13,6 +13,8 @@ Common commands:
 
 - `tmact ls` lists tmux panes and caches numbered targets like `-t 0`.
 - `tmact inspect --all` classifies panes by runtime and activity state.
+- `tmact wait --target session:0.0 --until input-ready --timeout 5m` waits
+  read-only for a bounded pane state transition or terminal blocker.
 - `tmact -t 0 send --text "status?" --enter` previews input; `--execute`
   actually sends it.
 - `tmact detect --target session:0.0 --json` detects directory-access prompts.

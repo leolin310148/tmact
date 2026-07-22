@@ -35,6 +35,24 @@ func TestEmptyServerErrorClassification(t *testing.T) {
 	}
 }
 
+func TestTargetGoneErrorClassification(t *testing.T) {
+	for _, message := range []string{
+		"tmux display-message failed: can't find pane: %42",
+		"tmux display-message failed: can't find session: work",
+		"tmux capture-pane failed: no server running on /tmp/tmux-501/default",
+		"tmux list-panes failed: no current target",
+	} {
+		if !IsTargetGoneError(errors.New(message)) {
+			t.Errorf("IsTargetGoneError(%q) = false", message)
+		}
+	}
+	for _, err := range []error{nil, errors.New("tmux capture-pane failed: permission denied")} {
+		if IsTargetGoneError(err) {
+			t.Errorf("IsTargetGoneError(%v) = true", err)
+		}
+	}
+}
+
 func TestParseCapturePaneInfo(t *testing.T) {
 	info, err := parseCapturePaneInfo("work:2.1\t%42\t180\n")
 	if err != nil {

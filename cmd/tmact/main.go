@@ -69,109 +69,111 @@ func run(args []string) error {
 		return runSend(args[1:], globals)
 	case "capture":
 		return runCapture(args[1:], globals)
+	case "wait":
+		return runWait(args[1:], globals)
 	case "detect":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runDetect(args[1:])
 	case "inspect":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runInspect(args[1:])
 	case "status":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runStatus(args[1:])
 	case "statusd":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runStatusd(args[1:])
 	case "usage":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runUsage(args[1:])
 	case "human-active":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runHumanActive(args[1:])
 	case "stt-set":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runSTTSet(args[1:])
 	case "inbox":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runInbox(args[1:])
 	case "summarize":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runSummarize(args[1:])
 	case "broadcast":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runBroadcast(args[1:])
 	case "panels":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runPanels(args[1:])
 	case "loop":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runLoop(args[1:])
 	case "workflow":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runWorkflow(args[1:])
 	case "watch":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runWatch(args[1:])
 	case "dispatch-work":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runDispatch(args[1:])
 	case "trust-folder":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runTrustFolder(args[1:])
 	case "hook":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runHook(args[1:])
 	case "commands":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runCommands(args[1:])
 	case "llm":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runLLM(args[1:])
 	case "help":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runHelp(args[1:])
 	case "version", "-v", "--version", "-version":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send and capture")
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runVersion(args[1:])
 	case "-h", "--help":

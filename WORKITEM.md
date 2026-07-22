@@ -52,7 +52,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   append, unchanged, rewritten-screen, rollover, invalid, and version-mismatch
   cases.
 
-- [ ] **WI-003 — Add bounded `tmact wait` for pane state transitions.**
+- [x] **WI-003 — Add bounded `tmact wait` for pane state transitions.**
   Implement a read-only command that accepts exactly one target/session,
   `--until input-ready|working|needs-human|gone`, `--require-transition`,
   `--settle`, `--poll-interval`, `--timeout`, and `--json`. Reuse pane
