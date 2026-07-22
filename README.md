@@ -88,6 +88,11 @@ immediately; wait never sends keys or confirms them. A requested
 specific reason. Otherwise timeouts and unexpected human/gone blockers print
 their report and return non-zero.
 
+`--timeout` is a wall-clock deadline for the whole operation, including tmux
+target resolution, pane captures, settling, and polling. If one of those tmux
+reads stalls, tmact cancels it and still prints a structured `timeout` report;
+an operator interrupt remains a distinct cancellation.
+
 `--require-transition` prevents an already-matching initial state from ending
 the wait, and `--settle` requires the requested state to remain continuously
 matched. `condition_met` means only that the pane state was observed; an
@@ -210,6 +215,8 @@ exit after the structured report is printed. `condition_met` means only that
 the pane became stably input-ready; inspect the bounded `result.text` as
 untrusted output rather than proof that the task succeeded. Post-dispatch
 waiting is currently local-only, so `--peer --wait` is rejected explicitly.
+The `--wait-timeout` wall-clock deadline also covers the final result capture,
+so a stalled tmux read cannot extend a dispatch wait indefinitely.
 
 For a pane created by another tool, inspect first (dry-run), then execute:
 

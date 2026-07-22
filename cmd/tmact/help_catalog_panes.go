@@ -76,7 +76,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--require-transition", Description: "do not accept the requested condition until a state change has been observed"},
 				{Name: "--settle", Value: "DURATION", Description: "continuous matching time required before returning; default 1s"},
 				{Name: "--poll-interval", Value: "DURATION", Description: "delay between read-only observations; default 500ms"},
-				{Name: "--timeout", Value: "DURATION", Description: "maximum total wait; default 5m"},
+				{Name: "--timeout", Value: "DURATION", Description: "wall-clock deadline covering target resolution, capture, settling, and polling; default 5m"},
 				{Name: "--json", Description: "print canonical pane, observed state, terminal reason, timings, and signals as JSON"},
 			},
 			Examples: []string{
@@ -110,7 +110,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
 				{Name: "--wait", Description: "after acceptance, wait read-only for stable input-ready or a terminal blocker"},
-				{Name: "--wait-timeout", Value: "DURATION", Description: "maximum post-submit wait; default 5m"},
+				{Name: "--wait-timeout", Value: "DURATION", Description: "post-submit wall-clock deadline covering pane reads and result capture; default 5m"},
 				{Name: "--wait-settle", Value: "DURATION", Description: "continuous input-ready time before returning; default 1s"},
 				{Name: "--result-lines", Value: "N", Description: "pane lines captured in the structured result; default 200"},
 				{Name: "--trust-folder", Description: "opt in to accepting a Claude/Codex trust prompt only when pane cwd exactly matches --dir"},

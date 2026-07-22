@@ -69,21 +69,23 @@ type Report struct {
 // Dependencies isolates tmux reads and time so waits can be tested without a
 // live tmux server or wall-clock sleeps.
 type Dependencies struct {
-	ResolveTarget func(string) (tmux.CapturePaneInfo, error)
-	CapturePane   func(context.Context, string, int) (string, error)
-	IsTargetGone  func(error) bool
-	Now           func() time.Time
-	Wait          func(context.Context, time.Duration) error
+	ResolveTarget   func(context.Context, string) (tmux.CapturePaneInfo, error)
+	CapturePane     func(context.Context, string, int) (string, error)
+	IsTargetGone    func(error) bool
+	Now             func() time.Time
+	Wait            func(context.Context, time.Duration) error
+	DeadlineContext func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 }
 
 // DefaultDependencies wires the wait to read-only tmux helpers.
 func DefaultDependencies() Dependencies {
 	return Dependencies{
-		ResolveTarget: tmux.CapturePaneInfoForTarget,
-		CapturePane:   tmux.CapturePaneContext,
-		IsTargetGone:  tmux.IsTargetGoneError,
-		Now:           time.Now,
-		Wait:          waitContext,
+		ResolveTarget:   tmux.CapturePaneInfoForTargetContext,
+		CapturePane:     tmux.CapturePaneContext,
+		IsTargetGone:    tmux.IsTargetGoneError,
+		Now:             time.Now,
+		Wait:            waitContext,
+		DeadlineContext: context.WithTimeout,
 	}
 }
 
@@ -111,6 +113,8 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 		StartedAt: started,
 	}
 	deadline := started.Add(options.Timeout)
+	waitCtx, cancel := deps.DeadlineContext(ctx, options.Timeout)
+	defer cancel()
 	lookupTarget := options.Selector
 	resolved := false
 	previousState := ""
@@ -118,12 +122,15 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 	conditionActive := false
 
 	for {
-		if err := ctx.Err(); err != nil {
+		if done, err := finishContext(ctx, waitCtx, &report, deps.Now()); done {
 			return report, err
 		}
 
-		info, err := deps.ResolveTarget(lookupTarget)
+		info, err := deps.ResolveTarget(waitCtx, lookupTarget)
 		if err != nil {
+			if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+				return report, contextErr
+			}
 			if deps.IsTargetGone(err) {
 				now := deps.Now()
 				report.State = StateGone
@@ -136,6 +143,9 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 				return finish(report, now), nil
 			}
 			return report, fmt.Errorf("resolve wait target %q: %w", lookupTarget, err)
+		}
+		if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+			return report, contextErr
 		}
 		if !resolved {
 			report.Target = info.Target
@@ -152,10 +162,10 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			return finish(report, now), nil
 		}
 
-		raw, err := deps.CapturePane(ctx, report.PaneID, captureLines)
+		raw, err := deps.CapturePane(waitCtx, report.PaneID, captureLines)
 		if err != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return report, ctxErr
+			if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+				return report, contextErr
 			}
 			if deps.IsTargetGone(err) {
 				now := deps.Now()
@@ -168,6 +178,9 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			}
 			return report, fmt.Errorf("capture wait target %s: %w", report.PaneID, err)
 		}
+		if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+			return report, contextErr
+		}
 
 		classified := panestate.Classify(raw)
 		state := NormalizeState(classified)
@@ -177,6 +190,10 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 		report.RawState = classified.State
 		report.LastLine = classified.LastLine
 		report.Signals = append(report.Signals[:0], classified.Signals...)
+		if !now.Before(deadline) {
+			report.Reason = ReasonTimeout
+			return finish(report, now), nil
+		}
 		if previousState != "" && state != previousState {
 			report.TransitionObserved = true
 		}
@@ -204,11 +221,6 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			conditionActive = false
 		}
 
-		if !now.Before(deadline) {
-			report.Reason = ReasonTimeout
-			return finish(report, now), nil
-		}
-
 		delay := options.PollInterval
 		if remaining := deadline.Sub(now); remaining < delay {
 			delay = remaining
@@ -218,7 +230,10 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 				delay = remaining
 			}
 		}
-		if err := deps.Wait(ctx, delay); err != nil {
+		if err := deps.Wait(waitCtx, delay); err != nil {
+			if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+				return report, contextErr
+			}
 			return report, err
 		}
 	}
@@ -240,10 +255,27 @@ func validate(options Options, deps Dependencies) error {
 	if options.Timeout <= 0 {
 		return errors.New("wait timeout must be positive")
 	}
-	if deps.ResolveTarget == nil || deps.CapturePane == nil || deps.IsTargetGone == nil || deps.Now == nil || deps.Wait == nil {
+	if deps.ResolveTarget == nil || deps.CapturePane == nil || deps.IsTargetGone == nil || deps.Now == nil || deps.Wait == nil || deps.DeadlineContext == nil {
 		return errors.New("wait dependencies are incomplete")
 	}
 	return nil
+}
+
+func finishContext(parent, waitCtx context.Context, report *Report, now time.Time) (bool, error) {
+	if err := parent.Err(); err != nil {
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return true, err
+		}
+		report.Reason = ReasonTimeout
+		*report = finish(*report, now)
+		return true, nil
+	}
+	if waitCtx.Err() != nil {
+		report.Reason = ReasonTimeout
+		*report = finish(*report, now)
+		return true, nil
+	}
+	return false, nil
 }
 
 // NormalizeState maps pane classification onto the public wait conditions.

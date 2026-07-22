@@ -41,7 +41,7 @@ func runDispatch(args []string) error {
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
 	wait := fs.Bool("wait", false, "wait for stable input-ready after the submitted prompt is accepted")
-	waitTimeout := fs.Duration("wait-timeout", dispatch.DefaultWaitTimeout, "maximum post-submit wait")
+	waitTimeout := fs.Duration("wait-timeout", dispatch.DefaultWaitTimeout, "post-submit wall-clock deadline including pane reads and result capture")
 	waitSettle := fs.Duration("wait-settle", dispatch.DefaultWaitSettle, "continuous input-ready time before returning")
 	resultLines := fs.Int("result-lines", dispatch.DefaultResultLines, "pane lines to capture after waiting")
 	trustFolder := fs.Bool("trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")

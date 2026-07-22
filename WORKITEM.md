@@ -174,7 +174,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   Check other mutation callers for the updated error contract, then run focused
   session/statusd/web tests and `go test ./...`.
 
-- [ ] **WI-015 — Enforce a real wall-clock deadline for `tmact wait`.**
+- [x] **WI-015 — Enforce a real wall-clock deadline for `tmact wait`.**
   Make `--timeout` bound target resolution, pane capture, settling, and polling,
   not just the gaps between completed tmux calls. Thread a deadline-bearing
   context through target resolution as well as capture using cancellable tmux

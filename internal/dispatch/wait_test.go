@@ -37,6 +37,9 @@ func TestDispatchWaitTerminalCases(t *testing.T) {
 				}
 				return tt.baseline, nil
 			}
+			deps.CapturePaneContext = func(_ context.Context, target string, lines int) (string, error) {
+				return deps.CapturePane(target, lines)
+			}
 			waitCalls := 0
 			deps.WaitPane = func(ctx context.Context, options panewait.Options) (panewait.Report, error) {
 				waitCalls++
@@ -88,6 +91,38 @@ func TestDispatchWaitDryRunPlansWithoutWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if report.Wait == nil || report.Wait.Status != dispatch.StatusPlanned || report.Wait.Outcome != nil || report.Result != nil {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestDispatchWaitDeadlineBoundsResultCapture(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{claudePane()}, nil }
+	deps.CapturePane = func(_ string, _ int) (string, error) {
+		if len(rec.pastes) < 2 {
+			return "Claude Code\n❯ ", nil
+		}
+		return "Claude Code\nWorking (esc to interrupt)", nil
+	}
+	deps.WaitPane = func(context.Context, panewait.Options) (panewait.Report, error) {
+		return panewait.Report{Target: "work:0.0", PaneID: "%1", State: panewait.UntilInputReady, RawState: "waiting_input", Reason: panewait.ReasonConditionMet, ConditionMet: true}, nil
+	}
+	deps.CapturePaneContext = func(ctx context.Context, _ string, _ int) (string, error) {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+
+	opts := baseOpts()
+	opts.Execute, opts.Wait = true, true
+	opts.WaitTimeout, opts.ResultLines = 20*time.Millisecond, 42
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil || !strings.Contains(err.Error(), panewait.ReasonTimeout) {
+		t.Fatalf("err = %v", err)
+	}
+	if report.Wait == nil || report.Wait.Outcome == nil || report.Wait.Outcome.Reason != panewait.ReasonTimeout || report.Wait.Outcome.ConditionMet {
+		t.Fatalf("wait report = %#v", report.Wait)
+	}
+	if report.Result != nil || report.Wait.Status != dispatch.StatusFailed || stepStatus(t, report, "wait-result") != dispatch.StatusFailed {
 		t.Fatalf("report = %#v", report)
 	}
 }

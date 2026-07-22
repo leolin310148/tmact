@@ -21,7 +21,7 @@ type fakeWait struct {
 
 func (f *fakeWait) dependencies() Dependencies {
 	return Dependencies{
-		ResolveTarget: func(string) (tmux.CapturePaneInfo, error) {
+		ResolveTarget: func(context.Context, string) (tmux.CapturePaneInfo, error) {
 			f.resolves++
 			if f.goneAt > 0 && f.resolves >= f.goneAt {
 				return tmux.CapturePaneInfo{}, errGone
@@ -50,6 +50,7 @@ func (f *fakeWait) dependencies() Dependencies {
 				return nil
 			}
 		},
+		DeadlineContext: context.WithTimeout,
 	}
 }
 
@@ -211,6 +212,132 @@ func TestWaitCancellationInterruptsPolling(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+func TestWaitDeadlineInterruptsBlockingDependencies(t *testing.T) {
+	tests := []struct {
+		name  string
+		block string
+	}{
+		{name: "resolve", block: "resolve"},
+		{name: "capture", block: "capture"},
+		{name: "poll wait", block: "wait"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeWait{captures: []string{"plain output\n"}}
+			deps := fake.dependencies()
+			deadline := newManualDeadline()
+			deps.DeadlineContext = deadline.Context
+			started := make(chan struct{})
+
+			if tt.block == "resolve" {
+				deps.ResolveTarget = func(ctx context.Context, _ string) (tmux.CapturePaneInfo, error) {
+					close(started)
+					<-ctx.Done()
+					return tmux.CapturePaneInfo{}, ctx.Err()
+				}
+			}
+			if tt.block == "capture" {
+				deps.CapturePane = func(ctx context.Context, _ string, _ int) (string, error) {
+					close(started)
+					<-ctx.Done()
+					return "", ctx.Err()
+				}
+			}
+			if tt.block == "wait" {
+				deps.Wait = func(ctx context.Context, _ time.Duration) error {
+					close(started)
+					<-ctx.Done()
+					return ctx.Err()
+				}
+			}
+
+			type result struct {
+				report Report
+				err    error
+			}
+			resultCh := make(chan result, 1)
+			go func() {
+				report, err := RunWithDependencies(context.Background(), baseOptions(UntilWorking), deps)
+				resultCh <- result{report: report, err: err}
+			}()
+
+			<-deadline.Armed
+			<-started
+			deadline.Expire()
+			got := <-resultCh
+			if got.err != nil {
+				t.Fatal(got.err)
+			}
+			if got.report.Reason != ReasonTimeout || got.report.ConditionMet {
+				t.Fatalf("report = %#v", got.report)
+			}
+		})
+	}
+}
+
+func TestWaitOperatorCancellationDuringCaptureRemainsCancellation(t *testing.T) {
+	fake := &fakeWait{}
+	deps := fake.dependencies()
+	started := make(chan struct{})
+	deps.CapturePane = func(ctx context.Context, _ string, _ int) (string, error) {
+		close(started)
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	type result struct {
+		report Report
+		err    error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		report, err := RunWithDependencies(ctx, baseOptions(UntilWorking), deps)
+		resultCh <- result{report: report, err: err}
+	}()
+	<-started
+	cancel()
+	got := <-resultCh
+	if !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("err = %v", got.err)
+	}
+	if got.report.Reason == ReasonTimeout {
+		t.Fatalf("operator cancellation reported as timeout: %#v", got.report)
+	}
+}
+
+func TestWaitParentDeadlineReturnsStructuredTimeout(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	report, err := RunWithDependencies(ctx, baseOptions(UntilWorking), (&fakeWait{}).dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Reason != ReasonTimeout || report.ConditionMet {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+type manualDeadline struct {
+	Armed  chan struct{}
+	cancel context.CancelFunc
+}
+
+func newManualDeadline() *manualDeadline {
+	return &manualDeadline{Armed: make(chan struct{})}
+}
+
+func (d *manualDeadline) Context(parent context.Context, _ time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	d.cancel = cancel
+	close(d.Armed)
+	return ctx, cancel
+}
+
+func (d *manualDeadline) Expire() {
+	d.cancel()
 }
 
 func TestWaitMatchesWorking(t *testing.T) {
