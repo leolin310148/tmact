@@ -32,6 +32,12 @@ type Pane struct {
 	InMode         bool
 }
 
+type CapturePaneInfo struct {
+	Target      string
+	PaneID      string
+	HistorySize int
+}
+
 func ListLayout() (Layout, error) {
 	layout := Layout{
 		Sessions: map[string]bool{},
@@ -472,6 +478,31 @@ func isPaneRowFlag(value string) bool {
 // form classifiers and pattern matchers expect.
 func CapturePane(target string, lines int) (string, error) {
 	return capturePaneContext(context.Background(), target, lines, false)
+}
+
+// CapturePaneInfoForTarget resolves one tmux target to its canonical pane
+// target and stable pane id, and reports the available scrollback size.
+func CapturePaneInfoForTarget(target string) (CapturePaneInfo, error) {
+	if target == "" {
+		return CapturePaneInfo{}, fmt.Errorf("target cannot be empty")
+	}
+	output, err := outputTmux("display-message", "-p", "-t", target, "#{session_name}:#{window_index}.#{pane_index}\t#{pane_id}\t#{history_size}")
+	if err != nil {
+		return CapturePaneInfo{}, err
+	}
+	return parseCapturePaneInfo(output)
+}
+
+func parseCapturePaneInfo(output string) (CapturePaneInfo, error) {
+	parts := strings.Split(strings.TrimSpace(output), "\t")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
+		return CapturePaneInfo{}, fmt.Errorf("invalid tmux pane metadata %q", strings.TrimSpace(output))
+	}
+	historySize, err := strconv.Atoi(parts[2])
+	if err != nil || historySize < 0 {
+		return CapturePaneInfo{}, fmt.Errorf("invalid tmux pane history size %q", parts[2])
+	}
+	return CapturePaneInfo{Target: parts[0], PaneID: parts[1], HistorySize: historySize}, nil
 }
 
 // CapturePaneContext is CapturePane with cancellation support for long-lived

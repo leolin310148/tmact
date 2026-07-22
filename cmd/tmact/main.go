@@ -39,6 +39,8 @@ var (
 	listAllTmuxPanes     = tmux.ListAllPanes
 	listTargetTmuxPanes  = tmux.ListPanes
 	listSessionTmuxPanes = tmux.ListSessionPanes
+	captureTmuxPane      = tmux.CapturePane
+	captureTmuxPaneInfo  = tmux.CapturePaneInfoForTarget
 	newTmuxSession       = tmux.NewSession
 	newTmuxWindow        = tmux.NewWindow
 	pasteTmuxText        = tmux.PasteText
@@ -65,109 +67,111 @@ func run(args []string) error {
 		return runList(args[1:])
 	case "send":
 		return runSend(args[1:], globals)
+	case "capture":
+		return runCapture(args[1:], globals)
 	case "detect":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runDetect(args[1:])
 	case "inspect":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runInspect(args[1:])
 	case "status":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runStatus(args[1:])
 	case "statusd":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runStatusd(args[1:])
 	case "usage":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runUsage(args[1:])
 	case "human-active":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runHumanActive(args[1:])
 	case "stt-set":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runSTTSet(args[1:])
 	case "inbox":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runInbox(args[1:])
 	case "summarize":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runSummarize(args[1:])
 	case "broadcast":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runBroadcast(args[1:])
 	case "panels":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runPanels(args[1:])
 	case "loop":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runLoop(args[1:])
 	case "workflow":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runWorkflow(args[1:])
 	case "watch":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runWatch(args[1:])
 	case "dispatch-work":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runDispatch(args[1:])
 	case "trust-folder":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runTrustFolder(args[1:])
 	case "hook":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runHook(args[1:])
 	case "commands":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runCommands(args[1:])
 	case "llm":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runLLM(args[1:])
 	case "help":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runHelp(args[1:])
 	case "version", "-v", "--version", "-version":
 		if globals.Target != "" {
-			return errors.New("global -t/--target is currently supported with send")
+			return errors.New("global -t/--target is currently supported with send and capture")
 		}
 		return runVersion(args[1:])
 	case "-h", "--help":
