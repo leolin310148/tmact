@@ -33,8 +33,8 @@ func sessionCommandHelpCatalog() []commandHelp {
 				{Name: "--json", Description: "print the plan/result as JSON"},
 			},
 			Examples: []string{"tmact session close work", "tmact session close work --execute --json"},
-			Safety:   []string{"Without --execute, tmux and closed-session history are unchanged.", "SESSION must be one exact local session name, never a pane, window, peer, glob, or broad selector."},
-			Notes:    []string{"The saved entry contains only session name, cwd, detected runtime intent, and close time; pane contents are never persisted."},
+			Safety:   []string{"Without --execute, tmux and closed-session history are unchanged.", "With --execute, the reopen entry is atomically persisted before tmux is asked to kill the session; a persistence failure leaves the session running.", "SESSION must be one exact local session name, never a pane, window, peer, glob, or broad selector."},
+			Notes:    []string{"The saved entry contains only session name, cwd, detected runtime intent, and close time; pane contents are never persisted.", "If tmux cannot kill the session, tmact rolls back the staged history entry and reports any rollback failure alongside the kill error."},
 		},
 		{
 			Command:  "session closed",

@@ -161,7 +161,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   by the vulnerable parser is rebuilt instead of reused. Run focused log tests
   and `go test ./...`.
 
-- [ ] **WI-014 — Make recoverable session close durable before killing.**
+- [x] **WI-014 — Make recoverable session close durable before killing.**
   A successful `tmact session close --execute` must guarantee its reopen intent
   survived an atomic disk write. Expose persistence errors from
   `ClosedSessionLog` instead of silently ignoring them, durably stage the exact

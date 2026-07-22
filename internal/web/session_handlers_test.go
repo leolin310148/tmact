@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -112,6 +113,38 @@ func TestHandleSessionReopen(t *testing.T) {
 	}
 	if entries := log.List(); len(entries) != 0 {
 		t.Fatalf("log after reopen = %#v", entries)
+	}
+}
+
+func TestHandleSessionReopenRollsBackWhenHistoryRemovalFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "closed.json")
+	log := statusd.NewClosedSessionLog(path, 10)
+	if err := log.Record(statusd.ClosedSession{Session: "old", CWD: "/repo", ClosedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	killed := 0
+	s := &Server{
+		ClosedSessions: log,
+		DirExists:      func(string) bool { return true },
+		NewSession: func(string, string, string, []string) error {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		},
+		KillSession: func(string) error { killed++; return nil },
+		Logf:        func(string, ...any) {},
+	}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, sessionJSONRequest(http.MethodPost, "/api/session/reopen", `{"session":"old"}`))
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "remove reopened session from history") {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if killed != 1 {
+		t.Fatalf("cleanup KillSession calls = %d, want 1", killed)
 	}
 }
 

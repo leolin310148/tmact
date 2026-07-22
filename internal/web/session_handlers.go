@@ -256,7 +256,14 @@ func (s *Server) handleSessionReopen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.ClosedSessions != nil {
-		s.ClosedSessions.Remove(name)
+		if _, err := s.ClosedSessions.Remove(name); err != nil {
+			if cleanupErr := s.killSession()(name); cleanupErr != nil {
+				writeJSONError(w, http.StatusInternalServerError, "remove reopened session from history: "+err.Error()+" (cleanup failed: "+cleanupErr.Error()+")")
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "remove reopened session from history: "+err.Error())
+			return
+		}
 	}
 	s.logf("reopened session %q at %q via web UI", name, cwd)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

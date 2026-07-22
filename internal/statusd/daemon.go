@@ -114,10 +114,14 @@ func (d *Daemon) trackClosedSessions(snapshot Snapshot, scanErr error) {
 			sort.Slice(closedNow, func(i, j int) bool {
 				return closedNow[i].Session < closedNow[j].Session
 			})
-			d.closed.Record(closedNow...)
+			if err := d.closed.Record(closedNow...); err != nil {
+				d.logf("closed sessions: best-effort record failed: %v", err)
+			}
 		}
 	}
-	d.closed.PruneLive(live)
+	if err := d.closed.PruneLive(live); err != nil {
+		d.logf("closed sessions: best-effort live-session prune failed: %v", err)
+	}
 	d.prevSessions = current
 }
 

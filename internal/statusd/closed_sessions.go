@@ -2,12 +2,17 @@ package statusd
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"time"
 )
+
+var ErrClosedSessionPersistenceDisabled = errors.New("closed-session persistence is disabled")
 
 const (
 	ClosedSessionsVersion     = 1
@@ -40,6 +45,10 @@ type closedSessionsFile struct {
 type ClosedSessionLog struct {
 	path string
 	max  int
+	// Filesystem functions are stored per log so persistence failures remain
+	// deterministic to test without global hooks.
+	writeFile func(string, []byte, os.FileMode) error
+	syncDir   func(string) error
 
 	mu      sync.Mutex
 	loaded  bool
@@ -50,7 +59,12 @@ func NewClosedSessionLog(path string, max int) *ClosedSessionLog {
 	if max <= 0 {
 		max = DefaultClosedSessionsMax
 	}
-	return &ClosedSessionLog{path: path, max: max}
+	return &ClosedSessionLog{
+		path:      path,
+		max:       max,
+		writeFile: writeAtomicFile,
+		syncDir:   syncDirectory,
+	}
 }
 
 // DefaultClosedSessionsPath returns ~/.tmact/closed-sessions.json. Empty
@@ -74,16 +88,67 @@ func (l *ClosedSessionLog) List() []ClosedSession {
 }
 
 // Record prepends the given closed sessions (newest first), dropping any older
-// entry with the same session name, and persists the capped result.
-func (l *ClosedSessionLog) Record(closed ...ClosedSession) {
-	if len(closed) == 0 {
-		return
+// entry with the same session name, and persists the capped result. An empty
+// path keeps the log in memory only.
+func (l *ClosedSessionLog) Record(closed ...ClosedSession) error {
+	return l.record(false, closed...)
+}
+
+// RecordDurable is Record with persistence required. It is used before a
+// destructive close so success guarantees the reopen intent reached the
+// configured atomic history file.
+func (l *ClosedSessionLog) RecordDurable(closed ...ClosedSession) error {
+	return l.record(true, closed...)
+}
+
+// StageDurable atomically records one entry and returns a rollback that
+// restores the exact prior log. The rollback refuses to overwrite intervening
+// mutations on this log instance.
+func (l *ClosedSessionLog) StageDurable(closed ClosedSession) (func() error, error) {
+	if closed.Session == "" {
+		return nil, errors.New("closed-session name is empty")
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.load()
+	before := append([]ClosedSession(nil), l.entries...)
+	staged := mergeClosedSessions([]ClosedSession{closed}, l.entries, l.max)
+	if err := l.persist(staged, true); err != nil {
+		return nil, err
+	}
+	l.entries = staged
+	return func() error {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		if !slices.Equal(l.entries, staged) {
+			return errors.New("closed-session history changed after staging")
+		}
+		if err := l.persist(before, true); err != nil {
+			return err
+		}
+		l.entries = before
+		return nil
+	}, nil
+}
+
+func (l *ClosedSessionLog) record(requirePersistence bool, closed ...ClosedSession) error {
+	if len(closed) == 0 {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.load()
+	merged := mergeClosedSessions(closed, l.entries, l.max)
+	if err := l.persist(merged, requirePersistence); err != nil {
+		return err
+	}
+	l.entries = merged
+	return nil
+}
+
+func mergeClosedSessions(closed, existing []ClosedSession, max int) []ClosedSession {
 	seen := map[string]bool{}
-	merged := make([]ClosedSession, 0, len(closed)+len(l.entries))
+	merged := make([]ClosedSession, 0, len(closed)+len(existing))
 	for _, entry := range closed {
 		if entry.Session == "" || seen[entry.Session] {
 			continue
@@ -92,41 +157,44 @@ func (l *ClosedSessionLog) Record(closed ...ClosedSession) {
 		entry.Peer = ""
 		merged = append(merged, entry)
 	}
-	for _, entry := range l.entries {
+	for _, entry := range existing {
 		if seen[entry.Session] {
 			continue
 		}
 		seen[entry.Session] = true
 		merged = append(merged, entry)
 	}
-	if len(merged) > l.max {
-		merged = merged[:l.max]
+	if len(merged) > max {
+		merged = merged[:max]
 	}
-	l.entries = merged
-	l.persist()
+	return merged
 }
 
 // Remove drops the entry for session, reporting whether one existed.
-func (l *ClosedSessionLog) Remove(session string) bool {
+func (l *ClosedSessionLog) Remove(session string) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.load()
 	for i, entry := range l.entries {
 		if entry.Session == session {
-			l.entries = append(l.entries[:i:i], l.entries[i+1:]...)
-			l.persist()
-			return true
+			kept := append([]ClosedSession(nil), l.entries[:i]...)
+			kept = append(kept, l.entries[i+1:]...)
+			if err := l.persist(kept, false); err != nil {
+				return false, err
+			}
+			l.entries = kept
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // PruneLive drops entries whose session name is currently live again (the user
 // recreated it by hand), so the history only ever offers sessions that are
 // actually gone. Persists only when something changed.
-func (l *ClosedSessionLog) PruneLive(live map[string]bool) {
+func (l *ClosedSessionLog) PruneLive(live map[string]bool) error {
 	if len(live) == 0 {
-		return
+		return nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -138,10 +206,13 @@ func (l *ClosedSessionLog) PruneLive(live map[string]bool) {
 		}
 	}
 	if len(kept) == len(l.entries) {
-		return
+		return nil
+	}
+	if err := l.persist(kept, false); err != nil {
+		return err
 	}
 	l.entries = kept
-	l.persist()
+	return nil
 }
 
 // load reads the on-disk log once; a missing or corrupt file yields an empty
@@ -170,20 +241,39 @@ func (l *ClosedSessionLog) load() {
 	l.entries = entries
 }
 
-// persist writes the current entries atomically; best-effort. Caller holds l.mu.
-func (l *ClosedSessionLog) persist() {
+// persist writes entries atomically and syncs the containing directory. Caller
+// holds l.mu; l.entries is not changed until this succeeds.
+func (l *ClosedSessionLog) persist(entries []ClosedSession, requirePersistence bool) error {
 	if l.path == "" {
-		return
+		if requirePersistence {
+			return ErrClosedSessionPersistenceDisabled
+		}
+		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
-		return
+	dir := filepath.Dir(l.path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("prepare closed-session history directory: %w", err)
 	}
 	data, err := json.MarshalIndent(closedSessionsFile{
 		Version:  ClosedSessionsVersion,
-		Sessions: l.entries,
+		Sessions: entries,
 	}, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("encode closed-session history: %w", err)
 	}
-	_ = writeAtomicFile(l.path, append(data, '\n'), 0o600)
+	writeFile := l.writeFile
+	if writeFile == nil {
+		writeFile = writeAtomicFile
+	}
+	if err := writeFile(l.path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write closed-session history: %w", err)
+	}
+	syncDir := l.syncDir
+	if syncDir == nil {
+		syncDir = syncDirectory
+	}
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("sync closed-session history directory: %w", err)
+	}
+	return nil
 }
