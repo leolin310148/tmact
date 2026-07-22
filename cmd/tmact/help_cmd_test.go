@@ -63,6 +63,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "--after CURSOR", "canonical target", "reset=true", "Peer targets are explicitly unsupported", "untrusted data"},
 		},
 		{
+			name: "wait",
+			args: []string{"wait", "--help"},
+			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "condition_met", "needs_human", "does not prove", "never sends keys"},
+		},
+		{
 			name: "workflow",
 			args: []string{"workflow", "--help"},
 			want: []string{"workflow", "revision-aware DAG", "workflow validate", "workflow start", "durable dispatch IDs", "--execute"},
@@ -134,6 +139,7 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	foundWorkflow := false
 	foundLLM := false
 	foundCapture := false
+	foundWait := false
 	for _, command := range manifest.Commands {
 		if command.Command == "loop status" {
 			foundLoopStatus = true
@@ -174,6 +180,12 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 				t.Fatalf("capture help is too sparse: %#v", command)
 			}
 		}
+		if command.Command == "wait" {
+			foundWait = true
+			if len(command.Flags) < 8 || len(command.Safety) < 2 || len(command.Notes) < 3 {
+				t.Fatalf("wait help is too sparse: %#v", command)
+			}
+		}
 		if command.Command == "llm instructions" {
 			foundLLM = true
 			if len(command.Safety) == 0 {
@@ -201,6 +213,9 @@ func TestCommandsJSONIsMachineReadable(t *testing.T) {
 	}
 	if !foundCapture {
 		t.Fatalf("capture missing from manifest: %#v", manifest.Commands)
+	}
+	if !foundWait {
+		t.Fatalf("wait missing from manifest: %#v", manifest.Commands)
 	}
 	if !foundLLM {
 		t.Fatalf("llm instructions missing from manifest: %#v", manifest.Commands)

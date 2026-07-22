@@ -62,6 +62,40 @@ func paneCommandHelpCatalog() []commandHelp {
 			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
 		},
 		{
+			Command: "wait",
+			Summary: "Wait read-only for a bounded pane state transition or terminal blocker.",
+			Usage: []string{
+				"tmact wait --target TARGET --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]",
+				"tmact wait --session SESSION --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]",
+				"tmact -t TARGET wait --until input-ready|working|needs-human|gone [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--target", Value: "TARGET", Description: "exact local pane target; alternatively use global -t"},
+				{Name: "--session", Value: "SESSION", Description: "exact local session; pins its active pane when waiting starts"},
+				{Name: "--until", Value: "CONDITION", Description: "required condition: input-ready, working, needs-human, or gone", Required: true},
+				{Name: "--require-transition", Description: "do not accept the requested condition until a state change has been observed"},
+				{Name: "--settle", Value: "DURATION", Description: "continuous matching time required before returning; default 1s"},
+				{Name: "--poll-interval", Value: "DURATION", Description: "delay between read-only observations; default 500ms"},
+				{Name: "--timeout", Value: "DURATION", Description: "maximum total wait; default 5m"},
+				{Name: "--json", Description: "print canonical pane, observed state, terminal reason, timings, and signals as JSON"},
+			},
+			Examples: []string{
+				"tmact wait --target work:0.0 --until working --require-transition --timeout 30s --json",
+				"tmact wait --session work --until input-ready --require-transition --settle 2s --timeout 10m --json",
+				"tmact wait --target %7 --until gone --timeout 1m",
+			},
+			Safety: []string{
+				"Read-only: wait captures and classifies pane output but never sends keys or answers prompts.",
+				"Permission, approval, trust, and other recognized blockers terminate with reason needs_human regardless of settling or transition flags.",
+			},
+			Notes: []string{
+				"Exactly one --target, --session, or global -t selector is required. Peer targets and sessions are unsupported.",
+				"Terminal reasons are condition_met, needs_human, timeout, and pane_gone. A requested needs-human or gone condition can be met while retaining its specific terminal reason.",
+				"condition_met means only that the requested pane state was observed; input-ready or idle-looking output does not prove that the pane's task succeeded.",
+				"Timeout and unexpected needs_human or pane_gone results return a non-zero exit after printing the text or JSON report.",
+			},
+		},
+		{
 			Command: "dispatch-work",
 			Summary: "Create or reuse a local or peer tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{

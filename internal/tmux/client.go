@@ -99,6 +99,23 @@ func isEmptyServerError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "no current target")
 }
 
+// IsTargetGoneError reports whether tmux says that a target can no longer be
+// resolved. Long-lived read-only commands use this to distinguish a vanished
+// pane from an operational capture failure.
+func IsTargetGoneError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return isNoServerError(err) || isEmptyServerError(err) ||
+		strings.Contains(message, "can't find pane") ||
+		strings.Contains(message, "can't find window") ||
+		strings.Contains(message, "can't find session") ||
+		strings.Contains(message, "no such pane") ||
+		strings.Contains(message, "no such window") ||
+		strings.Contains(message, "no such session")
+}
+
 func ListAllPanes() ([]Pane, error) {
 	return listPanes([]string{"list-panes", "-a", "-F", paneListFormat})
 }

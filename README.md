@@ -13,6 +13,8 @@ Use the CLI when you want scriptable tmux control:
 - `tmact capture --target session:0.0 --lines 120` prints plain text from one
   exact local pane; add `--json` for canonical pane, truncation metadata, and
   an opaque cursor for incremental captures.
+- `tmact wait --target session:0.0 --until input-ready --timeout 5m` performs a
+  bounded, read-only wait for a pane state or terminal blocker.
 - `tmact inspect --all` classifies panes by runtime and idle/running/asking
   state.
 - `tmact -t 0 send --text "status?" --enter` previews input; add `--execute`
@@ -59,6 +61,32 @@ with `reset: true`, `full_snapshot: true`, and a `reset_reason`; replace the
 consumer's snapshot before continuing with the newly returned cursor. Invalid
 or unsupported-version cursors are rejected. Cursors contain only bounded row
 fingerprints and metadata, never pane text, and are not persisted by tmact.
+
+### Bounded pane waiting
+
+Use `tmact wait` instead of shell sleeps or hand-written capture polling. It
+accepts exactly one exact local pane or session, and always requires a bounded
+timeout:
+
+```sh
+tmact wait --target work:0.0 --until working --require-transition --timeout 30s --json
+tmact wait --session work --until input-ready --require-transition --settle 2s --timeout 10m --json
+```
+
+The available conditions are `input-ready`, `working`, `needs-human`, and
+`gone`. JSON reports preserve the specific terminal reason:
+`condition_met`, `needs_human`, `timeout`, or `pane_gone`. Recognized
+permission, approval, trust, and blocked prompts return `needs_human`
+immediately; wait never sends keys or confirms them. A requested
+`needs-human` or `gone` condition is considered met while retaining that
+specific reason. Otherwise timeouts and unexpected human/gone blockers print
+their report and return non-zero.
+
+`--require-transition` prevents an already-matching initial state from ending
+the wait, and `--settle` requires the requested state to remain continuously
+matched. `condition_met` means only that the pane state was observed; an
+input-ready or idle-looking pane does not prove its task succeeded. Peer waits
+are explicitly unsupported.
 
 ### Managed loop lifecycle
 
