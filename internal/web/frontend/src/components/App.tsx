@@ -49,7 +49,7 @@ import {
   useAppStateStore,
   useAppState,
 } from "../store/AppStateContext";
-import type { AppCallbacks } from "../store/AppStateContext";
+import type { AppCallbacks, AppState } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
 import { reportHumanActivity } from "../api/client";
@@ -136,6 +136,15 @@ function findPaneIn(snap: Snapshot | null, paneID: string | null): PaneStatus | 
     if (p && p.pane_id === paneID) return p;
   }
   return null;
+}
+
+/** Start a real pane switch; interaction-only state never follows the old pane. */
+export function switchSelectedPane(
+  state: Pick<AppState, "selected" | "selectionMode">,
+  paneID: string,
+): void {
+  state.selected = paneID;
+  state.selectionMode = false;
 }
 
 // AppInner runs inside the provider so it can call useAppState() (which the
@@ -630,7 +639,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         return;
       }
       closeDownloadList();
-      state.selected = paneID;
+      switchSelectedPane(state, paneID);
       rememberSelection(paneID);
       const draft = draftRef.current;
       if (draft) {
@@ -1118,6 +1127,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         <div className="content-wrap" id="content-wrap" ref={contentWrapRef}>
           <UsagePanel />
           <ContentPane
+            paneID={state.selected}
             text={pc.text}
             cwd={pc.cwd}
             peer={pc.peer}

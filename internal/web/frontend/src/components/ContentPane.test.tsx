@@ -31,12 +31,14 @@ vi.mock("mermaid", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 type Props = Parameters<typeof ContentPane>[0];
 
 function mount(overrides: Partial<Props> = {}) {
   const props: Props = {
+    paneID: null,
     text: "",
     cwd: null,
     peer: null,
@@ -55,6 +57,16 @@ function mount(overrides: Partial<Props> = {}) {
     pre,
     rerender: (p: Partial<Props>) => r.rerender(<ContentPane {...props} {...p} />),
   };
+}
+
+function selectText(node: Node): Selection {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  const selection = window.getSelection();
+  if (!selection) throw new Error("Selection API unavailable");
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return selection;
 }
 
 describe("ContentPane", () => {
@@ -135,5 +147,112 @@ describe("ContentPane", () => {
 
     await waitFor(() => expect(pre.querySelector('[data-testid="pane-mermaid-svg"]')).not.toBeNull());
     expect(pre.querySelector(".markdown-preview-mermaid")?.getAttribute("data-mermaid-state")).toBe("rendered");
+  });
+
+  it("keeps the clicked DOM target stable from pointerdown through click dispatch", () => {
+    const onPreviewImage = vi.fn();
+    const { pre, rerender } = mount({ paneID: "%1", text: "", onPreviewImage });
+    rerender({ paneID: "%1", text: "/work/shot.png", cwd: "/work", onPreviewImage });
+    const target = pre.querySelector(".image-path") as HTMLElement;
+
+    fireEvent.pointerDown(target, { pointerType: "mouse" });
+    fireEvent.pointerUp(target, { pointerType: "mouse" });
+    rerender({ paneID: "%1", text: "newest frame", cwd: "/work", onPreviewImage });
+
+    expect(target.isConnected).toBe(true);
+    expect(pre.querySelector(".image-path")).toBe(target);
+    expect(document.querySelector('[role="status"]')).toHaveTextContent(
+      "Live updates paused while selecting",
+    );
+
+    fireEvent.click(target, { ctrlKey: true });
+
+    expect(onPreviewImage).toHaveBeenCalledWith("/work/shot.png", "/work", "");
+    expect(pre.textContent).toBe("newest frame");
+    expect(target.isConnected).toBe(false);
+    expect(document.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("releases a pointer lock when the gesture is canceled outside the pane", () => {
+    const { pre, rerender } = mount({ paneID: "%1", text: "" });
+    rerender({ paneID: "%1", text: "stable frame" });
+    fireEvent.pointerDown(pre, { pointerType: "touch" });
+    rerender({ paneID: "%1", text: "latest frame" });
+
+    fireEvent.pointerCancel(document.body, { pointerType: "touch" });
+
+    expect(pre.textContent).toBe("latest frame");
+    expect(document.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("retains a browser selection while incoming frames keep arriving", () => {
+    const { pre, rerender } = mount({ paneID: "%1", text: "" });
+    rerender({ paneID: "%1", text: "copy this text" });
+    const textNode = pre.firstChild as Node;
+    const selection = selectText(textNode);
+
+    rerender({ paneID: "%1", text: "incoming replacement" });
+
+    expect(pre.firstChild).toBe(textNode);
+    expect(selection.toString()).toBe("copy this text");
+    expect(pre.textContent).toBe("copy this text");
+    expect(document.querySelector('[role="status"]')).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("flushes only the newest pending frame when the pane selection collapses", () => {
+    const { pre, rerender } = mount({ paneID: "%1", text: "" });
+    rerender({ paneID: "%1", text: "selected text" });
+    const selection = selectText(pre.firstChild as Node);
+
+    rerender({ paneID: "%1", text: "intermediate frame" });
+    rerender({ paneID: "%1", text: "latest frame" });
+    expect(pre.textContent).toBe("selected text");
+
+    selection.removeAllRanges();
+    fireEvent(document, new Event("selectionchange"));
+
+    expect(pre.textContent).toBe("latest frame");
+    expect(document.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("locks live DOM commits for selection mode and flushes on exit", () => {
+    const { pre, rerender } = mount({ paneID: "%1", text: "" });
+    rerender({ paneID: "%1", text: "stable frame" });
+
+    rerender({ paneID: "%1", text: "stable frame", selectionMode: true });
+    rerender({ paneID: "%1", text: "pending frame", selectionMode: true });
+
+    expect(pre.textContent).toBe("stable frame");
+    expect(document.querySelector('[role="status"]')).toBeInTheDocument();
+
+    rerender({ paneID: "%1", text: "pending frame", selectionMode: false });
+
+    expect(pre.textContent).toBe("pending frame");
+    expect(document.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("drops the old pending frame and selection when App switches panes", () => {
+    vi.useFakeTimers();
+    const onPreviewImage = vi.fn();
+    const { pre, rerender } = mount({ paneID: "%1", text: "", onPreviewImage });
+    rerender({ paneID: "%1", text: "/work/old.png", cwd: "/work", onPreviewImage });
+    const oldTarget = pre.querySelector(".image-path") as HTMLElement;
+    const oldNode = oldTarget.firstChild as Node;
+    const selection = selectText(oldNode);
+    fireEvent.pointerDown(oldTarget, { pointerType: "touch" });
+    rerender({ paneID: "%1", text: "old pane pending", cwd: "/work", onPreviewImage });
+
+    rerender({ paneID: "%2", text: "new pane now", cwd: "/other", onPreviewImage });
+    vi.advanceTimersByTime(550);
+
+    expect(pre.textContent).toBe("new pane now");
+    expect(oldNode.isConnected).toBe(false);
+    expect(selection.rangeCount).toBe(0);
+    expect(onPreviewImage).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="status"]')).toBeNull();
+
+    // Releasing the stale interaction cannot flush the prior pane's frame.
+    fireEvent.pointerCancel(pre, { pointerType: "mouse" });
+    expect(pre.textContent).toBe("new pane now");
   });
 });

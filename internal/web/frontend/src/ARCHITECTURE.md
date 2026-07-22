@@ -328,6 +328,11 @@ then `markImagePaths(pre, cwd, peer)` then auto-scroll. In React:
   `dangerouslySetInnerHTML`), call `markImagePaths(pre, cwd, peer)`, then if
   `atBottom` set `pre.scrollTop = pre.scrollHeight`. React must NEVER receive
   the rendered HTML as JSX children — it is opaque imperative content.
+- `ContentPane` must defer that imperative write while a pointer interaction,
+  selection mode, or a non-collapsed Selection inside `pre#content` is active.
+  It retains only the newest frame and commits it once after unlock. A pane-id
+  change is the exception: clear the old interaction/Selection, discard its
+  pending frame, and immediately paint the newly selected pane.
 - App owns `paneLines` (ref array) and `paneCache` (ref `Record<string,string[]>`):
   - `openWS`: `paneLines.current = cache[id]?.slice() ?? []`; if non-empty,
     `setContent(join, {cwd, peer})` immediately; then `paneStream.open(id)`.

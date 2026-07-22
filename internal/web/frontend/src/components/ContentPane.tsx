@@ -16,7 +16,7 @@
 // props (see §7) — "setContent(...)" in the port = App updates these props,
 // then this layout effect rewrites innerHTML.
 
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -39,7 +39,28 @@ interface PreviewPress {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+interface PaneFrame {
+  paneID: string | null;
+  text: string;
+  cwd: string | null;
+  peer: string | null;
+  markdown: boolean;
+}
+
+function sameFrame(a: PaneFrame | null, b: PaneFrame): boolean {
+  return (
+    !!a &&
+    a.paneID === b.paneID &&
+    a.text === b.text &&
+    a.cwd === b.cwd &&
+    a.peer === b.peer &&
+    a.markdown === b.markdown
+  );
+}
+
 export interface ContentPaneProps {
+  /** Exact selected pane id; changes force an immediate, clean pane render. */
+  paneID: string | null;
   /** Latest pane output text (App joins paneLines with "\n"). */
   text: string;
   /** Selected pane cwd (for preview path resolution); undefined/empty if none. */
@@ -72,6 +93,7 @@ export interface ContentPaneProps {
 }
 
 export default function ContentPane({
+  paneID,
   text,
   cwd,
   peer,
@@ -85,6 +107,15 @@ export default function ContentPane({
 }: ContentPaneProps) {
   const preRef = useRef<HTMLPreElement | null>(null);
   const previewPressRef = useRef<PreviewPress | null>(null);
+  const pointerInteractionRef = useRef(false);
+  const pointerUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionModeRef = useRef(selectionMode);
+  selectionModeRef.current = selectionMode;
+  const activePaneRef = useRef<string | null>(paneID);
+  const lastInputFrameRef = useRef<PaneFrame | null>(null);
+  const committedFrameRef = useRef<PaneFrame | null>(null);
+  const pendingFrameRef = useRef<PaneFrame | null>(null);
+  const [frameDeferred, setFrameDeferred] = useState(false);
   // The first layout-effect run is the mount, BEFORE App has called setContent
   // even once. index.html shipped pre#content with a static placeholder
   // (`<span class="empty">No pane selected.</span>`) that app.js left in place
@@ -95,33 +126,178 @@ export default function ContentPane({
   // overwrites exactly as the original did — including empty patches.
   const settledRef = useRef(false);
 
+  const paneHasSelection = useCallback((): boolean => {
+    const pre = preRef.current;
+    const selection = window.getSelection();
+    if (!pre || !selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+    return pre.contains(selection.anchorNode) || pre.contains(selection.focusNode);
+  }, []);
+
+  const clearPaneSelection = useCallback((): void => {
+    if (!paneHasSelection()) return;
+    window.getSelection()?.removeAllRanges();
+  }, [paneHasSelection]);
+
+  const commitFrame = useCallback((frame: PaneFrame): void => {
+    const pre = preRef.current;
+    if (!pre) return;
+    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
+    const html = render(frame.text, {
+      cwd: frame.cwd || undefined,
+      peer: frame.peer || undefined,
+      markdown: frame.markdown,
+    });
+    pre.innerHTML = frame.markdown ? preserveRenderedMermaidBlocks(pre, html) : html;
+    markPreviewablePaths(pre, frame.cwd, frame.peer);
+    if (frame.markdown) void renderMermaidDiagrams(pre);
+    if (atBottom) pre.scrollTop = pre.scrollHeight;
+    committedFrameRef.current = frame;
+  }, []);
+
+  const renderLocked = useCallback((): boolean => {
+    return pointerInteractionRef.current || selectionModeRef.current || paneHasSelection();
+  }, [paneHasSelection]);
+
+  const flushPendingFrame = useCallback((): void => {
+    if (renderLocked()) return;
+    const pending = pendingFrameRef.current;
+    if (!pending) return;
+    pendingFrameRef.current = null;
+    commitFrame(pending);
+    setFrameDeferred(false);
+  }, [commitFrame, renderLocked]);
+
+  const clearPointerUnlockTimer = useCallback((): void => {
+    if (pointerUnlockTimerRef.current == null) return;
+    clearTimeout(pointerUnlockTimerRef.current);
+    pointerUnlockTimerRef.current = null;
+  }, []);
+
+  const clearPreviewPress = useCallback((): void => {
+    const press = previewPressRef.current;
+    if (press?.timer) clearTimeout(press.timer);
+    previewPressRef.current = null;
+  }, []);
+
+  const unlockPointerInteraction = useCallback((): void => {
+    clearPointerUnlockTimer();
+    pointerInteractionRef.current = false;
+    flushPendingFrame();
+  }, [clearPointerUnlockTimer, flushPendingFrame]);
+
+  const schedulePointerUnlock = useCallback((): void => {
+    if (!pointerInteractionRef.current) return;
+    clearPointerUnlockTimer();
+    pointerUnlockTimerRef.current = setTimeout(() => {
+      pointerUnlockTimerRef.current = null;
+      pointerInteractionRef.current = false;
+      flushPendingFrame();
+    }, 0);
+  }, [clearPointerUnlockTimer, flushPendingFrame]);
+
   // setContent — read atBottom BEFORE writing, assign innerHTML imperatively,
-  // run markPreviewablePaths, restore scroll. Keyed on text/cwd/peer so it re-runs
-  // exactly when app.js called setContent (a new paneLines join / pane switch).
+  // run markPreviewablePaths, restore scroll. Live frames keep arriving while
+  // selection/pointer interaction is locked; only the newest one is retained.
   useLayoutEffect(() => {
     const pre = preRef.current;
     if (!pre) return;
+    const frame: PaneFrame = {
+      paneID,
+      text,
+      cwd: cwd || null,
+      peer: peer || null,
+      markdown,
+    };
     if (!settledRef.current) {
       // Mount: no setContent yet — paint the index.html placeholder imperatively.
       settledRef.current = true;
+      activePaneRef.current = paneID;
+      lastInputFrameRef.current = frame;
       pre.innerHTML = '<span class="empty">No pane selected.</span>';
       return;
     }
-    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-    const html = render(text, { cwd: cwd || undefined, peer: peer || undefined, markdown });
-    pre.innerHTML = markdown ? preserveRenderedMermaidBlocks(pre, html) : html;
-    markPreviewablePaths(pre, cwd, peer);
-    if (markdown) void renderMermaidDiagrams(pre);
-    if (atBottom) pre.scrollTop = pre.scrollHeight;
-  }, [text, cwd, peer, markdown]);
+
+    if (paneID !== activePaneRef.current) {
+      // A pending frame belongs to the old pane. Clear every old interaction
+      // before painting the selected pane immediately, even if a pointer or
+      // selection-mode lock was active.
+      clearPointerUnlockTimer();
+      clearPreviewPress();
+      pointerInteractionRef.current = false;
+      clearPaneSelection();
+      pendingFrameRef.current = null;
+      activePaneRef.current = paneID;
+      lastInputFrameRef.current = frame;
+      commitFrame(frame);
+      setFrameDeferred(false);
+      return;
+    }
+
+    const frameChanged = !sameFrame(lastInputFrameRef.current, frame);
+    lastInputFrameRef.current = frame;
+    if (frameChanged) {
+      if (sameFrame(committedFrameRef.current, frame)) {
+        pendingFrameRef.current = null;
+        setFrameDeferred(false);
+        return;
+      }
+      if (renderLocked()) {
+        pendingFrameRef.current = frame;
+        setFrameDeferred(true);
+        return;
+      }
+      pendingFrameRef.current = null;
+      commitFrame(frame);
+      setFrameDeferred(false);
+      return;
+    }
+
+    // A lock prop may have changed without a new frame (selection mode off).
+    flushPendingFrame();
+  }, [
+    paneID,
+    text,
+    cwd,
+    peer,
+    markdown,
+    selectionMode,
+    clearPaneSelection,
+    clearPointerUnlockTimer,
+    clearPreviewPress,
+    commitFrame,
+    flushPendingFrame,
+    renderLocked,
+  ]);
+
+  useEffect(() => {
+    const handleSelectionChange = (): void => flushPendingFrame();
+    const handleDocumentPointerUp = (): void => schedulePointerUnlock();
+    const handleDocumentPointerCancel = (): void => {
+      if (!pointerInteractionRef.current) return;
+      clearPreviewPress();
+      unlockPointerInteraction();
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    // Pointer release can land outside the pane after a drag. Capture it at the
+    // document boundary so no interaction lock can remain orphaned.
+    document.addEventListener("pointerup", handleDocumentPointerUp, true);
+    document.addEventListener("pointercancel", handleDocumentPointerCancel, true);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("pointerup", handleDocumentPointerUp, true);
+      document.removeEventListener("pointercancel", handleDocumentPointerCancel, true);
+      clearPointerUnlockTimer();
+      clearPreviewPress();
+    };
+  }, [
+    clearPointerUnlockTimer,
+    clearPreviewPress,
+    flushPendingFrame,
+    schedulePointerUnlock,
+    unlockPointerInteraction,
+  ]);
 
   // ---- long-press / preview helpers (app.js image behavior, generalized) ----
-
-  const clearPreviewPress = (): void => {
-    const ip = previewPressRef.current;
-    if (ip && ip.timer) clearTimeout(ip.timer);
-    previewPressRef.current = null;
-  };
 
   const previewTarget = (e: { target: EventTarget | null }): HTMLElement | null => {
     const t = e.target as (Element & { closest?: (s: string) => Element | null }) | null;
@@ -156,21 +332,29 @@ export default function ContentPane({
   };
 
   const handleClick = (e: ReactMouseEvent): void => {
-    const ip = previewPressRef.current;
-    if (ip && ip.opened) {
+    try {
+      const ip = previewPressRef.current;
+      if (ip && ip.opened) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearPreviewPress();
+        return;
+      }
+      const target = previewTarget(e);
+      if (!target || !(e.metaKey || e.ctrlKey)) return;
       e.preventDefault();
       e.stopPropagation();
-      clearPreviewPress();
-      return;
+      openPreviewTarget(target);
+    } finally {
+      // Browser click dispatch follows pointerup. Keep the old target alive
+      // through this handler, then release the repaint lock exactly once.
+      unlockPointerInteraction();
     }
-    const target = previewTarget(e);
-    if (!target || !(e.metaKey || e.ctrlKey)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    openPreviewTarget(target);
   };
 
   const handlePointerDown = (e: ReactPointerEvent): void => {
+    clearPointerUnlockTimer();
+    pointerInteractionRef.current = true;
     const target = previewTarget(e);
     if (!target || e.pointerType === "mouse") return;
     clearPreviewPress();
@@ -200,12 +384,15 @@ export default function ContentPane({
 
   const handlePointerUp = (): void => {
     const ip = previewPressRef.current;
-    if (!ip || ip.opened) return;
-    clearPreviewPress();
+    if (ip && !ip.opened) clearPreviewPress();
+    // `click` normally releases the lock after its target has dispatched. The
+    // zero-delay fallback covers drag/no-click gestures without racing click.
+    schedulePointerUnlock();
   };
 
   const handlePointerCancel = (): void => {
     clearPreviewPress();
+    unlockPointerInteraction();
   };
 
   const handleScroll = (_e: ReactUIEvent<HTMLPreElement>): void => {
@@ -216,16 +403,23 @@ export default function ContentPane({
   // React must never receive it as children. The element starts empty here and
   // is populated synchronously before paint.
   return (
-    <pre
-      id="content"
-      ref={preRef}
-      onMouseUp={handleMouseUp}
-      onClick={handleClick}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onScroll={handleScroll}
-    />
+    <>
+      <pre
+        id="content"
+        ref={preRef}
+        onMouseUp={handleMouseUp}
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onScroll={handleScroll}
+      />
+      {frameDeferred ? (
+        <div className="pane-update-paused" role="status" aria-live="polite">
+          Live updates paused while selecting
+        </div>
+      ) : null}
+    </>
   );
 }
