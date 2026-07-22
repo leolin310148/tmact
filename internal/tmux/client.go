@@ -181,7 +181,7 @@ func KillSession(session string) error {
 	if strings.TrimSpace(session) == "" {
 		return fmt.Errorf("session cannot be empty")
 	}
-	return runTmux("kill-session", "-t", session)
+	return runTmux("kill-session", "-t", exactSessionTarget(session))
 }
 
 func NewWindow(session string, window string, cwd string, command []string) error {

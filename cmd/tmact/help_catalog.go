@@ -3,6 +3,7 @@ package main
 func commandHelpCatalog() []commandHelp {
 	return concatCommandHelpCatalogs(
 		paneCommandHelpCatalog(),
+		sessionCommandHelpCatalog(),
 		agentCommandHelpCatalog(),
 		loopCommandHelpCatalog(),
 		workflowV2CommandHelpCatalog(),

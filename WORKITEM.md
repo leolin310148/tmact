@@ -91,7 +91,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   is unavailable. Test immediate-idle, working-to-idle, permission, timeout, and
   disappeared-pane cases.
 
-- [ ] **WI-006 — Add recoverable CLI session close/history/reopen.**
+- [x] **WI-006 — Add recoverable CLI session close/history/reopen.**
   Introduce `tmact session close`, `tmact session closed`, and
   `tmact session reopen`, reusing statusd/web closed-session persistence.
   Closing is dry-run by default and requires `--execute`; targets must be exact
