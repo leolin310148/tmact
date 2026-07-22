@@ -119,6 +119,7 @@ func normalizeClaude(env envelope, record *Record) bool {
 	if msg.Model != "" {
 		record.Model = msg.Model
 	}
+	record.Content = joinContent(contentFromRaw(msg.Content), contentFromRaw(env.ToolUse))
 	if msg.Usage != nil {
 		record.Usage = &Usage{
 			InputTokens:              msg.Usage.InputTokens,
@@ -238,6 +239,7 @@ func normalizeCodex(env envelope, record *Record, state *parseState) bool {
 		duration := time.Duration(*payload.WallTime * float64(time.Second))
 		record.Duration = &duration
 	}
+	record.Content = contentFromRaw(env.Payload)
 
 	switch env.Type {
 	case "session_meta":
@@ -321,6 +323,63 @@ func normalizeCodex(env envelope, record *Record, state *parseState) bool {
 		}
 	default:
 		return false
+	}
+}
+
+func joinContent(values ...string) string {
+	var nonempty []string
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			nonempty = append(nonempty, value)
+		}
+	}
+	return strings.Join(nonempty, "\n")
+}
+
+// contentFromRaw extracts user-visible string values from current provider
+// content shapes. It intentionally ignores object keys and scalar numbers so
+// normalized metadata is not duplicated into content output.
+func contentFromRaw(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+	var stringsOut []string
+	collectContentStrings(value, &stringsOut, 0)
+	return joinContent(stringsOut...)
+}
+
+func collectContentStrings(value any, out *[]string, depth int) {
+	if depth > 16 {
+		return
+	}
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
+			(strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+			var nested any
+			if json.Unmarshal([]byte(trimmed), &nested) == nil {
+				collectContentStrings(nested, out, depth+1)
+				return
+			}
+		}
+		if trimmed != "" {
+			*out = append(*out, typed)
+		}
+	case []any:
+		for _, item := range typed {
+			collectContentStrings(item, out, depth+1)
+		}
+	case map[string]any:
+		for _, key := range []string{"text", "content", "message", "output", "input", "arguments", "summary", "cmd", "command", "prompt", "query", "patch", "result"} {
+			if nested, ok := typed[key]; ok {
+				collectContentStrings(nested, out, depth+1)
+			}
+		}
 	}
 }
 

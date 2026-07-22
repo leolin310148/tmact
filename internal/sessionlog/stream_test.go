@@ -21,6 +21,9 @@ func TestStreamClaudeNormalizesToolCallAndResult(t *testing.T) {
 	if call.Kind != KindToolCall || call.Role != "assistant" || call.Tool != "Bash" || call.Command != "git status --short" {
 		t.Fatalf("call metadata = %#v", call)
 	}
+	if call.Content != "synthetic response\ngit status --short" {
+		t.Fatalf("call content = %q", call.Content)
+	}
 	if call.TimestampText != "2026-07-20T09:10:11.123Z" || call.Timestamp.IsZero() || call.Model != "claude-sonnet-4-5" {
 		t.Fatalf("call time/model = %#v", call)
 	}
@@ -34,6 +37,9 @@ func TestStreamClaudeNormalizesToolCallAndResult(t *testing.T) {
 	}
 	if result.Duration == nil || *result.Duration != 250*time.Millisecond {
 		t.Fatalf("result duration = %v", result.Duration)
+	}
+	if result.Content != "synthetic output" {
+		t.Fatalf("result content = %q", result.Content)
 	}
 	if records[2].Kind != KindUnknown {
 		t.Fatalf("unknown kind = %q", records[2].Kind)
@@ -60,6 +66,9 @@ func TestStreamCodexNormalizesCurrentToolShapesAndContext(t *testing.T) {
 	}
 	if result.Duration == nil || *result.Duration != 1250*time.Millisecond {
 		t.Fatalf("function result duration = %v", result.Duration)
+	}
+	if result.Content != "synthetic output" {
+		t.Fatalf("function result content = %q", result.Content)
 	}
 	customCall := records[4]
 	if customCall.Kind != KindToolCall || customCall.Tool != "shell" || customCall.Command != "git status --short" {
