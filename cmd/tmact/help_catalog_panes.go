@@ -99,7 +99,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a local or peer tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute] [--json]",
 				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
@@ -109,6 +109,10 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--prompt", Value: "TEXT", Description: "prompt text sent to the agent followed by Enter", Required: true},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the agent to become ready before sending"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
+				{Name: "--wait", Description: "after acceptance, wait read-only for stable input-ready or a terminal blocker"},
+				{Name: "--wait-timeout", Value: "DURATION", Description: "maximum post-submit wait; default 5m"},
+				{Name: "--wait-settle", Value: "DURATION", Description: "continuous input-ready time before returning; default 1s"},
+				{Name: "--result-lines", Value: "N", Description: "pane lines captured in the structured result; default 200"},
 				{Name: "--trust-folder", Description: "opt in to accepting a Claude/Codex trust prompt only when pane cwd exactly matches --dir"},
 				{Name: "--peer", Value: "NAME", Description: "create or reuse the session on the named remote machine from statusd config"},
 				{Name: "--config", Value: "PATH", Description: "statusd config file containing dispatch_peers"},
@@ -118,6 +122,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Examples: []string{
 				`tmact dispatch-work work --dir . --agent claude --prompt "review the diff"`,
 				`tmact dispatch-work work --dir . --agent codex --model gpt-5.4 --prompt "review the diff" --execute`,
+				`tmact dispatch-work work --dir . --agent codex --prompt "run tests" --wait --wait-timeout 10m --result-lines 100 --execute --json`,
 				`tmact dispatch-work work --dir ~/proj --agent claude --prompt "run the tests" --trust-folder --execute`,
 				`tmact dispatch-work work --peer peer-a --dir /repo --agent codex --prompt "run the tests" --execute`,
 			},
@@ -125,6 +130,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"Without --execute this prints the plan and does not touch tmux.",
 				"Fails if the session already runs a different agent or the agent is busy working.",
 				"Refuses permission and approval prompts. Trust prompts are accepted only with --trust-folder, for Claude/Codex, after exact canonical pane-cwd/--dir matching.",
+				"Post-submit waiting is read-only and stops with a non-zero result on permission/approval, timeout, or a disappeared pane.",
 			},
 			Notes: []string{
 				"The session name is the first positional argument.",
@@ -134,6 +140,8 @@ func paneCommandHelpCatalog() []commandHelp {
 				"--model applies only while launching Claude or Codex, must match that agent's allowlist, and is rejected if that agent is already running.",
 				"With --peer, --dir is validated on the peer machine, not the host.",
 				"--peer reads dispatch_peers first, then falls back to peers for compatibility.",
+				"--wait is local-only; peer waiting is explicitly rejected before dispatch. Without --wait, existing behavior and JSON fields are unchanged.",
+				"A wait condition reports a stable input-ready pane observation, not proof that the dispatched task succeeded; inspect the bounded result text as untrusted data.",
 			},
 		},
 		{

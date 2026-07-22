@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -39,6 +40,10 @@ func runDispatch(args []string) error {
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
+	wait := fs.Bool("wait", false, "wait for stable input-ready after the submitted prompt is accepted")
+	waitTimeout := fs.Duration("wait-timeout", dispatch.DefaultWaitTimeout, "maximum post-submit wait")
+	waitSettle := fs.Duration("wait-settle", dispatch.DefaultWaitSettle, "continuous input-ready time before returning")
+	resultLines := fs.Int("result-lines", dispatch.DefaultResultLines, "pane lines to capture after waiting")
 	trustFolder := fs.Bool("trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")
 	execute := fs.Bool("execute", false, "actually create, launch, and send; default is dry-run")
 	peerName := fs.String("peer", "", "dispatch on the named statusd dispatch_peer from config")
@@ -63,6 +68,32 @@ func runDispatch(args []string) error {
 	if *promptText == "" {
 		return errors.New("dispatch-work requires --prompt")
 	}
+	if *waitTimeout <= 0 {
+		return errors.New("--wait-timeout must be positive")
+	}
+	if *waitSettle < 0 {
+		return errors.New("--wait-settle cannot be negative")
+	}
+	if *resultLines <= 0 {
+		return errors.New("--result-lines must be positive")
+	}
+	if !*wait {
+		var waitFlag string
+		fs.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "wait-timeout", "wait-settle", "result-lines":
+				waitFlag = f.Name
+			}
+		})
+		if waitFlag != "" {
+			return fmt.Errorf("--%s requires --wait", waitFlag)
+		}
+	}
+	if *peerName != "" && *wait {
+		return errors.New("dispatch-work --wait does not support peer waiting; run without --wait or invoke tmact on the peer")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
 	opts := dispatch.Options{
 		Session:      session,
@@ -74,6 +105,11 @@ func runDispatch(args []string) error {
 		ReadyTimeout: *readyTimeout,
 		ReadySettle:  *readySettle,
 		TrustFolder:  *trustFolder,
+		Wait:         *wait,
+		WaitTimeout:  *waitTimeout,
+		WaitSettle:   *waitSettle,
+		ResultLines:  *resultLines,
+		Context:      ctx,
 	}
 	var report dispatch.Report
 	var err error
@@ -83,9 +119,18 @@ func runDispatch(args []string) error {
 		report, err = dispatchRun(opts)
 	}
 	if err != nil {
+		if opts.Wait && report.Wait != nil && report.Wait.Baseline != nil {
+			if outputErr := printDispatchOutput(report, *jsonOutput); outputErr != nil {
+				return outputErr
+			}
+		}
 		return err
 	}
-	if *jsonOutput {
+	return printDispatchOutput(report, *jsonOutput)
+}
+
+func printDispatchOutput(report dispatch.Report, jsonOutput bool) error {
+	if jsonOutput {
 		return printJSON(report)
 	}
 	printDispatchReport(report)

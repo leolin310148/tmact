@@ -55,7 +55,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "peer dispatch",
 			args: []string{"dispatch-work", "--help"},
-			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH"},
+			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "--wait-settle DURATION", "--result-lines N", "local-only", "not proof"},
 		},
 		{
 			name: "capture",

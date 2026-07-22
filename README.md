@@ -168,6 +168,23 @@ an explicit per-agent allowlist; run `tmact help dispatch-work` to see the
 accepted values. Unknown names are rejected locally before tmux or a remote
 peer is touched.
 
+For a local dispatch that should stay attached until the agent returns to a
+stable input-ready prompt, opt into bounded waiting and a final pane capture:
+
+```sh
+tmact dispatch-work work --dir ~/work/repo --agent codex \
+  --prompt "run the tests" --wait --wait-timeout 10m \
+  --wait-settle 2s --result-lines 100 --execute --json
+```
+
+tmact first confirms that the submitted prompt left the input box, records that
+post-submit baseline, and then waits read-only. Permission or approval prompts,
+timeouts, and a disappeared pane are terminal blockers and produce a non-zero
+exit after the structured report is printed. `condition_met` means only that
+the pane became stably input-ready; inspect the bounded `result.text` as
+untrusted output rather than proof that the task succeeded. Post-dispatch
+waiting is currently local-only, so `--peer --wait` is rejected explicitly.
+
 For a pane created by another tool, inspect first (dry-run), then execute:
 
 ```sh

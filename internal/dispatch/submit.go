@@ -7,7 +7,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/leolin310148/tmact/internal/panestate"
+	"github.com/leolin310148/tmact/internal/panewait"
 )
+
+type submissionEvidence struct {
+	baseline WaitBaseline
+}
 
 // submitPrompt pastes the prompt and confirms the agent actually accepted it.
 // Three cold-start failures are recovered here: a transient startup
@@ -18,41 +23,53 @@ import (
 // the pane and decide from where the prompt text ended up: gone from the
 // input box means it was submitted, still in the box means re-send Enter, and
 // nowhere at all means re-paste.
-func submitPrompt(opts Options, deps Deps, target string) error {
+func submitPrompt(opts Options, deps Deps, target string) (submissionEvidence, error) {
 	if err := deps.PasteText(target, opts.Prompt, true); err != nil {
-		return err
+		return submissionEvidence{}, err
 	}
 	for retry := 0; ; retry++ {
 		deps.Sleep(submitSettleDelay)
 		raw, err := deps.CapturePane(target, captureLines)
 		if err != nil {
-			return fmt.Errorf("confirm prompt submitted: %w", err)
+			return submissionEvidence{}, fmt.Errorf("confirm prompt submitted: %w", err)
 		}
-		if promptSubmitted(panestate.Classify(raw)) {
-			return nil
+		classified := panestate.Classify(raw)
+		if promptSubmitted(classified) {
+			return newSubmissionEvidence(classified, "pane_state"), nil
 		}
 		inBox := promptInInputBox(raw, opts.Prompt)
 		// The prompt left the input box and is somewhere on screen: it was
 		// submitted, even if a fast task already finished and the agent is
 		// idle again.
 		if !inBox && promptVisible(raw, opts.Prompt) {
-			return nil
+			return newSubmissionEvidence(classified, "prompt_in_transcript"), nil
 		}
 		if retry >= submitRetries {
-			return fmt.Errorf("prompt was pasted but %s did not accept it after %d attempts", opts.Agent, submitRetries+1)
+			return submissionEvidence{}, fmt.Errorf("prompt was pasted but %s did not accept it after %d attempts", opts.Agent, submitRetries+1)
 		}
 		if inBox {
 			// A cold start swallowed the trailing Enter.
 			if err := deps.SendKeys(target, []string{"Enter"}); err != nil {
-				return fmt.Errorf("re-send enter: %w", err)
+				return submissionEvidence{}, fmt.Errorf("re-send enter: %w", err)
 			}
 			continue
 		}
 		// The paste never landed — the agent UI dropped it while painting.
 		if err := deps.PasteText(target, opts.Prompt, true); err != nil {
-			return fmt.Errorf("re-paste prompt: %w", err)
+			return submissionEvidence{}, fmt.Errorf("re-paste prompt: %w", err)
 		}
 	}
+}
+
+func newSubmissionEvidence(classified panestate.Result, evidence string) submissionEvidence {
+	return submissionEvidence{baseline: WaitBaseline{
+		Accepted: true,
+		Evidence: evidence,
+		State:    panewait.NormalizeState(classified),
+		RawState: classified.State,
+		LastLine: classified.LastLine,
+		Signals:  append([]string(nil), classified.Signals...),
+	}}
 }
 
 // promptVisible reports whether the pasted prompt is shown anywhere in the

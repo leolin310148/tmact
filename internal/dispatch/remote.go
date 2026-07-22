@@ -83,6 +83,9 @@ func (r RemoteRequest) Options() (Options, error) {
 // PostRemote sends dispatch-work to a peer statusd and returns the peer's
 // report. The returned report is annotated with peer metadata for host output.
 func PostRemote(ctx context.Context, client *http.Client, peerName, peerURL string, opts Options) (Report, error) {
+	if opts.Wait {
+		return Report{}, fmt.Errorf("dispatch-work --wait does not support peer waiting")
+	}
 	model, err := ValidateModel(opts.Agent, opts.Model)
 	if err != nil {
 		return Report{}, err

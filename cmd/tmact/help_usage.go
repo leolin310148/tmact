@@ -53,7 +53,8 @@ Usage:
   tmact workflow report --dispatch-id ID --outcome OUTCOME [--body TEXT]
   tmact workflow stop (--id ID | --config workflow.yaml) --wait
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION [--peer NAME] --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--execute]
+  tmact dispatch-work SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
+  tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--execute]
   tmact trust-folder --target work:0.0 --dir /repo --agent claude [--execute]
   tmact help [command] [--json]
   tmact commands [--json]

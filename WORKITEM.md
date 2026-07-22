@@ -82,7 +82,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   previewable path can be clicked without the target disappearing; record the
   manual case in `docs/smoke-test.md` when appropriate.
 
-- [ ] **WI-005 — Integrate bounded waiting into `dispatch-work`.**
+- [x] **WI-005 — Integrate bounded waiting into `dispatch-work`.**
   Add opt-in `--wait`, `--wait-timeout`, `--wait-settle`, and `--result-lines`
   flags. Record the post-submit baseline, require evidence that the submission
   was accepted, then wait for stable input-ready or a terminal blocker. Preserve
