@@ -148,7 +148,7 @@ capture, structured completion, or a complete CLI session lifecycle.
   `text/plain` POSTs, valid same-origin JSON, unknown history, cwd tampering,
   and the peer path. Run focused web tests and `go test ./...`.
 
-- [ ] **WI-013 — Make command summaries fail closed around environment values.**
+- [x] **WI-013 — Make command summaries fail closed around environment values.**
   Replace the `strings.Fields` command-summary parsing that can turn part of a
   quoted environment value into the reported executable. Parse only enough
   shell-word structure to safely skip complete leading assignments and common

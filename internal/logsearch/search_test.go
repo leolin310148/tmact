@@ -31,7 +31,7 @@ func TestSearchBothProvidersIsPrivateByDefaultAndReportsCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, private := range []string{"private Claude", "private Codex", "topsecret", "full-argument"} {
+	for _, private := range []string{"private Claude", "private Codex", "topsecret", "alpha-secret", "topsecret alpha-secret", "full-argument"} {
 		if strings.Contains(string(encoded), private) {
 			t.Fatalf("default JSON leaked %q: %s", private, encoded)
 		}

@@ -1,11 +1,14 @@
 package logstats
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leolin310148/tmact/internal/sessionlog"
 )
 
 func TestStatsAggregatesSafeFieldsAndReusesChangedSourcesIncrementally(t *testing.T) {
@@ -29,7 +32,7 @@ func TestStatsAggregatesSafeFieldsAndReusesChangedSourcesIncrementally(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, private := range []string{"topsecret", "private-argument", "private prompt", "tool output"} {
+	for _, private := range []string{"topsecret", "partial-secret", "topsecret partial-secret", "codexsecret", "codex-partial", "codexsecret codex-partial", "private-argument", "private prompt", "tool output"} {
 		if strings.Contains(string(cacheData), private) {
 			t.Fatalf("cache leaked %q: %s", private, cacheData)
 		}
@@ -101,7 +104,11 @@ func TestDoctorRebuildsCorruptAndStaleCachesAndReportsCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stale := strings.Replace(string(data), `"parser_version": 1`, `"parser_version": 999`, 1)
+	if sessionlog.ParserVersion <= 1 {
+		t.Fatalf("parser version = %d, want a bump past the vulnerable version", sessionlog.ParserVersion)
+	}
+	currentVersion := fmt.Sprintf(`"parser_version": %d`, sessionlog.ParserVersion)
+	stale := strings.ReplaceAll(string(data), currentVersion, `"parser_version": 1`)
 	if stale == string(data) {
 		t.Fatal("cache did not contain parser version")
 	}
@@ -161,13 +168,13 @@ func installFixtures(t *testing.T) (root, cachePath, claudePath, codexPath strin
 	codexPath = filepath.Join(codexRoot, "sessions", "2026", "07", "session.jsonl")
 	cachePath = filepath.Join(root, ".tmact", DefaultCacheName)
 	writeFixture(t, claudePath, strings.Join([]string{
-		`{"type":"assistant","timestamp":"2026-07-21T09:00:00Z","sessionId":"claude-redacted","message":{"role":"assistant","content":[{"type":"text","text":"private prompt"},{"type":"tool_use","name":"Bash","input":{"command":"TOKEN=topsecret git status --short private-argument"}}]}}`,
+		`{"type":"assistant","timestamp":"2026-07-21T09:00:00Z","sessionId":"claude-redacted","message":{"role":"assistant","content":[{"type":"text","text":"private prompt"},{"type":"tool_use","name":"Bash","input":{"command":"TOKEN='topsecret partial-secret' git status --short private-argument"}}]}}`,
 		`{malformed}`,
 		`{"type":"future-event","timestamp":"2026-07-21T11:00:00Z","sessionId":"claude-redacted"}`,
 	}, "\n")+"\n")
 	writeFixture(t, codexPath, strings.Join([]string{
 		`{"type":"session_meta","timestamp":"2026-07-21T10:00:00Z","payload":{"id":"codex-redacted","cwd":"/workspace/redacted"}}`,
-		`{"type":"response_item","timestamp":"2026-07-21T11:30:00Z","payload":{"type":"local_shell_call","action":{"command":["go","test","./...","tool output"]}}}`,
+		`{"type":"response_item","timestamp":"2026-07-21T11:30:00Z","payload":{"type":"local_shell_call","action":{"command":["env","TOKEN=codexsecret codex-partial","go","test","./...","tool output"]}}}`,
 	}, "\n")+"\n")
 	t.Setenv("CLAUDE_CONFIG_DIRS", claudeRoot)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
