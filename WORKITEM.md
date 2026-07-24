@@ -1,6 +1,6 @@
 # Train Layout — Infinite Journey Background Work Items
 
-This queue turns the train-theme background plan into ten dependency-ordered,
+This queue turns the train-theme background plan into fifteen dependency-ordered,
 independently verifiable work items. The finished scene must make the fixed
 train feel as if it is travelling forever through coherent regions, support
 day/sunset/night presentation, remain deterministic enough to test, and allow a
@@ -156,3 +156,59 @@ future station stop without growing the DOM or memory usage over time.
   seams, stable train controls, acceptable CPU behavior, and readable day,
   sunset, and night scenes. Document the route seed/debug controls and final
   manual verification cases.
+
+- [ ] **TRAIN-011 — Keep reduced-motion station timing on wall-clock time.**
+  Decouple the deliberately infrequent reduced-motion route steps from the
+  station's non-positional timing. With `prefers-reduced-motion: reduce`, keep
+  cruise/approach scenery movement restrained and infrequent, but make the
+  250ms platform-settle phase and four-second dwell complete on real elapsed
+  wall-clock time rather than stretching to roughly 90 seconds and 20 minutes.
+  Preserve visibility suspension semantics so hidden time cannot cause a route
+  jump or silently skip an observable station phase. Add fake-timer coverage
+  for reduced-motion approach, platform, dwell, departure, visibility
+  suspend/resume, cleanup, and unchanged bounded route stepping. Run the
+  frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-012 — Make stations visually legible without obscuring the train.**
+  Recompose or retune the station platform, canopy/building silhouette, signals,
+  lamps, and ambient steam so an approach, stop, and departure read clearly as
+  a station at 390px compact, normal desktop, and 1920px-or-wider viewports.
+  Do not move the complete world above the train, block controls, cover
+  passengers, or weaken horizontal train inspection. Preserve deterministic
+  station spans and the existing state machine. Add focused structural/style
+  assertions, then use the shared Vite server and `borz` to capture and inspect
+  approach/platform/dwell states at compact and wide sizes. Run the frontend
+  suite, build, and `make test`.
+
+- [ ] **TRAIN-013 — Tune station discovery and repeat cadence.**
+  Shorten the default seed's initial journey so a normal 12px/s session begins
+  its first station approach within roughly three to five minutes, and tune
+  later station spacing to roughly six to nine minutes without permitting
+  back-to-back stations or violating the configured minimum journey distance.
+  Keep scheduling deterministic, aligned to complete multi-chunk regions, and
+  configurable for callers that need longer journeys. Add exact default-seed
+  timing assertions, multi-seed bounds, cooldown tests, and continuity coverage
+  after departure. Verify the development triggers remain unchanged. Run the
+  frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-014 — Advance clock-driven palettes at local-time boundaries.**
+  Give the train layout an owned, cleanup-safe clock update so an open page
+  automatically crosses day → sunset at 17:00 and sunset → night at 18:30
+  without relying on pane traffic, resizing, or another unrelated React render.
+  Schedule efficiently at the next meaningful boundary rather than rerendering
+  every animation frame. Manual palette overrides must remain stable and route
+  geometry/position must not change. Add fake-system-time tests for both
+  boundaries, manual override isolation, timer cleanup, and remount behavior.
+  Run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-015 — Make browser smoke checks resistant to false viewport passes.**
+  Update the train smoke procedure to require this exact order for every size:
+  open/reopen the shared port-5234 page with `borz`, set the viewport, hard
+  reload, then assert `window.innerWidth` and `window.innerHeight` before
+  trusting layout or screenshots. Record the plain non-cache-busted Vite module
+  freshness check and make compact, desktop, and ultrawide evidence explicit.
+  Re-run the documented station and bounded-DOM checks with `borz`, record the
+  date and results without private pane data, run `rtk git diff --check`, and
+  keep this item documentation-only unless a reproducible product defect is
+  found; if one is found, leave this item unchecked and report it instead of
+  expanding scope.
