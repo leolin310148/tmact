@@ -1,185 +1,158 @@
-# tmact Agent-Ergonomics Work Items
+# Train Layout — Infinite Journey Background Work Items
 
-This queue turns the 2026-05-01 through 2026-07-22 Claude/Codex session-log
-analysis into small, dependency-ordered implementation tasks. The dominant
-observed failure mode was that agents use `tmact dispatch-work`, then fall back
-to hand-written `sleep`, `tmux capture-pane`, polling loops, `send-keys`, and
-`kill-session` because tmact does not yet expose bounded wait, incremental
-capture, structured completion, or a complete CLI session lifecycle.
+This queue turns the train-theme background plan into ten dependency-ordered,
+independently verifiable work items. The finished scene must make the fixed
+train feel as if it is travelling forever through coherent regions, support
+day/sunset/night presentation, remain deterministic enough to test, and allow a
+future station stop without growing the DOM or memory usage over time.
 
 ## Worker contract
 
-- Work on branch `main` in `<repo-root>`.
-- Read `AGENTS.md`, `CLAUDE.md`, and this file before starting an item.
+- Work from this repository's root and read `AGENTS.md`, `CLAUDE.md`, and this
+  file before starting an item.
 - Select only the first unchecked item. Never start a second item in the same
   cycle.
-- Start only from a clean worktree. If it is dirty, make no changes and report
-  the exact paths as a blocker. Never reset, clean, stash, or discard work.
-- Preserve dry-run defaults, exact targets, peer behavior, prompt refusal, and
-  folder-trust safety boundaries.
-- Keep Go dependencies minimal. Prefer existing `internal/tmux`, `panestate`,
-  `statusd`, `workflow`, and `agentspend` primitives over parallel subsystems.
-- Add focused tests and update CLI help/catalog/LLM instructions when a public
-  command or flag changes.
-- Run targeted tests plus `go test ./...` for Go-only changes. For frontend or
-  embedded-web changes, run `make test`.
-- Complete atomically: implementation, tests, docs/help, and exactly this
-  item's checkbox belong in one commit. Use a concise imperative commit subject.
-- Do not push.
-- If blocked, do not check the item or commit partial work. Leave the tree clean
-  when safely possible without discarding pre-existing work, and report the
-  blocker.
-- If every item is checked, make no changes and report queue completion.
+- The existing train layout, locomotive, carriage, track, seat, and character
+  work is the baseline. Do not redraw or restructure those assets unless the
+  selected item explicitly requires integration changes.
+- Before automation starts, the current train-layout baseline should be
+  committed. If the worktree contains pre-existing changes, never reset, clean,
+  stash, overwrite, or discard them; report the exact paths as a blocker.
+- Keep the train and its horizontal inspection/overflow behavior independent
+  from world movement. The train stays visually fixed while the scenery moves
+  from left to right because the locomotive faces left.
+- Prefer a small deterministic route engine and reusable scene assets over one
+  very wide image, unbounded DOM nodes, or uncontrolled per-frame randomness.
+- Use seeded randomness for route generation. The same seed, route position,
+  viewport, and time-of-day input must reproduce the same scene.
+- Respect `prefers-reduced-motion`, tab visibility, viewport resizing, and the
+  existing theme/settings architecture.
+- Add focused Vitest coverage with every behavioral item. Use fake time and
+  deterministic seeds where animation or randomness is involved.
+- For visual work, verify with `borz` at compact and wide viewport sizes. Check
+  that there are no gaps, jumps, obvious repeated patterns, or collisions that
+  obscure the train.
+- Run targeted tests during implementation. Before completing an item, run the
+  frontend test suite and build; run `make test` when shared application
+  behavior or Go-embedded web output is affected.
+- Complete each item atomically: implementation, tests, documentation/debug
+  affordances, and exactly that item's checkbox belong in one commit. Use a
+  concise imperative commit subject and do not push.
+- If blocked, do not check the item or commit partial work. If all items are
+  checked, make no changes and report queue completion.
 
 ## Queue
 
-- [x] **WI-001 — Add a safe `tmact capture` command.**
-  Expose the existing plain-text pane capture through a top-level CLI command
-  accepting one exact target, `--lines`, `--non-empty`, and `--json`. Reuse
-  `internal/tmux.CapturePane`; do not shell out through a second implementation.
-  Text mode prints only captured text. JSON includes canonical target/pane,
-  requested line count, text, and truncation metadata when knowable. Support
-  local targets first and return an explicit unsupported error for peer targets
-  rather than silently treating them as local. Add command/help tests and unit
-  tests that do not require live tmux.
+- [ ] **TRAIN-001 — Establish the independent moving-world viewport.**
+  Add a background/world layer behind `TrainLayout` whose clipping, dimensions,
+  and animation state do not depend on the horizontal overflow used to inspect
+  the locomotive and carriages. Define one route-position value and make the
+  scenery move left-to-right while the train remains fixed. Establish explicit
+  z-index and pointer-event boundaries so the world never blocks train or
+  locomotive interactions. Include a temporary diagnostic grid/marker to prove
+  motion direction and independence, then keep it available only through a
+  development flag. Cover mounting, layering, direction, and train-scroll
+  independence with focused tests.
 
-- [x] **WI-002 — Add opaque incremental cursors to `tmact capture`.**
-  Add `--after CURSOR` and return a new opaque cursor in JSON. A repeated capture
-  should emit only newly observed terminal rows when overlap can be established;
-  if history rolled or the cursor cannot be reconciled, return a documented
-  reset/full snapshot indication. Keep cursor contents versioned and bounded;
-  do not persist pane contents or introduce SQLite. Add deterministic tests for
-  append, unchanged, rewritten-screen, rollover, invalid, and version-mismatch
-  cases.
+- [ ] **TRAIN-002 — Build a deterministic infinite route-chunk engine.**
+  Divide the journey into fixed-width logical `RouteChunk`s generated from a
+  versioned seed and integer chunk index. Maintain only the visible chunks plus
+  bounded overscan in a recyclable ring/window; travelling for a long time must
+  not continually add DOM nodes or retained route objects. Handle forward
+  movement and viewport resizing without blank seams or regenerating already
+  visible chunks differently. Expose lightweight development diagnostics for
+  seed, route position, chunk indices, and mounted chunk count. Test stable
+  generation, recycling, long-distance bounds, resize behavior, and seed
+  variation.
 
-- [x] **WI-003 — Add bounded `tmact wait` for pane state transitions.**
-  Implement a read-only command that accepts exactly one target/session,
-  `--until input-ready|working|needs-human|gone`, `--require-transition`,
-  `--settle`, `--poll-interval`, `--timeout`, and `--json`. Reuse pane
-  classification and capture helpers. Distinguish terminal reasons
-  `condition_met`, `needs_human`, `timeout`, and `pane_gone`; never claim that
-  idle alone proves task success. Permission/approval prompts must return
-  `needs_human`, not be confirmed. Add cancellation and fake-clock/dependency
-  tests without live tmux.
+- [ ] **TRAIN-003 — Add the five-layer parallax scene renderer.**
+  Render each route through explicit layers: sky, ultra-far silhouette, far
+  terrain, midground scenery, and near/foreground objects. Start with code-native
+  placeholder shapes and assign restrained speed ratios around `0`, `0.1`,
+  `0.25`, `0.55`, and `1.0`, keeping the train on its fixed layer. Adjacent
+  chunks and parallax layers must overlap safely enough to avoid hairline gaps
+  at fractional pixels. Pause or simplify motion for reduced-motion users.
+  Test transform calculations, layer ordering, seam overlap, and reduced-motion
+  behavior; visually verify both compact and ultrawide screens.
 
-- [x] **WI-004 — Keep pane DOM stable during selection and clicks.**
-  Stop live pane repaints from invalidating browser Selection/Range objects or
-  click targets. Keep receiving WebSocket patches and updating the pane
-  buffer/cache, but defer `pre#content` DOM commits while any pointer
-  interaction is in progress, selection mode is enabled, or a non-collapsed
-  browser selection belongs to the pane. Hold the pointer lock through click
-  dispatch; on unlock, render only the newest pending frame once. A pane switch
-  must clear the old interaction/selection and immediately render the newly
-  selected pane, never flush stale content from the prior pane. Preserve the
-  imperative terminal renderer, path marking, Mermaid rendering, scroll
-  behavior, and rAF coalescing; do not throttle or reconnect the WebSocket.
-  Show an unobtrusive, accessible "Live updates paused while selecting"
-  indicator while a frame is deferred. Add focused `ContentPane`/App tests for
-  DOM identity during pointer-to-click, selection retention across incoming
-  text, latest-frame flush on selection collapse, selection-mode locking, and
-  pane switching. Run frontend Vitest and `make test`, then use `borz` against a
-  rapidly changing local pane to verify that text can be selected/copied and a
-  previewable path can be clicked without the target disappearing; record the
-  manual case in `docs/smoke-test.md` when appropriate.
+- [ ] **TRAIN-004 — Produce the reusable pixel-art scenery asset kit.**
+  Create transparent, scale-consistent assets matching the existing train's
+  pixel-art perspective and palette. The minimum kit is: three cloud forms,
+  three far mountain/terrain silhouettes, six tree/vegetation variants, six
+  town or industrial building variants, one bridge set, one coast/sea set, and
+  three near-track props such as poles, signs, or fences. Keep distant assets
+  simple and low-contrast so they do not compete with passengers; reserve the
+  strongest detail and contrast for near objects. Record intended layer,
+  anchor, safe scale range, and day/night treatment in an asset manifest.
+  Replace TRAIN-003 placeholders and verify transparent edges, pixel scaling,
+  anchors, and seamless terrain joins in the live layout.
 
-- [x] **WI-005 — Integrate bounded waiting into `dispatch-work`.**
-  Add opt-in `--wait`, `--wait-timeout`, `--wait-settle`, and `--result-lines`
-  flags. Record the post-submit baseline, require evidence that the submission
-  was accepted, then wait for stable input-ready or a terminal blocker. Preserve
-  existing JSON and behavior without `--wait`; add a structured wait/result
-  section when enabled. Support local panes and fail explicitly if peer waiting
-  is unavailable. Test immediate-idle, working-to-idle, permission, timeout, and
-  disappeared-pane cases.
+- [ ] **TRAIN-005 — Generate coherent regions with route grammar.**
+  Introduce region profiles for at least forest, mountain/foothill, town,
+  coast, and industrial outskirts. A region should last roughly 6–12 chunks and
+  constrain which assets, densities, terrain, and landmarks may appear; do not
+  scatter every object type uniformly. Add weighted transitions so neighboring
+  regions form plausible journeys, for example forest → foothills → suburb →
+  town or town → coast. Enforce per-layer spacing, collision, maximum density,
+  landmark limits, and cooldown/deweighting for recently used variants. Test
+  allowed transitions, deterministic output, density bounds, spacing, and
+  repeat avoidance across a long seeded route.
 
-- [x] **WI-006 — Add recoverable CLI session close/history/reopen.**
-  Introduce `tmact session close`, `tmact session closed`, and
-  `tmact session reopen`, reusing statusd/web closed-session persistence.
-  Closing is dry-run by default and requires `--execute`; targets must be exact
-  and broad deletion is out of scope. Reopen restores recorded name/cwd/runtime
-  intent where safely supported and refuses conflicts. Add service and CLI tests.
+- [ ] **TRAIN-006 — Add day, sunset, and night as palette states.**
+  Make time of day independent from route geometry: changing between day,
+  sunset, and night must recolor/crossfade the same visible terrain rather than
+  regenerate its objects or jump the route. Define shared CSS palette tokens
+  for sky, haze, silhouettes, surfaces, water, and foreground contrast. Add
+  separate emissive overlays for stars, moon, windows, streetlights, station
+  lamps, signals, and water reflections so night is readable without baking
+  three complete copies of every asset. Initially follow the office layout's
+  local-time selection and manual theme override. Test selection rules, manual
+  override, stable geometry, transition state, and accessible contrast.
 
-- [x] **WI-007 — Add guarded session create and agent resume.**
-  Add `tmact session create NAME --dir DIR` for an idle shell and
-  `tmact session resume NAME --dir DIR --agent claude|codex --session-id ID`.
-  Both are dry-run by default, validate canonical cwd, refuse busy/different
-  runtimes and prompts, and require `--execute`. Never infer a resume id from
-  pane text. Keep provider command construction unit-testable and update help.
+- [ ] **TRAIN-007 — Make continuous motion smooth, bounded, and lifecycle-safe.**
+  Drive route position from elapsed time rather than frame count, with one
+  animation owner and configurable cruise speed. Clamp large elapsed-time jumps,
+  suspend expensive updates while the document is hidden, resume without a
+  scenery leap, and avoid React rerendering the whole train every frame. Ensure
+  window resizing, route recycling, lazy asset loading, and manual train
+  scrolling cannot produce a visible gap. Add a reduced-motion mode that keeps
+  a complete static scene and advances only through restrained, infrequent
+  steps when needed. Test fake-clock progression, pause/resume, throttled-frame
+  recovery, cleanup, and bounded render/mount counts.
 
-- [x] **WI-008 — Extract normalized Claude/Codex session-log readers.**
-  Create a shared internal package for provider discovery and streaming JSONL,
-  factoring path resolution out of `internal/agentspend` without changing spend
-  results. Normalize timestamp, provider, session id, cwd, role, event kind,
-  tool, command, exit code, and duration where present. Handle oversized lines,
-  malformed records, unknown event types, and current Claude/Codex tool-call
-  shapes. Use only redacted synthetic fixtures.
+- [ ] **TRAIN-008 — Add landmarks, bridges, and transition set pieces.**
+  Promote bridges, tunnels/cuttings, coastline reveals, town edges, and other
+  large compositions to deterministic multi-chunk set pieces rather than
+  ordinary random props. Reserve their chunk spans before filling smaller
+  objects, provide entry/body/exit pieces, and prevent incompatible landmarks
+  from overlapping. Give set pieces restrained foreground occlusion so the
+  carriage and passengers remain legible. Add at least one complete bridge
+  traversal and one coast or tunnel transition. Test reservations, chunk-boundary
+  continuity, incompatibility rules, and deterministic entry/body/exit output;
+  visually inspect the entire traversal at cruise speed.
 
-- [x] **WI-009 — Add privacy-safe `tmact log search`.**
-  Implement `tmact log search QUERY` with `--provider`, `--since`, `--cwd`,
-  `--kind`, `--limit`, `--json`, and opt-in `--show-content`. Default output
-  includes normalized metadata and command verb/subcommand only, never raw
-  prompts, tool output, environment values, or full arguments. Search both
-  providers through WI-008 and report provider parse coverage/errors. Add help
-  and fixture-based tests.
+- [ ] **TRAIN-009 — Implement station approach, stop, and departure.**
+  Add a station as a scheduled route event with the state machine `cruise →
+  approach/signals → decelerate → platform → dwell → depart/accelerate →
+  cruise`. Reserve the station's multi-chunk span, introduce signals and
+  platform/building assets, and expose explicit speed targets rather than
+  coupling station logic to animation frames. During dwell, positional scenery
+  must stop while ambient details such as lights, clouds, steam, or subtle
+  passenger effects may continue. Prevent another station from appearing until
+  a configurable minimum journey distance has passed. Provide a deterministic
+  development trigger to reach/leave a station quickly. Test every state
+  transition, speed curve boundary, dwell timing, cooldown, tab pause/resume,
+  and route continuity after departure.
 
-- [x] **WI-010 — Add `tmact log stats` and an incremental plain-file index.**
-  Aggregate by provider, tool, command, and subcommand with `--since` and JSON.
-  Cache safe normalized fields under the tmact config directory, keyed by source
-  path, size, mtime, and parser version. Use atomic plain-file writes and rebuild
-  after missing/corrupt cache. Add `tmact log doctor` for file counts, skipped
-  records, schema coverage, and cache health. Do not add SQLite.
-
-- [x] **WI-011 — Update canonical skills for the new CLI workflow.**
-  Edit only canonical `skills/`. Change `tmact-dispatch` and `agent-loop` to use
-  bounded `tmact wait`/`capture` and guarded `tmact send`, not raw capture-pane,
-  polling loops, or send-keys. Make routine preflight concise and document log
-  privacy defaults. Extend `scripts/install-skills.sh --check` to report active
-  duplicate/orphan backup skill directories without deleting them. Run the
-  skill-creator validator, the install check, and relevant tests.
-
-- [x] **WI-012 — Protect web session mutations and validate reopen history.**
-  Treat `/api/session/kill` and `/api/session/reopen` as destructive browser
-  mutations. Reject cross-site browser requests and CORS-safelisted bodies that
-  bypass preflight; require the expected JSON request shape without breaking
-  same-origin PWA use or authenticated/configured peer proxying. A rejected
-  request must never call `KillSession` or `NewSession`. Reopen must resolve one
-  exact local entry from `ClosedSessions` and use its recorded cwd; reject an
-  unknown name or a caller-supplied cwd that differs from history. Keep exact
-  local-session and peer boundaries. Add handler tests for cross-origin and
-  `text/plain` POSTs, valid same-origin JSON, unknown history, cwd tampering,
-  and the peer path. Run focused web tests and `go test ./...`.
-
-- [x] **WI-013 — Make command summaries fail closed around environment values.**
-  Replace the `strings.Fields` command-summary parsing that can turn part of a
-  quoted environment value into the reported executable. Parse only enough
-  shell-word structure to safely skip complete leading assignments and common
-  `env` forms; never evaluate expansions, and return an empty/conservative
-  summary for malformed or ambiguous syntax. Cover single/double quotes,
-  escaped spaces, multiple assignments, option-bearing `env`, unbalanced
-  quotes, and `SECRET='alpha beta' git status`. Verify both default `log search`
-  output and the plain-file stats index contain neither complete nor partial
-  environment values. Bump the parser/cache identity so an existing index made
-  by the vulnerable parser is rebuilt instead of reused. Run focused log tests
-  and `go test ./...`.
-
-- [x] **WI-014 — Make recoverable session close durable before killing.**
-  A successful `tmact session close --execute` must guarantee its reopen intent
-  survived an atomic disk write. Expose persistence errors from
-  `ClosedSessionLog` instead of silently ignoring them, durably stage the exact
-  history entry before `KillSession`, and do not kill when staging fails. If
-  killing fails, roll back the staged entry and report any rollback failure
-  without hiding the original error. Preserve explicit best-effort behavior
-  only for non-destructive daemon tracking where it is intentional. Add tests
-  for unwritable/write/rename failure, kill-not-called on persistence failure,
-  kill rollback, and visibility from a newly constructed history instance.
-  Check other mutation callers for the updated error contract, then run focused
-  session/statusd/web tests and `go test ./...`.
-
-- [x] **WI-015 — Enforce a real wall-clock deadline for `tmact wait`.**
-  Make `--timeout` bound target resolution, pane capture, settling, and polling,
-  not just the gaps between completed tmux calls. Thread a deadline-bearing
-  context through target resolution as well as capture using cancellable tmux
-  subprocesses; do not leak goroutines. Expiration must still return the
-  structured `timeout` terminal reason/report, while operator cancellation
-  remains distinguishable. Add deterministic blocking dependency tests for
-  resolve, capture, and poll waits, plus CLI and `dispatch-work --wait`
-  regression coverage. Run focused wait/dispatch/CLI tests and `go test ./...`.
+- [ ] **TRAIN-010 — Integrate, tune, and harden the complete journey.**
+  Remove temporary placeholders, make the background load only for the train
+  theme, and ensure all animation/resources clean up when switching themes.
+  Tune scale, speed, density, haze, palette transitions, and foreground
+  occlusion across compact mobile-like widths, normal desktop, and ultrawide
+  screens. Add an end-to-end deterministic journey test covering multiple
+  regions, a time-of-day change, a landmark, a station stop, departure, resize,
+  theme switch, and remount. Run frontend tests, build, and `make test`, then
+  perform a sustained `borz` smoke run checking constant DOM bounds, no blank
+  seams, stable train controls, acceptable CPU behavior, and readable day,
+  sunset, and night scenes. Document the route seed/debug controls and final
+  manual verification cases.

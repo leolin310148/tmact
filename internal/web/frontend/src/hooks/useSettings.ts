@@ -27,7 +27,7 @@ const FONT_MIN = 9,
 const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
 const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
-const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
+const PANE_SWITCHER_LAYOUTS = ["bottom", "office", "train"];
 
 interface ClientSettings {
   paneFont?: number;
@@ -115,7 +115,7 @@ export interface SettingsRefs {
 export interface UseSettingsResult {
   /** True when the overlay is shown; SettingsDialog renders hidden={!visible}. */
   visible: boolean;
-  /** Current pane switcher layout ("bottom" | "office") — drives which
+  /** Current pane switcher layout ("bottom" | "office" | "train") — drives which
    *  layout-specific settings fields the dialog shows. */
   paneSwitcherLayout: string;
   /** Apply localStorage settings before first paint (App calls synchronously). */

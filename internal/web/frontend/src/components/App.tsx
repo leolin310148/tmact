@@ -73,6 +73,11 @@ const MarkdownPreview = lazy(() => import("./MarkdownPreview"));
 const OfficeDesks = lazy(() =>
   import("./OfficeDesks").then((m) => ({ default: m.OfficeDesks })),
 );
+// The train layout owns its scene CSS and large carriage sprite, so it stays in
+// a separate lazy chunk until the user selects the train pane-switcher theme.
+const TrainLayout = lazy(() =>
+  import("./TrainLayout").then((m) => ({ default: m.TrainLayout })),
+);
 import InputBar from "./InputBar";
 import Draft from "./Draft";
 import DirectInput from "./DirectInput";
@@ -1115,7 +1120,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
   // ===== render the full DOM tree (index.html order) =====
   const pc = paneContentRef.current;
-  const officePanes = state.snapshot && state.snapshot.panes
+  const paneSwitcherPanes = state.snapshot && state.snapshot.panes
     ? Object.values(state.snapshot.panes)
     : [];
 
@@ -1194,7 +1199,16 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       {settings.paneSwitcherLayout === "office" ? (
         <Suspense fallback={null}>
           <OfficeDesks
-            panes={officePanes}
+            panes={paneSwitcherPanes}
+            selected={state.selected}
+            onSelect={callbacks.selectPane}
+          />
+        </Suspense>
+      ) : null}
+      {settings.paneSwitcherLayout === "train" ? (
+        <Suspense fallback={null}>
+          <TrainLayout
+            panes={paneSwitcherPanes}
             selected={state.selected}
             onSelect={callbacks.selectPane}
           />

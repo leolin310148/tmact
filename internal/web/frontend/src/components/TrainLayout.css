@@ -1,0 +1,232 @@
+/* TrainLayout — compact train-theme pane-switcher scene.
+   The carriage and its windows are transparent PNG layers. This placeholder
+   backdrop makes that transparency visible before the animated scenery lands. */
+
+html[data-pane-switcher-layout="train"] .statusline {
+  display: none;
+}
+
+.train-layout {
+  flex: 0 0 auto;
+  width: 100%;
+  height: clamp(118px, 18vh, 160px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid var(--border);
+  background: #07111f;
+  box-shadow: inset 0 7px 13px rgba(0, 0, 0, 0.32);
+  image-rendering: pixelated;
+}
+
+.train-layout-scene {
+  --train-track-h: 19px;
+  position: relative;
+  min-width: 100%;
+  width: max-content;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 5px 12px 0 0;
+  background:
+    linear-gradient(180deg, rgba(7, 17, 31, 0.08), rgba(4, 9, 17, 0.48)),
+    linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
+}
+
+.train-layout-consist {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  height: calc(100% - var(--train-track-h));
+  margin-bottom: var(--train-track-h);
+}
+
+.train-carriage-image {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.train-locomotive-more {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  /* Keep the locomotive at its original scale, but use its rightmost two
+     thirds as the visible/clickable more trigger. The full-size image is
+     right-aligned inside this clipping window, cropping only its left third. */
+  height: 80%;
+  aspect-ratio: 508 / 383;
+  overflow: hidden;
+  margin: 0 -2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.train-layout-locomotive {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: block;
+  width: auto;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.train-locomotive-more:hover .train-layout-locomotive,
+.train-locomotive-more.open .train-layout-locomotive {
+  filter: brightness(1.08);
+}
+
+.train-locomotive-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 5px;
+}
+
+.train-more-pop {
+  z-index: 40;
+}
+
+.train-carriage {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  aspect-ratio: 821 / 383;
+  /* Both PNG ends include a long coupler. Pull neighbouring vehicles over
+     those transparent/coupler edges so the visible join stays compact at
+     every viewport height. */
+  margin-left: clamp(-22px, -2vh, -12px);
+}
+
+.train-carriage-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.train-seat {
+  position: absolute;
+  z-index: 2;
+  width: 17%;
+  aspect-ratio: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.train-seat--upper-left {
+  top: 14%;
+  left: calc(18% + 10px);
+}
+
+.train-seat--upper-right {
+  top: 14%;
+  left: calc(52% - 10px);
+}
+
+.train-seat--lower-left {
+  top: 52%;
+  left: calc(18% + 10px);
+}
+
+.train-seat--lower-right {
+  top: 52%;
+  left: calc(52% - 10px);
+}
+
+.train-seat-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  object-fit: contain;
+  transform: scale(0.8);
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.train-seat--facing-left .train-seat-sprite {
+  transform: scaleX(-0.8) scaleY(0.8);
+}
+
+.train-seat:not(.train-seat--empty):hover .train-seat-sprite {
+  filter: brightness(1.08);
+}
+
+.train-seat.selected .train-seat-sprite {
+  filter:
+    drop-shadow(1px 0 0 #4ee9ff)
+    drop-shadow(-1px 0 0 #4ee9ff)
+    drop-shadow(0 1px 0 #4ee9ff)
+    drop-shadow(0 -1px 0 #4ee9ff);
+}
+
+.train-seat.stale .train-seat-sprite {
+  opacity: 0.55;
+  filter: grayscale(0.55);
+}
+
+.train-seat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.train-person-ask {
+  position: absolute;
+  top: 0;
+  right: 4%;
+  display: grid;
+  place-items: center;
+  min-width: 20%;
+  aspect-ratio: 1;
+  border: 1px solid #ffd166;
+  border-radius: 50%;
+  background: #6c4300;
+  color: #fff3bf;
+  font: 700 clamp(6px, 0.52vw, 9px) / 1 var(--mono);
+  box-shadow: 0 0 5px rgba(255, 193, 7, 0.45);
+}
+
+.train-layout-track {
+  position: absolute;
+  z-index: 0;
+  inset: auto 0 0;
+  height: var(--train-track-h);
+  background:
+    url("../assets/train-theme/sprites/train-track-tile.png")
+    0 0 / auto 100% repeat-x;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .train-layout {
+    height: clamp(104px, 16vh, 132px);
+  }
+
+  .train-layout-scene {
+    justify-content: flex-start;
+    padding-right: 8px;
+    padding-left: 0;
+  }
+}
