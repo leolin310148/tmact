@@ -95,6 +95,20 @@ function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
   };
 }
 
+function routeGeometryFingerprint(container: HTMLElement): string[] {
+  return [...container.querySelectorAll<HTMLElement>(".train-parallax-chunk")].map(
+    (chunk) =>
+      [
+        chunk.dataset.parallaxLayer,
+        chunk.dataset.routeChunkIndex,
+        chunk.dataset.routeRegion,
+        chunk.dataset.routeSetPiece,
+        chunk.style.left,
+        chunk.style.width,
+      ].join(":"),
+  );
+}
+
 describe("TrainLayout", () => {
   it("mounts a clipped world below an independent train inspection layer", () => {
     const { container } = render(
@@ -122,6 +136,144 @@ describe("TrainLayout", () => {
     expect(trainWorldCruiseSpeed("?train-cruise-speed=24")).toBe(24);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=999")).toBe(96);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(12);
+  });
+
+  it("completes a deterministic journey across regions, station, resize, theme switch, and remount", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=train-010-e2e&train-cruise-speed=96&train-station-trigger=approach",
+    );
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const removeDocumentListener = vi.spyOn(document, "removeEventListener");
+    const removeWindowListener = vi.spyOn(window, "removeEventListener");
+    const journey = () => (
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />
+    );
+    const { container, rerender } = render(journey());
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const initialPosition = world.dataset.routePosition;
+    const initialGeometry = routeGeometryFingerprint(container);
+    const firstStation = world.dataset.stationEventId;
+    const visitedRegions = new Set<string>();
+    const visitedLandmarks = new Set<string>();
+    const visitedStationStates = new Set<string>();
+    let maximumMountedChunks = 0;
+    let timestamp = 0;
+
+    const observeJourney = () => {
+      for (const chunk of container.querySelectorAll<HTMLElement>(
+        '[data-world-layer="near"] .train-route-chunk',
+      )) {
+        if (chunk.dataset.routeRegion) {
+          visitedRegions.add(chunk.dataset.routeRegion);
+        }
+        const setPiece = chunk.dataset.routeSetPiece;
+        if (setPiece && setPiece !== "none" && setPiece !== "station") {
+          visitedLandmarks.add(setPiece);
+        }
+      }
+      if (world.dataset.stationState) {
+        visitedStationStates.add(world.dataset.stationState);
+      }
+      maximumMountedChunks = Math.max(
+        maximumMountedChunks,
+        Number(world.dataset.routeTotalMountedChunks),
+      );
+    };
+
+    expect(world).toHaveAttribute("data-route-seed", "train-010-e2e");
+    expect(world).toHaveAttribute("data-time-of-day", "day");
+    expect(world).toHaveAttribute("data-station-state", "approach");
+    observeJourney();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cycle train lighting (day / sunset / night)",
+      }),
+    );
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+    expect(world).toHaveAttribute("data-palette-transition", "crossfading");
+    expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
+    act(() => vi.advanceTimersByTime(450));
+    expect(world).toHaveAttribute("data-palette-transition", "settled");
+
+    animation.run(timestamp);
+    for (
+      let frame = 0;
+      frame < 360 &&
+      !(
+        world.dataset.stationState === "cruise" &&
+        world.dataset.stationEventId !== firstStation
+      );
+      frame++
+    ) {
+      timestamp += 250;
+      animation.run(timestamp);
+      observeJourney();
+    }
+
+    expect(visitedStationStates).toEqual(
+      new Set([
+        "approach",
+        "decelerate",
+        "platform",
+        "dwell",
+        "depart",
+        "cruise",
+      ]),
+    );
+    expect(world.dataset.stationEventId).not.toBe(firstStation);
+
+    Object.defineProperty(world, "clientWidth", {
+      configurable: true,
+      get: () => 2_560,
+    });
+    act(() => window.dispatchEvent(new Event("resize")));
+    observeJourney();
+    expect(Number(world.dataset.routeTotalMountedChunks)).toBeGreaterThan(
+      initialGeometry.length,
+    );
+
+    for (
+      let frame = 0;
+      frame < 480 &&
+      (visitedRegions.size < 3 || visitedLandmarks.size === 0);
+      frame++
+    ) {
+      timestamp += 250;
+      animation.run(timestamp);
+      observeJourney();
+    }
+
+    expect(visitedRegions.size).toBeGreaterThanOrEqual(3);
+    expect(visitedLandmarks.size).toBeGreaterThan(0);
+    expect(maximumMountedChunks).toBeLessThanOrEqual(80);
+    expect(container.querySelectorAll(".train-parallax-chunk").length).toBe(
+      Number(world.dataset.routeTotalMountedChunks),
+    );
+
+    rerender(<div data-active-theme="office" />);
+    expect(container.querySelector(".train-layout")).not.toBeInTheDocument();
+    expect(animation.pending()).toBe(0);
+    expect(removeDocumentListener).toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.any(Function),
+    );
+    expect(removeWindowListener).toHaveBeenCalledWith(
+      "resize",
+      expect.any(Function),
+    );
+
+    rerender(journey());
+    const remountedWorld =
+      container.querySelector<HTMLElement>(".train-layout-world")!;
+    expect(remountedWorld).not.toBe(world);
+    expect(remountedWorld.dataset.routePosition).toBe(initialPosition);
+    expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
+    expect(remountedWorld).toHaveAttribute("data-route-apply-count", "1");
   });
 
   it("renders the scheduled station span with platform, building, signals, and ambient detail", () => {
@@ -415,7 +567,7 @@ describe("TrainLayout", () => {
     rerender(<TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />);
     expect(queryByTestId("train-world-debug-grid")).toHaveTextContent("world →");
     expect(queryByTestId("train-route-diagnostics")).toHaveTextContent(
-      /seed infinite-journey .* position 0\.0px .* chunks .* mounted \d+/,
+      /seed infinite-journey .* position 0\.0px .* chunks .* near \d+ .* total \d+/,
     );
   });
 
@@ -435,6 +587,9 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute(
       "data-route-seed-version",
       "tmact-train-route-v1",
+    );
+    expect(Number(world!.dataset.routeTotalMountedChunks)).toBe(
+      container.querySelectorAll(".train-parallax-chunk").length,
     );
   });
 

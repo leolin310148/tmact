@@ -1,4 +1,4 @@
-// TrainLayout — train-theme pane switcher prototype.
+// TrainLayout — train-theme pane switcher and bounded infinite journey.
 //
 // Panes use the same visible/overflow split as the chip and office switchers.
 // Visible panes are packed four per double-decker carriage; overflow panes and
@@ -683,6 +683,13 @@ function createRouteEngines(seed: string): TrainRouteEngines {
   ) as TrainRouteEngines;
 }
 
+function totalMountedRouteChunks(routeWindows: TrainRouteWindows): number {
+  return TRAIN_PARALLAX_LAYERS.reduce(
+    (total, layer) => total + routeWindows[layer.name].chunks.length,
+    0,
+  );
+}
+
 function usePrefersReducedTrainMotion(): boolean {
   const [reducedMotion, setReducedMotion] = useState(
     () =>
@@ -832,10 +839,14 @@ function TrainWorld({
       world.dataset.routeSeedVersion = TRAIN_ROUTE_SEED_VERSION;
       world.dataset.routeChunkIndices = indices;
       world.dataset.routeMountedChunks = String(nearWindow.chunks.length);
+      world.dataset.routeTotalMountedChunks = String(
+        totalMountedRouteChunks(nextWindows),
+      );
       if (diagnosticsRef.current) {
         diagnosticsRef.current.value =
           `seed ${seed} · position ${routePosition.toFixed(1)}px · ` +
-          `chunks ${indices} · mounted ${nearWindow.chunks.length} · ` +
+          `chunks ${indices} · near ${nearWindow.chunks.length} · ` +
+          `total ${totalMountedRouteChunks(nextWindows)} · ` +
           `station ${stationJourney.state} → ${stationJourney.station.id}`;
       }
     };
@@ -944,6 +955,7 @@ function TrainWorld({
         .map((chunk) => chunk.index)
         .join(",")}
       data-route-mounted-chunks={nearWindow.chunks.length}
+      data-route-total-mounted-chunks={totalMountedRouteChunks(routeWindows)}
       data-motion={reducedMotion ? "reduced" : "full"}
       data-motion-state={
         document.visibilityState === "hidden" ? "suspended" : "running"
@@ -1030,8 +1042,9 @@ function TrainWorld({
           <span>world →</span>
           <output ref={diagnosticsRef} data-testid="train-route-diagnostics">
             seed {seed} · position 0.0px · chunks{" "}
-            {nearWindow.chunks.map((chunk) => chunk.index).join(",")} · mounted{" "}
-            {nearWindow.chunks.length}
+            {nearWindow.chunks.map((chunk) => chunk.index).join(",")} · near{" "}
+            {nearWindow.chunks.length} · total{" "}
+            {totalMountedRouteChunks(routeWindows)}
           </output>
         </div>
       ) : null}

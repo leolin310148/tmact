@@ -135,6 +135,50 @@ isolated local tmux pane. Range text copied intact; the path node kept identity
 while frames arrived; selection collapse flushed the latest frame; and the
 preview opened before the deferred repaint replaced the clicked node.
 
+### Train infinite journey
+
+Select the train pane-switcher layout before opening a journey URL. The
+development-only controls are:
+
+- `train-route-seed=<text>` selects the deterministic, versioned route seed
+  (trimmed to 64 characters).
+- `train-world-debug=1` shows direction, route position, visible near-chunk
+  indices, near mounted count, total mounted count across all five parallax
+  layers, and station state.
+- `train-cruise-speed=<px-per-second>` overrides cruise speed, capped at 96.
+- `train-station-trigger=approach|depart` starts near the next deterministic
+  station event.
+
+Use the existing Vite server and a reproducible URL such as:
+
+```text
+http://127.0.0.1:5234/?train-world-debug=1&train-route-seed=smoke-line&train-cruise-speed=96&train-station-trigger=approach
+```
+
+Final manual cases:
+
+1. At 390×844, 1280×800, and 2560×900, hard-reload the URL and verify the
+   locomotive/carriages stay fixed while scenery travels right. Horizontal
+   train inspection must not move the world.
+2. Watch at least three region changes and a complete non-station set piece.
+   Expect no blank seam, jump, obvious short repeat, or scenery that blocks
+   train controls/passengers.
+3. Let the station traverse `approach → decelerate → platform → dwell → depart
+   → cruise`. Position must remain fixed during dwell while station steam and
+   lights remain available.
+4. Cycle day → sunset → night. Geometry and route position must remain stable;
+   controls, passengers, terrain, water, and emissive overlays remain readable.
+5. Resize compact → ultrawide → compact during cruise. The debug total may
+   resize but must settle to a bounded value; repeated travel must not make it
+   trend upward or leave a blank edge.
+6. Switch train → office/bottom. The train DOM disappears and route position
+   stops updating. Switch back to train with the same URL: seed, initial chunk
+   geometry, and station trigger are reproduced.
+7. During a sustained five-minute cruise, sample
+   `.train-parallax-chunk`, `.train-scenery-asset`, animation-frame cadence,
+   and browser task-manager CPU. Counts must remain bounded, controls remain
+   responsive, and the console must stay free of errors.
+
 ## Notes Template
 
 ```text

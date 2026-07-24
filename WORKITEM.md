@@ -144,7 +144,7 @@ future station stop without growing the DOM or memory usage over time.
   transition, speed curve boundary, dwell timing, cooldown, tab pause/resume,
   and route continuity after departure.
 
-- [ ] **TRAIN-010 — Integrate, tune, and harden the complete journey.**
+- [x] **TRAIN-010 — Integrate, tune, and harden the complete journey.**
   Remove temporary placeholders, make the background load only for the train
   theme, and ensure all animation/resources clean up when switching themes.
   Tune scale, speed, density, haze, palette transitions, and foreground
