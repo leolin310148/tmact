@@ -98,7 +98,7 @@ future station stop without growing the DOM or memory usage over time.
   allowed transitions, deterministic output, density bounds, spacing, and
   repeat avoidance across a long seeded route.
 
-- [ ] **TRAIN-006 — Add day, sunset, and night as palette states.**
+- [x] **TRAIN-006 — Add day, sunset, and night as palette states.**
   Make time of day independent from route geometry: changing between day,
   sunset, and night must recolor/crossfade the same visible terrain rather than
   regenerate its objects or jump the route. Define shared CSS palette tokens

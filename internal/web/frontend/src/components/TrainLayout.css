@@ -19,14 +19,58 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout-world {
   --train-route-position: 0px;
+  --train-palette-sky-top: #09172b;
+  --train-palette-sky-bottom: #102740;
+  --train-palette-haze: rgba(68, 101, 135, 0.25);
+  --train-palette-silhouette: #142d47;
+  --train-palette-far-surface: #153752;
+  --train-palette-mid-surface: #123149;
+  --train-palette-near-surface: #0c2639;
+  --train-palette-water: #174b68;
+  --train-palette-foreground-contrast: #eaf6ff;
+  --train-palette-control-surface: #07111f;
+  --train-palette-emissive: #ffe596;
   position: absolute;
   z-index: 0;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  background-color: var(--train-palette-control-surface);
+  transition: background-color 450ms ease;
+}
+
+.train-world-atmospheres,
+.train-world-atmosphere {
+  position: absolute;
+  inset: 0;
+}
+
+.train-world-atmospheres {
+  z-index: 0;
+}
+
+.train-world-atmosphere {
+  opacity: 0;
   background:
-    linear-gradient(180deg, rgba(7, 17, 31, 0.08), rgba(4, 9, 17, 0.48)),
-    linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
+    linear-gradient(180deg, transparent 48%, var(--train-atmosphere-haze)),
+    linear-gradient(
+      180deg,
+      var(--train-atmosphere-sky-top),
+      var(--train-atmosphere-sky-bottom)
+    );
+  transition: opacity 450ms ease;
+}
+
+.train-world-atmosphere.is-active {
+  opacity: 1;
+}
+
+.train-sky-emissive {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .train-world-layer {
@@ -51,9 +95,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-world-layer--sky {
-  background:
-    linear-gradient(180deg, rgba(101, 169, 209, 0.18), transparent 66%),
-    linear-gradient(180deg, #183a5d 0%, #102b49 62%, #0a1d32 100%);
+  background: linear-gradient(180deg, var(--train-palette-haze), transparent 66%);
 }
 
 .train-scenery-asset {
@@ -66,6 +108,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+  transition: filter 450ms ease, opacity 450ms ease;
 }
 
 .train-scenery-asset[data-scenery-anchor="center"] {
@@ -80,15 +123,18 @@ html[data-pane-switcher-layout="train"] .statusline {
   top: calc(16% + 6px);
   opacity: 0.4;
   filter: saturate(0.72) brightness(0.9);
+  transition: filter 450ms ease, opacity 450ms ease;
 }
 
 .train-parallax-chunk--ultra-far {
   opacity: 0.58;
   background: linear-gradient(
     to top,
-    #132b45 0 calc(var(--train-chunk-terrain-height) - 7px),
+    var(--train-palette-silhouette)
+      0 calc(var(--train-chunk-terrain-height) - 7px),
     transparent calc(var(--train-chunk-terrain-height) + 1px)
   );
+  transition: opacity 450ms ease;
 }
 
 .train-parallax-chunk--ultra-far .train-scenery-asset {
@@ -101,9 +147,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   opacity: 0.78;
   background: linear-gradient(
     to top,
-    #153553 0 calc(var(--train-chunk-terrain-height) - 2px),
+    var(--train-palette-far-surface)
+      0 calc(var(--train-chunk-terrain-height) - 2px),
     transparent var(--train-chunk-terrain-height)
   );
+  transition: opacity 450ms ease;
 }
 
 .train-parallax-chunk--far .train-scenery-asset {
@@ -116,9 +164,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   opacity: 0.88;
   background: linear-gradient(
     to top,
-    #123149 0 calc(var(--train-chunk-terrain-height) - 12px),
+    var(--train-palette-mid-surface)
+      0 calc(var(--train-chunk-terrain-height) - 12px),
     transparent calc(var(--train-chunk-terrain-height) - 11px)
   );
+  transition: opacity 450ms ease;
 }
 
 .train-parallax-chunk--midground .train-scenery-asset {
@@ -135,9 +185,10 @@ html[data-pane-switcher-layout="train"] .statusline {
   opacity: 0.8;
   background: linear-gradient(
     to top,
-    #0c2639 0 18px,
+    var(--train-palette-near-surface) 0 18px,
     transparent 19px
   );
+  transition: opacity 450ms ease;
 }
 
 .train-parallax-chunk--near .train-scenery-asset {
@@ -152,6 +203,136 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-parallax-chunk--variant-4 .train-scenery-asset {
   filter: saturate(0.66) brightness(0.72);
+}
+
+.train-layout-world[data-time-of-day="day"] .train-scenery-asset {
+  filter: saturate(0.86) brightness(1.12);
+}
+
+.train-layout-world[data-time-of-day="sunset"] .train-scenery-asset {
+  filter: saturate(0.82) sepia(0.16) brightness(0.92);
+}
+
+.train-layout-world[data-time-of-day="night"] .train-scenery-asset {
+  filter: saturate(0.68) brightness(0.76);
+}
+
+.train-emissive-overlay {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 450ms ease, filter 450ms ease;
+}
+
+.train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay {
+  opacity: 0.38;
+}
+
+.train-layout-world[data-time-of-day="night"] .train-emissive-overlay {
+  opacity: 0.88;
+}
+
+.train-emissive-overlay[data-emissive-enabled="false"] {
+  opacity: 0 !important;
+}
+
+.train-emissive-overlay--stars {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, var(--train-palette-emissive) 0 1px, transparent 1.5px),
+    radial-gradient(circle, #d8eeff 0 1px, transparent 1.5px);
+  background-position: 11px 9px, 37px 24px;
+  background-size: 53px 31px, 71px 43px;
+}
+
+.train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay--stars {
+  opacity: 0.08;
+}
+
+.train-emissive-overlay--moon {
+  top: 12px;
+  left: 9%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--train-palette-emissive);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--train-palette-emissive), transparent 45%);
+}
+
+.train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay--moon {
+  opacity: 0.16;
+}
+
+.train-emissive-overlay--windows {
+  bottom: calc(var(--train-chunk-terrain-height) + 7px);
+  width: 18px;
+  height: 9px;
+  transform: translateX(-50%);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-palette-emissive) 0 2px,
+      transparent 2px 5px
+    );
+  filter: drop-shadow(0 0 3px var(--train-palette-emissive));
+}
+
+.train-emissive-overlay--streetlight,
+.train-emissive-overlay--station-lamp,
+.train-emissive-overlay--signal {
+  bottom: 17px;
+  width: 2px;
+  height: 20px;
+  background: var(--train-palette-near-surface);
+}
+
+.train-emissive-overlay--streetlight::before,
+.train-emissive-overlay--station-lamp::before,
+.train-emissive-overlay--signal::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -3px;
+  width: 8px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--train-palette-emissive);
+  box-shadow: 0 0 7px var(--train-palette-emissive);
+}
+
+.train-emissive-overlay--station-lamp {
+  height: 24px;
+}
+
+.train-emissive-overlay--station-lamp::before {
+  left: -5px;
+  width: 12px;
+}
+
+.train-emissive-overlay--signal::before {
+  top: 0;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: #ff6d57;
+  box-shadow: 0 0 7px #ff6d57;
+}
+
+.train-emissive-overlay--water-reflection {
+  right: 0;
+  bottom: calc(var(--train-chunk-terrain-height) - 7px);
+  left: 0;
+  height: 12px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--train-palette-emissive), transparent 55%) 0 1px,
+      transparent 1px 4px
+    ),
+    linear-gradient(90deg, transparent, var(--train-palette-water), transparent);
+  filter: blur(0.3px);
 }
 
 .train-world-debug-grid {
@@ -192,6 +373,44 @@ html[data-pane-switcher-layout="train"] .statusline {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.train-time-toggle {
+  position: absolute;
+  z-index: 4;
+  top: 6px;
+  left: 7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--train-palette-foreground-contrast, #eaf6ff),
+    transparent 45%
+  );
+  border-radius: 50%;
+  background: var(--train-palette-control-surface, #07111f);
+  color: var(--train-palette-foreground-contrast, #eaf6ff);
+  font: 700 14px/1 sans-serif;
+  cursor: pointer;
+  opacity: 0.72;
+  transition:
+    color 450ms ease,
+    background-color 450ms ease,
+    opacity 120ms ease;
+}
+
+.train-time-toggle:hover {
+  opacity: 1;
+}
+
+.train-time-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  opacity: 1;
 }
 
 .train-layout-inspection {
@@ -405,6 +624,14 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-world-layer-track {
     transform: none;
     will-change: auto;
+  }
+
+  .train-world-atmosphere,
+  .train-layout-world,
+  .train-scenery-asset,
+  .train-emissive-overlay,
+  .train-time-toggle {
+    transition-duration: 0.01ms;
   }
 }
 

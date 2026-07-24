@@ -54,6 +54,12 @@ import {
 import {
   trainSceneryPlacementsForChunk,
 } from "./trainScenery";
+import {
+  SCENE_MODES,
+  clockSceneMode,
+  nextSceneMode,
+  type SceneMode,
+} from "./sceneTime";
 import "./TrainLayout.css";
 
 interface TrainLayoutProps {
@@ -81,6 +87,88 @@ const OCCUPIED_SEAT_URLS = [
 const TRAIN_WORLD_SPEED_PX_PER_SECOND = 12;
 const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
 const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
+const TRAIN_PALETTE_TRANSITION_MS = 450;
+
+interface TrainTimePalette {
+  skyTop: string;
+  skyBottom: string;
+  haze: string;
+  silhouette: string;
+  farSurface: string;
+  midSurface: string;
+  nearSurface: string;
+  water: string;
+  foregroundContrast: string;
+  controlSurface: string;
+  emissive: string;
+}
+
+export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> = {
+  day: {
+    skyTop: "#78b9d5",
+    skyBottom: "#d9ead3",
+    haze: "rgba(231, 244, 221, 0.48)",
+    silhouette: "#53767b",
+    farSurface: "#426e64",
+    midSurface: "#315c51",
+    nearSurface: "#183f3b",
+    water: "#4c9db5",
+    foregroundContrast: "#10243a",
+    controlSurface: "#f4fbff",
+    emissive: "#fff2ad",
+  },
+  sunset: {
+    skyTop: "#7b527a",
+    skyBottom: "#e49a69",
+    haze: "rgba(255, 190, 129, 0.42)",
+    silhouette: "#59455d",
+    farSurface: "#58465b",
+    midSurface: "#463b50",
+    nearSurface: "#2b3042",
+    water: "#9a6173",
+    foregroundContrast: "#fff6df",
+    controlSurface: "#4b263f",
+    emissive: "#ffd889",
+  },
+  night: {
+    skyTop: "#09172b",
+    skyBottom: "#102740",
+    haze: "rgba(68, 101, 135, 0.25)",
+    silhouette: "#142d47",
+    farSurface: "#153752",
+    midSurface: "#123149",
+    nearSurface: "#0c2639",
+    water: "#174b68",
+    foregroundContrast: "#eaf6ff",
+    controlSurface: "#07111f",
+    emissive: "#ffe596",
+  },
+};
+
+function channelLuminance(channel: number): number {
+  const normalized = channel / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function colorLuminance(hex: string): number {
+  const channels = hex.match(/[a-f\d]{2}/gi)?.map((value) => Number.parseInt(value, 16));
+  if (!channels || channels.length !== 3) return 0;
+  return (
+    0.2126 * channelLuminance(channels[0]!) +
+    0.7152 * channelLuminance(channels[1]!) +
+    0.0722 * channelLuminance(channels[2]!)
+  );
+}
+
+export function trainPaletteContrastRatio(mode: SceneMode): number {
+  const palette = TRAIN_TIME_PALETTES[mode];
+  const foreground = colorLuminance(palette.foregroundContrast);
+  const background = colorLuminance(palette.controlSurface);
+  return (Math.max(foreground, background) + 0.05) /
+    (Math.min(foreground, background) + 0.05);
+}
 
 // Route position increases as the left-facing train travels forward. CSS uses
 // that positive value as the route layer's x translation, so the world moves
@@ -315,6 +403,52 @@ type TrainSceneryAssetStyle = CSSProperties & {
   "--train-scenery-scale": number;
 };
 
+type TrainPaletteStyle = CSSProperties & {
+  "--train-palette-sky-top": string;
+  "--train-palette-sky-bottom": string;
+  "--train-palette-haze": string;
+  "--train-palette-silhouette": string;
+  "--train-palette-far-surface": string;
+  "--train-palette-mid-surface": string;
+  "--train-palette-near-surface": string;
+  "--train-palette-water": string;
+  "--train-palette-foreground-contrast": string;
+  "--train-palette-control-surface": string;
+  "--train-palette-emissive": string;
+};
+
+type TrainAtmosphereStyle = CSSProperties & {
+  "--train-atmosphere-sky-top": string;
+  "--train-atmosphere-sky-bottom": string;
+  "--train-atmosphere-haze": string;
+};
+
+function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
+  const palette = TRAIN_TIME_PALETTES[mode];
+  return {
+    "--train-palette-sky-top": palette.skyTop,
+    "--train-palette-sky-bottom": palette.skyBottom,
+    "--train-palette-haze": palette.haze,
+    "--train-palette-silhouette": palette.silhouette,
+    "--train-palette-far-surface": palette.farSurface,
+    "--train-palette-mid-surface": palette.midSurface,
+    "--train-palette-near-surface": palette.nearSurface,
+    "--train-palette-water": palette.water,
+    "--train-palette-foreground-contrast": palette.foregroundContrast,
+    "--train-palette-control-surface": palette.controlSurface,
+    "--train-palette-emissive": palette.emissive,
+  };
+}
+
+function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
+  const palette = TRAIN_TIME_PALETTES[mode];
+  return {
+    "--train-atmosphere-sky-top": palette.skyTop,
+    "--train-atmosphere-sky-bottom": palette.skyBottom,
+    "--train-atmosphere-haze": palette.haze,
+  };
+}
+
 function TrainRouteChunk({
   chunk,
   layer,
@@ -385,6 +519,59 @@ function TrainRouteChunk({
           />
         );
       })}
+      {sceneryPlacements
+        .filter((placement) => placement.asset.category === "building")
+        .map((placement, ordinal) => (
+          <span
+            className="train-emissive-overlay train-emissive-overlay--windows"
+            data-emissive="windows"
+            style={{ left: `${placement.offsetPercent}%` }}
+            key={`windows-${placement.asset.id}-${ordinal}`}
+          />
+        ))}
+      {layer.name === "midground" ? (
+        <span
+          className="train-emissive-overlay train-emissive-overlay--streetlight"
+          data-emissive="streetlight"
+          data-emissive-enabled={
+            chunk.region === "town" || chunk.region === "industrial"
+              ? "true"
+              : "false"
+          }
+          style={{ left: `${18 + chunk.variant * 14}%` }}
+        />
+      ) : null}
+      {layer.name === "near" ? (
+        <span
+          className="train-emissive-overlay train-emissive-overlay--station-lamp"
+          data-emissive="station-lamp"
+          data-emissive-enabled={
+            chunk.region === "town" && chunk.regionChunkOffset === 0
+              ? "true"
+              : "false"
+          }
+          style={{ left: `${24 + chunk.variant * 11}%` }}
+        />
+      ) : null}
+      {layer.name === "near" ? (
+        <span
+          className="train-emissive-overlay train-emissive-overlay--signal"
+          data-emissive="signal"
+          data-emissive-enabled={
+            chunk.region === "town" || chunk.region === "industrial"
+              ? "true"
+              : "false"
+          }
+          style={{ left: `${78 - chunk.variant * 9}%` }}
+        />
+      ) : null}
+      {layer.name === "far" ? (
+        <span
+          className="train-emissive-overlay train-emissive-overlay--water-reflection"
+          data-emissive="water-reflection"
+          data-emissive-enabled={chunk.region === "coast" ? "true" : "false"}
+        />
+      ) : null}
     </div>
   );
 }
@@ -439,7 +626,15 @@ function prefersReducedTrainMotion(): boolean {
   );
 }
 
-function TrainWorld() {
+function TrainWorld({
+  timeOfDay,
+  timeSource,
+  paletteTransition,
+}: {
+  timeOfDay: SceneMode;
+  timeSource: "clock" | "manual";
+  paletteTransition: "settled" | "crossfading";
+}) {
   const worldRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsRef = useRef<HTMLOutputElement | null>(null);
   const debug = trainWorldDebugEnabled(window.location.search);
@@ -566,7 +761,37 @@ function TrainWorld() {
         .join(",")}
       data-route-mounted-chunks={nearWindow.chunks.length}
       data-motion={reducedMotion ? "reduced" : "full"}
+      data-time-of-day={timeOfDay}
+      data-time-source={timeSource}
+      data-palette-transition={paletteTransition}
+      style={trainPaletteStyle(timeOfDay)}
     >
+      <div className="train-world-atmospheres">
+        {SCENE_MODES.map((mode) => (
+          <span
+            className={[
+              "train-world-atmosphere",
+              `train-world-atmosphere--${mode}`,
+              mode === timeOfDay ? "is-active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-atmosphere={mode}
+            style={trainAtmosphereStyle(mode)}
+            key={mode}
+          />
+        ))}
+      </div>
+      <div className="train-sky-emissive" aria-hidden="true">
+        <span
+          className="train-emissive-overlay train-emissive-overlay--stars"
+          data-emissive="stars"
+        />
+        <span
+          className="train-emissive-overlay train-emissive-overlay--moon"
+          data-emissive="moon"
+        />
+      </div>
       {TRAIN_PARALLAX_LAYERS.map((layer, layerIndex) => {
         const layerWindow = routeWindows[layer.name];
         const style: TrainWorldLayerStyle = {
@@ -620,6 +845,12 @@ function TrainWorld() {
 export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
   const layoutRef = useRef<HTMLElement | null>(null);
   const [minimumCarriages, setMinimumCarriages] = useState(1);
+  const [modeOverride, setModeOverride] = useState<SceneMode | null>(null);
+  const timeOfDay = modeOverride ?? clockSceneMode(new Date());
+  const [paletteTransition, setPaletteTransition] = useState<
+    "settled" | "crossfading"
+  >("settled");
+  const previousTimeOfDay = useRef(timeOfDay);
   const items = paneListItems(panes);
   const { visible, overflow } = splitPaneItems(items, selected);
   const paneCarriageCount = Math.ceil(visible.length / 4);
@@ -629,6 +860,17 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
     const firstPassenger = carriageIndex * 4;
     carriages.push(visible.slice(firstPassenger, firstPassenger + 4));
   }
+
+  useEffect(() => {
+    if (previousTimeOfDay.current === timeOfDay) return;
+    previousTimeOfDay.current = timeOfDay;
+    setPaletteTransition("crossfading");
+    const transitionTimer = window.setTimeout(
+      () => setPaletteTransition("settled"),
+      TRAIN_PALETTE_TRANSITION_MS,
+    );
+    return () => window.clearTimeout(transitionTimer);
+  }, [timeOfDay]);
 
   useLayoutEffect(() => {
     const layout = layoutRef.current;
@@ -671,8 +913,13 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
       className="train-layout"
       aria-label="Train pane switcher"
       data-minimum-carriages={minimumCarriages}
+      style={trainPaletteStyle(timeOfDay)}
     >
-      <TrainWorld />
+      <TrainWorld
+        timeOfDay={timeOfDay}
+        timeSource={modeOverride === null ? "clock" : "manual"}
+        paletteTransition={paletteTransition}
+      />
       <div className="train-layout-inspection" data-layer="train">
         <div className="train-layout-scene">
           <div className="train-layout-consist">
@@ -717,6 +964,20 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
           <div className="train-layout-track" aria-hidden="true" />
         </div>
       </div>
+      <button
+        type="button"
+        className="train-time-toggle"
+        aria-label="Cycle train lighting (day / sunset / night)"
+        title={`Train lighting: ${timeOfDay}. Cycle day / sunset / night`}
+        data-time-of-day={timeOfDay}
+        data-time-source={modeOverride === null ? "clock" : "manual"}
+        onPointerDown={onPointerDownNoBlur}
+        onClick={() => setModeOverride(nextSceneMode(timeOfDay))}
+      >
+        <span aria-hidden="true">
+          {timeOfDay === "day" ? "☀" : timeOfDay === "sunset" ? "◐" : "☾"}
+        </span>
+      </button>
     </aside>
   );
 }

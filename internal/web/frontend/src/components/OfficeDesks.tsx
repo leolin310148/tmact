@@ -22,6 +22,7 @@ import {
 import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
+import { clockSceneMode, nextSceneMode, type SceneMode } from "./sceneTime";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
 import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
@@ -50,19 +51,6 @@ interface OfficeDesksProps {
   panes: PaneStatus[];
   selected: string | null;
   onSelect: (paneID: string) => void;
-}
-
-// The office wall window has three time-of-day looks. The clock picks one
-// (06:00–17:00 day · 17:00–18:30 sunset · otherwise night); the window easter
-// egg cycles through them in this order.
-type SceneMode = "day" | "sunset" | "night";
-const SCENE_MODES: SceneMode[] = ["day", "sunset", "night"];
-
-function clockSceneMode(now: Date): SceneMode {
-  const mins = now.getHours() * 60 + now.getMinutes();
-  if (mins >= 17 * 60 && mins < 18 * 60 + 30) return "sunset";
-  if (mins >= 6 * 60 && mins < 17 * 60) return "day";
-  return "night";
 }
 
 const characterUrls = [
@@ -329,9 +317,7 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           aria-label="Cycle office lighting (day / sunset / night)"
           title="Cycle day / sunset / night"
           onPointerDown={onPointerDownNoBlur}
-          onClick={() =>
-            setModeOverride(SCENE_MODES[(SCENE_MODES.indexOf(mode) + 1) % SCENE_MODES.length]!)
-          }
+          onClick={() => setModeOverride(nextSceneMode(mode))}
         />
         {visible.length === 0 && overflow.length === 0 ? (
           <div className="office-desks-empty">

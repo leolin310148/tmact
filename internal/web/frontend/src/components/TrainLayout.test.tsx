@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PaneStatus } from "../types/server";
 import {
   advanceTrainWorldRoutePosition,
   minimumCarriagesForWidth,
+  trainPaletteContrastRatio,
   TrainLayout,
 } from "./TrainLayout";
 
@@ -23,6 +24,7 @@ vi.mock("../api/client", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
 });
@@ -222,6 +224,86 @@ describe("TrainLayout", () => {
       expect(layer).toHaveAttribute("data-motion", "reduced");
       expect((layer as HTMLElement).dataset.layerPosition).toBe("0.000px");
     }
+  });
+
+  it("manually crossfades palettes without changing visible route geometry", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const geometryBefore = [
+      ...container.querySelectorAll<HTMLElement>(".train-parallax-chunk"),
+    ].map((chunk) => ({
+      layer: chunk.dataset.parallaxLayer,
+      index: chunk.dataset.routeChunkIndex,
+      region: chunk.dataset.routeRegion,
+      left: chunk.style.left,
+      width: chunk.style.width,
+    }));
+    const positionBefore = world.dataset.routePosition;
+
+    expect(world).toHaveAttribute("data-time-of-day", "day");
+    expect(world).toHaveAttribute("data-time-source", "clock");
+    expect(world).toHaveAttribute("data-palette-transition", "settled");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cycle train lighting (day / sunset / night)",
+      }),
+    );
+
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+    expect(world).toHaveAttribute("data-time-source", "manual");
+    expect(world).toHaveAttribute("data-palette-transition", "crossfading");
+    expect(world.dataset.routePosition).toBe(positionBefore);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(".train-parallax-chunk")].map(
+        (chunk) => ({
+          layer: chunk.dataset.parallaxLayer,
+          index: chunk.dataset.routeChunkIndex,
+          region: chunk.dataset.routeRegion,
+          left: chunk.style.left,
+          width: chunk.style.width,
+        }),
+      ),
+    ).toEqual(geometryBefore);
+
+    act(() => vi.advanceTimersByTime(450));
+    expect(world).toHaveAttribute("data-palette-transition", "settled");
+  });
+
+  it("keeps every emissive treatment separate from the scenery sprites", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const emissiveKinds = new Set(
+      [...container.querySelectorAll<HTMLElement>("[data-emissive]")].map(
+        (overlay) => overlay.dataset.emissive,
+      ),
+    );
+
+    expect(emissiveKinds).toEqual(
+      new Set([
+        "stars",
+        "moon",
+        "windows",
+        "streetlight",
+        "station-lamp",
+        "signal",
+        "water-reflection",
+      ]),
+    );
+    for (const overlay of container.querySelectorAll("[data-emissive]")) {
+      expect(overlay.tagName).not.toBe("IMG");
+    }
+  });
+
+  it("provides accessible foreground contrast in every palette", () => {
+    expect(trainPaletteContrastRatio("day")).toBeGreaterThanOrEqual(4.5);
+    expect(trainPaletteContrastRatio("sunset")).toBeGreaterThanOrEqual(4.5);
+    expect(trainPaletteContrastRatio("night")).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps world position independent from horizontal train inspection", () => {
