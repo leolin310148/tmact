@@ -155,11 +155,38 @@ Use the existing Vite server and a reproducible URL such as:
 http://127.0.0.1:5234/?train-world-debug=1&train-route-seed=smoke-line&train-cruise-speed=96&train-station-trigger=approach
 ```
 
+#### Required viewport protocol
+
+Run the following sequence from the beginning for **every** requested size.
+Do not reuse a screenshot or DOM result from a prior viewport, and do not set
+the viewport as part of `borz open`:
+
+1. Confirm the shared server returns HTTP 200 at the plain page URL.
+2. Fetch the plain, non-cache-busted
+   `http://127.0.0.1:5234/src/main.tsx` URL (no query string) and confirm the
+   response contains the current entrypoint imports and source-map content.
+   A stale or mismatched module invalidates the run.
+3. Open or reopen the port-5234 journey URL with `borz` and wait for
+   `.train-layout-world`.
+4. Set the viewport with `borz viewport <width>x<height>` **after** opening.
+5. Hard-reload with `borz refresh` and wait for `.train-layout-world` again.
+6. Before inspecting DOM, waiting for a station state, or taking a screenshot,
+   run `borz eval '({width: window.innerWidth, height:
+   window.innerHeight})' --unwrap` and require an exact match. Stop and discard
+   the evidence if either dimension differs.
+
+Only after the dimension assertion passes should lazy train images be allowed
+to settle and the visual/DOM checks begin. Repeat the complete sequence for:
+
+- compact: 390×844
+- desktop: 1280×800
+- ultrawide: 2560×900
+
 Final manual cases:
 
-1. At 390×844, 1280×800, and 2560×900, hard-reload the URL and verify the
-   locomotive/carriages stay fixed while scenery travels right. Horizontal
-   train inspection must not move the world.
+1. Using the required viewport protocol at 390×844, 1280×800, and 2560×900,
+   verify the locomotive/carriages stay fixed while scenery travels right.
+   Horizontal train inspection must not move the world.
 2. Watch at least three region changes and a complete non-station set piece.
    Expect no blank seam, jump, obvious short repeat, or scenery that blocks
    train controls/passengers.
@@ -178,6 +205,27 @@ Final manual cases:
    `.train-parallax-chunk`, `.train-scenery-asset`, animation-frame cadence,
    and browser task-manager CPU. Counts must remain bounded, controls remain
    responsive, and the console must stay free of errors.
+
+Last run 2026-07-25: the shared Vite server returned HTTP 200 and the plain
+`/src/main.tsx` response matched the current entrypoint before each viewport.
+Each page was then opened/reopened, resized, hard-reloaded, and its actual
+`window.innerWidth`/`window.innerHeight` asserted before evidence was recorded.
+No private pane names, output, or payloads were included.
+
+| Evidence size | Actual viewport | Station evidence | Bounded DOM evidence |
+| --- | --- | --- | --- |
+| Compact | 390×844 | `approach → decelerate → platform → dwell`; platform and dwell stayed at `3680px`; two station segments were visible behind the train | 31 parallax chunks at dwell and after departure/cruise; scenery assets recycled from 21 to 24 |
+| Desktop | 1280×800 | Same complete transition and `3680px` stop; four station segments were visible behind the train | 44 parallax chunks and 29 scenery assets at dwell |
+| Ultrawide | 2560×900 | Same complete transition and `3680px` stop; four station segments were visible with no seam or control collision | 64 parallax chunks and 45 scenery assets at dwell |
+
+The ultrawide worst-case bounded-DOM run then continued for 305 seconds at
+96 px/s and sampled every five seconds (62 samples). Route position advanced
+from `4083.389px` to `28158.397px` across repeated station states. Both
+`.train-parallax-chunk` and the debug total stayed exactly 64 throughout;
+`.train-scenery-asset` recycled within 38–47 rather than trending upward.
+Approach/dwell and sustained-run screenshots showed no blank edge or station
+occlusion of the fixed controls, and `borz errors --json` reported no page
+errors.
 
 ## Notes Template
 

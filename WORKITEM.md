@@ -201,7 +201,7 @@ future station stop without growing the DOM or memory usage over time.
   boundaries, manual override isolation, timer cleanup, and remount behavior.
   Run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-015 — Make browser smoke checks resistant to false viewport passes.**
+- [x] **TRAIN-015 — Make browser smoke checks resistant to false viewport passes.**
   Update the train smoke procedure to require this exact order for every size:
   open/reopen the shared port-5234 page with `borz`, set the viewport, hard
   reload, then assert `window.innerWidth` and `window.innerHeight` before
