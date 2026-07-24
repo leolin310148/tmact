@@ -52,8 +52,7 @@ import {
   type TrainParallaxLayerName,
 } from "./trainRoute";
 import {
-  trainSceneryAssetsForChunk,
-  trainSceneryScale,
+  trainSceneryPlacementsForChunk,
 } from "./trainScenery";
 import "./TrainLayout.css";
 
@@ -333,11 +332,7 @@ function TrainRouteChunk({
     "--train-chunk-ridge-height": `${chunk.ridgeHeight}px`,
     "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
   };
-  const sceneryAssets = trainSceneryAssetsForChunk(
-    layer.name,
-    chunk.index,
-    chunk.variant,
-  );
+  const sceneryPlacements = trainSceneryPlacementsForChunk(layer.name, chunk);
 
   return (
     <div
@@ -351,14 +346,18 @@ function TrainRouteChunk({
         .join(" ")}
       data-route-chunk-index={chunk.index}
       data-route-chunk-variant={chunk.variant}
+      data-route-region={chunk.region}
+      data-route-region-index={chunk.regionIndex}
+      data-route-region-offset={chunk.regionChunkOffset}
       data-parallax-layer={layer.name}
       data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
     >
-      {sceneryAssets.map((asset) => {
+      {sceneryPlacements.map((placement, ordinal) => {
+        const { asset } = placement;
         const sceneryStyle: TrainSceneryAssetStyle = {
-          left: `${chunk.featureOffset}%`,
-          "--train-scenery-scale": trainSceneryScale(asset, chunk.variant),
+          left: `${placement.offsetPercent}%`,
+          "--train-scenery-scale": placement.scale,
         };
         return (
           <img
@@ -378,8 +377,11 @@ function TrainRouteChunk({
             data-scenery-anchor={asset.anchor}
             data-scenery-safe-scale={asset.safeScale.join("-")}
             data-scenery-day-night={asset.dayNightTreatment}
+            data-scenery-landmark={placement.landmark ? "true" : "false"}
+            data-scenery-collision-width={placement.collisionWidth.toFixed(3)}
+            data-scenery-minimum-spacing={placement.minimumSpacingPx}
             style={sceneryStyle}
-            key={asset.id}
+            key={`${asset.id}-${ordinal}`}
           />
         );
       })}

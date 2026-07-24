@@ -3,6 +3,8 @@ export const DEFAULT_TRAIN_ROUTE_SEED = "infinite-journey";
 export const TRAIN_ROUTE_CHUNK_WIDTH = 320;
 export const TRAIN_ROUTE_OVERSCAN_CHUNKS = 2;
 export const TRAIN_PARALLAX_SEAM_OVERLAP = 2;
+export const TRAIN_REGION_CHUNK_LENGTH = 9;
+const TRAIN_REGION_MACRO_LENGTH = 32;
 
 export const TRAIN_PARALLAX_LAYERS = [
   { name: "sky", speedRatio: 0 },
@@ -15,13 +17,60 @@ export const TRAIN_PARALLAX_LAYERS = [
 export type TrainParallaxLayer = (typeof TRAIN_PARALLAX_LAYERS)[number];
 export type TrainParallaxLayerName = TrainParallaxLayer["name"];
 
+export type TrainRegionName =
+  | "forest"
+  | "mountain"
+  | "town"
+  | "coast"
+  | "industrial";
+
+export interface TrainRegionProfile {
+  name: TrainRegionName;
+  label: string;
+  transitionWeights: Readonly<Partial<Record<TrainRegionName, number>>>;
+}
+
+export const TRAIN_REGION_PROFILES = {
+  forest: {
+    name: "forest",
+    label: "Forest",
+    transitionWeights: { mountain: 8, town: 2 },
+  },
+  mountain: {
+    name: "mountain",
+    label: "Mountain foothills",
+    transitionWeights: { forest: 4, town: 7, coast: 1 },
+  },
+  town: {
+    name: "town",
+    label: "Town",
+    transitionWeights: { forest: 1, mountain: 2, coast: 5, industrial: 4 },
+  },
+  coast: {
+    name: "coast",
+    label: "Coast",
+    transitionWeights: { mountain: 2, town: 8 },
+  },
+  industrial: {
+    name: "industrial",
+    label: "Industrial outskirts",
+    transitionWeights: { forest: 1, mountain: 2, town: 8 },
+  },
+} as const satisfies Record<TrainRegionName, TrainRegionProfile>;
+
 export interface RouteChunk {
   index: number;
   seedKey: string;
+  routeSeed: string;
+  seedVersion: string;
   variant: number;
   terrainHeight: number;
   ridgeHeight: number;
   featureOffset: number;
+  region: TrainRegionName;
+  regionIndex: number;
+  regionChunkOffset: number;
+  regionChunkLength: number;
 }
 
 export interface RouteChunkWindowSnapshot {
@@ -68,6 +117,10 @@ function hashString(value: string): number {
   return hash >>> 0;
 }
 
+export function trainRouteRandomUnit(value: string): number {
+  return createSeededRandom(hashString(value))();
+}
+
 function createSeededRandom(seed: number): () => number {
   let state = seed;
   return () => {
@@ -75,6 +128,80 @@ function createSeededRandom(seed: number): () => number {
     let value = Math.imul(state ^ (state >>> 15), 1 | state);
     value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function weightedTransition(
+  current: TrainRegionName,
+  randomValue: number,
+  excluded?: TrainRegionName,
+): TrainRegionName {
+  const choices = (
+    Object.entries(TRAIN_REGION_PROFILES[current].transitionWeights) as [
+      TrainRegionName,
+      number,
+    ][]
+  ).filter(([name, weight]) => name !== excluded && weight > 0);
+  const totalWeight = choices.reduce((total, [, weight]) => total + weight, 0);
+  let cursor = randomValue * totalWeight;
+
+  for (const [name, weight] of choices) {
+    cursor -= weight;
+    if (cursor < 0) return name;
+  }
+  return choices.at(-1)?.[0] ?? "town";
+}
+
+export function trainRegionAtIndex(
+  seed: string,
+  regionIndex: number,
+  seedVersion = TRAIN_ROUTE_SEED_VERSION,
+): TrainRegionName {
+  assertInteger(regionIndex, "train region index");
+  const resolvedSeed = seed || DEFAULT_TRAIN_ROUTE_SEED;
+  const macroIndex = Math.floor(regionIndex / TRAIN_REGION_MACRO_LENGTH);
+  const macroOffset = positiveModulo(regionIndex, TRAIN_REGION_MACRO_LENGTH);
+  let region: TrainRegionName = "town";
+
+  for (let offset = 1; offset <= macroOffset; offset++) {
+    if (offset === TRAIN_REGION_MACRO_LENGTH - 1) {
+      region = "mountain";
+      continue;
+    }
+    const exclude =
+      offset === TRAIN_REGION_MACRO_LENGTH - 2 ? "mountain" : undefined;
+    region = weightedTransition(
+      region,
+      trainRouteRandomUnit(
+        `${seedVersion}:${resolvedSeed}:region:${macroIndex}:${offset}`,
+      ),
+      exclude,
+    );
+  }
+  return region;
+}
+
+export function trainRegionForChunk(
+  seed: string,
+  chunkIndex: number,
+  seedVersion = TRAIN_ROUTE_SEED_VERSION,
+): {
+  name: TrainRegionName;
+  index: number;
+  chunkOffset: number;
+  chunkLength: number;
+} {
+  assertInteger(chunkIndex, "route chunk index");
+  const regionIndex = Math.floor(chunkIndex / TRAIN_REGION_CHUNK_LENGTH);
+  return {
+    name: trainRegionAtIndex(seed, regionIndex, seedVersion),
+    index: regionIndex,
+    chunkOffset: positiveModulo(chunkIndex, TRAIN_REGION_CHUNK_LENGTH),
+    chunkLength: TRAIN_REGION_CHUNK_LENGTH,
   };
 }
 
@@ -93,14 +220,21 @@ export function generateRouteChunk(
   const resolvedSeed = seed || DEFAULT_TRAIN_ROUTE_SEED;
   const seedKey = `${seedVersion}:${resolvedSeed}:${index}`;
   const random = createSeededRandom(hashString(seedKey));
+  const region = trainRegionForChunk(resolvedSeed, index, seedVersion);
 
   return {
     index,
     seedKey,
+    routeSeed: resolvedSeed,
+    seedVersion,
     variant: Math.floor(random() * 5),
     terrainHeight: 34 + Math.floor(random() * 25),
     ridgeHeight: 48 + Math.floor(random() * 33),
     featureOffset: 12 + Math.floor(random() * 76),
+    region: region.name,
+    regionIndex: region.index,
+    regionChunkOffset: region.chunkOffset,
+    regionChunkLength: region.chunkLength,
   };
 }
 

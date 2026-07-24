@@ -4,8 +4,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { TRAIN_PARALLAX_LAYERS } from "./trainRoute";
 import {
+  generateRouteChunk,
+  TRAIN_PARALLAX_LAYERS,
+  TRAIN_REGION_CHUNK_LENGTH,
+  TRAIN_ROUTE_CHUNK_WIDTH,
+} from "./trainRoute";
+import {
+  TRAIN_REGION_SCENERY_PROFILES,
   TRAIN_SCENERY_ASSETS,
   TRAIN_SCENERY_BRIDGES,
   TRAIN_SCENERY_BUILDINGS,
@@ -14,8 +20,9 @@ import {
   TRAIN_SCENERY_PROPS,
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
-  trainSceneryAssetsForChunk,
+  trainSceneryPlacementsForChunk,
   trainSceneryScale,
+  type TrainRegionSceneryProfile,
 } from "./trainScenery";
 
 describe("train scenery asset kit", () => {
@@ -61,34 +68,134 @@ describe("train scenery asset kit", () => {
     }
   });
 
-  it("selects every asset deterministically across a long chunk sample", () => {
+  it("selects every region-allowed asset deterministically across a long route", () => {
     const firstPass = new Map<string, readonly string[]>();
     const selectedIDs = new Set<string>();
 
-    for (let index = -180; index <= 180; index++) {
-      const variant = ((index % 5) + 5) % 5;
+    for (let index = -1800; index <= 1800; index++) {
+      const chunk = generateRouteChunk("asset-line", index);
       for (const layer of TRAIN_PARALLAX_LAYERS) {
-        const assets = trainSceneryAssetsForChunk(
-          layer.name,
-          index,
-          variant,
-        );
-        const key = `${layer.name}:${index}:${variant}`;
-        const ids = assets.map((asset) => asset.id);
+        const placements = trainSceneryPlacementsForChunk(layer.name, chunk);
+        const key = `${layer.name}:${index}`;
+        const ids = placements.map((placement) => placement.asset.id);
         firstPass.set(key, ids);
         ids.forEach((id) => selectedIDs.add(id));
         expect(
-          trainSceneryAssetsForChunk(layer.name, index, variant).map(
-            (asset) => asset.id,
+          trainSceneryPlacementsForChunk(layer.name, chunk).map(
+            (placement) => placement.asset.id,
           ),
         ).toEqual(ids);
       }
     }
 
-    expect(firstPass.size).toBe(TRAIN_PARALLAX_LAYERS.length * 361);
+    expect(firstPass.size).toBe(TRAIN_PARALLAX_LAYERS.length * 3601);
     expect(selectedIDs).toEqual(
       new Set(TRAIN_SCENERY_ASSETS.map((asset) => asset.id)),
     );
+  });
+
+  it("enforces regional asset pools, density bounds, and one landmark per region", () => {
+    const landmarkChunks = new Map<number, Set<number>>();
+
+    for (let index = -1200; index <= 1200; index++) {
+      const chunk = generateRouteChunk("constraint-line", index);
+      const profile = TRAIN_REGION_SCENERY_PROFILES[
+        chunk.region
+      ] as TrainRegionSceneryProfile;
+      for (const layer of TRAIN_PARALLAX_LAYERS) {
+        const rule = profile.layers[layer.name];
+        const placements = trainSceneryPlacementsForChunk(layer.name, chunk);
+        expect(placements.length).toBeLessThanOrEqual(rule?.maxPerChunk ?? 0);
+
+        for (const placement of placements) {
+          const isAllowedNormal = rule?.assetIds.includes(placement.asset.id);
+          const isAllowedLandmark =
+            profile.landmark?.layer === layer.name &&
+            profile.landmark.assetIds.includes(placement.asset.id);
+          expect(
+            isAllowedNormal || isAllowedLandmark,
+            `${chunk.region}/${layer.name}/${placement.asset.id}`,
+          ).toBe(true);
+
+          if (placement.landmark) {
+            const chunks =
+              landmarkChunks.get(chunk.regionIndex) ?? new Set<number>();
+            chunks.add(chunk.index);
+            landmarkChunks.set(chunk.regionIndex, chunks);
+          }
+        }
+      }
+    }
+
+    for (const chunks of landmarkChunks.values()) {
+      expect(chunks.size).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("keeps placed objects spaced and collision-free across chunk boundaries", () => {
+    for (const layer of TRAIN_PARALLAX_LAYERS) {
+      const placements = [];
+      for (let index = -500; index <= 500; index++) {
+        const chunk = generateRouteChunk("spacing-line", index);
+        for (const placement of trainSceneryPlacementsForChunk(
+          layer.name,
+          chunk,
+        )) {
+          if (placement.minimumSpacingPx <= 0) continue;
+          placements.push({
+            center:
+              index * TRAIN_ROUTE_CHUNK_WIDTH +
+              (placement.offsetPercent / 100) * TRAIN_ROUTE_CHUNK_WIDTH,
+            ...placement,
+          });
+        }
+      }
+      placements.sort((left, right) => left.center - right.center);
+
+      for (let index = 1; index < placements.length; index++) {
+        const previous = placements[index - 1]!;
+        const current = placements[index]!;
+        const distance = current.center - previous.center;
+        expect(distance).toBeGreaterThanOrEqual(
+          Math.min(previous.minimumSpacingPx, current.minimumSpacingPx),
+        );
+        expect(distance).toBeGreaterThanOrEqual(
+          previous.collisionWidth / 2 + current.collisionWidth / 2,
+        );
+      }
+    }
+  });
+
+  it("deweights recently used variants throughout every region", () => {
+    for (const layer of TRAIN_PARALLAX_LAYERS) {
+      for (let regionIndex = -80; regionIndex <= 80; regionIndex++) {
+        const ids: string[] = [];
+        for (let offset = 0; offset < TRAIN_REGION_CHUNK_LENGTH; offset++) {
+          const chunk = generateRouteChunk(
+            "cooldown-line",
+            regionIndex * TRAIN_REGION_CHUNK_LENGTH + offset,
+          );
+          ids.push(
+            ...trainSceneryPlacementsForChunk(layer.name, chunk).map(
+              (placement) => placement.asset.id,
+            ),
+          );
+        }
+        for (let index = 1; index < ids.length; index++) {
+          const profile = TRAIN_REGION_SCENERY_PROFILES[
+            generateRouteChunk(
+              "cooldown-line",
+              regionIndex * TRAIN_REGION_CHUNK_LENGTH,
+            ).region
+          ] as TrainRegionSceneryProfile;
+          const rule = profile.layers[layer.name];
+          const pool = rule?.assetIds ?? [];
+          if ((rule?.cooldownChunks ?? 0) > 0 && new Set(pool).size > 1) {
+            expect(ids[index]).not.toBe(ids[index - 1]);
+          }
+        }
+      }
+    }
   });
 
   it("keeps deterministic variant scaling inside each asset safe range", () => {

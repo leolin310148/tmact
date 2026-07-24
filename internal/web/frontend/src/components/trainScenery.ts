@@ -21,7 +21,13 @@ import vegetationConiferTallUrl from "../assets/train-theme/sprites/scenery/vege
 import vegetationDeciduousUrl from "../assets/train-theme/sprites/scenery/vegetation-deciduous.png";
 import vegetationHedgerowUrl from "../assets/train-theme/sprites/scenery/vegetation-hedgerow.png";
 import vegetationReedsUrl from "../assets/train-theme/sprites/scenery/vegetation-reeds.png";
-import type { TrainParallaxLayerName } from "./trainRoute";
+import {
+  TRAIN_REGION_CHUNK_LENGTH,
+  trainRouteRandomUnit,
+  type RouteChunk,
+  type TrainParallaxLayerName,
+  type TrainRegionName,
+} from "./trainRoute";
 
 export type TrainSceneryCategory =
   | "cloud"
@@ -370,46 +376,414 @@ export const TRAIN_SCENERY_ASSETS = [
   ...TRAIN_SCENERY_PROPS,
 ] as const satisfies readonly TrainSceneryAsset[];
 
+export interface TrainRegionLayerRule {
+  assetIds: readonly string[];
+  density: number;
+  maxPerChunk: number;
+  minimumSpacingPx: number;
+  cooldownChunks: number;
+}
+
+export interface TrainRegionSceneryProfile {
+  name: TrainRegionName;
+  layers: Readonly<
+    Partial<Record<TrainParallaxLayerName, TrainRegionLayerRule>>
+  >;
+  landmark?: {
+    layer: TrainParallaxLayerName;
+    assetIds: readonly string[];
+    probability: number;
+    maxPerRegion: 1;
+  };
+}
+
+const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
+const PROP_IDS = TRAIN_SCENERY_PROPS.map((asset) => asset.id);
+
+export const TRAIN_REGION_SCENERY_PROFILES = {
+  forest: {
+    name: "forest",
+    layers: {
+      sky: {
+        assetIds: CLOUD_IDS,
+        density: 0.55,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 1,
+      },
+      "ultra-far": {
+        assetIds: ["terrain-foothills", "terrain-mesa"],
+        density: 1,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      far: {
+        assetIds: ["terrain-foothills", "terrain-mesa"],
+        density: 0.85,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      midground: {
+        assetIds: [
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+          "vegetation-deciduous",
+          "vegetation-hedgerow",
+        ],
+        density: 1.35,
+        maxPerChunk: 2,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+      near: {
+        assetIds: ["prop-fence", "prop-telegraph-pole"],
+        density: 0.42,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["bridge-truss"],
+      probability: 0.18,
+      maxPerRegion: 1,
+    },
+  },
+  mountain: {
+    name: "mountain",
+    layers: {
+      sky: {
+        assetIds: CLOUD_IDS,
+        density: 0.72,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 1,
+      },
+      "ultra-far": {
+        assetIds: ["terrain-alpine", "terrain-foothills"],
+        density: 1,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      far: {
+        assetIds: ["terrain-alpine", "terrain-foothills"],
+        density: 0.9,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      midground: {
+        assetIds: [
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+          "vegetation-coastal-pine",
+        ],
+        density: 0.72,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+      near: {
+        assetIds: ["prop-warning-sign", "prop-telegraph-pole"],
+        density: 0.28,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["bridge-truss"],
+      probability: 0.32,
+      maxPerRegion: 1,
+    },
+  },
+  town: {
+    name: "town",
+    layers: {
+      sky: {
+        assetIds: ["cloud-wisp", "cloud-cumulus"],
+        density: 0.38,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 1,
+      },
+      "ultra-far": {
+        assetIds: ["terrain-foothills", "terrain-mesa"],
+        density: 1,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      far: {
+        assetIds: ["terrain-foothills", "terrain-mesa"],
+        density: 0.72,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      midground: {
+        assetIds: [
+          "building-rowhouse",
+          "building-apartments",
+          "building-cottage",
+          "vegetation-deciduous",
+          "vegetation-hedgerow",
+        ],
+        density: 1.5,
+        maxPerChunk: 2,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+      near: {
+        assetIds: PROP_IDS,
+        density: 0.52,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["building-water-tower"],
+      probability: 0.42,
+      maxPerRegion: 1,
+    },
+  },
+  coast: {
+    name: "coast",
+    layers: {
+      sky: {
+        assetIds: ["cloud-wisp", "cloud-storm", "cloud-cumulus"],
+        density: 0.62,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 1,
+      },
+      "ultra-far": {
+        assetIds: ["terrain-mesa", "terrain-foothills"],
+        density: 0.78,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      far: {
+        assetIds: ["coast-shore"],
+        density: 1,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      midground: {
+        assetIds: [
+          "vegetation-coastal-pine",
+          "vegetation-reeds",
+          "vegetation-hedgerow",
+          "building-cottage",
+        ],
+        density: 0.78,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+      near: {
+        assetIds: ["prop-fence", "prop-warning-sign"],
+        density: 0.3,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+    },
+  },
+  industrial: {
+    name: "industrial",
+    layers: {
+      sky: {
+        assetIds: ["cloud-storm", "cloud-wisp"],
+        density: 0.48,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 1,
+      },
+      "ultra-far": {
+        assetIds: ["terrain-mesa", "terrain-foothills"],
+        density: 1,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      far: {
+        assetIds: ["terrain-mesa", "terrain-foothills"],
+        density: 0.68,
+        maxPerChunk: 1,
+        minimumSpacingPx: 0,
+        cooldownChunks: 0,
+      },
+      midground: {
+        assetIds: [
+          "building-workshop",
+          "building-warehouse",
+          "building-apartments",
+        ],
+        density: 1.42,
+        maxPerChunk: 2,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+      near: {
+        assetIds: PROP_IDS,
+        density: 0.62,
+        maxPerChunk: 1,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
+      },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["building-water-tower"],
+      probability: 0.58,
+      maxPerRegion: 1,
+    },
+  },
+} as const satisfies Record<TrainRegionName, TrainRegionSceneryProfile>;
+
+export interface TrainSceneryPlacement {
+  asset: TrainSceneryAsset;
+  offsetPercent: number;
+  scale: number;
+  collisionWidth: number;
+  minimumSpacingPx: number;
+  landmark: boolean;
+}
+
+const TRAIN_SCENERY_ASSET_BY_ID = new Map(
+  TRAIN_SCENERY_ASSETS.map((asset) => [asset.id, asset]),
+);
+
 function positiveModulo(value: number, divisor: number): number {
   return ((value % divisor) + divisor) % divisor;
 }
 
-function selectAsset(
-  assets: readonly TrainSceneryAsset[],
-  chunkIndex: number,
-  variant: number,
-): TrainSceneryAsset {
-  return assets[positiveModulo(chunkIndex + variant, assets.length)]!;
+function assetForID(id: string): TrainSceneryAsset {
+  const resolved = TRAIN_SCENERY_ASSET_BY_ID.get(id);
+  if (!resolved) throw new Error(`unknown train scenery asset: ${id}`);
+  return resolved;
 }
 
-export function trainSceneryAssetsForChunk(
-  layer: TrainParallaxLayerName,
-  chunkIndex: number,
-  variant: number,
-): readonly TrainSceneryAsset[] {
-  switch (layer) {
-    case "sky":
-      return [selectAsset(TRAIN_SCENERY_CLOUDS, chunkIndex, variant)];
-    case "ultra-far":
-      return [selectAsset(TRAIN_SCENERY_TERRAIN, chunkIndex, variant)];
-    case "far":
-      return positiveModulo(chunkIndex, 7) === 0
-        ? TRAIN_SCENERY_COASTS
-        : [selectAsset(TRAIN_SCENERY_TERRAIN, chunkIndex + 1, variant)];
-    case "midground":
-      if (positiveModulo(chunkIndex, 11) === 0) return TRAIN_SCENERY_BRIDGES;
-      return positiveModulo(chunkIndex, 2) === 0
-        ? [selectAsset(TRAIN_SCENERY_BUILDINGS, chunkIndex / 2, variant)]
-        : [
-            selectAsset(
-              TRAIN_SCENERY_VEGETATION,
-              Math.floor(chunkIndex / 2),
-              variant,
-            ),
-          ];
-    case "near":
-      return [selectAsset(TRAIN_SCENERY_PROPS, chunkIndex, variant)];
+function objectCount(
+  density: number,
+  maximum: number,
+  randomValue: number,
+): number {
+  const base = Math.floor(density);
+  const fractional = density - base;
+  return Math.min(maximum, base + (randomValue < fractional ? 1 : 0));
+}
+
+function placementOffsets(count: number, randomValue: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [25 + randomValue * 50];
+  const jitter = (randomValue - 0.5) * 2;
+  return [25 + jitter, 75 - jitter];
+}
+
+function chooseAsset(
+  assetIds: readonly string[],
+  randomValue: number,
+  recentIDs: readonly string[],
+): TrainSceneryAsset {
+  const start = Math.floor(randomValue * assetIds.length);
+  for (let offset = 0; offset < assetIds.length; offset++) {
+    const id = assetIds[positiveModulo(start + offset, assetIds.length)]!;
+    if (!recentIDs.includes(id)) return assetForID(id);
   }
+  const leastRecentID = [...assetIds].sort(
+    (left, right) => recentIDs.lastIndexOf(left) - recentIDs.lastIndexOf(right),
+  )[0]!;
+  return assetForID(leastRecentID);
+}
+
+function regionLayerPlan(
+  chunk: RouteChunk,
+  layer: TrainParallaxLayerName,
+): readonly (readonly TrainSceneryPlacement[])[] {
+  const profile: TrainRegionSceneryProfile =
+    TRAIN_REGION_SCENERY_PROFILES[chunk.region];
+  const rule = profile.layers[layer];
+  if (!rule) return Array.from({ length: TRAIN_REGION_CHUNK_LENGTH }, () => []);
+
+  const regionKey =
+    `${chunk.seedVersion}:${chunk.routeSeed}:region-plan:` +
+    `${chunk.regionIndex}:${layer}`;
+  const landmark =
+    profile.landmark?.layer === layer &&
+    trainRouteRandomUnit(`${regionKey}:landmark:enabled`) <
+      profile.landmark.probability
+      ? {
+          offset:
+            2 +
+            Math.floor(
+              trainRouteRandomUnit(`${regionKey}:landmark:offset`) *
+                (TRAIN_REGION_CHUNK_LENGTH - 4),
+            ),
+          assetIds: profile.landmark.assetIds,
+        }
+      : null;
+  const recentIDs: string[] = [];
+  const plan: TrainSceneryPlacement[][] = [];
+
+  for (let localOffset = 0; localOffset < TRAIN_REGION_CHUNK_LENGTH; localOffset++) {
+    const chunkKey = `${regionKey}:chunk:${localOffset}`;
+    const isLandmark = landmark?.offset === localOffset;
+    const assetIds = isLandmark ? landmark.assetIds : rule.assetIds;
+    const count = isLandmark
+      ? 1
+      : objectCount(
+          rule.density,
+          rule.maxPerChunk,
+          trainRouteRandomUnit(`${chunkKey}:density`),
+        );
+    const offsets = isLandmark
+      ? [50]
+      : placementOffsets(
+          count,
+          trainRouteRandomUnit(`${chunkKey}:offset`),
+        );
+    const placements = offsets.map((offsetPercent, ordinal) => {
+      const asset = chooseAsset(
+        assetIds,
+        trainRouteRandomUnit(`${chunkKey}:asset:${ordinal}`),
+        recentIDs,
+      );
+      const variant = Math.floor(
+        trainRouteRandomUnit(`${chunkKey}:variant:${ordinal}`) * 5,
+      );
+      const scale = trainSceneryScale(asset, variant);
+      recentIDs.push(asset.id);
+      recentIDs.splice(0, Math.max(0, recentIDs.length - rule.cooldownChunks));
+      return {
+        asset,
+        offsetPercent,
+        scale,
+        collisionWidth: asset.width * scale,
+        minimumSpacingPx: rule.minimumSpacingPx,
+        landmark: isLandmark,
+      };
+    });
+    plan.push(placements);
+  }
+  return plan;
+}
+
+export function trainSceneryPlacementsForChunk(
+  layer: TrainParallaxLayerName,
+  chunk: RouteChunk,
+): readonly TrainSceneryPlacement[] {
+  return regionLayerPlan(chunk, layer)[chunk.regionChunkOffset] ?? [];
 }
 
 export function trainSceneryScale(

@@ -145,7 +145,8 @@ describe("TrainLayout", () => {
     const sprites =
       container.querySelectorAll<HTMLImageElement>(".train-scenery-asset");
 
-    expect(sprites).toHaveLength(chunks.length);
+    expect(sprites.length).toBeGreaterThan(0);
+    expect(sprites.length).toBeLessThanOrEqual(chunks.length * 2);
     expect(container.querySelector("[data-scenery-category='cloud']")).not.toBeNull();
     expect(
       container.querySelector("[data-scenery-category='terrain']"),
@@ -160,9 +161,19 @@ describe("TrainLayout", () => {
       expect(sprite).toHaveAttribute("data-scenery-asset");
       expect(sprite.dataset.sceneryAnchor).toMatch(/^(center|bottom-center)$/);
       expect(sprite.dataset.scenerySafeScale).toMatch(/^\d+(\.\d+)?-\d+(\.\d+)?$/);
+      expect(sprite.dataset.sceneryLandmark).toMatch(/^(true|false)$/);
+      expect(Number(sprite.dataset.sceneryCollisionWidth)).toBeGreaterThan(0);
       expect(sprite.width).toBeGreaterThan(0);
       expect(sprite.height).toBeGreaterThan(0);
       expect(sprite.style.getPropertyValue("--train-scenery-scale")).not.toBe("");
+    }
+
+    for (const chunk of chunks) {
+      expect(chunk.getAttribute("data-route-region")).toMatch(
+        /^(forest|mountain|town|coast|industrial)$/,
+      );
+      expect(chunk).toHaveAttribute("data-route-region-index");
+      expect(chunk).toHaveAttribute("data-route-region-offset");
     }
   });
 

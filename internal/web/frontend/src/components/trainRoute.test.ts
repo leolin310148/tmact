@@ -6,10 +6,14 @@ import {
   routeChunkWindowRange,
   TRAIN_PARALLAX_LAYERS,
   TRAIN_PARALLAX_SEAM_OVERLAP,
+  TRAIN_REGION_CHUNK_LENGTH,
+  TRAIN_REGION_PROFILES,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
+  trainRegionAtIndex,
   trainParallaxLayerPosition,
   trainParallaxLayerTransform,
+  type TrainRegionProfile,
 } from "./trainRoute";
 
 describe("train route chunks", () => {
@@ -21,10 +25,16 @@ describe("train route chunks", () => {
     expect(first).toEqual({
       index: 42,
       seedKey: "tmact-train-route-v1:alpine-line:42",
+      routeSeed: "alpine-line",
+      seedVersion: "tmact-train-route-v1",
       variant: 1,
       terrainHeight: 40,
       ridgeHeight: 56,
       featureOffset: 14,
+      region: "mountain",
+      regionIndex: 4,
+      regionChunkOffset: 6,
+      regionChunkLength: 9,
     });
     expect(() => generateRouteChunk("alpine-line", 1.5)).toThrow(
       "route chunk index must be an integer",
@@ -46,6 +56,49 @@ describe("train route chunks", () => {
       ridgeHeight: forest.ridgeHeight,
       featureOffset: forest.featureOffset,
     });
+  });
+
+  it("builds deterministic nine-chunk regions with weighted allowed transitions", () => {
+    const firstPass = Array.from({ length: 400 }, (_, offset) =>
+      trainRegionAtIndex("grammar-line", offset - 200),
+    );
+    const repeated = Array.from({ length: 400 }, (_, offset) =>
+      trainRegionAtIndex("grammar-line", offset - 200),
+    );
+
+    expect(repeated).toEqual(firstPass);
+    expect(new Set(firstPass)).toEqual(
+      new Set(["forest", "mountain", "town", "coast", "industrial"]),
+    );
+    expect(TRAIN_REGION_CHUNK_LENGTH).toBeGreaterThanOrEqual(6);
+    expect(TRAIN_REGION_CHUNK_LENGTH).toBeLessThanOrEqual(12);
+
+    for (let index = 1; index < firstPass.length; index++) {
+      const previous = firstPass[index - 1]!;
+      const current = firstPass[index]!;
+      expect(
+        (TRAIN_REGION_PROFILES[previous] as TrainRegionProfile)
+          .transitionWeights[current],
+        `${previous} → ${current}`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps every chunk in a region coherent before changing profile", () => {
+    for (let regionIndex = -40; regionIndex <= 40; regionIndex++) {
+      const chunks = Array.from({ length: TRAIN_REGION_CHUNK_LENGTH }, (_, offset) =>
+        generateRouteChunk(
+          "coherent-line",
+          regionIndex * TRAIN_REGION_CHUNK_LENGTH + offset,
+        ),
+      );
+      expect(new Set(chunks.map((chunk) => chunk.region))).toEqual(
+        new Set([trainRegionAtIndex("coherent-line", regionIndex)]),
+      );
+      expect(chunks.map((chunk) => chunk.regionChunkOffset)).toEqual(
+        Array.from({ length: TRAIN_REGION_CHUNK_LENGTH }, (_, offset) => offset),
+      );
+    }
   });
 
   it("reports the default seed when an empty seed falls back", () => {

@@ -87,7 +87,7 @@ future station stop without growing the DOM or memory usage over time.
   Replace TRAIN-003 placeholders and verify transparent edges, pixel scaling,
   anchors, and seamless terrain joins in the live layout.
 
-- [ ] **TRAIN-005 — Generate coherent regions with route grammar.**
+- [x] **TRAIN-005 — Generate coherent regions with route grammar.**
   Introduce region profiles for at least forest, mountain/foothill, town,
   coast, and industrial outskirts. A region should last roughly 6–12 chunks and
   constrain which assets, densities, terrain, and landmarks may appear; do not
