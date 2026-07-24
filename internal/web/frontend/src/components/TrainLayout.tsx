@@ -6,8 +6,16 @@
 // chair, and occupied chair are separate aligned layers. Seat order is
 // upper-left, upper-right, lower-left, lower-right; right-side chair sprites
 // mirror the shared right-facing artwork so every pair faces inward.
+// The scenery uses a separate, bounded route-chunk window behind the consist.
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
@@ -29,6 +37,15 @@ import {
   type PaneListItem,
 } from "./StatusLine";
 import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
+import {
+  DEFAULT_TRAIN_ROUTE_SEED,
+  RouteChunkWindow,
+  routeChunkWindowRange,
+  TRAIN_ROUTE_CHUNK_WIDTH,
+  TRAIN_ROUTE_SEED_VERSION,
+  type RouteChunk,
+  type RouteChunkWindowSnapshot,
+} from "./trainRoute";
 import "./TrainLayout.css";
 
 interface TrainLayoutProps {
@@ -55,10 +72,11 @@ const OCCUPIED_SEAT_URLS = [
 
 const TRAIN_WORLD_SPEED_PX_PER_SECOND = 12;
 const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
+const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 
 // Route position increases as the left-facing train travels forward. CSS uses
-// that positive value as background-position-x, so the world moves right while
-// the consist itself remains fixed.
+// that positive value as the route layer's x translation, so the world moves
+// right while the consist itself remains fixed.
 export function advanceTrainWorldRoutePosition(
   routePosition: number,
   elapsedMs: number,
@@ -72,6 +90,12 @@ export function trainWorldDebugEnabled(search: string): boolean {
     import.meta.env.DEV &&
     new URLSearchParams(search).get(TRAIN_WORLD_DEBUG_PARAM) === "1"
   );
+}
+
+export function trainWorldRouteSeed(search: string): string {
+  if (!import.meta.env.DEV) return DEFAULT_TRAIN_ROUTE_SEED;
+  const requested = new URLSearchParams(search).get(TRAIN_WORLD_SEED_PARAM)?.trim();
+  return requested ? requested.slice(0, 64) : DEFAULT_TRAIN_ROUTE_SEED;
 }
 
 // Calculate the least number of carriage layers needed for the consist to
@@ -267,9 +291,60 @@ function TrainLocomotiveMore({
   );
 }
 
+type TrainRouteChunkStyle = CSSProperties & {
+  "--train-chunk-terrain-height": string;
+  "--train-chunk-ridge-height": string;
+  "--train-chunk-feature-offset": string;
+};
+
+function TrainRouteChunk({ chunk }: { chunk: RouteChunk }) {
+  const style: TrainRouteChunkStyle = {
+    left: `${-chunk.index * TRAIN_ROUTE_CHUNK_WIDTH}px`,
+    width: `${TRAIN_ROUTE_CHUNK_WIDTH}px`,
+    "--train-chunk-terrain-height": `${chunk.terrainHeight}px`,
+    "--train-chunk-ridge-height": `${chunk.ridgeHeight}px`,
+    "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
+  };
+
+  return (
+    <div
+      className={`train-route-chunk train-route-chunk--${chunk.variant}`}
+      data-route-chunk-index={chunk.index}
+      data-route-chunk-variant={chunk.variant}
+      style={style}
+    />
+  );
+}
+
+function initialWorldWidth(): number {
+  return Math.max(1, window.innerWidth || TRAIN_ROUTE_CHUNK_WIDTH);
+}
+
+function sameRouteWindow(
+  current: RouteChunkWindowSnapshot,
+  next: Pick<RouteChunkWindowSnapshot, "firstIndex" | "lastIndex">,
+): boolean {
+  return current.firstIndex === next.firstIndex && current.lastIndex === next.lastIndex;
+}
+
+function routeChunkSlotKey(index: number, mountedCount: number): string {
+  const slot = ((index % mountedCount) + mountedCount) % mountedCount;
+  return `route-slot-${slot}`;
+}
+
 function TrainWorld() {
   const worldRef = useRef<HTMLDivElement | null>(null);
+  const diagnosticsRef = useRef<HTMLOutputElement | null>(null);
   const debug = trainWorldDebugEnabled(window.location.search);
+  const [routeEngine] = useState(
+    () => new RouteChunkWindow(trainWorldRouteSeed(window.location.search)),
+  );
+  const seed = routeEngine.seed;
+  const [routeWindow, setRouteWindow] = useState(() =>
+    routeEngine.update(0, initialWorldWidth()),
+  );
+  const routeWindowRef = useRef(routeWindow);
+  routeWindowRef.current = routeWindow;
 
   useEffect(() => {
     const world = worldRef.current;
@@ -282,10 +357,33 @@ function TrainWorld() {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    const viewportWidth = () => Math.max(1, world.clientWidth || initialWorldWidth());
     const applyRoutePosition = () => {
       const value = `${routePosition.toFixed(3)}px`;
       world.style.setProperty("--train-route-position", value);
       world.dataset.routePosition = value;
+      const nextRange = routeChunkWindowRange(
+        routePosition,
+        viewportWidth(),
+        routeEngine.chunkWidth,
+        routeEngine.overscan,
+      );
+      let nextWindow = routeWindowRef.current;
+      if (!sameRouteWindow(nextWindow, nextRange)) {
+        nextWindow = routeEngine.update(routePosition, nextRange.viewportWidth);
+        routeWindowRef.current = nextWindow;
+        setRouteWindow(nextWindow);
+      }
+      const indices = nextWindow.chunks.map((chunk) => chunk.index).join(",");
+      world.dataset.routeSeed = seed;
+      world.dataset.routeSeedVersion = TRAIN_ROUTE_SEED_VERSION;
+      world.dataset.routeChunkIndices = indices;
+      world.dataset.routeMountedChunks = String(nextWindow.chunks.length);
+      if (diagnosticsRef.current) {
+        diagnosticsRef.current.value =
+          `seed ${seed} · position ${routePosition.toFixed(1)}px · ` +
+          `chunks ${indices} · mounted ${nextWindow.chunks.length}`;
+      }
     };
     const advance = (timestamp: number) => {
       if (previousTimestamp !== null) {
@@ -300,11 +398,20 @@ function TrainWorld() {
     };
 
     applyRoutePosition();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(applyRoutePosition);
+    observer?.observe(world);
+    const handleResize = applyRoutePosition;
+    window.addEventListener("resize", handleResize);
     if (!reducedMotion) frame = window.requestAnimationFrame(advance);
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", handleResize);
     };
-  }, []);
+  }, [routeEngine, seed]);
 
   return (
     <div
@@ -314,14 +421,32 @@ function TrainWorld() {
       data-layer="world"
       data-route-direction="right"
       data-route-position="0.000px"
+      data-route-seed={seed}
+      data-route-seed-version={TRAIN_ROUTE_SEED_VERSION}
+      data-route-chunk-indices={routeWindow.chunks
+        .map((chunk) => chunk.index)
+        .join(",")}
+      data-route-mounted-chunks={routeWindow.chunks.length}
     >
-      <div className="train-world-scenery" />
+      <div className="train-world-route">
+        {routeWindow.chunks.map((chunk) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            key={routeChunkSlotKey(chunk.index, routeWindow.chunks.length)}
+          />
+        ))}
+      </div>
       {debug ? (
         <div
           className="train-world-debug-grid"
           data-testid="train-world-debug-grid"
         >
           <span>world →</span>
+          <output ref={diagnosticsRef} data-testid="train-route-diagnostics">
+            seed {seed} · position 0.0px · chunks{" "}
+            {routeWindow.chunks.map((chunk) => chunk.index).join(",")} · mounted{" "}
+            {routeWindow.chunks.length}
+          </output>
         </div>
       ) : null}
     </div>

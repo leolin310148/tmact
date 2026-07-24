@@ -54,7 +54,7 @@ future station stop without growing the DOM or memory usage over time.
   development flag. Cover mounting, layering, direction, and train-scroll
   independence with focused tests.
 
-- [ ] **TRAIN-002 — Build a deterministic infinite route-chunk engine.**
+- [x] **TRAIN-002 — Build a deterministic infinite route-chunk engine.**
   Divide the journey into fixed-width logical `RouteChunk`s generated from a
   versioned seed and integer chunk index. Maintain only the visible chunks plus
   bounded overscan in a recyclable ring/window; travelling for a long time must

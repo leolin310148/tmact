@@ -29,18 +29,64 @@ html[data-pane-switcher-layout="train"] .statusline {
     linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
 }
 
-.train-world-scenery {
+.train-world-route {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 80px 34px at 50% 100%, #173553 0 98%, transparent 100%)
-      var(--train-route-position) bottom / 220px 68px repeat-x,
-    radial-gradient(ellipse 105px 43px at 50% 100%, #102b47 0 98%, transparent 100%)
-      calc(var(--train-route-position) + 90px) bottom / 290px 82px repeat-x;
+  transform: translate3d(var(--train-route-position), 0, 0);
+  will-change: transform;
   opacity: 0.8;
 }
 
+.train-route-chunk {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    to top,
+    #102b47 0 var(--train-chunk-terrain-height),
+    transparent calc(var(--train-chunk-terrain-height) + 1px)
+  );
+}
+
+.train-route-chunk::before,
+.train-route-chunk::after {
+  content: "";
+  position: absolute;
+  bottom: var(--train-chunk-terrain-height);
+  border-radius: 50% 50% 0 0;
+  transform: translateX(-50%);
+}
+
+.train-route-chunk::before {
+  left: var(--train-chunk-feature-offset);
+  width: 230px;
+  height: var(--train-chunk-ridge-height);
+  background: #173553;
+}
+
+.train-route-chunk::after {
+  left: calc(var(--train-chunk-feature-offset) - 38%);
+  width: 180px;
+  height: calc(var(--train-chunk-ridge-height) - 14px);
+  background: #102b47;
+}
+
+.train-route-chunk--1::before,
+.train-route-chunk--4::after {
+  border-radius: 70% 30% 0 0;
+}
+
+.train-route-chunk--2::before {
+  transform: translateX(-50%) skewX(-13deg);
+}
+
+.train-route-chunk--3::after {
+  transform: translateX(-50%) skewX(16deg);
+}
+
 .train-world-debug-grid {
+  z-index: 2;
   position: absolute;
   inset: 0;
   background:
@@ -57,14 +103,26 @@ html[data-pane-switcher-layout="train"] .statusline {
     );
 }
 
-.train-world-debug-grid span {
+.train-world-debug-grid span,
+.train-world-debug-grid output {
   position: absolute;
-  top: 6px;
   left: 8px;
   padding: 2px 4px;
   background: rgba(7, 17, 31, 0.82);
   color: #ffe36e;
   font: 700 10px/1.2 var(--mono);
+}
+
+.train-world-debug-grid span {
+  top: 6px;
+}
+
+.train-world-debug-grid output {
+  top: 23px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .train-layout-inspection {
@@ -275,9 +333,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .train-world-scenery,
+  .train-world-route,
   .train-world-debug-grid {
-    background-position-x: 0;
+    transform: none;
   }
 }
 

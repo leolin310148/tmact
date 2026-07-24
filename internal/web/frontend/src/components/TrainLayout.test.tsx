@@ -76,6 +76,28 @@ describe("TrainLayout", () => {
     window.history.replaceState(null, "", "/?train-world-debug=1");
     rerender(<TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />);
     expect(queryByTestId("train-world-debug-grid")).toHaveTextContent("world →");
+    expect(queryByTestId("train-route-diagnostics")).toHaveTextContent(
+      /seed infinite-journey .* position 0\.0px .* chunks .* mounted \d+/,
+    );
+  });
+
+  it("mounts only the diagnosed route chunk window", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world");
+    const chunks = container.querySelectorAll(".train-route-chunk");
+
+    expect(world).not.toBeNull();
+    expect(chunks).toHaveLength(Number(world!.dataset.routeMountedChunks));
+    expect(
+      [...chunks].map((chunk) => chunk.getAttribute("data-route-chunk-index")).join(","),
+    ).toBe(world!.dataset.routeChunkIndices);
+    expect(world).toHaveAttribute("data-route-seed", "infinite-journey");
+    expect(world).toHaveAttribute(
+      "data-route-seed-version",
+      "tmact-train-route-v1",
+    );
   });
 
   it("keeps world position independent from horizontal train inspection", () => {
