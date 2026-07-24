@@ -191,7 +191,7 @@ future station stop without growing the DOM or memory usage over time.
   after departure. Verify the development triggers remain unchanged. Run the
   frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-014 — Advance clock-driven palettes at local-time boundaries.**
+- [x] **TRAIN-014 — Advance clock-driven palettes at local-time boundaries.**
   Give the train layout an owned, cleanup-safe clock update so an open page
   automatically crosses day → sunset at 17:00 and sunset → night at 18:30
   without relying on pane traffic, resizing, or another unrelated React render.

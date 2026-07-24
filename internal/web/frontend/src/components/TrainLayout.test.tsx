@@ -916,7 +916,9 @@ describe("TrainLayout", () => {
     act(() => vi.advanceTimersByTime(100));
     visibility.set("hidden");
     expect(world).toHaveAttribute("data-motion-state", "suspended");
-    expect(vi.getTimerCount()).toBe(0);
+    // Positional/station motion is fully suspended; only the independent
+    // next-palette-boundary clock remains scheduled.
+    expect(vi.getTimerCount()).toBe(1);
     act(() => vi.advanceTimersByTime(60_000));
     expect(world).toHaveAttribute("data-station-state", "platform");
 
@@ -990,6 +992,108 @@ describe("TrainLayout", () => {
 
     act(() => vi.advanceTimersByTime(450));
     expect(world).toHaveAttribute("data-palette-transition", "settled");
+  });
+
+  it("crosses from day to sunset at the 17:00 local-time boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 16, 59, 59, 500));
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const geometryBefore = routeGeometryFingerprint(container);
+    const positionBefore = world.dataset.routePosition;
+
+    act(() => vi.advanceTimersByTime(499));
+    expect(world).toHaveAttribute("data-time-of-day", "day");
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+    expect(world).toHaveAttribute("data-time-source", "clock");
+    expect(world).toHaveAttribute("data-palette-transition", "crossfading");
+    expect(world.dataset.routePosition).toBe(positionBefore);
+    expect(routeGeometryFingerprint(container)).toEqual(geometryBefore);
+
+    act(() => vi.advanceTimersByTime(450));
+    expect(world).toHaveAttribute("data-palette-transition", "settled");
+  });
+
+  it("crosses from sunset to night at the 18:30 local-time boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 18, 29, 59, 500));
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const geometryBefore = routeGeometryFingerprint(container);
+    const positionBefore = world.dataset.routePosition;
+
+    act(() => vi.advanceTimersByTime(499));
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-time-of-day", "night");
+    expect(world).toHaveAttribute("data-time-source", "clock");
+    expect(world).toHaveAttribute("data-palette-transition", "crossfading");
+    expect(world.dataset.routePosition).toBe(positionBefore);
+    expect(routeGeometryFingerprint(container)).toEqual(geometryBefore);
+  });
+
+  it("keeps a manual palette stable while clock boundaries pass", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 16, 59, 59, 500));
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const geometryBefore = routeGeometryFingerprint(container);
+    const positionBefore = world.dataset.routePosition;
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cycle train lighting (day / sunset / night)",
+      }),
+    );
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+    expect(world).toHaveAttribute("data-time-source", "manual");
+
+    act(() => vi.advanceTimersByTime(90 * 60 * 1_000 + 500));
+    expect(world).toHaveAttribute("data-time-of-day", "sunset");
+    expect(world).toHaveAttribute("data-time-source", "manual");
+    expect(world.dataset.routePosition).toBe(positionBefore);
+    expect(routeGeometryFingerprint(container)).toEqual(geometryBefore);
+  });
+
+  it("cleans up its clock timer and reschedules from current time on remount", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 16, 59, 59));
+    installAnimationFrame();
+    mockVisibility();
+    const journey = () => (
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />
+    );
+    const firstMount = render(journey());
+
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    firstMount.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+
+    vi.setSystemTime(new Date(2026, 0, 1, 18, 29, 59));
+    const secondMount = render(journey());
+    const remountedWorld =
+      secondMount.container.querySelector<HTMLElement>(".train-layout-world")!;
+    expect(remountedWorld).toHaveAttribute("data-time-of-day", "sunset");
+
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(remountedWorld).toHaveAttribute("data-time-of-day", "night");
+    secondMount.unmount();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("keeps every emissive treatment separate from the scenery sprites", () => {

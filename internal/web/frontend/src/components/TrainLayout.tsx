@@ -58,6 +58,7 @@ import {
 import {
   SCENE_MODES,
   clockSceneMode,
+  nextClockSceneModeBoundary,
   nextSceneMode,
   type SceneMode,
 } from "./sceneTime";
@@ -758,6 +759,31 @@ function usePrefersReducedTrainMotion(): boolean {
   return reducedMotion;
 }
 
+function useClockSceneMode(): SceneMode {
+  const [mode, setMode] = useState(() => clockSceneMode(new Date()));
+
+  useEffect(() => {
+    let timer: number | null = null;
+
+    const updateAndSchedule = () => {
+      const now = new Date();
+      setMode(clockSceneMode(now));
+      const nextBoundary = nextClockSceneModeBoundary(now);
+      timer = window.setTimeout(
+        updateAndSchedule,
+        Math.max(1, nextBoundary.getTime() - now.getTime()),
+      );
+    };
+
+    updateAndSchedule();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
+  return mode;
+}
+
 function TrainWorld({
   timeOfDay,
   timeSource,
@@ -1156,7 +1182,8 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
   const layoutRef = useRef<HTMLElement | null>(null);
   const [minimumCarriages, setMinimumCarriages] = useState(1);
   const [modeOverride, setModeOverride] = useState<SceneMode | null>(null);
-  const timeOfDay = modeOverride ?? clockSceneMode(new Date());
+  const clockMode = useClockSceneMode();
+  const timeOfDay = modeOverride ?? clockMode;
   const [paletteTransition, setPaletteTransition] = useState<
     "settled" | "crossfading"
   >("settled");
