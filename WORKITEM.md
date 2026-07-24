@@ -131,7 +131,7 @@ future station stop without growing the DOM or memory usage over time.
   continuity, incompatibility rules, and deterministic entry/body/exit output;
   visually inspect the entire traversal at cruise speed.
 
-- [ ] **TRAIN-009 — Implement station approach, stop, and departure.**
+- [x] **TRAIN-009 — Implement station approach, stop, and departure.**
   Add a station as a scheduled route event with the state machine `cruise →
   approach/signals → decelerate → platform → dwell → depart/accelerate →
   cruise`. Reserve the station's multi-chunk span, introduce signals and

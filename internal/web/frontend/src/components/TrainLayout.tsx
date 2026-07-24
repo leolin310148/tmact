@@ -62,11 +62,15 @@ import {
   type SceneMode,
 } from "./sceneTime";
 import {
-  advanceTrainWorldRoutePosition,
   TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND,
   TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
 } from "./trainMotion";
+import {
+  advanceTrainStationJourney,
+  createTrainStationJourney,
+  trainStationDevelopmentTrigger,
+} from "./trainStation";
 import "./TrainLayout.css";
 
 export { advanceTrainWorldRoutePosition } from "./trainMotion";
@@ -502,21 +506,43 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
       style={style}
     >
       {chunk.setPiece?.renderLayer === layer.name ? (
-        <span
-          className={[
-            "train-set-piece",
-            `train-set-piece--${chunk.setPiece.type}`,
-            `train-set-piece--${chunk.setPiece.role}`,
-          ].join(" ")}
-          data-set-piece-id={chunk.setPiece.id}
-          data-set-piece-type={chunk.setPiece.type}
-          data-set-piece-role={chunk.setPiece.role}
-          data-set-piece-segment={chunk.setPiece.segmentOffset}
-          data-set-piece-span={chunk.setPiece.span}
-          data-set-piece-start={chunk.setPiece.startIndex}
-          data-set-piece-end={chunk.setPiece.endIndex}
-          data-set-piece-occlusion="restrained"
-        />
+        <>
+          <span
+            className={[
+              "train-set-piece",
+              `train-set-piece--${chunk.setPiece.type}`,
+              `train-set-piece--${chunk.setPiece.role}`,
+            ].join(" ")}
+            data-set-piece-id={chunk.setPiece.id}
+            data-set-piece-type={chunk.setPiece.type}
+            data-set-piece-role={chunk.setPiece.role}
+            data-set-piece-segment={chunk.setPiece.segmentOffset}
+            data-set-piece-span={chunk.setPiece.span}
+            data-set-piece-start={chunk.setPiece.startIndex}
+            data-set-piece-end={chunk.setPiece.endIndex}
+            data-set-piece-occlusion="restrained"
+            data-station-assets={
+              chunk.setPiece.type === "station"
+                ? "platform,building"
+                : undefined
+            }
+          />
+          {chunk.setPiece.type === "station" ? (
+            <>
+              <span
+                className="train-station-signal"
+                data-station-asset="signal"
+                data-station-signal-aspect={
+                  chunk.setPiece.role === "exit" ? "proceed" : "approach"
+                }
+              />
+              <span
+                className="train-station-ambient-steam"
+                data-station-ambient-detail="steam"
+              />
+            </>
+          ) : null}
+        </>
       ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
@@ -657,18 +683,6 @@ function createRouteEngines(seed: string): TrainRouteEngines {
   ) as TrainRouteEngines;
 }
 
-function createRouteWindows(
-  routeEngines: TrainRouteEngines,
-  viewportWidth: number,
-): TrainRouteWindows {
-  return Object.fromEntries(
-    TRAIN_PARALLAX_LAYERS.map((layer) => [
-      layer.name,
-      routeEngines[layer.name].update(0, viewportWidth),
-    ]),
-  ) as TrainRouteWindows;
-}
-
 function usePrefersReducedTrainMotion(): boolean {
   const [reducedMotion, setReducedMotion] = useState(
     () =>
@@ -707,11 +721,31 @@ function TrainWorld({
     createRouteEngines(trainWorldRouteSeed(window.location.search)),
   );
   const seed = routeEngines.near.seed;
+  const [initialStationJourney] = useState(() =>
+    createTrainStationJourney(
+      seed,
+      0,
+      { cruiseSpeed },
+      trainStationDevelopmentTrigger(window.location.search),
+    ),
+  );
   const [routeWindows, setRouteWindows] = useState(() =>
-    createRouteWindows(routeEngines, initialWorldWidth()),
+    Object.fromEntries(
+      TRAIN_PARALLAX_LAYERS.map((layer) => [
+        layer.name,
+        routeEngines[layer.name].update(
+          trainParallaxLayerPosition(
+            initialStationJourney.routePosition,
+            layer.speedRatio,
+          ),
+          initialWorldWidth(),
+        ),
+      ]),
+    ) as TrainRouteWindows,
   );
   const routeWindowsRef = useRef(routeWindows);
-  const routePositionRef = useRef(0);
+  const stationJourneyRef = useRef(initialStationJourney);
+  const routePositionRef = useRef(initialStationJourney.routePosition);
   routeWindowsRef.current = routeWindows;
 
   useEffect(() => {
@@ -733,6 +767,22 @@ function TrainWorld({
       world.style.setProperty("--train-route-position", value);
       world.dataset.routePosition = value;
       world.dataset.routeApplyCount = String(routeApplyCount);
+      const stationJourney = stationJourneyRef.current;
+      world.dataset.stationState = stationJourney.state;
+      world.dataset.stationTargetSpeed =
+        stationJourney.targetSpeed.toFixed(3);
+      world.dataset.stationCurrentSpeed =
+        stationJourney.currentSpeed.toFixed(3);
+      world.dataset.stationEventId = stationJourney.station.id;
+      world.dataset.stationStopPosition =
+        `${stationJourney.station.stopPosition.toFixed(3)}px`;
+      world.dataset.stationPositionalMotion =
+        stationJourney.state === "platform" ||
+        stationJourney.state === "dwell"
+          ? "stopped"
+          : "moving";
+      world.dataset.stationAmbient =
+        stationJourney.state === "dwell" ? "running" : "available";
       const width = viewportWidth();
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
@@ -785,7 +835,8 @@ function TrainWorld({
       if (diagnosticsRef.current) {
         diagnosticsRef.current.value =
           `seed ${seed} · position ${routePosition.toFixed(1)}px · ` +
-          `chunks ${indices} · mounted ${nearWindow.chunks.length}`;
+          `chunks ${indices} · mounted ${nearWindow.chunks.length} · ` +
+          `station ${stationJourney.state} → ${stationJourney.station.id}`;
       }
     };
 
@@ -814,11 +865,13 @@ function TrainWorld({
         reducedTimer = window.setTimeout(() => {
           reducedTimer = null;
           if (!active || documentIsHidden()) return;
-          routePositionRef.current = advanceTrainWorldRoutePosition(
-            routePositionRef.current,
+          stationJourneyRef.current = advanceTrainStationJourney(
+            stationJourneyRef.current,
             TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
-            cruiseSpeed,
+            { cruiseSpeed },
           );
+          routePositionRef.current =
+            stationJourneyRef.current.routePosition;
           applyRoutePosition();
           scheduleMotion();
         }, TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS);
@@ -830,11 +883,12 @@ function TrainWorld({
       frame = null;
       if (!active || documentIsHidden()) return;
       if (previousTimestamp !== null) {
-        routePositionRef.current = advanceTrainWorldRoutePosition(
-          routePositionRef.current,
+        stationJourneyRef.current = advanceTrainStationJourney(
+          stationJourneyRef.current,
           timestamp - previousTimestamp,
-          cruiseSpeed,
+          { cruiseSpeed },
         );
+        routePositionRef.current = stationJourneyRef.current.routePosition;
         applyRoutePosition();
       }
       previousTimestamp = timestamp;
@@ -845,6 +899,7 @@ function TrainWorld({
       previousTimestamp = null;
       if (documentIsHidden()) {
         world.dataset.motionState = "suspended";
+        world.dataset.stationAmbient = "suspended";
         return;
       }
       scheduleMotion();
@@ -882,7 +937,7 @@ function TrainWorld({
       aria-hidden="true"
       data-layer="world"
       data-route-direction="right"
-      data-route-position="0.000px"
+      data-route-position={`${initialStationJourney.routePosition.toFixed(3)}px`}
       data-route-seed={seed}
       data-route-seed-version={TRAIN_ROUTE_SEED_VERSION}
       data-route-chunk-indices={nearWindow.chunks
@@ -894,6 +949,13 @@ function TrainWorld({
         document.visibilityState === "hidden" ? "suspended" : "running"
       }
       data-cruise-speed={cruiseSpeed}
+      data-station-state={initialStationJourney.state}
+      data-station-target-speed={initialStationJourney.targetSpeed.toFixed(3)}
+      data-station-current-speed={initialStationJourney.currentSpeed.toFixed(3)}
+      data-station-event-id={initialStationJourney.station.id}
+      data-station-stop-position={`${initialStationJourney.station.stopPosition.toFixed(3)}px`}
+      data-station-positional-motion="moving"
+      data-station-ambient="available"
       data-route-apply-count="0"
       data-route-window-updates="0"
       data-time-of-day={timeOfDay}

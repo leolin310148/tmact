@@ -237,6 +237,148 @@ html[data-pane-switcher-layout="train"] .statusline {
   transform: scaleX(-1);
 }
 
+.train-set-piece--station {
+  bottom: 17px;
+  height: 112px;
+  opacity: 0.48;
+  border-bottom: 7px solid color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    white 14%
+  );
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 10%,
+      var(--train-palette-silhouette) 10% 13%,
+      transparent 13% 86%,
+      var(--train-palette-silhouette) 86% 89%,
+      transparent 89%
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 12%,
+      var(--train-palette-mid-surface) 12% 73%,
+      transparent 73%
+    );
+}
+
+.train-set-piece--station::before {
+  content: "";
+  position: absolute;
+  right: 5%;
+  bottom: 79px;
+  left: 5%;
+  height: 5px;
+  border-top: 3px solid var(--train-palette-silhouette);
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    transparent 18%
+  );
+  box-shadow:
+    0 68px 0 color-mix(
+      in srgb,
+      var(--train-palette-mid-surface),
+      white 10%
+    );
+}
+
+.train-set-piece--station::after {
+  content: "";
+  position: absolute;
+  right: 13%;
+  bottom: 58px;
+  left: 13%;
+  height: 11px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-palette-emissive) 0 4px,
+      transparent 4px 16px
+    );
+  filter: drop-shadow(0 0 3px var(--train-palette-emissive));
+  opacity: 0.72;
+}
+
+.train-set-piece--station.train-set-piece--entry {
+  clip-path: polygon(20% 100%, 29% 45%, 44% 20%, 100% 20%, 100% 100%);
+}
+
+.train-set-piece--station.train-set-piece--exit {
+  clip-path: polygon(0 20%, 57% 20%, 73% 45%, 82% 100%, 0 100%);
+}
+
+.train-station-signal {
+  position: absolute;
+  z-index: 1;
+  bottom: 17px;
+  left: 18%;
+  width: 3px;
+  height: 88px;
+  background: var(--train-palette-silhouette);
+}
+
+.train-station-signal::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 9px;
+  height: 12px;
+  border: 2px solid var(--train-palette-silhouette);
+  border-radius: 2px;
+  background: #d95f4d;
+  box-shadow: 0 0 6px color-mix(in srgb, #ff6d57, transparent 20%);
+}
+
+.train-station-signal[data-station-signal-aspect="proceed"] {
+  right: 18%;
+  left: auto;
+}
+
+.train-station-signal[data-station-signal-aspect="proceed"]::before {
+  background: #72d78a;
+  box-shadow: 0 0 6px color-mix(in srgb, #72d78a, transparent 20%);
+}
+
+.train-set-piece--body + .train-station-signal {
+  display: none;
+}
+
+.train-station-ambient-steam {
+  position: absolute;
+  z-index: 1;
+  bottom: 112px;
+  left: 68%;
+  width: 7px;
+  height: 7px;
+  border: 2px solid color-mix(
+    in srgb,
+    var(--train-palette-haze),
+    white 30%
+  );
+  border-radius: 50%;
+  opacity: 0;
+  animation: train-station-steam 2.4s steps(4, end) infinite;
+}
+
+@keyframes train-station-steam {
+  0% {
+    opacity: 0;
+    transform: translate(0, 5px) scale(0.6);
+  }
+
+  25% {
+    opacity: 0.52;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(8px, -13px) scale(1.25);
+  }
+}
+
 .train-world-layer--sky {
   background: linear-gradient(180deg, var(--train-palette-haze), transparent 66%);
 }
@@ -782,6 +924,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-emissive-overlay,
   .train-time-toggle {
     transition-duration: 0.01ms;
+  }
+
+  .train-station-ambient-steam {
+    animation: none;
+    opacity: 0.32;
   }
 }
 

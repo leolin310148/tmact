@@ -1,3 +1,8 @@
+import {
+  TRAIN_STATION_SPAN_CHUNKS,
+  trainStationEventForChunk,
+} from "./trainStation";
+
 export const TRAIN_ROUTE_SEED_VERSION = "tmact-train-route-v1";
 export const DEFAULT_TRAIN_ROUTE_SEED = "infinite-journey";
 export const TRAIN_ROUTE_CHUNK_WIDTH = 320;
@@ -28,7 +33,8 @@ export type TrainSetPieceType =
   | "bridge"
   | "tunnel"
   | "coast-reveal"
-  | "town-edge";
+  | "town-edge"
+  | "station";
 
 export type TrainSetPieceRole = "entry" | "body" | "exit";
 
@@ -59,28 +65,35 @@ export const TRAIN_SET_PIECE_DEFINITIONS = {
     span: 4,
     renderLayer: "midground",
     reservedLayers: ["midground", "near"],
-    incompatibleWith: ["tunnel", "coast-reveal", "town-edge"],
+    incompatibleWith: ["tunnel", "coast-reveal", "town-edge", "station"],
   },
   tunnel: {
     type: "tunnel",
     span: 3,
     renderLayer: "midground",
     reservedLayers: ["midground", "near"],
-    incompatibleWith: ["bridge", "coast-reveal", "town-edge"],
+    incompatibleWith: ["bridge", "coast-reveal", "town-edge", "station"],
   },
   "coast-reveal": {
     type: "coast-reveal",
     span: 4,
     renderLayer: "far",
     reservedLayers: ["far", "midground", "near"],
-    incompatibleWith: ["bridge", "tunnel", "town-edge"],
+    incompatibleWith: ["bridge", "tunnel", "town-edge", "station"],
   },
   "town-edge": {
     type: "town-edge",
     span: 3,
     renderLayer: "midground",
     reservedLayers: ["midground", "near"],
-    incompatibleWith: ["bridge", "tunnel", "coast-reveal"],
+    incompatibleWith: ["bridge", "tunnel", "coast-reveal", "station"],
+  },
+  station: {
+    type: "station",
+    span: TRAIN_STATION_SPAN_CHUNKS,
+    renderLayer: "near",
+    reservedLayers: ["midground", "near"],
+    incompatibleWith: ["bridge", "tunnel", "coast-reveal", "town-edge"],
   },
 } as const satisfies Record<TrainSetPieceType, TrainSetPieceDefinition>;
 
@@ -290,6 +303,39 @@ export function trainRouteSetPieceForChunk(
   assertInteger(chunkIndex, "route chunk index");
   const resolvedSeed = seed || DEFAULT_TRAIN_ROUTE_SEED;
   const region = trainRegionForChunk(resolvedSeed, chunkIndex, seedVersion);
+  const station = trainStationEventForChunk(resolvedSeed, chunkIndex, {
+    chunkWidth: TRAIN_ROUTE_CHUNK_WIDTH,
+    alignmentChunks: TRAIN_REGION_CHUNK_LENGTH,
+  });
+  if (station) {
+    const segmentOffset = chunkIndex - station.startChunk;
+    return {
+      id: station.id,
+      type: "station",
+      role:
+        segmentOffset === 0
+          ? "entry"
+          : segmentOffset === station.spanChunks - 1
+            ? "exit"
+            : "body",
+      startIndex: station.startChunk,
+      endIndex: station.endChunk,
+      span: station.spanChunks,
+      segmentOffset,
+      renderLayer: "near",
+      reservedLayers: ["midground", "near"],
+      incompatibleWith: ["bridge", "tunnel", "coast-reveal", "town-edge"],
+    };
+  }
+  const regionStart = region.index * TRAIN_REGION_CHUNK_LENGTH;
+  if (
+    trainStationEventForChunk(resolvedSeed, regionStart, {
+      chunkWidth: TRAIN_ROUTE_CHUNK_WIDTH,
+      alignmentChunks: TRAIN_REGION_CHUNK_LENGTH,
+    })
+  ) {
+    return null;
+  }
   const type = trainSetPieceTypeForRegion(
     resolvedSeed,
     region.name,

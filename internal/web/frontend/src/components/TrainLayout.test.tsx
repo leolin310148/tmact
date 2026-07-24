@@ -124,6 +124,150 @@ describe("TrainLayout", () => {
     expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(12);
   });
 
+  it("renders the scheduled station span with platform, building, signals, and ambient detail", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const stationSegments = [
+      ...container.querySelectorAll<HTMLElement>(
+        '.train-set-piece[data-set-piece-type="station"]',
+      ),
+    ].sort(
+      (left, right) =>
+        Number(left.dataset.setPieceSegment) -
+        Number(right.dataset.setPieceSegment),
+    );
+
+    expect(world).toHaveAttribute("data-station-state", "approach");
+    expect(world).toHaveAttribute("data-station-target-speed", "8.400");
+    expect(stationSegments).toHaveLength(6);
+    expect(stationSegments.map((segment) => segment.dataset.setPieceRole)).toEqual(
+      ["entry", "body", "body", "body", "body", "exit"],
+    );
+    expect(
+      new Set(stationSegments.map((segment) => segment.dataset.setPieceId)),
+    ).toHaveProperty("size", 1);
+    expect(
+      stationSegments.every(
+        (segment) => segment.dataset.stationAssets === "platform,building",
+      ),
+    ).toBe(true);
+    expect(container.querySelectorAll("[data-station-asset='signal']")).toHaveLength(
+      6,
+    );
+    expect(
+      container.querySelectorAll("[data-station-ambient-detail='steam']"),
+    ).toHaveLength(6);
+  });
+
+  it("stops positional scenery for dwell while ambient details continue, then departs continuously", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const states = new Set<string>([world.dataset.stationState!]);
+    const firstStation = world.dataset.stationEventId;
+    let timestamp = 0;
+
+    animation.run(timestamp);
+    for (
+      let frame = 0;
+      frame < 300 && world.dataset.stationState !== "dwell";
+      frame++
+    ) {
+      timestamp += 250;
+      animation.run(timestamp);
+      states.add(world.dataset.stationState!);
+    }
+
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+    expect(world).toHaveAttribute("data-station-positional-motion", "stopped");
+    expect(world).toHaveAttribute("data-station-ambient", "running");
+    const dwellPosition = world.dataset.routePosition;
+
+    timestamp += 250;
+    animation.run(timestamp);
+    expect(world.dataset.routePosition).toBe(dwellPosition);
+
+    for (
+      let frame = 0;
+      frame < 300 &&
+      !(
+        world.dataset.stationState === "cruise" &&
+        world.dataset.stationEventId !== firstStation
+      );
+      frame++
+    ) {
+      timestamp += 250;
+      animation.run(timestamp);
+      states.add(world.dataset.stationState!);
+    }
+
+    expect(states).toEqual(
+      new Set([
+        "approach",
+        "decelerate",
+        "platform",
+        "dwell",
+        "depart",
+        "cruise",
+      ]),
+    );
+    expect(world.dataset.stationEventId).not.toBe(firstStation);
+    expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
+      Number.parseFloat(dwellPosition!),
+    );
+    expect(world).toHaveAttribute("data-station-target-speed", "12.000");
+  });
+
+  it("pauses station departure while hidden and resumes without a leap", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=depart",
+    );
+    const animation = installAnimationFrame();
+    const visibility = mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    animation.run(1_000);
+    animation.run(1_250);
+    const pausedPosition = world.dataset.routePosition;
+    const pausedSpeed = world.dataset.stationCurrentSpeed;
+
+    visibility.set("hidden");
+    expect(world).toHaveAttribute("data-motion-state", "suspended");
+    expect(world).toHaveAttribute("data-station-ambient", "suspended");
+    expect(animation.pending()).toBe(0);
+
+    visibility.set("visible");
+    animation.run(100_000);
+    expect(world.dataset.routePosition).toBe(pausedPosition);
+    expect(world.dataset.stationCurrentSpeed).toBe(pausedSpeed);
+    animation.run(100_250);
+    expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
+      Number.parseFloat(pausedPosition!),
+    );
+  });
+
   it("progresses from the animation clock without rerendering the train", () => {
     const animation = installAnimationFrame();
     mockVisibility();

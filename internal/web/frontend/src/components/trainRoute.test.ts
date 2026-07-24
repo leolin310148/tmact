@@ -47,7 +47,7 @@ describe("train route chunks", () => {
         segmentOffset: 2,
         renderLayer: "midground",
         reservedLayers: ["midground", "near"],
-        incompatibleWith: ["tunnel", "coast-reveal", "town-edge"],
+        incompatibleWith: ["tunnel", "coast-reveal", "town-edge", "station"],
       },
     });
     expect(() => generateRouteChunk("alpine-line", 1.5)).toThrow(
@@ -128,7 +128,7 @@ describe("train route chunks", () => {
 
     expect(repeated).toEqual(firstPass);
     expect(new Set(entries.map((setPiece) => setPiece?.type))).toEqual(
-      new Set(["bridge", "tunnel", "coast-reveal", "town-edge"]),
+      new Set(["bridge", "tunnel", "coast-reveal", "town-edge", "station"]),
     );
 
     const reservations = entries
