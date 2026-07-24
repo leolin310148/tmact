@@ -483,6 +483,8 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
     "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
   };
   const sceneryPlacements = trainSceneryPlacementsForChunk(layer.name, chunk);
+  const stationSegment =
+    chunk.setPiece?.type === "station" ? chunk.setPiece : null;
 
   return (
     <div
@@ -525,24 +527,69 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
             data-set-piece-end={chunk.setPiece.endIndex}
             data-set-piece-occlusion="restrained"
             data-station-assets={
-              chunk.setPiece.type === "station"
-                ? "platform,building"
+              stationSegment
+                ? "platform,building,canopy,lamps"
                 : undefined
             }
-          />
-          {chunk.setPiece.type === "station" ? (
+            data-station-vertical-zone={
+              stationSegment ? "behind-train" : undefined
+            }
+          >
+            {stationSegment ? (
+              <>
+                <span
+                  className="train-station-platform"
+                  data-station-asset="platform"
+                />
+                <span
+                  className="train-station-building"
+                  data-station-asset="building"
+                >
+                  <span
+                    className="train-station-window-row"
+                    data-station-asset="windows"
+                  />
+                  {stationSegment.segmentOffset === 2 ? (
+                    <span
+                      className="train-station-name-board"
+                      data-station-asset="sign"
+                    >
+                      TMACT
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  className="train-station-canopy"
+                  data-station-asset="canopy"
+                />
+                <span
+                  className="train-station-lamp train-station-lamp--leading"
+                  data-station-asset="lamp"
+                />
+                <span
+                  className="train-station-lamp train-station-lamp--trailing"
+                  data-station-asset="lamp"
+                />
+              </>
+            ) : null}
+          </span>
+          {stationSegment &&
+          stationSegment.segmentOffset >= 1 &&
+          stationSegment.segmentOffset <= 4 ? (
             <>
               <span
                 className="train-station-signal"
                 data-station-asset="signal"
                 data-station-signal-aspect={
-                  chunk.setPiece.role === "exit" ? "proceed" : "approach"
+                  stationSegment.segmentOffset >= 3 ? "proceed" : "approach"
                 }
               />
-              <span
-                className="train-station-ambient-steam"
-                data-station-ambient-detail="steam"
-              />
+              {stationSegment.segmentOffset === 2 ? (
+                <span
+                  className="train-station-ambient-steam"
+                  data-station-ambient-detail="steam"
+                />
+              ) : null}
             </>
           ) : null}
         </>

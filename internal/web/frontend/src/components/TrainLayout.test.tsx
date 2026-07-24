@@ -1,4 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PaneStatus } from "../types/server";
@@ -18,6 +20,11 @@ import {
   TRAIN_STATION_DEFAULT_DWELL_MS,
   TRAIN_STATION_PLATFORM_SETTLE_MS,
 } from "./trainStation";
+
+const trainLayoutCss = readFileSync(
+  resolve(process.cwd(), "src/components/TrainLayout.css"),
+  "utf8",
+);
 
 vi.mock("../api/client", () => ({
   loadClosedSessions: vi.fn(() =>
@@ -313,7 +320,7 @@ describe("TrainLayout", () => {
     expect(remountedWorld).toHaveAttribute("data-route-apply-count", "1");
   });
 
-  it("renders the scheduled station span with platform, building, signals, and ambient detail", () => {
+  it("renders a legible station composition behind the train without changing its span", () => {
     window.history.replaceState(
       null,
       "",
@@ -346,15 +353,53 @@ describe("TrainLayout", () => {
     ).toHaveProperty("size", 1);
     expect(
       stationSegments.every(
-        (segment) => segment.dataset.stationAssets === "platform,building",
+        (segment) =>
+          segment.dataset.stationAssets ===
+            "platform,building,canopy,lamps" &&
+          segment.dataset.stationVerticalZone === "behind-train",
       ),
     ).toBe(true);
-    expect(container.querySelectorAll("[data-station-asset='signal']")).toHaveLength(
-      6,
-    );
+    expect(
+      container.querySelectorAll("[data-station-asset='platform']"),
+    ).toHaveLength(6);
+    expect(
+      container.querySelectorAll("[data-station-asset='building']"),
+    ).toHaveLength(6);
+    expect(
+      container.querySelectorAll("[data-station-asset='canopy']"),
+    ).toHaveLength(6);
+    expect(
+      container.querySelectorAll("[data-station-asset='lamp']"),
+    ).toHaveLength(12);
+    expect(
+      container.querySelectorAll("[data-station-asset='signal']"),
+    ).toHaveLength(4);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-asset='signal']",
+      )].map((signal) => signal.dataset.stationSignalAspect),
+    ).toEqual(["approach", "approach", "proceed", "proceed"]);
     expect(
       container.querySelectorAll("[data-station-ambient-detail='steam']"),
-    ).toHaveLength(6);
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll("[data-station-asset='sign']"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps station scenery pointer-inert below the train and caps compact station geometry", () => {
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\s*\{[\s\S]*?z-index:\s*0;[\s\S]*?pointer-events:\s*none;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-inspection\s*\{[\s\S]*?z-index:\s*1;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-set-piece--station\s*\{[\s\S]*?bottom:\s*17px;[\s\S]*?height:\s*112px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*0;/,
+    );
   });
 
   it("stops positional scenery for dwell while ambient details continue, then departs continuously", () => {

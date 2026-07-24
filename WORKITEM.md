@@ -169,7 +169,7 @@ future station stop without growing the DOM or memory usage over time.
   suspend/resume, cleanup, and unchanged bounded route stepping. Run the
   frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-012 — Make stations visually legible without obscuring the train.**
+- [x] **TRAIN-012 — Make stations visually legible without obscuring the train.**
   Recompose or retune the station platform, canopy/building silhouette, signals,
   lamps, and ambient steam so an approach, stop, and departure read clearly as
   a station at 390px compact, normal desktop, and 1920px-or-wider viewports.
