@@ -622,7 +622,6 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 @media (prefers-reduced-motion: reduce) {
   .train-world-layer-track {
-    transform: none;
     will-change: auto;
   }
 

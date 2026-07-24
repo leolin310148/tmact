@@ -9,6 +9,7 @@
 // The scenery uses a separate, bounded route-chunk window behind the consist.
 
 import {
+  memo,
   useEffect,
   useId,
   useLayoutEffect,
@@ -60,7 +61,15 @@ import {
   nextSceneMode,
   type SceneMode,
 } from "./sceneTime";
+import {
+  advanceTrainWorldRoutePosition,
+  TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND,
+  TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
+  TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
+} from "./trainMotion";
 import "./TrainLayout.css";
+
+export { advanceTrainWorldRoutePosition } from "./trainMotion";
 
 interface TrainLayoutProps {
   panes: PaneStatus[];
@@ -84,9 +93,9 @@ const OCCUPIED_SEAT_URLS = [
   occupiedSeat06Url,
 ];
 
-const TRAIN_WORLD_SPEED_PX_PER_SECOND = 12;
 const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
 const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
+const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 
 interface TrainTimePalette {
@@ -170,17 +179,6 @@ export function trainPaletteContrastRatio(mode: SceneMode): number {
     (Math.min(foreground, background) + 0.05);
 }
 
-// Route position increases as the left-facing train travels forward. CSS uses
-// that positive value as the route layer's x translation, so the world moves
-// right while the consist itself remains fixed.
-export function advanceTrainWorldRoutePosition(
-  routePosition: number,
-  elapsedMs: number,
-  speedPxPerSecond = TRAIN_WORLD_SPEED_PX_PER_SECOND,
-): number {
-  return routePosition + (Math.max(0, elapsedMs) * speedPxPerSecond) / 1000;
-}
-
 export function trainWorldDebugEnabled(search: string): boolean {
   return (
     import.meta.env.DEV &&
@@ -192,6 +190,17 @@ export function trainWorldRouteSeed(search: string): string {
   if (!import.meta.env.DEV) return DEFAULT_TRAIN_ROUTE_SEED;
   const requested = new URLSearchParams(search).get(TRAIN_WORLD_SEED_PARAM)?.trim();
   return requested ? requested.slice(0, 64) : DEFAULT_TRAIN_ROUTE_SEED;
+}
+
+export function trainWorldCruiseSpeed(search: string): number {
+  if (!import.meta.env.DEV) return TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND;
+  const requested = Number.parseFloat(
+    new URLSearchParams(search).get(TRAIN_WORLD_SPEED_PARAM) ?? "",
+  );
+  if (!Number.isFinite(requested) || requested <= 0) {
+    return TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND;
+  }
+  return Math.min(96, requested);
 }
 
 // Calculate the least number of carriage layers needed for the consist to
@@ -449,7 +458,7 @@ function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
   };
 }
 
-function TrainRouteChunk({
+const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk,
   layer,
 }: {
@@ -503,6 +512,8 @@ function TrainRouteChunk({
             alt=""
             aria-hidden="true"
             draggable={false}
+            loading="lazy"
+            decoding="async"
             width={asset.width}
             height={asset.height}
             data-scenery-asset={asset.id}
@@ -574,7 +585,7 @@ function TrainRouteChunk({
       ) : null}
     </div>
   );
-}
+});
 
 function initialWorldWidth(): number {
   return Math.max(1, window.innerWidth || TRAIN_ROUTE_CHUNK_WIDTH);
@@ -582,9 +593,16 @@ function initialWorldWidth(): number {
 
 function sameRouteWindow(
   current: RouteChunkWindowSnapshot,
-  next: Pick<RouteChunkWindowSnapshot, "firstIndex" | "lastIndex">,
+  next: Pick<
+    RouteChunkWindowSnapshot,
+    "firstIndex" | "lastIndex" | "viewportWidth"
+  >,
 ): boolean {
-  return current.firstIndex === next.firstIndex && current.lastIndex === next.lastIndex;
+  return (
+    current.firstIndex === next.firstIndex &&
+    current.lastIndex === next.lastIndex &&
+    current.viewportWidth === next.viewportWidth
+  );
 }
 
 function routeChunkSlotKey(index: number, mountedCount: number): string {
@@ -619,11 +637,22 @@ function createRouteWindows(
   ) as TrainRouteWindows;
 }
 
-function prefersReducedTrainMotion(): boolean {
-  return (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+function usePrefersReducedTrainMotion(): boolean {
+  const [reducedMotion, setReducedMotion] = useState(
+    () =>
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(query.matches);
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  return reducedMotion;
 }
 
 function TrainWorld({
@@ -638,7 +667,10 @@ function TrainWorld({
   const worldRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsRef = useRef<HTMLOutputElement | null>(null);
   const debug = trainWorldDebugEnabled(window.location.search);
-  const [reducedMotion] = useState(prefersReducedTrainMotion);
+  const reducedMotion = usePrefersReducedTrainMotion();
+  const [cruiseSpeed] = useState(() =>
+    trainWorldCruiseSpeed(window.location.search),
+  );
   const [routeEngines] = useState(() =>
     createRouteEngines(trainWorldRouteSeed(window.location.search)),
   );
@@ -647,21 +679,28 @@ function TrainWorld({
     createRouteWindows(routeEngines, initialWorldWidth()),
   );
   const routeWindowsRef = useRef(routeWindows);
+  const routePositionRef = useRef(0);
   routeWindowsRef.current = routeWindows;
 
   useEffect(() => {
     const world = worldRef.current;
     if (!world) return;
 
-    let routePosition = 0;
     let previousTimestamp: number | null = null;
-    let frame = 0;
+    let frame: number | null = null;
+    let reducedTimer: number | null = null;
+    let active = true;
+    let routeApplyCount = 0;
+    let routeWindowUpdateCount = 0;
 
     const viewportWidth = () => Math.max(1, world.clientWidth || initialWorldWidth());
     const applyRoutePosition = () => {
+      const routePosition = routePositionRef.current;
+      routeApplyCount += 1;
       const value = `${routePosition.toFixed(3)}px`;
       world.style.setProperty("--train-route-position", value);
       world.dataset.routePosition = value;
+      world.dataset.routeApplyCount = String(routeApplyCount);
       const width = viewportWidth();
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
@@ -670,7 +709,6 @@ function TrainWorld({
         const layerPosition = trainParallaxLayerPosition(
           routePosition,
           layer.speedRatio,
-          reducedMotion,
         );
         const layerElement = world.querySelector<HTMLElement>(
           `[data-world-layer="${layer.name}"]`,
@@ -701,9 +739,11 @@ function TrainWorld({
       }
 
       if (windowsChanged) {
+        routeWindowUpdateCount += 1;
         routeWindowsRef.current = nextWindows;
         setRouteWindows(nextWindows);
       }
+      world.dataset.routeWindowUpdates = String(routeWindowUpdateCount);
       const nearWindow = nextWindows.near;
       const indices = nearWindow.chunks.map((chunk) => chunk.index).join(",");
       world.dataset.routeSeed = seed;
@@ -716,16 +756,66 @@ function TrainWorld({
           `chunks ${indices} · mounted ${nearWindow.chunks.length}`;
       }
     };
+
+    const documentIsHidden = () => document.visibilityState === "hidden";
+    const cancelScheduledMotion = () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+        frame = null;
+      }
+      if (reducedTimer !== null) {
+        window.clearTimeout(reducedTimer);
+        reducedTimer = null;
+      }
+    };
+    const scheduleMotion = () => {
+      if (
+        !active ||
+        documentIsHidden() ||
+        frame !== null ||
+        reducedTimer !== null
+      ) {
+        return;
+      }
+      world.dataset.motionState = "running";
+      if (reducedMotion) {
+        reducedTimer = window.setTimeout(() => {
+          reducedTimer = null;
+          if (!active || documentIsHidden()) return;
+          routePositionRef.current = advanceTrainWorldRoutePosition(
+            routePositionRef.current,
+            TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
+            cruiseSpeed,
+          );
+          applyRoutePosition();
+          scheduleMotion();
+        }, TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS);
+        return;
+      }
+      frame = window.requestAnimationFrame(advance);
+    };
     const advance = (timestamp: number) => {
+      frame = null;
+      if (!active || documentIsHidden()) return;
       if (previousTimestamp !== null) {
-        routePosition = advanceTrainWorldRoutePosition(
-          routePosition,
+        routePositionRef.current = advanceTrainWorldRoutePosition(
+          routePositionRef.current,
           timestamp - previousTimestamp,
+          cruiseSpeed,
         );
         applyRoutePosition();
       }
       previousTimestamp = timestamp;
-      frame = window.requestAnimationFrame(advance);
+      scheduleMotion();
+    };
+    const handleVisibility = () => {
+      cancelScheduledMotion();
+      previousTimestamp = null;
+      if (documentIsHidden()) {
+        world.dataset.motionState = "suspended";
+        return;
+      }
+      scheduleMotion();
     };
 
     applyRoutePosition();
@@ -736,13 +826,20 @@ function TrainWorld({
     observer?.observe(world);
     const handleResize = applyRoutePosition;
     window.addEventListener("resize", handleResize);
-    if (!reducedMotion) frame = window.requestAnimationFrame(advance);
+    document.addEventListener("visibilitychange", handleVisibility);
+    if (documentIsHidden()) {
+      world.dataset.motionState = "suspended";
+    } else {
+      scheduleMotion();
+    }
     return () => {
-      if (frame) window.cancelAnimationFrame(frame);
+      active = false;
+      cancelScheduledMotion();
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [reducedMotion, routeEngines, seed]);
+  }, [cruiseSpeed, reducedMotion, routeEngines, seed]);
 
   const nearWindow = routeWindows.near;
 
@@ -761,6 +858,12 @@ function TrainWorld({
         .join(",")}
       data-route-mounted-chunks={nearWindow.chunks.length}
       data-motion={reducedMotion ? "reduced" : "full"}
+      data-motion-state={
+        document.visibilityState === "hidden" ? "suspended" : "running"
+      }
+      data-cruise-speed={cruiseSpeed}
+      data-route-apply-count="0"
+      data-route-window-updates="0"
       data-time-of-day={timeOfDay}
       data-time-source={timeSource}
       data-palette-transition={paletteTransition}

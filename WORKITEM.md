@@ -109,7 +109,7 @@ future station stop without growing the DOM or memory usage over time.
   local-time selection and manual theme override. Test selection rules, manual
   override, stable geometry, transition state, and accessible contrast.
 
-- [ ] **TRAIN-007 — Make continuous motion smooth, bounded, and lifecycle-safe.**
+- [x] **TRAIN-007 — Make continuous motion smooth, bounded, and lifecycle-safe.**
   Drive route position from elapsed time rather than frame count, with one
   animation owner and configurable cruise speed. Clamp large elapsed-time jumps,
   suspend expensive updates while the document is hidden, resume without a

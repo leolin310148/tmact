@@ -6,8 +6,13 @@ import {
   advanceTrainWorldRoutePosition,
   minimumCarriagesForWidth,
   trainPaletteContrastRatio,
+  trainWorldCruiseSpeed,
   TrainLayout,
 } from "./TrainLayout";
+import {
+  TRAIN_WORLD_MAX_FRAME_ELAPSED_MS,
+  TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
+} from "./trainMotion";
 
 vi.mock("../api/client", () => ({
   loadClosedSessions: vi.fn(() =>
@@ -25,9 +30,51 @@ vi.mock("../api/client", () => ({
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
 });
+
+function installAnimationFrame() {
+  let nextID = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal(
+    "requestAnimationFrame",
+    vi.fn((callback: FrameRequestCallback) => {
+      const id = nextID++;
+      callbacks.set(id, callback);
+      return id;
+    }),
+  );
+  vi.stubGlobal(
+    "cancelAnimationFrame",
+    vi.fn((id: number) => callbacks.delete(id)),
+  );
+
+  return {
+    pending: () => callbacks.size,
+    run(timestamp: number) {
+      const pending = [...callbacks.values()];
+      callbacks.clear();
+      act(() => {
+        for (const callback of pending) callback(timestamp);
+      });
+    },
+  };
+}
+
+function mockVisibility(initial: DocumentVisibilityState = "visible") {
+  let visibility = initial;
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(
+    () => visibility,
+  );
+  return {
+    set(next: DocumentVisibilityState) {
+      visibility = next;
+      act(() => document.dispatchEvent(new Event("visibilitychange")));
+    },
+  };
+}
 
 function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
   return {
@@ -66,8 +113,152 @@ describe("TrainLayout", () => {
   });
 
   it("advances the world to the right from a single route position", () => {
-    expect(advanceTrainWorldRoutePosition(10, 500)).toBe(16);
+    expect(advanceTrainWorldRoutePosition(10, 200)).toBe(12.4);
+    expect(advanceTrainWorldRoutePosition(10, 500)).toBe(13);
     expect(advanceTrainWorldRoutePosition(16, -100)).toBe(16);
+  });
+
+  it("accepts a bounded development cruise-speed override", () => {
+    expect(trainWorldCruiseSpeed("?train-cruise-speed=24")).toBe(24);
+    expect(trainWorldCruiseSpeed("?train-cruise-speed=999")).toBe(96);
+    expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(12);
+  });
+
+  it("progresses from the animation clock without rerendering the train", () => {
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const consist = container.querySelector(".train-layout-consist");
+
+    animation.run(1_000);
+    animation.run(1_200);
+
+    expect(world).toHaveAttribute("data-cruise-speed", "12");
+    expect(world).toHaveAttribute("data-route-position", "2.400px");
+    expect(world).toHaveAttribute("data-route-apply-count", "2");
+    expect(world).toHaveAttribute("data-route-window-updates", "1");
+    expect(container.querySelector(".train-layout-consist")).toBe(consist);
+  });
+
+  it("clamps a throttled frame instead of leaping forward", () => {
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    animation.run(100);
+    animation.run(100 + TRAIN_WORLD_MAX_FRAME_ELAPSED_MS + 20_000);
+
+    expect(world).toHaveAttribute("data-route-position", "3.000px");
+  });
+
+  it("suspends while hidden and resumes from a fresh timestamp", () => {
+    const animation = installAnimationFrame();
+    const visibility = mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    animation.run(1_000);
+    animation.run(1_100);
+    expect(world).toHaveAttribute("data-route-position", "1.200px");
+
+    visibility.set("hidden");
+    expect(world).toHaveAttribute("data-motion-state", "suspended");
+    expect(animation.pending()).toBe(0);
+
+    visibility.set("visible");
+    animation.run(100_000);
+    expect(world).toHaveAttribute("data-route-position", "1.200px");
+    animation.run(100_100);
+    expect(world).toHaveAttribute("data-route-position", "2.400px");
+    expect(world).toHaveAttribute("data-motion-state", "running");
+  });
+
+  it("cleans up scheduled motion and visibility ownership on unmount", () => {
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const removeListener = vi.spyOn(document, "removeEventListener");
+    const { unmount } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+
+    expect(animation.pending()).toBeGreaterThan(0);
+    unmount();
+
+    expect(animation.pending()).toBe(0);
+    expect(removeListener).toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.any(Function),
+    );
+  });
+
+  it("recycles chunks without unbounded mounts or train renders", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-cruise-speed=96",
+    );
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const consist = container.querySelector(".train-layout-consist");
+
+    animation.run(0);
+    for (let frame = 1; frame <= 120; frame++) {
+      animation.run(frame * TRAIN_WORLD_MAX_FRAME_ELAPSED_MS);
+    }
+
+    const nearChunks = container.querySelectorAll(
+      '[data-world-layer="near"] .train-route-chunk',
+    );
+    const allChunks = container.querySelectorAll(".train-parallax-chunk");
+    expect(Number(world.dataset.routeWindowUpdates)).toBeGreaterThan(0);
+    expect(nearChunks).toHaveLength(Number(world.dataset.routeMountedChunks));
+    expect(allChunks.length).toBeLessThanOrEqual(50);
+    expect(container.querySelector(".train-layout-consist")).toBe(consist);
+  });
+
+  it("expands the overscanned route window before a wider viewport can gap", () => {
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const compactCount = Number(world.dataset.routeMountedChunks);
+    Object.defineProperty(world, "clientWidth", {
+      configurable: true,
+      get: () => 1_920,
+    });
+
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    const wideCount = Number(world.dataset.routeMountedChunks);
+    const nearChunks = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-world-layer="near"] .train-route-chunk',
+      ),
+    ];
+    const rightmostEdge = Math.max(
+      ...nearChunks.map(
+        (chunk) =>
+          Number.parseFloat(chunk.style.left) +
+          Number.parseFloat(chunk.style.width),
+      ),
+    );
+    expect(wideCount).toBeGreaterThan(compactCount);
+    expect(nearChunks).toHaveLength(wideCount);
+    expect(rightmostEdge).toBeGreaterThanOrEqual(1_920);
   });
 
   it("shows the motion grid only when its development flag is enabled", () => {
@@ -160,6 +351,8 @@ describe("TrainLayout", () => {
 
     for (const sprite of sprites) {
       expect(sprite).toHaveAttribute("aria-hidden", "true");
+      expect(sprite).toHaveAttribute("loading", "lazy");
+      expect(sprite).toHaveAttribute("decoding", "async");
       expect(sprite).toHaveAttribute("data-scenery-asset");
       expect(sprite.dataset.sceneryAnchor).toMatch(/^(center|bottom-center)$/);
       expect(sprite.dataset.scenerySafeScale).toMatch(/^\d+(\.\d+)?-\d+(\.\d+)?$/);
@@ -224,6 +417,33 @@ describe("TrainLayout", () => {
       expect(layer).toHaveAttribute("data-motion", "reduced");
       expect((layer as HTMLElement).dataset.layerPosition).toBe("0.000px");
     }
+  });
+
+  it("uses restrained infrequent route steps for reduced motion", () => {
+    vi.useFakeTimers();
+    mockVisibility();
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: "(prefers-reduced-motion: reduce)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS - 1));
+    expect(world).toHaveAttribute("data-route-position", "0.000px");
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-route-position", "1.200px");
+    expect(
+      container.querySelector<HTMLElement>('[data-world-layer="near"]')!
+        .dataset.layerPosition,
+    ).toBe("1.200px");
   });
 
   it("manually crossfades palettes without changing visible route geometry", () => {
