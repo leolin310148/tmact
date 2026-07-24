@@ -113,7 +113,9 @@ describe("train scenery asset kit", () => {
             profile.landmark?.layer === layer.name &&
             profile.landmark.assetIds.includes(placement.asset.id);
           expect(
-            isAllowedNormal || isAllowedLandmark,
+            isAllowedNormal ||
+              isAllowedLandmark ||
+              placement.setPiece !== null,
             `${chunk.region}/${layer.name}/${placement.asset.id}`,
           ).toBe(true);
 
@@ -166,6 +168,24 @@ describe("train scenery asset kit", () => {
     }
   });
 
+  it("reserves set-piece layers before placing incompatible small scenery", () => {
+    for (let index = -1_200; index <= 1_200; index++) {
+      const chunk = generateRouteChunk("reservation-line", index);
+      if (!chunk.setPiece) continue;
+
+      for (const layer of TRAIN_PARALLAX_LAYERS) {
+        const placements = trainSceneryPlacementsForChunk(layer.name, chunk);
+        if (!chunk.setPiece.reservedLayers.includes(layer.name)) continue;
+        expect(placements.length).toBeLessThanOrEqual(1);
+        expect(
+          placements.every(
+            (placement) => placement.setPiece?.id === chunk.setPiece?.id,
+          ),
+        ).toBe(true);
+      }
+    }
+  });
+
   it("deweights recently used variants throughout every region", () => {
     for (const layer of TRAIN_PARALLAX_LAYERS) {
       for (let regionIndex = -80; regionIndex <= 80; regionIndex++) {
@@ -177,11 +197,13 @@ describe("train scenery asset kit", () => {
           );
           ids.push(
             ...trainSceneryPlacementsForChunk(layer.name, chunk).map(
-              (placement) => placement.asset.id,
+              (placement) =>
+                placement.setPiece ? "" : placement.asset.id,
             ),
           );
         }
-        for (let index = 1; index < ids.length; index++) {
+        const normalIDs = ids.filter(Boolean);
+        for (let index = 1; index < normalIDs.length; index++) {
           const profile = TRAIN_REGION_SCENERY_PROFILES[
             generateRouteChunk(
               "cooldown-line",
@@ -191,7 +213,7 @@ describe("train scenery asset kit", () => {
           const rule = profile.layers[layer.name];
           const pool = rule?.assetIds ?? [];
           if ((rule?.cooldownChunks ?? 0) > 0 && new Set(pool).size > 1) {
-            expect(ids[index]).not.toBe(ids[index - 1]);
+            expect(normalIDs[index]).not.toBe(normalIDs[index - 1]);
           }
         }
       }

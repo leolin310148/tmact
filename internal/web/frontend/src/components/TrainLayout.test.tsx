@@ -372,6 +372,35 @@ describe("TrainLayout", () => {
     }
   });
 
+  it("renders deterministic set-piece segments with restrained occlusion", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const segments = [
+      ...container.querySelectorAll<HTMLElement>("[data-set-piece-id]"),
+    ].filter((element) => element.classList.contains("train-set-piece"));
+    const townEdge = segments.filter(
+      (segment) => segment.dataset.setPieceType === "town-edge",
+    );
+
+    expect(townEdge.map((segment) => segment.dataset.setPieceRole)).toEqual([
+      "entry",
+      "body",
+      "exit",
+    ]);
+    expect(
+      new Set(townEdge.map((segment) => segment.dataset.setPieceId)),
+    ).toHaveProperty("size", 1);
+    for (const segment of segments) {
+      expect(segment).toHaveAttribute("data-set-piece-occlusion", "restrained");
+      expect(segment.dataset.setPieceRole).toMatch(/^(entry|body|exit)$/);
+      expect(Number(segment.dataset.setPieceSpan)).toBeGreaterThanOrEqual(3);
+      expect(Number(segment.dataset.setPieceStart)).toBeLessThanOrEqual(
+        Number(segment.dataset.setPieceEnd),
+      );
+    }
+  });
+
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,

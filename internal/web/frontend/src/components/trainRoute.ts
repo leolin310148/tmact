@@ -24,6 +24,66 @@ export type TrainRegionName =
   | "coast"
   | "industrial";
 
+export type TrainSetPieceType =
+  | "bridge"
+  | "tunnel"
+  | "coast-reveal"
+  | "town-edge";
+
+export type TrainSetPieceRole = "entry" | "body" | "exit";
+
+export interface TrainSetPieceDefinition {
+  type: TrainSetPieceType;
+  span: number;
+  renderLayer: TrainParallaxLayerName;
+  reservedLayers: readonly TrainParallaxLayerName[];
+  incompatibleWith: readonly TrainSetPieceType[];
+}
+
+export interface TrainSetPieceSegment {
+  id: string;
+  type: TrainSetPieceType;
+  role: TrainSetPieceRole;
+  startIndex: number;
+  endIndex: number;
+  span: number;
+  segmentOffset: number;
+  renderLayer: TrainParallaxLayerName;
+  reservedLayers: readonly TrainParallaxLayerName[];
+  incompatibleWith: readonly TrainSetPieceType[];
+}
+
+export const TRAIN_SET_PIECE_DEFINITIONS = {
+  bridge: {
+    type: "bridge",
+    span: 4,
+    renderLayer: "midground",
+    reservedLayers: ["midground", "near"],
+    incompatibleWith: ["tunnel", "coast-reveal", "town-edge"],
+  },
+  tunnel: {
+    type: "tunnel",
+    span: 3,
+    renderLayer: "midground",
+    reservedLayers: ["midground", "near"],
+    incompatibleWith: ["bridge", "coast-reveal", "town-edge"],
+  },
+  "coast-reveal": {
+    type: "coast-reveal",
+    span: 4,
+    renderLayer: "far",
+    reservedLayers: ["far", "midground", "near"],
+    incompatibleWith: ["bridge", "tunnel", "town-edge"],
+  },
+  "town-edge": {
+    type: "town-edge",
+    span: 3,
+    renderLayer: "midground",
+    reservedLayers: ["midground", "near"],
+    incompatibleWith: ["bridge", "tunnel", "coast-reveal"],
+  },
+} as const satisfies Record<TrainSetPieceType, TrainSetPieceDefinition>;
+
 export interface TrainRegionProfile {
   name: TrainRegionName;
   label: string;
@@ -71,6 +131,7 @@ export interface RouteChunk {
   regionIndex: number;
   regionChunkOffset: number;
   regionChunkLength: number;
+  setPiece: TrainSetPieceSegment | null;
 }
 
 export interface RouteChunkWindowSnapshot {
@@ -205,6 +266,83 @@ export function trainRegionForChunk(
   };
 }
 
+function trainSetPieceTypeForRegion(
+  seed: string,
+  region: TrainRegionName,
+  regionIndex: number,
+  seedVersion: string,
+): TrainSetPieceType {
+  if (region === "coast") return "coast-reveal";
+  if (region === "town" || region === "industrial") return "town-edge";
+  if (region === "forest") return "bridge";
+  return trainRouteRandomUnit(
+    `${seedVersion}:${seed}:set-piece:${regionIndex}:mountain-type`,
+  ) < 0.5
+    ? "bridge"
+    : "tunnel";
+}
+
+export function trainRouteSetPieceForChunk(
+  seed: string,
+  chunkIndex: number,
+  seedVersion = TRAIN_ROUTE_SEED_VERSION,
+): TrainSetPieceSegment | null {
+  assertInteger(chunkIndex, "route chunk index");
+  const resolvedSeed = seed || DEFAULT_TRAIN_ROUTE_SEED;
+  const region = trainRegionForChunk(resolvedSeed, chunkIndex, seedVersion);
+  const type = trainSetPieceTypeForRegion(
+    resolvedSeed,
+    region.name,
+    region.index,
+    seedVersion,
+  );
+  const definition = TRAIN_SET_PIECE_DEFINITIONS[type];
+  const maximumStartOffset =
+    TRAIN_REGION_CHUNK_LENGTH - definition.span - 1;
+  const startOffset =
+    type === "coast-reveal" || type === "town-edge"
+      ? 0
+      : 1 +
+        Math.floor(
+          trainRouteRandomUnit(
+            `${seedVersion}:${resolvedSeed}:set-piece:${region.index}:start`,
+          ) * maximumStartOffset,
+        );
+  const segmentOffset = region.chunkOffset - startOffset;
+  if (segmentOffset < 0 || segmentOffset >= definition.span) return null;
+
+  const startIndex =
+    region.index * TRAIN_REGION_CHUNK_LENGTH + startOffset;
+  const role: TrainSetPieceRole =
+    segmentOffset === 0
+      ? "entry"
+      : segmentOffset === definition.span - 1
+        ? "exit"
+        : "body";
+
+  return {
+    id: `${seedVersion}:${resolvedSeed}:set-piece:${region.index}:${type}`,
+    type,
+    role,
+    startIndex,
+    endIndex: startIndex + definition.span - 1,
+    span: definition.span,
+    segmentOffset,
+    renderLayer: definition.renderLayer,
+    reservedLayers: definition.reservedLayers,
+    incompatibleWith: definition.incompatibleWith,
+  };
+}
+
+export function trainSetPiecesAreIncompatible(
+  left: TrainSetPieceType,
+  right: TrainSetPieceType,
+): boolean {
+  const incompatibleWith: readonly TrainSetPieceType[] =
+    TRAIN_SET_PIECE_DEFINITIONS[left].incompatibleWith;
+  return incompatibleWith.includes(right);
+}
+
 function assertInteger(value: number, name: string): void {
   if (!Number.isInteger(value)) {
     throw new Error(`${name} must be an integer`);
@@ -235,6 +373,7 @@ export function generateRouteChunk(
     regionIndex: region.index,
     regionChunkOffset: region.chunkOffset,
     regionChunkLength: region.chunkLength,
+    setPiece: trainRouteSetPieceForChunk(resolvedSeed, index, seedVersion),
   };
 }
 

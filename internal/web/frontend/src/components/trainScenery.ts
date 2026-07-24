@@ -23,8 +23,10 @@ import vegetationHedgerowUrl from "../assets/train-theme/sprites/scenery/vegetat
 import vegetationReedsUrl from "../assets/train-theme/sprites/scenery/vegetation-reeds.png";
 import {
   TRAIN_REGION_CHUNK_LENGTH,
+  trainRouteSetPieceForChunk,
   trainRouteRandomUnit,
   type RouteChunk,
+  type TrainSetPieceSegment,
   type TrainParallaxLayerName,
   type TrainRegionName,
 } from "./trainRoute";
@@ -445,12 +447,6 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
     },
-    landmark: {
-      layer: "midground",
-      assetIds: ["bridge-truss"],
-      probability: 0.18,
-      maxPerRegion: 1,
-    },
   },
   mountain: {
     name: "mountain",
@@ -494,12 +490,6 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
-    },
-    landmark: {
-      layer: "midground",
-      assetIds: ["bridge-truss"],
-      probability: 0.32,
-      maxPerRegion: 1,
     },
   },
   town: {
@@ -658,6 +648,7 @@ export interface TrainSceneryPlacement {
   collisionWidth: number;
   minimumSpacingPx: number;
   landmark: boolean;
+  setPiece: TrainSetPieceSegment | null;
 }
 
 const TRAIN_SCENERY_ASSET_BY_ID = new Map(
@@ -707,6 +698,30 @@ function chooseAsset(
   return assetForID(leastRecentID);
 }
 
+function setPiecePlacement(
+  setPiece: TrainSetPieceSegment,
+  layer: TrainParallaxLayerName,
+): TrainSceneryPlacement | null {
+  const assetID =
+    setPiece.type === "bridge" && layer === "midground"
+      ? "bridge-truss"
+      : setPiece.type === "coast-reveal" && layer === "far"
+        ? "coast-shore"
+        : null;
+  if (!assetID) return null;
+  const resolvedAsset = assetForID(assetID);
+  const scale = resolvedAsset.safeScale[1];
+  return {
+    asset: resolvedAsset,
+    offsetPercent: 50,
+    scale,
+    collisionWidth: resolvedAsset.width * scale,
+    minimumSpacingPx: 0,
+    landmark: false,
+    setPiece,
+  };
+}
+
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
@@ -738,6 +753,16 @@ function regionLayerPlan(
 
   for (let localOffset = 0; localOffset < TRAIN_REGION_CHUNK_LENGTH; localOffset++) {
     const chunkKey = `${regionKey}:chunk:${localOffset}`;
+    const setPiece = trainRouteSetPieceForChunk(
+      chunk.routeSeed,
+      chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset,
+      chunk.seedVersion,
+    );
+    if (setPiece?.reservedLayers.includes(layer)) {
+      const placement = setPiecePlacement(setPiece, layer);
+      plan.push(placement ? [placement] : []);
+      continue;
+    }
     const isLandmark = landmark?.offset === localOffset;
     const assetIds = isLandmark ? landmark.assetIds : rule.assetIds;
     const count = isLandmark
@@ -772,6 +797,7 @@ function regionLayerPlan(
         collisionWidth: asset.width * scale,
         minimumSpacingPx: rule.minimumSpacingPx,
         landmark: isLandmark,
+        setPiece: null,
       };
     });
     plan.push(placements);

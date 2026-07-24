@@ -94,6 +94,149 @@ html[data-pane-switcher-layout="train"] .statusline {
   overflow: visible;
 }
 
+.train-set-piece {
+  position: absolute;
+  right: -1px;
+  left: -1px;
+  display: block;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.train-set-piece--bridge {
+  bottom: 17px;
+  height: 48px;
+  border-bottom: 5px solid var(--train-palette-mid-surface);
+  background:
+    linear-gradient(
+        34deg,
+        transparent 0 46%,
+        var(--train-palette-silhouette) 47% 52%,
+        transparent 53%
+      )
+      0 0 / 64px 43px,
+    linear-gradient(
+        -34deg,
+        transparent 0 46%,
+        var(--train-palette-silhouette) 47% 52%,
+        transparent 53%
+      )
+      0 0 / 64px 43px;
+}
+
+.train-set-piece--bridge::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -15px;
+  left: 0;
+  height: 12px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 58px,
+      var(--train-palette-mid-surface) 58px 64px
+    );
+}
+
+.train-set-piece--tunnel {
+  bottom: 17px;
+  height: 93px;
+  background: var(--train-palette-silhouette);
+  clip-path: polygon(0 100%, 0 38%, 9% 17%, 21% 5%, 100% 5%, 100% 100%);
+}
+
+.train-set-piece--tunnel::after {
+  content: "";
+  position: absolute;
+  right: 8%;
+  bottom: 0;
+  left: 8%;
+  height: 72%;
+  border-radius: 45% 45% 0 0;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-control-surface),
+    transparent 16%
+  );
+}
+
+.train-set-piece--tunnel.train-set-piece--body {
+  clip-path: none;
+}
+
+.train-set-piece--tunnel.train-set-piece--exit {
+  transform: scaleX(-1);
+}
+
+.train-set-piece--coast-reveal {
+  bottom: 17px;
+  height: 36px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--train-palette-haze), transparent 50%) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--train-palette-water), white 10%),
+      var(--train-palette-water)
+    );
+}
+
+.train-set-piece--coast-reveal.train-set-piece--entry {
+  clip-path: polygon(28% 100%, 36% 32%, 50% 13%, 100% 0, 100% 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--exit {
+  clip-path: polygon(0 0, 58% 18%, 76% 45%, 84% 100%, 0 100%);
+}
+
+.train-set-piece--town-edge {
+  bottom: 17px;
+  height: 76px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-palette-mid-surface) 0 30px,
+      transparent 30px 36px,
+      var(--train-palette-mid-surface) 36px 78px,
+      transparent 78px 84px
+    );
+  clip-path: polygon(
+    0 100%,
+    0 52%,
+    10% 52%,
+    10% 28%,
+    24% 28%,
+    24% 61%,
+    39% 61%,
+    39% 12%,
+    58% 12%,
+    58% 43%,
+    74% 43%,
+    74% 24%,
+    90% 24%,
+    90% 55%,
+    100% 55%,
+    100% 100%
+  );
+}
+
+.train-set-piece--town-edge.train-set-piece--entry {
+  opacity: 0.32;
+}
+
+.train-set-piece--town-edge.train-set-piece--body {
+  opacity: 0.44;
+}
+
+.train-set-piece--town-edge.train-set-piece--exit {
+  opacity: 0.38;
+  transform: scaleX(-1);
+}
+
 .train-world-layer--sky {
   background: linear-gradient(180deg, var(--train-palette-haze), transparent 66%);
 }
@@ -276,6 +419,14 @@ html[data-pane-switcher-layout="train"] .statusline {
       transparent 2px 5px
     );
   filter: drop-shadow(0 0 3px var(--train-palette-emissive));
+}
+
+.train-emissive-overlay--town-edge-windows {
+  right: 12%;
+  bottom: 36px;
+  left: 12%;
+  width: auto;
+  transform: none;
 }
 
 .train-emissive-overlay--streetlight,

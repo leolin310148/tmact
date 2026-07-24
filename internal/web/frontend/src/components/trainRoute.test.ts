@@ -8,8 +8,10 @@ import {
   TRAIN_PARALLAX_SEAM_OVERLAP,
   TRAIN_REGION_CHUNK_LENGTH,
   TRAIN_REGION_PROFILES,
+  TRAIN_SET_PIECE_DEFINITIONS,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
+  trainSetPiecesAreIncompatible,
   trainRegionAtIndex,
   trainParallaxLayerPosition,
   trainParallaxLayerTransform,
@@ -35,6 +37,18 @@ describe("train route chunks", () => {
       regionIndex: 4,
       regionChunkOffset: 6,
       regionChunkLength: 9,
+      setPiece: {
+        id: "tmact-train-route-v1:alpine-line:set-piece:4:bridge",
+        type: "bridge",
+        role: "body",
+        startIndex: 40,
+        endIndex: 43,
+        span: 4,
+        segmentOffset: 2,
+        renderLayer: "midground",
+        reservedLayers: ["midground", "near"],
+        incompatibleWith: ["tunnel", "coast-reveal", "town-edge"],
+      },
     });
     expect(() => generateRouteChunk("alpine-line", 1.5)).toThrow(
       "route chunk index must be an integer",
@@ -98,6 +112,103 @@ describe("train route chunks", () => {
       expect(chunks.map((chunk) => chunk.regionChunkOffset)).toEqual(
         Array.from({ length: TRAIN_REGION_CHUNK_LENGTH }, (_, offset) => offset),
       );
+    }
+  });
+
+  it("reserves deterministic non-overlapping multi-chunk set pieces", () => {
+    const firstPass = Array.from({ length: 1_801 }, (_, offset) =>
+      generateRouteChunk("set-piece-line", offset - 900).setPiece,
+    );
+    const repeated = Array.from({ length: 1_801 }, (_, offset) =>
+      generateRouteChunk("set-piece-line", offset - 900).setPiece,
+    );
+    const entries = firstPass.filter(
+      (setPiece) => setPiece?.role === "entry",
+    );
+
+    expect(repeated).toEqual(firstPass);
+    expect(new Set(entries.map((setPiece) => setPiece?.type))).toEqual(
+      new Set(["bridge", "tunnel", "coast-reveal", "town-edge"]),
+    );
+
+    const reservations = entries
+      .map((setPiece) => setPiece!)
+      .sort((left, right) => left.startIndex - right.startIndex);
+    for (let index = 1; index < reservations.length; index++) {
+      const previous = reservations[index - 1]!;
+      const current = reservations[index]!;
+      expect(previous.endIndex).toBeLessThan(current.startIndex);
+      if (
+        trainSetPiecesAreIncompatible(previous.type, current.type) ||
+        trainSetPiecesAreIncompatible(current.type, previous.type)
+      ) {
+        expect(previous.endIndex).toBeLessThan(current.startIndex);
+      }
+    }
+  });
+
+  it("emits continuous entry/body/exit segments for bridge and transition traversals", () => {
+    const segmentsByID = new Map<
+      string,
+      NonNullable<ReturnType<typeof generateRouteChunk>["setPiece"]>[]
+    >();
+
+    for (let index = -900; index <= 900; index++) {
+      const setPiece = generateRouteChunk("traversal-line", index).setPiece;
+      if (!setPiece) continue;
+      const segments = segmentsByID.get(setPiece.id) ?? [];
+      segments.push(setPiece);
+      segmentsByID.set(setPiece.id, segments);
+    }
+
+    const complete = [...segmentsByID.values()].filter(
+      (segments) => segments.length === segments[0]?.span,
+    );
+    for (const segments of complete) {
+      segments.sort((left, right) => left.segmentOffset - right.segmentOffset);
+      expect(segments.map((segment) => segment.role)).toEqual([
+        "entry",
+        ...Array.from({ length: segments.length - 2 }, () => "body" as const),
+        "exit",
+      ]);
+      expect(segments.map((segment) => segment.startIndex + segment.segmentOffset))
+        .toEqual(
+          Array.from(
+            { length: segments.length },
+            (_, offset) => segments[0]!.startIndex + offset,
+          ),
+        );
+      expect(new Set(segments.map((segment) => segment.id)).size).toBe(1);
+    }
+
+    expect(complete.some((segments) => segments[0]?.type === "bridge")).toBe(true);
+    expect(
+      complete.some(
+        (segments) =>
+          segments[0]?.type === "coast-reveal" ||
+          segments[0]?.type === "tunnel",
+      ),
+    ).toBe(true);
+  });
+
+  it("declares symmetric incompatibility and bounded region reservations", () => {
+    for (const definition of Object.values(TRAIN_SET_PIECE_DEFINITIONS)) {
+      expect(definition.span).toBeGreaterThanOrEqual(3);
+      expect(definition.span).toBeLessThan(TRAIN_REGION_CHUNK_LENGTH);
+      for (const incompatible of definition.incompatibleWith) {
+        expect(trainSetPiecesAreIncompatible(incompatible, definition.type)).toBe(
+          true,
+        );
+      }
+    }
+
+    for (let index = -900; index <= 900; index++) {
+      const chunk = generateRouteChunk("bounded-pieces", index);
+      if (!chunk.setPiece) continue;
+      const regionStart = chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH;
+      const regionEnd = regionStart + TRAIN_REGION_CHUNK_LENGTH - 1;
+      expect(chunk.setPiece.startIndex).toBeGreaterThanOrEqual(regionStart);
+      expect(chunk.setPiece.endIndex).toBeLessThan(regionEnd);
     }
   });
 

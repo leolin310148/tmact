@@ -120,7 +120,7 @@ future station stop without growing the DOM or memory usage over time.
   steps when needed. Test fake-clock progression, pause/resume, throttled-frame
   recovery, cleanup, and bounded render/mount counts.
 
-- [ ] **TRAIN-008 — Add landmarks, bridges, and transition set pieces.**
+- [x] **TRAIN-008 — Add landmarks, bridges, and transition set pieces.**
   Promote bridges, tunnels/cuttings, coastline reveals, town edges, and other
   large compositions to deterministic multi-chunk set pieces rather than
   ordinary random props. Reserve their chunk spans before filling smaller

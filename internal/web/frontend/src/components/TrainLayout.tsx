@@ -492,10 +492,32 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
       data-route-region={chunk.region}
       data-route-region-index={chunk.regionIndex}
       data-route-region-offset={chunk.regionChunkOffset}
+      data-route-set-piece={chunk.setPiece?.type ?? "none"}
+      data-route-set-piece-role={chunk.setPiece?.role ?? "none"}
+      data-route-set-piece-reserved-layers={
+        chunk.setPiece?.reservedLayers.join(",") ?? ""
+      }
       data-parallax-layer={layer.name}
       data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
     >
+      {chunk.setPiece?.renderLayer === layer.name ? (
+        <span
+          className={[
+            "train-set-piece",
+            `train-set-piece--${chunk.setPiece.type}`,
+            `train-set-piece--${chunk.setPiece.role}`,
+          ].join(" ")}
+          data-set-piece-id={chunk.setPiece.id}
+          data-set-piece-type={chunk.setPiece.type}
+          data-set-piece-role={chunk.setPiece.role}
+          data-set-piece-segment={chunk.setPiece.segmentOffset}
+          data-set-piece-span={chunk.setPiece.span}
+          data-set-piece-start={chunk.setPiece.startIndex}
+          data-set-piece-end={chunk.setPiece.endIndex}
+          data-set-piece-occlusion="restrained"
+        />
+      ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
         const sceneryStyle: TrainSceneryAssetStyle = {
@@ -523,6 +545,8 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-safe-scale={asset.safeScale.join("-")}
             data-scenery-day-night={asset.dayNightTreatment}
             data-scenery-landmark={placement.landmark ? "true" : "false"}
+            data-scenery-set-piece={placement.setPiece?.type ?? "none"}
+            data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-collision-width={placement.collisionWidth.toFixed(3)}
             data-scenery-minimum-spacing={placement.minimumSpacingPx}
             style={sceneryStyle}
@@ -540,6 +564,14 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
             key={`windows-${placement.asset.id}-${ordinal}`}
           />
         ))}
+      {layer.name === "midground" &&
+      chunk.setPiece?.type === "town-edge" ? (
+        <span
+          className="train-emissive-overlay train-emissive-overlay--windows train-emissive-overlay--town-edge-windows"
+          data-emissive="windows"
+          data-set-piece-id={chunk.setPiece.id}
+        />
+      ) : null}
       {layer.name === "midground" ? (
         <span
           className="train-emissive-overlay train-emissive-overlay--streetlight"
