@@ -11,8 +11,13 @@ import {
 } from "./TrainLayout";
 import {
   TRAIN_WORLD_MAX_FRAME_ELAPSED_MS,
+  TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
 } from "./trainMotion";
+import {
+  TRAIN_STATION_DEFAULT_DWELL_MS,
+  TRAIN_STATION_PLATFORM_SETTLE_MS,
+} from "./trainStation";
 
 vi.mock("../api/client", () => ({
   loadClosedSessions: vi.fn(() =>
@@ -74,6 +79,38 @@ function mockVisibility(initial: DocumentVisibilityState = "visible") {
       act(() => document.dispatchEvent(new Event("visibilitychange")));
     },
   };
+}
+
+function mockReducedMotion() {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockReturnValue({
+      matches: true,
+      media: "(prefers-reduced-motion: reduce)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+  );
+}
+
+function advanceReducedMotionToState(
+  world: HTMLElement,
+  expectedState: string,
+  limit = 200,
+) {
+  const routePositions: number[] = [
+    Number.parseFloat(world.dataset.routePosition!),
+  ];
+  for (
+    let step = 0;
+    step < limit && world.dataset.stationState !== expectedState;
+    step++
+  ) {
+    act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS));
+    routePositions.push(Number.parseFloat(world.dataset.routePosition!));
+  }
+  expect(world).toHaveAttribute("data-station-state", expectedState);
+  return routePositions;
 }
 
 function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
@@ -750,15 +787,7 @@ describe("TrainLayout", () => {
   it("uses restrained infrequent route steps for reduced motion", () => {
     vi.useFakeTimers();
     mockVisibility();
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn().mockReturnValue({
-        matches: true,
-        media: "(prefers-reduced-motion: reduce)",
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    );
+    mockReducedMotion();
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
@@ -772,6 +801,102 @@ describe("TrainLayout", () => {
       container.querySelector<HTMLElement>('[data-world-layer="near"]')!
         .dataset.layerPosition,
     ).toBe("1.200px");
+  });
+
+  it("keeps reduced-motion approach restrained while station phases use wall-clock time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-cruise-speed=96&train-station-trigger=approach",
+    );
+    mockVisibility();
+    mockReducedMotion();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    const routePositions = advanceReducedMotionToState(world, "platform");
+    const routeDeltas = routePositions.slice(1).map(
+      (position, index) => position - routePositions[index]!,
+    );
+    expect(
+      routeDeltas.every(
+        (delta) =>
+          delta >= 0 &&
+          delta <=
+            (96 * TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS) / 1_000,
+      ),
+    ).toBe(true);
+    const stopPosition = world.dataset.routePosition;
+
+    act(() => vi.advanceTimersByTime(TRAIN_STATION_PLATFORM_SETTLE_MS - 1));
+    expect(world).toHaveAttribute("data-station-state", "platform");
+    expect(world.dataset.routePosition).toBe(stopPosition);
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+
+    act(() => vi.advanceTimersByTime(TRAIN_STATION_DEFAULT_DWELL_MS - 1));
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+    expect(world.dataset.routePosition).toBe(stopPosition);
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-station-state", "depart");
+    expect(world.dataset.routePosition).toBe(stopPosition);
+
+    act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS));
+    expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
+      Number.parseFloat(stopPosition!),
+    );
+  });
+
+  it("suspends the reduced-motion station wall clock while hidden and cleans it up", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-cruise-speed=96&train-station-trigger=approach",
+    );
+    const visibility = mockVisibility();
+    mockReducedMotion();
+    const removeListener = vi.spyOn(document, "removeEventListener");
+    const { container, unmount } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    advanceReducedMotionToState(world, "platform");
+    act(() => vi.advanceTimersByTime(100));
+    visibility.set("hidden");
+    expect(world).toHaveAttribute("data-motion-state", "suspended");
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(world).toHaveAttribute("data-station-state", "platform");
+
+    visibility.set("visible");
+    act(() => vi.advanceTimersByTime(149));
+    expect(world).toHaveAttribute("data-station-state", "platform");
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+
+    act(() => vi.advanceTimersByTime(2_000));
+    visibility.set("hidden");
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+    visibility.set("visible");
+    act(() => vi.advanceTimersByTime(1_999));
+    expect(world).toHaveAttribute("data-station-state", "dwell");
+    act(() => vi.advanceTimersByTime(1));
+    expect(world).toHaveAttribute("data-station-state", "depart");
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(removeListener).toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.any(Function),
+    );
   });
 
   it("manually crossfades palettes without changing visible route geometry", () => {

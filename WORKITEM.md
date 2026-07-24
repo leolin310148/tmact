@@ -157,7 +157,7 @@ future station stop without growing the DOM or memory usage over time.
   sunset, and night scenes. Document the route seed/debug controls and final
   manual verification cases.
 
-- [ ] **TRAIN-011 — Keep reduced-motion station timing on wall-clock time.**
+- [x] **TRAIN-011 — Keep reduced-motion station timing on wall-clock time.**
   Decouple the deliberately infrequent reduced-motion route steps from the
   station's non-positional timing. With `prefers-reduced-motion: reduce`, keep
   cruise/approach scenery movement restrained and infrequent, but make the

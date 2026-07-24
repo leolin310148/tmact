@@ -68,7 +68,10 @@ import {
 } from "./trainMotion";
 import {
   advanceTrainStationJourney,
+  advanceTrainStationJourneyOnClock,
   createTrainStationJourney,
+  TRAIN_STATION_DEFAULT_DWELL_MS,
+  TRAIN_STATION_PLATFORM_SETTLE_MS,
   trainStationDevelopmentTrigger,
 } from "./trainStation";
 import "./TrainLayout.css";
@@ -762,6 +765,7 @@ function TrainWorld({
     let previousTimestamp: number | null = null;
     let frame: number | null = null;
     let reducedTimer: number | null = null;
+    let reducedClockStartedAt: number | null = null;
     let active = true;
     let routeApplyCount = 0;
     let routeWindowUpdateCount = 0;
@@ -861,6 +865,32 @@ function TrainWorld({
         window.clearTimeout(reducedTimer);
         reducedTimer = null;
       }
+      reducedClockStartedAt = null;
+    };
+    const reducedPhaseDuration = () => {
+      const journey = stationJourneyRef.current;
+      if (journey.state === "platform") {
+        return TRAIN_STATION_PLATFORM_SETTLE_MS;
+      }
+      if (journey.state === "dwell") {
+        return TRAIN_STATION_DEFAULT_DWELL_MS;
+      }
+      return null;
+    };
+    const advanceReducedStationClock = (timestamp: number) => {
+      const phaseDuration = reducedPhaseDuration();
+      if (phaseDuration === null || reducedClockStartedAt === null) return;
+      const elapsed = Math.max(0, timestamp - reducedClockStartedAt);
+      if (elapsed === 0) return;
+      stationJourneyRef.current = advanceTrainStationJourneyOnClock(
+        stationJourneyRef.current,
+        0,
+        elapsed,
+        { cruiseSpeed },
+      );
+      routePositionRef.current = stationJourneyRef.current.routePosition;
+      reducedClockStartedAt = timestamp;
+      applyRoutePosition();
     };
     const scheduleMotion = () => {
       if (
@@ -873,19 +903,35 @@ function TrainWorld({
       }
       world.dataset.motionState = "running";
       if (reducedMotion) {
+        const phaseDuration = reducedPhaseDuration();
+        const delay =
+          phaseDuration === null
+            ? TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS
+            : Math.max(
+                0,
+                phaseDuration - stationJourneyRef.current.stateElapsedMs,
+              );
+        reducedClockStartedAt = Date.now();
         reducedTimer = window.setTimeout(() => {
           reducedTimer = null;
           if (!active || documentIsHidden()) return;
-          stationJourneyRef.current = advanceTrainStationJourney(
-            stationJourneyRef.current,
-            TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
-            { cruiseSpeed },
-          );
+          const timestamp = Date.now();
+          if (phaseDuration === null) {
+            stationJourneyRef.current = advanceTrainStationJourneyOnClock(
+              stationJourneyRef.current,
+              TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
+              0,
+              { cruiseSpeed },
+            );
+          } else {
+            advanceReducedStationClock(timestamp);
+          }
           routePositionRef.current =
             stationJourneyRef.current.routePosition;
-          applyRoutePosition();
+          reducedClockStartedAt = null;
+          if (phaseDuration === null) applyRoutePosition();
           scheduleMotion();
-        }, TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS);
+        }, delay);
         return;
       }
       frame = window.requestAnimationFrame(advance);
@@ -906,6 +952,13 @@ function TrainWorld({
       scheduleMotion();
     };
     const handleVisibility = () => {
+      if (
+        reducedMotion &&
+        documentIsHidden() &&
+        reducedClockStartedAt !== null
+      ) {
+        advanceReducedStationClock(Date.now());
+      }
       cancelScheduledMotion();
       previousTimestamp = null;
       if (documentIsHidden()) {

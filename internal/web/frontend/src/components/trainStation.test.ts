@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   advanceTrainStationJourney,
+  advanceTrainStationJourneyOnClock,
   createTrainStationJourney,
   TRAIN_STATION_DEFAULT_DWELL_MS,
   TRAIN_STATION_DEFAULT_MINIMUM_JOURNEY_DISTANCE,
@@ -208,5 +209,30 @@ describe("train station journey", () => {
     );
     expect(advanceTrainStationJourney(journey, 0)).toEqual(journey);
     expect(advanceTrainStationJourney(journey, Number.NaN)).toEqual(journey);
+  });
+
+  it("advances non-positional station phases from a separate wall clock", () => {
+    let journey = advanceUntil(
+      createTrainStationJourney("wall-clock-line", 0, {}, "approach"),
+      "platform",
+    );
+    const stopPosition = journey.routePosition;
+
+    journey = advanceTrainStationJourneyOnClock(journey, 0, 249);
+    expect(journey.state).toBe("platform");
+    expect(journey.routePosition).toBe(stopPosition);
+    journey = advanceTrainStationJourneyOnClock(journey, 0, 1);
+    expect(journey.state).toBe("dwell");
+
+    journey = advanceTrainStationJourneyOnClock(
+      journey,
+      0,
+      TRAIN_STATION_DEFAULT_DWELL_MS - 1,
+    );
+    expect(journey.state).toBe("dwell");
+    expect(journey.routePosition).toBe(stopPosition);
+    journey = advanceTrainStationJourneyOnClock(journey, 0, 1);
+    expect(journey.state).toBe("depart");
+    expect(journey.routePosition).toBe(stopPosition);
   });
 });

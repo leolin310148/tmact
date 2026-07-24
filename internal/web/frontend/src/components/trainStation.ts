@@ -302,14 +302,37 @@ export function advanceTrainStationJourney(
   elapsedMs: number,
   options: Partial<TrainStationJourneyOptions> = {},
 ): TrainStationJourney {
-  const resolved = resolvedJourneyOptions(options);
-  const boundedElapsed = Math.min(
+  const boundedElapsed = boundedTrainStationRouteElapsed(elapsedMs);
+  return advanceTrainStationJourneyOnClock(
+    journey,
+    boundedElapsed,
+    boundedElapsed,
+    options,
+  );
+}
+
+function boundedTrainStationRouteElapsed(elapsedMs: number): number {
+  return Math.min(
     TRAIN_STATION_MAX_ELAPSED_MS,
     Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : 0,
   );
-  if (boundedElapsed === 0) return journey;
+}
 
-  const elapsedSeconds = boundedElapsed / 1_000;
+export function advanceTrainStationJourneyOnClock(
+  journey: TrainStationJourney,
+  routeElapsedMs: number,
+  stationElapsedMs: number,
+  options: Partial<TrainStationJourneyOptions> = {},
+): TrainStationJourney {
+  const resolved = resolvedJourneyOptions(options);
+  const boundedRouteElapsed = boundedTrainStationRouteElapsed(routeElapsedMs);
+  const wallClockElapsed =
+    Number.isFinite(stationElapsedMs) && stationElapsedMs > 0
+      ? stationElapsedMs
+      : 0;
+  if (boundedRouteElapsed === 0 && wallClockElapsed === 0) return journey;
+
+  const elapsedSeconds = boundedRouteElapsed / 1_000;
   let next = { ...journey };
   const distances = effectiveStationDistances(resolved);
   const approachStart =
@@ -325,7 +348,7 @@ export function advanceTrainStationJourney(
   }
 
   if (next.state === "platform") {
-    next.stateElapsedMs += boundedElapsed;
+    next.stateElapsedMs += wallClockElapsed;
     if (next.stateElapsedMs >= resolved.platformSettleMs) {
       next = transition(next, "dwell", resolved);
     }
@@ -333,12 +356,14 @@ export function advanceTrainStationJourney(
   }
 
   if (next.state === "dwell") {
-    next.stateElapsedMs += boundedElapsed;
+    next.stateElapsedMs += wallClockElapsed;
     if (next.stateElapsedMs >= resolved.dwellMs) {
       next = transition(next, "depart", resolved);
     }
     return next;
   }
+
+  if (boundedRouteElapsed === 0) return next;
 
   let desiredSpeed = trainStationTargetSpeed(next.state, resolved.cruiseSpeed);
   let rate = resolved.accelerationPxPerSecondSquared;
@@ -365,7 +390,7 @@ export function advanceTrainStationJourney(
   next.targetSpeed = trainStationTargetSpeed(next.state, resolved.cruiseSpeed);
   next.routePosition +=
     ((previousSpeed + next.currentSpeed) / 2) * elapsedSeconds;
-  next.stateElapsedMs += boundedElapsed;
+  next.stateElapsedMs += boundedRouteElapsed;
 
   if (
     next.state === "decelerate" &&
