@@ -180,7 +180,7 @@ future station stop without growing the DOM or memory usage over time.
   approach/platform/dwell states at compact and wide sizes. Run the frontend
   suite, build, and `make test`.
 
-- [ ] **TRAIN-013 — Tune station discovery and repeat cadence.**
+- [x] **TRAIN-013 — Tune station discovery and repeat cadence.**
   Shorten the default seed's initial journey so a normal 12px/s session begins
   its first station approach within roughly three to five minutes, and tune
   later station spacing to roughly six to nine minutes without permitting

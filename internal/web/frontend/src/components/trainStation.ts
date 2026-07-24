@@ -1,7 +1,8 @@
 export const TRAIN_STATION_SPAN_CHUNKS = 6;
 export const TRAIN_STATION_REGION_ALIGNMENT_CHUNKS = 9;
 export const TRAIN_STATION_DEFAULT_CHUNK_WIDTH = 320;
-export const TRAIN_STATION_DEFAULT_MINIMUM_JOURNEY_DISTANCE = 5_120;
+export const TRAIN_STATION_DEFAULT_INITIAL_JOURNEY_DISTANCE = 2_880;
+export const TRAIN_STATION_DEFAULT_MINIMUM_JOURNEY_DISTANCE = 3_840;
 export const TRAIN_STATION_DEFAULT_APPROACH_DISTANCE = 144;
 export const TRAIN_STATION_DEFAULT_DECELERATE_DISTANCE = 48;
 export const TRAIN_STATION_DEFAULT_DWELL_MS = 4_000;
@@ -20,6 +21,7 @@ export type TrainStationDevelopmentTrigger = "approach" | "depart" | null;
 
 export interface TrainStationScheduleOptions {
   chunkWidth: number;
+  initialJourneyDistance: number;
   minimumJourneyDistance: number;
   alignmentChunks: number;
   spanChunks: number;
@@ -58,6 +60,7 @@ export interface TrainStationJourney {
 
 const DEFAULT_SCHEDULE_OPTIONS: TrainStationScheduleOptions = {
   chunkWidth: TRAIN_STATION_DEFAULT_CHUNK_WIDTH,
+  initialJourneyDistance: TRAIN_STATION_DEFAULT_INITIAL_JOURNEY_DISTANCE,
   minimumJourneyDistance: TRAIN_STATION_DEFAULT_MINIMUM_JOURNEY_DISTANCE,
   alignmentChunks: TRAIN_STATION_REGION_ALIGNMENT_CHUNKS,
   spanChunks: TRAIN_STATION_SPAN_CHUNKS,
@@ -76,15 +79,6 @@ export const DEFAULT_TRAIN_STATION_JOURNEY_OPTIONS: TrainStationJourneyOptions =
     departureClearDistance: 72,
   };
 
-function hashString(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
 function resolvedScheduleOptions(
   options: Partial<TrainStationScheduleOptions> = {},
 ): TrainStationScheduleOptions {
@@ -96,6 +90,8 @@ function resolvedScheduleOptions(
     resolved.alignmentChunks <= 0 ||
     !Number.isInteger(resolved.spanChunks) ||
     resolved.spanChunks <= 0 ||
+    !Number.isFinite(resolved.initialJourneyDistance) ||
+    resolved.initialJourneyDistance < 0 ||
     !Number.isFinite(resolved.minimumJourneyDistance) ||
     resolved.minimumJourneyDistance < 0
   ) {
@@ -115,12 +111,12 @@ function stationCycleChunks(options: TrainStationScheduleOptions): number {
   );
 }
 
-function stationPhaseChunks(
-  seed: string,
-  options: TrainStationScheduleOptions,
-): number {
-  const phaseRegions = 2 + (hashString(`station:${seed || "infinite-journey"}`) % 3);
-  return phaseRegions * options.alignmentChunks;
+function stationPhaseChunks(options: TrainStationScheduleOptions): number {
+  const alignmentDistance = options.alignmentChunks * options.chunkWidth;
+  return (
+    Math.ceil(options.initialJourneyDistance / alignmentDistance) *
+    options.alignmentChunks
+  );
 }
 
 export function trainStationEventByIndex(
@@ -134,7 +130,7 @@ export function trainStationEventByIndex(
   const resolved = resolvedScheduleOptions(options);
   const routeSeed = seed || "infinite-journey";
   const startChunk =
-    stationPhaseChunks(routeSeed, resolved) +
+    stationPhaseChunks(resolved) +
     eventIndex * stationCycleChunks(resolved);
   return {
     id: `station:${routeSeed}:${eventIndex}`,
@@ -156,7 +152,7 @@ export function trainStationEventForChunk(
     throw new Error("train station chunk index must be an integer");
   }
   const resolved = resolvedScheduleOptions(options);
-  const phase = stationPhaseChunks(seed || "infinite-journey", resolved);
+  const phase = stationPhaseChunks(resolved);
   const cycle = stationCycleChunks(resolved);
   const eventIndex = Math.floor((chunkIndex - phase) / cycle);
   if (eventIndex < 0) return null;
@@ -174,7 +170,7 @@ export function trainStationEventAtOrAfter(
   const resolved = resolvedScheduleOptions(options);
   const safePosition =
     Number.isFinite(routePosition) && routePosition > 0 ? routePosition : 0;
-  const phase = stationPhaseChunks(seed || "infinite-journey", resolved);
+  const phase = stationPhaseChunks(resolved);
   const cycle = stationCycleChunks(resolved);
   const firstStop =
     (phase + (resolved.spanChunks - 1) / 2) * resolved.chunkWidth;
