@@ -4,8 +4,12 @@ import {
   generateRouteChunk,
   RouteChunkWindow,
   routeChunkWindowRange,
+  TRAIN_PARALLAX_LAYERS,
+  TRAIN_PARALLAX_SEAM_OVERLAP,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
+  trainParallaxLayerPosition,
+  trainParallaxLayerTransform,
 } from "./trainRoute";
 
 describe("train route chunks", () => {
@@ -109,5 +113,31 @@ describe("train route chunks", () => {
     expect(before.lastIndex - after.firstIndex).toBeGreaterThanOrEqual(
       TRAIN_ROUTE_OVERSCAN_CHUNKS * 2,
     );
+  });
+
+  it("defines five ordered parallax layers with restrained speed ratios", () => {
+    expect(TRAIN_PARALLAX_LAYERS).toEqual([
+      { name: "sky", speedRatio: 0 },
+      { name: "ultra-far", speedRatio: 0.1 },
+      { name: "far", speedRatio: 0.25 },
+      { name: "midground", speedRatio: 0.55 },
+      { name: "near", speedRatio: 1 },
+    ]);
+    expect(TRAIN_PARALLAX_SEAM_OVERLAP).toBe(2);
+  });
+
+  it("calculates layer transforms from route position and pauses reduced motion", () => {
+    expect(trainParallaxLayerPosition(240, 0.25)).toBe(60);
+    expect(trainParallaxLayerPosition(240, 0.55)).toBe(132);
+    expect(trainParallaxLayerTransform(240, 0.1)).toBe(
+      "translate3d(24.000px, 0, 0)",
+    );
+    expect(trainParallaxLayerTransform(240, 1)).toBe(
+      "translate3d(240.000px, 0, 0)",
+    );
+    expect(trainParallaxLayerPosition(240, 1, true)).toBe(0);
+    expect(trainParallaxLayerTransform(240, 1, true)).toBe("none");
+    expect(trainParallaxLayerPosition(Number.NaN, 1)).toBe(0);
+    expect(trainParallaxLayerPosition(240, Number.NaN)).toBe(0);
   });
 });

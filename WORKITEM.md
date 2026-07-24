@@ -65,7 +65,7 @@ future station stop without growing the DOM or memory usage over time.
   generation, recycling, long-distance bounds, resize behavior, and seed
   variation.
 
-- [ ] **TRAIN-003 — Add the five-layer parallax scene renderer.**
+- [x] **TRAIN-003 — Add the five-layer parallax scene renderer.**
   Render each route through explicit layers: sky, ultra-far silhouette, far
   terrain, midground scenery, and near/foreground objects. Start with code-native
   placeholder shapes and assign restrained speed ratios around `0`, `0.1`,

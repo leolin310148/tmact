@@ -29,60 +29,215 @@ html[data-pane-switcher-layout="train"] .statusline {
     linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
 }
 
-.train-world-route {
+.train-world-layer {
   position: absolute;
+  z-index: var(--train-layer-order);
   inset: 0;
-  transform: translate3d(var(--train-route-position), 0, 0);
-  will-change: transform;
-  opacity: 0.8;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.train-route-chunk {
+.train-world-layer-track {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  overflow: hidden;
+  inset: 0;
+  transform: translate3d(var(--train-layer-position), 0, 0);
+  will-change: transform;
+}
+
+.train-parallax-chunk {
+  position: absolute;
+  inset-block: 0;
+  overflow: visible;
+}
+
+.train-world-layer--sky {
+  background:
+    linear-gradient(180deg, rgba(101, 169, 209, 0.18), transparent 66%),
+    linear-gradient(180deg, #183a5d 0%, #102b49 62%, #0a1d32 100%);
+}
+
+.train-parallax-chunk--sky::before,
+.train-parallax-chunk--sky::after {
+  content: "";
+  position: absolute;
+  left: var(--train-chunk-feature-offset);
+  border-radius: 999px;
+  background: rgba(182, 210, 222, 0.34);
+  box-shadow:
+    17px -5px 0 rgba(182, 210, 222, 0.3),
+    35px 2px 0 rgba(182, 210, 222, 0.24);
+}
+
+.train-parallax-chunk--sky::before {
+  top: 18%;
+  width: 44px;
+  height: 9px;
+}
+
+.train-parallax-chunk--sky::after {
+  top: 39%;
+  left: calc(var(--train-chunk-feature-offset) - 36%);
+  width: 31px;
+  height: 6px;
+  opacity: 0.65;
+}
+
+.train-parallax-chunk--ultra-far {
+  opacity: 0.62;
   background: linear-gradient(
     to top,
-    #102b47 0 var(--train-chunk-terrain-height),
+    #132b45 0 calc(var(--train-chunk-terrain-height) - 7px),
     transparent calc(var(--train-chunk-terrain-height) + 1px)
   );
 }
 
-.train-route-chunk::before,
-.train-route-chunk::after {
+.train-parallax-chunk--ultra-far::before,
+.train-parallax-chunk--ultra-far::after,
+.train-parallax-chunk--far::before,
+.train-parallax-chunk--far::after {
   content: "";
   position: absolute;
   bottom: var(--train-chunk-terrain-height);
-  border-radius: 50% 50% 0 0;
   transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  clip-path: polygon(0 100%, 16% 53%, 31% 70%, 53% 8%, 72% 59%, 86% 38%, 100% 100%);
 }
 
-.train-route-chunk::before {
+.train-parallax-chunk--ultra-far::before {
   left: var(--train-chunk-feature-offset);
-  width: 230px;
-  height: var(--train-chunk-ridge-height);
-  background: #173553;
+  width: 265px;
+  height: calc(var(--train-chunk-ridge-height) + 10px);
+  background: #173653;
 }
 
-.train-route-chunk::after {
+.train-parallax-chunk--ultra-far::after {
   left: calc(var(--train-chunk-feature-offset) - 38%);
+  width: 210px;
+  height: calc(var(--train-chunk-ridge-height) - 8px);
+  background: #132e49;
+  opacity: 0.82;
+}
+
+.train-parallax-chunk--far {
+  opacity: 0.78;
+  background: linear-gradient(
+    to top,
+    #153553 0 calc(var(--train-chunk-terrain-height) - 2px),
+    transparent var(--train-chunk-terrain-height)
+  );
+}
+
+.train-parallax-chunk--far::before {
+  left: var(--train-chunk-feature-offset);
+  width: 218px;
+  height: var(--train-chunk-ridge-height);
+  background: #1b4261;
+  clip-path: polygon(0 100%, 8% 68%, 24% 49%, 40% 65%, 57% 22%, 75% 61%, 100% 100%);
+}
+
+.train-parallax-chunk--far::after {
+  left: calc(var(--train-chunk-feature-offset) - 43%);
   width: 180px;
-  height: calc(var(--train-chunk-ridge-height) - 14px);
-  background: #102b47;
+  height: calc(var(--train-chunk-ridge-height) - 13px);
+  background: #173a58;
+  clip-path: polygon(0 100%, 18% 62%, 36% 74%, 55% 31%, 73% 67%, 100% 100%);
 }
 
-.train-route-chunk--1::before,
-.train-route-chunk--4::after {
-  border-radius: 70% 30% 0 0;
+.train-parallax-chunk--midground {
+  opacity: 0.88;
+  background: linear-gradient(
+    to top,
+    #123149 0 calc(var(--train-chunk-terrain-height) - 12px),
+    transparent calc(var(--train-chunk-terrain-height) - 11px)
+  );
 }
 
-.train-route-chunk--2::before {
-  transform: translateX(-50%) skewX(-13deg);
+.train-parallax-chunk--midground::before {
+  content: "";
+  position: absolute;
+  left: var(--train-chunk-feature-offset);
+  bottom: calc(var(--train-chunk-terrain-height) - 12px);
+  width: 8px;
+  height: 33px;
+  border-radius: 45% 55% 24% 22%;
+  background: #173d49;
+  box-shadow:
+    28px 8px 0 -1px #1a4650,
+    58px -4px 0 2px #143843,
+    94px 5px 0 -1px #1a4650,
+    123px -8px 0 1px #143843;
+  transform: scaleX(2.4);
+  transform-origin: 50% 100%;
 }
 
-.train-route-chunk--3::after {
-  transform: translateX(-50%) skewX(16deg);
+.train-parallax-chunk--midground::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--train-chunk-feature-offset) - 16%);
+  bottom: calc(var(--train-chunk-terrain-height) - 11px);
+  width: 52px;
+  height: 23px;
+  border: 2px solid rgba(24, 61, 72, 0.9);
+  border-bottom: 0;
+  background:
+    linear-gradient(90deg, transparent 42%, #183d48 43% 57%, transparent 58%),
+    linear-gradient(180deg, #214b57 0 34%, #173b47 35%);
+  clip-path: polygon(0 27%, 16% 27%, 16% 8%, 31% 8%, 31% 27%, 100% 27%, 100% 100%, 0 100%);
+}
+
+.train-parallax-chunk--near {
+  opacity: 0.8;
+  background: linear-gradient(
+    to top,
+    #0c2639 0 18px,
+    transparent 19px
+  );
+}
+
+.train-parallax-chunk--near::before {
+  content: "";
+  position: absolute;
+  left: var(--train-chunk-feature-offset);
+  bottom: 17px;
+  width: 4px;
+  height: 46px;
+  background: #102b39;
+  box-shadow:
+    72px 12px 0 #102b39,
+    145px -2px 0 #102b39;
+}
+
+.train-parallax-chunk--near::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--train-chunk-feature-offset) - 5%);
+  bottom: 35px;
+  width: 165px;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    #183c49 0 22px,
+    transparent 22px 30px
+  );
+  box-shadow: 0 8px 0 rgba(24, 60, 73, 0.82);
+}
+
+.train-parallax-chunk--ultra-far.train-parallax-chunk--variant-1::before,
+.train-parallax-chunk--far.train-parallax-chunk--variant-1::before {
+  transform: translateX(-50%) skewX(-6deg);
+}
+
+.train-parallax-chunk--ultra-far.train-parallax-chunk--variant-2::after,
+.train-parallax-chunk--far.train-parallax-chunk--variant-2::after {
+  transform: translateX(-50%) skewX(7deg);
+}
+
+.train-parallax-chunk--variant-3 {
+  filter: brightness(1.06);
+}
+
+.train-parallax-chunk--variant-4::before {
+  filter: brightness(0.9);
 }
 
 .train-world-debug-grid {
@@ -333,9 +488,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .train-world-route,
-  .train-world-debug-grid {
+  .train-world-layer-track {
     transform: none;
+    will-change: auto;
   }
 }
 

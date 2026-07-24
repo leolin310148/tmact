@@ -41,10 +41,15 @@ import {
   DEFAULT_TRAIN_ROUTE_SEED,
   RouteChunkWindow,
   routeChunkWindowRange,
+  TRAIN_PARALLAX_LAYERS,
+  TRAIN_PARALLAX_SEAM_OVERLAP,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_SEED_VERSION,
+  trainParallaxLayerPosition,
   type RouteChunk,
   type RouteChunkWindowSnapshot,
+  type TrainParallaxLayer,
+  type TrainParallaxLayerName,
 } from "./trainRoute";
 import "./TrainLayout.css";
 
@@ -297,10 +302,25 @@ type TrainRouteChunkStyle = CSSProperties & {
   "--train-chunk-feature-offset": string;
 };
 
-function TrainRouteChunk({ chunk }: { chunk: RouteChunk }) {
+type TrainWorldLayerStyle = CSSProperties & {
+  "--train-layer-order": number;
+  "--train-layer-position": string;
+  "--train-layer-speed": number;
+};
+
+function TrainRouteChunk({
+  chunk,
+  layer,
+}: {
+  chunk: RouteChunk;
+  layer: TrainParallaxLayer;
+}) {
   const style: TrainRouteChunkStyle = {
-    left: `${-chunk.index * TRAIN_ROUTE_CHUNK_WIDTH}px`,
-    width: `${TRAIN_ROUTE_CHUNK_WIDTH}px`,
+    left: `${
+      -chunk.index * TRAIN_ROUTE_CHUNK_WIDTH -
+      TRAIN_PARALLAX_SEAM_OVERLAP / 2
+    }px`,
+    width: `${TRAIN_ROUTE_CHUNK_WIDTH + TRAIN_PARALLAX_SEAM_OVERLAP}px`,
     "--train-chunk-terrain-height": `${chunk.terrainHeight}px`,
     "--train-chunk-ridge-height": `${chunk.ridgeHeight}px`,
     "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
@@ -308,9 +328,18 @@ function TrainRouteChunk({ chunk }: { chunk: RouteChunk }) {
 
   return (
     <div
-      className={`train-route-chunk train-route-chunk--${chunk.variant}`}
+      className={[
+        "train-parallax-chunk",
+        `train-parallax-chunk--${layer.name}`,
+        `train-parallax-chunk--variant-${chunk.variant}`,
+        layer.name === "near" ? "train-route-chunk" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-route-chunk-index={chunk.index}
       data-route-chunk-variant={chunk.variant}
+      data-parallax-layer={layer.name}
+      data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
     />
   );
@@ -332,19 +361,54 @@ function routeChunkSlotKey(index: number, mountedCount: number): string {
   return `route-slot-${slot}`;
 }
 
+type TrainRouteEngines = Record<TrainParallaxLayerName, RouteChunkWindow>;
+type TrainRouteWindows = Record<
+  TrainParallaxLayerName,
+  RouteChunkWindowSnapshot
+>;
+
+function createRouteEngines(seed: string): TrainRouteEngines {
+  return Object.fromEntries(
+    TRAIN_PARALLAX_LAYERS.map((layer) => [
+      layer.name,
+      new RouteChunkWindow(seed),
+    ]),
+  ) as TrainRouteEngines;
+}
+
+function createRouteWindows(
+  routeEngines: TrainRouteEngines,
+  viewportWidth: number,
+): TrainRouteWindows {
+  return Object.fromEntries(
+    TRAIN_PARALLAX_LAYERS.map((layer) => [
+      layer.name,
+      routeEngines[layer.name].update(0, viewportWidth),
+    ]),
+  ) as TrainRouteWindows;
+}
+
+function prefersReducedTrainMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 function TrainWorld() {
   const worldRef = useRef<HTMLDivElement | null>(null);
   const diagnosticsRef = useRef<HTMLOutputElement | null>(null);
   const debug = trainWorldDebugEnabled(window.location.search);
-  const [routeEngine] = useState(
-    () => new RouteChunkWindow(trainWorldRouteSeed(window.location.search)),
+  const [reducedMotion] = useState(prefersReducedTrainMotion);
+  const [routeEngines] = useState(() =>
+    createRouteEngines(trainWorldRouteSeed(window.location.search)),
   );
-  const seed = routeEngine.seed;
-  const [routeWindow, setRouteWindow] = useState(() =>
-    routeEngine.update(0, initialWorldWidth()),
+  const seed = routeEngines.near.seed;
+  const [routeWindows, setRouteWindows] = useState(() =>
+    createRouteWindows(routeEngines, initialWorldWidth()),
   );
-  const routeWindowRef = useRef(routeWindow);
-  routeWindowRef.current = routeWindow;
+  const routeWindowsRef = useRef(routeWindows);
+  routeWindowsRef.current = routeWindows;
 
   useEffect(() => {
     const world = worldRef.current;
@@ -353,36 +417,64 @@ function TrainWorld() {
     let routePosition = 0;
     let previousTimestamp: number | null = null;
     let frame = 0;
-    const reducedMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const viewportWidth = () => Math.max(1, world.clientWidth || initialWorldWidth());
     const applyRoutePosition = () => {
       const value = `${routePosition.toFixed(3)}px`;
       world.style.setProperty("--train-route-position", value);
       world.dataset.routePosition = value;
-      const nextRange = routeChunkWindowRange(
-        routePosition,
-        viewportWidth(),
-        routeEngine.chunkWidth,
-        routeEngine.overscan,
-      );
-      let nextWindow = routeWindowRef.current;
-      if (!sameRouteWindow(nextWindow, nextRange)) {
-        nextWindow = routeEngine.update(routePosition, nextRange.viewportWidth);
-        routeWindowRef.current = nextWindow;
-        setRouteWindow(nextWindow);
+      const width = viewportWidth();
+      let windowsChanged = false;
+      const nextWindows = { ...routeWindowsRef.current };
+
+      for (const layer of TRAIN_PARALLAX_LAYERS) {
+        const layerPosition = trainParallaxLayerPosition(
+          routePosition,
+          layer.speedRatio,
+          reducedMotion,
+        );
+        const layerElement = world.querySelector<HTMLElement>(
+          `[data-world-layer="${layer.name}"]`,
+        );
+        if (layerElement) {
+          layerElement.style.setProperty(
+            "--train-layer-position",
+            `${layerPosition.toFixed(3)}px`,
+          );
+          layerElement.dataset.layerPosition = `${layerPosition.toFixed(3)}px`;
+        }
+
+        const routeEngine = routeEngines[layer.name];
+        const nextRange = routeChunkWindowRange(
+          layerPosition,
+          width,
+          routeEngine.chunkWidth,
+          routeEngine.overscan,
+        );
+        const currentWindow = nextWindows[layer.name];
+        if (!sameRouteWindow(currentWindow, nextRange)) {
+          nextWindows[layer.name] = routeEngine.update(
+            layerPosition,
+            nextRange.viewportWidth,
+          );
+          windowsChanged = true;
+        }
       }
-      const indices = nextWindow.chunks.map((chunk) => chunk.index).join(",");
+
+      if (windowsChanged) {
+        routeWindowsRef.current = nextWindows;
+        setRouteWindows(nextWindows);
+      }
+      const nearWindow = nextWindows.near;
+      const indices = nearWindow.chunks.map((chunk) => chunk.index).join(",");
       world.dataset.routeSeed = seed;
       world.dataset.routeSeedVersion = TRAIN_ROUTE_SEED_VERSION;
       world.dataset.routeChunkIndices = indices;
-      world.dataset.routeMountedChunks = String(nextWindow.chunks.length);
+      world.dataset.routeMountedChunks = String(nearWindow.chunks.length);
       if (diagnosticsRef.current) {
         diagnosticsRef.current.value =
           `seed ${seed} · position ${routePosition.toFixed(1)}px · ` +
-          `chunks ${indices} · mounted ${nextWindow.chunks.length}`;
+          `chunks ${indices} · mounted ${nearWindow.chunks.length}`;
       }
     };
     const advance = (timestamp: number) => {
@@ -411,7 +503,9 @@ function TrainWorld() {
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
     };
-  }, [routeEngine, seed]);
+  }, [reducedMotion, routeEngines, seed]);
+
+  const nearWindow = routeWindows.near;
 
   return (
     <div
@@ -423,19 +517,45 @@ function TrainWorld() {
       data-route-position="0.000px"
       data-route-seed={seed}
       data-route-seed-version={TRAIN_ROUTE_SEED_VERSION}
-      data-route-chunk-indices={routeWindow.chunks
+      data-route-chunk-indices={nearWindow.chunks
         .map((chunk) => chunk.index)
         .join(",")}
-      data-route-mounted-chunks={routeWindow.chunks.length}
+      data-route-mounted-chunks={nearWindow.chunks.length}
+      data-motion={reducedMotion ? "reduced" : "full"}
     >
-      <div className="train-world-route">
-        {routeWindow.chunks.map((chunk) => (
-          <TrainRouteChunk
-            chunk={chunk}
-            key={routeChunkSlotKey(chunk.index, routeWindow.chunks.length)}
-          />
-        ))}
-      </div>
+      {TRAIN_PARALLAX_LAYERS.map((layer, layerIndex) => {
+        const layerWindow = routeWindows[layer.name];
+        const style: TrainWorldLayerStyle = {
+          "--train-layer-order": layerIndex,
+          "--train-layer-position": "0.000px",
+          "--train-layer-speed": layer.speedRatio,
+        };
+        return (
+          <div
+            className={`train-world-layer train-world-layer--${layer.name}`}
+            data-world-layer={layer.name}
+            data-layer-order={layerIndex}
+            data-layer-position="0.000px"
+            data-speed-ratio={layer.speedRatio}
+            data-motion={reducedMotion ? "reduced" : "full"}
+            style={style}
+            key={layer.name}
+          >
+            <div className="train-world-layer-track">
+              {layerWindow.chunks.map((chunk) => (
+                <TrainRouteChunk
+                  chunk={chunk}
+                  layer={layer}
+                  key={`${layer.name}-${routeChunkSlotKey(
+                    chunk.index,
+                    layerWindow.chunks.length,
+                  )}`}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
       {debug ? (
         <div
           className="train-world-debug-grid"
@@ -444,8 +564,8 @@ function TrainWorld() {
           <span>world →</span>
           <output ref={diagnosticsRef} data-testid="train-route-diagnostics">
             seed {seed} · position 0.0px · chunks{" "}
-            {routeWindow.chunks.map((chunk) => chunk.index).join(",")} · mounted{" "}
-            {routeWindow.chunks.length}
+            {nearWindow.chunks.map((chunk) => chunk.index).join(",")} · mounted{" "}
+            {nearWindow.chunks.length}
           </output>
         </div>
       ) : null}

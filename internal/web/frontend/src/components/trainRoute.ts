@@ -2,6 +2,18 @@ export const TRAIN_ROUTE_SEED_VERSION = "tmact-train-route-v1";
 export const DEFAULT_TRAIN_ROUTE_SEED = "infinite-journey";
 export const TRAIN_ROUTE_CHUNK_WIDTH = 320;
 export const TRAIN_ROUTE_OVERSCAN_CHUNKS = 2;
+export const TRAIN_PARALLAX_SEAM_OVERLAP = 2;
+
+export const TRAIN_PARALLAX_LAYERS = [
+  { name: "sky", speedRatio: 0 },
+  { name: "ultra-far", speedRatio: 0.1 },
+  { name: "far", speedRatio: 0.25 },
+  { name: "midground", speedRatio: 0.55 },
+  { name: "near", speedRatio: 1 },
+] as const;
+
+export type TrainParallaxLayer = (typeof TRAIN_PARALLAX_LAYERS)[number];
+export type TrainParallaxLayerName = TrainParallaxLayer["name"];
 
 export interface RouteChunk {
   index: number;
@@ -20,6 +32,31 @@ export interface RouteChunkWindowSnapshot {
   firstIndex: number;
   lastIndex: number;
   chunks: readonly RouteChunk[];
+}
+
+export function trainParallaxLayerPosition(
+  routePosition: number,
+  speedRatio: number,
+  reducedMotion = false,
+): number {
+  if (reducedMotion) return 0;
+  const safeRoutePosition =
+    Number.isFinite(routePosition) && routePosition > 0 ? routePosition : 0;
+  const safeSpeedRatio =
+    Number.isFinite(speedRatio) && speedRatio > 0 ? speedRatio : 0;
+  return safeRoutePosition * safeSpeedRatio;
+}
+
+export function trainParallaxLayerTransform(
+  routePosition: number,
+  speedRatio: number,
+  reducedMotion = false,
+): string {
+  if (reducedMotion) return "none";
+  return `translate3d(${trainParallaxLayerPosition(
+    routePosition,
+    speedRatio,
+  ).toFixed(3)}px, 0, 0)`;
 }
 
 function hashString(value: string): number {

@@ -23,6 +23,7 @@ vi.mock("../api/client", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
 });
 
@@ -98,6 +99,89 @@ describe("TrainLayout", () => {
       "data-route-seed-version",
       "tmact-train-route-v1",
     );
+  });
+
+  it("renders ordered bounded chunks for all five parallax layers", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const layers = [
+      ...container.querySelectorAll<HTMLElement>(".train-world-layer"),
+    ];
+
+    expect(layers.map((layer) => layer.dataset.worldLayer)).toEqual([
+      "sky",
+      "ultra-far",
+      "far",
+      "midground",
+      "near",
+    ]);
+    expect(layers.map((layer) => layer.dataset.speedRatio)).toEqual([
+      "0",
+      "0.1",
+      "0.25",
+      "0.55",
+      "1",
+    ]);
+    expect(layers.map((layer) => layer.dataset.layerOrder)).toEqual([
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
+    for (const layer of layers) {
+      expect(
+        layer.querySelectorAll(".train-parallax-chunk").length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("overlaps adjacent chunks to hide fractional-pixel seams", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const nearChunks = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-world-layer="near"] .train-parallax-chunk',
+      ),
+    ].sort(
+      (left, right) =>
+        Number.parseFloat(left.style.left) - Number.parseFloat(right.style.left),
+    );
+    const first = nearChunks[0]!;
+    const second = nearChunks[1]!;
+    const firstLeft = Number.parseFloat(first.style.left);
+    const firstRight = firstLeft + Number.parseFloat(first.style.width);
+    const secondLeft = Number.parseFloat(second.style.left);
+
+    expect(first).toHaveAttribute("data-seam-overlap", "2");
+    expect(firstRight - secondLeft).toBe(2);
+  });
+
+  it("mounts a complete static scene for reduced-motion users", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: "(prefers-reduced-motion: reduce)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector(".train-layout-world");
+    const layers = container.querySelectorAll(".train-world-layer");
+
+    expect(world).toHaveAttribute("data-motion", "reduced");
+    expect(layers).toHaveLength(5);
+    for (const layer of layers) {
+      expect(layer).toHaveAttribute("data-motion", "reduced");
+      expect((layer as HTMLElement).dataset.layerPosition).toBe("0.000px");
+    }
   });
 
   it("keeps world position independent from horizontal train inspection", () => {
