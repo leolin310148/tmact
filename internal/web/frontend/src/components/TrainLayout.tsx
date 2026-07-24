@@ -51,6 +51,10 @@ import {
   type TrainParallaxLayer,
   type TrainParallaxLayerName,
 } from "./trainRoute";
+import {
+  trainSceneryAssetsForChunk,
+  trainSceneryScale,
+} from "./trainScenery";
 import "./TrainLayout.css";
 
 interface TrainLayoutProps {
@@ -308,6 +312,10 @@ type TrainWorldLayerStyle = CSSProperties & {
   "--train-layer-speed": number;
 };
 
+type TrainSceneryAssetStyle = CSSProperties & {
+  "--train-scenery-scale": number;
+};
+
 function TrainRouteChunk({
   chunk,
   layer,
@@ -325,6 +333,11 @@ function TrainRouteChunk({
     "--train-chunk-ridge-height": `${chunk.ridgeHeight}px`,
     "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
   };
+  const sceneryAssets = trainSceneryAssetsForChunk(
+    layer.name,
+    chunk.index,
+    chunk.variant,
+  );
 
   return (
     <div
@@ -341,7 +354,36 @@ function TrainRouteChunk({
       data-parallax-layer={layer.name}
       data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
-    />
+    >
+      {sceneryAssets.map((asset) => {
+        const sceneryStyle: TrainSceneryAssetStyle = {
+          left: `${chunk.featureOffset}%`,
+          "--train-scenery-scale": trainSceneryScale(asset, chunk.variant),
+        };
+        return (
+          <img
+            className={[
+              "train-scenery-asset",
+              `train-scenery-asset--${asset.category}`,
+            ].join(" ")}
+            src={asset.src}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            width={asset.width}
+            height={asset.height}
+            data-scenery-asset={asset.id}
+            data-scenery-category={asset.category}
+            data-scenery-manifest-layer={asset.layer}
+            data-scenery-anchor={asset.anchor}
+            data-scenery-safe-scale={asset.safeScale.join("-")}
+            data-scenery-day-night={asset.dayNightTreatment}
+            style={sceneryStyle}
+            key={asset.id}
+          />
+        );
+      })}
+    </div>
   );
 }
 

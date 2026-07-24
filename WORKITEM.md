@@ -75,7 +75,7 @@ future station stop without growing the DOM or memory usage over time.
   Test transform calculations, layer ordering, seam overlap, and reduced-motion
   behavior; visually verify both compact and ultrawide screens.
 
-- [ ] **TRAIN-004 — Produce the reusable pixel-art scenery asset kit.**
+- [x] **TRAIN-004 — Produce the reusable pixel-art scenery asset kit.**
   Create transparent, scale-consistent assets matching the existing train's
   pixel-art perspective and palette. The minimum kit is: three cloud forms,
   three far mountain/terrain silhouettes, six tree/vegetation variants, six

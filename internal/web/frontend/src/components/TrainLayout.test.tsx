@@ -137,6 +137,35 @@ describe("TrainLayout", () => {
     }
   });
 
+  it("renders manifest-backed scenery sprites with explicit anchors and scale bounds", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const chunks = container.querySelectorAll(".train-parallax-chunk");
+    const sprites =
+      container.querySelectorAll<HTMLImageElement>(".train-scenery-asset");
+
+    expect(sprites).toHaveLength(chunks.length);
+    expect(container.querySelector("[data-scenery-category='cloud']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-scenery-category='terrain']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("[data-scenery-category='building'], [data-scenery-category='vegetation'], [data-scenery-category='bridge']"),
+    ).not.toBeNull();
+    expect(container.querySelector("[data-scenery-category='prop']")).not.toBeNull();
+
+    for (const sprite of sprites) {
+      expect(sprite).toHaveAttribute("aria-hidden", "true");
+      expect(sprite).toHaveAttribute("data-scenery-asset");
+      expect(sprite.dataset.sceneryAnchor).toMatch(/^(center|bottom-center)$/);
+      expect(sprite.dataset.scenerySafeScale).toMatch(/^\d+(\.\d+)?-\d+(\.\d+)?$/);
+      expect(sprite.width).toBeGreaterThan(0);
+      expect(sprite.height).toBeGreaterThan(0);
+      expect(sprite.style.getPropertyValue("--train-scenery-scale")).not.toBe("");
+    }
+  });
+
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
