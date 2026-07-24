@@ -1,21 +1,79 @@
-/* TrainLayout — compact train-theme pane-switcher scene.
-   The carriage and its windows are transparent PNG layers. This placeholder
-   backdrop makes that transparency visible before the animated scenery lands. */
+/* TrainLayout — compact train-theme pane-switcher scene. */
 
 html[data-pane-switcher-layout="train"] .statusline {
   display: none;
 }
 
 .train-layout {
+  position: relative;
+  isolation: isolate;
   flex: 0 0 auto;
   width: 100%;
   height: clamp(118px, 18vh, 160px);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   border-top: 1px solid var(--border);
   background: #07111f;
   box-shadow: inset 0 7px 13px rgba(0, 0, 0, 0.32);
   image-rendering: pixelated;
+}
+
+.train-layout-world {
+  --train-route-position: 0px;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(7, 17, 31, 0.08), rgba(4, 9, 17, 0.48)),
+    linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
+}
+
+.train-world-scenery {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80px 34px at 50% 100%, #173553 0 98%, transparent 100%)
+      var(--train-route-position) bottom / 220px 68px repeat-x,
+    radial-gradient(ellipse 105px 43px at 50% 100%, #102b47 0 98%, transparent 100%)
+      calc(var(--train-route-position) + 90px) bottom / 290px 82px repeat-x;
+  opacity: 0.8;
+}
+
+.train-world-debug-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+        90deg,
+        rgba(255, 216, 90, 0.7) 0 1px,
+        transparent 1px 32px
+      )
+      var(--train-route-position) 0 / auto 100%,
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 216, 90, 0.35) 0 1px,
+      transparent 1px 24px
+    );
+}
+
+.train-world-debug-grid span {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  padding: 2px 4px;
+  background: rgba(7, 17, 31, 0.82);
+  color: #ffe36e;
+  font: 700 10px/1.2 var(--mono);
+}
+
+.train-layout-inspection {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .train-layout-scene {
@@ -28,14 +86,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   align-items: flex-end;
   justify-content: flex-start;
   padding: 5px 12px 0 0;
-  background:
-    linear-gradient(180deg, rgba(7, 17, 31, 0.08), rgba(4, 9, 17, 0.48)),
-    linear-gradient(180deg, #122b49 0%, #0b1f36 62%, #07111f 100%);
 }
 
 .train-layout-consist {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
   flex: 0 0 auto;
@@ -209,7 +264,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout-track {
   position: absolute;
-  z-index: 0;
+  z-index: 1;
   inset: auto 0 0;
   height: var(--train-track-h);
   background:
@@ -217,6 +272,13 @@ html[data-pane-switcher-layout="train"] .statusline {
     0 0 / auto 100% repeat-x;
   image-rendering: pixelated;
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .train-world-scenery,
+  .train-world-debug-grid {
+    background-position-x: 0;
+  }
 }
 
 @media (max-width: 760px) {

@@ -43,7 +43,7 @@ future station stop without growing the DOM or memory usage over time.
 
 ## Queue
 
-- [ ] **TRAIN-001 — Establish the independent moving-world viewport.**
+- [x] **TRAIN-001 — Establish the independent moving-world viewport.**
   Add a background/world layer behind `TrainLayout` whose clipping, dimensions,
   and animation state do not depend on the horizontal overflow used to inspect
   the locomotive and carriages. Define one route-position value and make the

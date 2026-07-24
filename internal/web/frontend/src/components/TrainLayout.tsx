@@ -7,7 +7,7 @@
 // upper-left, upper-right, lower-left, lower-right; right-side chair sprites
 // mirror the shared right-facing artwork so every pair faces inward.
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
@@ -52,6 +52,27 @@ const OCCUPIED_SEAT_URLS = [
   occupiedSeat05Url,
   occupiedSeat06Url,
 ];
+
+const TRAIN_WORLD_SPEED_PX_PER_SECOND = 12;
+const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
+
+// Route position increases as the left-facing train travels forward. CSS uses
+// that positive value as background-position-x, so the world moves right while
+// the consist itself remains fixed.
+export function advanceTrainWorldRoutePosition(
+  routePosition: number,
+  elapsedMs: number,
+  speedPxPerSecond = TRAIN_WORLD_SPEED_PX_PER_SECOND,
+): number {
+  return routePosition + (Math.max(0, elapsedMs) * speedPxPerSecond) / 1000;
+}
+
+export function trainWorldDebugEnabled(search: string): boolean {
+  return (
+    import.meta.env.DEV &&
+    new URLSearchParams(search).get(TRAIN_WORLD_DEBUG_PARAM) === "1"
+  );
+}
 
 // Calculate the least number of carriage layers needed for the consist to
 // reach the viewport's right edge. CSS uses negative margins to overlap the
@@ -246,6 +267,67 @@ function TrainLocomotiveMore({
   );
 }
 
+function TrainWorld() {
+  const worldRef = useRef<HTMLDivElement | null>(null);
+  const debug = trainWorldDebugEnabled(window.location.search);
+
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!world) return;
+
+    let routePosition = 0;
+    let previousTimestamp: number | null = null;
+    let frame = 0;
+    const reducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const applyRoutePosition = () => {
+      const value = `${routePosition.toFixed(3)}px`;
+      world.style.setProperty("--train-route-position", value);
+      world.dataset.routePosition = value;
+    };
+    const advance = (timestamp: number) => {
+      if (previousTimestamp !== null) {
+        routePosition = advanceTrainWorldRoutePosition(
+          routePosition,
+          timestamp - previousTimestamp,
+        );
+        applyRoutePosition();
+      }
+      previousTimestamp = timestamp;
+      frame = window.requestAnimationFrame(advance);
+    };
+
+    applyRoutePosition();
+    if (!reducedMotion) frame = window.requestAnimationFrame(advance);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={worldRef}
+      className="train-layout-world"
+      aria-hidden="true"
+      data-layer="world"
+      data-route-direction="right"
+      data-route-position="0.000px"
+    >
+      <div className="train-world-scenery" />
+      {debug ? (
+        <div
+          className="train-world-debug-grid"
+          data-testid="train-world-debug-grid"
+        >
+          <span>world →</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
   const layoutRef = useRef<HTMLElement | null>(null);
   const [minimumCarriages, setMinimumCarriages] = useState(1);
@@ -301,47 +383,50 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
       aria-label="Train pane switcher"
       data-minimum-carriages={minimumCarriages}
     >
-      <div className="train-layout-scene">
-        <div className="train-layout-consist">
-          <TrainLocomotiveMore items={overflow} onSelect={onSelect} />
-          {carriages.map((carriage, carriageIndex) => (
-            <div
-              className="train-carriage"
-              role="group"
-              aria-label={`Train carriage ${carriageIndex + 1}`}
-              data-carriage-index={carriageIndex}
-              data-filler-carriage={carriageIndex >= paneCarriageCount}
-              key={`carriage-${carriageIndex}`}
-            >
-              <img
-                className="train-carriage-image"
-                src={carriageUrl}
-                alt=""
-                draggable={false}
-              />
-              {SEAT_CLASSES.map((_, seatIndex) => {
-                const item = carriage[seatIndex];
-                const globalIndex = carriageIndex * 4 + seatIndex;
-                return item ? (
-                  <TrainPassenger
-                    key={item.pane.pane_id || item.pane.target || globalIndex}
-                    item={item}
-                    globalIndex={globalIndex}
-                    seatIndex={seatIndex}
-                    selected={(item.pane.pane_id ?? "") === selected}
-                    onSelect={onSelect}
-                  />
-                ) : (
-                  <EmptyTrainSeat
-                    key={`empty-${carriageIndex}-${seatIndex}`}
-                    seatIndex={seatIndex}
-                  />
-                );
-              })}
-            </div>
-          ))}
+      <TrainWorld />
+      <div className="train-layout-inspection" data-layer="train">
+        <div className="train-layout-scene">
+          <div className="train-layout-consist">
+            <TrainLocomotiveMore items={overflow} onSelect={onSelect} />
+            {carriages.map((carriage, carriageIndex) => (
+              <div
+                className="train-carriage"
+                role="group"
+                aria-label={`Train carriage ${carriageIndex + 1}`}
+                data-carriage-index={carriageIndex}
+                data-filler-carriage={carriageIndex >= paneCarriageCount}
+                key={`carriage-${carriageIndex}`}
+              >
+                <img
+                  className="train-carriage-image"
+                  src={carriageUrl}
+                  alt=""
+                  draggable={false}
+                />
+                {SEAT_CLASSES.map((_, seatIndex) => {
+                  const item = carriage[seatIndex];
+                  const globalIndex = carriageIndex * 4 + seatIndex;
+                  return item ? (
+                    <TrainPassenger
+                      key={item.pane.pane_id || item.pane.target || globalIndex}
+                      item={item}
+                      globalIndex={globalIndex}
+                      seatIndex={seatIndex}
+                      selected={(item.pane.pane_id ?? "") === selected}
+                      onSelect={onSelect}
+                    />
+                  ) : (
+                    <EmptyTrainSeat
+                      key={`empty-${carriageIndex}-${seatIndex}`}
+                      seatIndex={seatIndex}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="train-layout-track" aria-hidden="true" />
         </div>
-        <div className="train-layout-track" aria-hidden="true" />
       </div>
     </aside>
   );

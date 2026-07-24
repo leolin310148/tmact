@@ -2,7 +2,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PaneStatus } from "../types/server";
-import { minimumCarriagesForWidth, TrainLayout } from "./TrainLayout";
+import {
+  advanceTrainWorldRoutePosition,
+  minimumCarriagesForWidth,
+  TrainLayout,
+} from "./TrainLayout";
 
 vi.mock("../api/client", () => ({
   loadClosedSessions: vi.fn(() =>
@@ -17,7 +21,10 @@ vi.mock("../api/client", () => ({
   reportHumanActivity: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
   return {
@@ -39,6 +46,58 @@ function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
 }
 
 describe("TrainLayout", () => {
+  it("mounts a clipped world below an independent train inspection layer", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+
+    const layout = container.querySelector(".train-layout");
+    const world = container.querySelector(".train-layout-world");
+    const inspection = container.querySelector(".train-layout-inspection");
+    expect(layout).toContainElement(world as HTMLElement);
+    expect(layout).toContainElement(inspection as HTMLElement);
+    expect(world).toHaveAttribute("data-layer", "world");
+    expect(world).toHaveAttribute("data-route-direction", "right");
+    expect(inspection).toHaveAttribute("data-layer", "train");
+    expect(world?.nextElementSibling).toBe(inspection);
+  });
+
+  it("advances the world to the right from a single route position", () => {
+    expect(advanceTrainWorldRoutePosition(10, 500)).toBe(16);
+    expect(advanceTrainWorldRoutePosition(16, -100)).toBe(16);
+  });
+
+  it("shows the motion grid only when its development flag is enabled", () => {
+    const { queryByTestId, rerender } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    expect(queryByTestId("train-world-debug-grid")).not.toBeInTheDocument();
+
+    window.history.replaceState(null, "", "/?train-world-debug=1");
+    rerender(<TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />);
+    expect(queryByTestId("train-world-debug-grid")).toHaveTextContent("world →");
+  });
+
+  it("keeps world position independent from horizontal train inspection", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world");
+    const inspection = container.querySelector<HTMLElement>(
+      ".train-layout-inspection",
+    );
+    expect(world).not.toBeNull();
+    expect(inspection).not.toBeNull();
+
+    const routePosition = world!.dataset.routePosition;
+    inspection!.scrollLeft = 240;
+    fireEvent.scroll(inspection!);
+
+    expect(inspection).toHaveProperty("scrollLeft", 240);
+    expect(world!.dataset.routePosition).toBe(routePosition);
+    expect(inspection!.contains(world)).toBe(false);
+  });
+
   it("renders an empty starter carriage when no panes exist", () => {
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
