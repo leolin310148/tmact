@@ -964,13 +964,16 @@ export const TRAIN_REGION_NIGHT_LIFE = {
   industrial: {
     kind: "industrial-beacons",
     owners: [
-      { assetId: "landmark-industrial-gantry", probability: 0.72 },
-      { assetId: "building-workshop", probability: 0.26 },
-      { assetId: "building-warehouse", probability: 0.22 },
-      { assetId: "building-water-tower", probability: 0.3 },
+      { assetId: "landmark-industrial-gantry", probability: 0.62 },
+      { assetId: "building-workshop", probability: 0.2 },
+      { assetId: "building-warehouse", probability: 0.17 },
+      { assetId: "building-water-tower", probability: 0.23 },
     ],
   },
 } as const satisfies Record<TrainRegionName, TrainRegionNightLifeRule>;
+
+export const TRAIN_NIGHT_LIFE_MIN_INTENSITY = 0.56;
+export const TRAIN_NIGHT_LIFE_MAX_INTENSITY = 0.8;
 
 export interface TrainSceneryPlacement {
   asset: TrainSceneryAsset;
@@ -1038,7 +1041,10 @@ export function trainNightLifeForPlacement(
     kind: regionRule.kind,
     region: chunk.region,
     ownerAssetId: placement.asset.id,
-    intensity: 0.62 + trainRouteRandomUnit(`${key}:intensity`) * 0.26,
+    intensity:
+      TRAIN_NIGHT_LIFE_MIN_INTENSITY +
+      trainRouteRandomUnit(`${key}:intensity`) *
+        (TRAIN_NIGHT_LIFE_MAX_INTENSITY - TRAIN_NIGHT_LIFE_MIN_INTENSITY),
     variant,
     occupancy: (["left", "center", "right"] as const)[variant]!,
     points,

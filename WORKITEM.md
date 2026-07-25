@@ -250,7 +250,7 @@ and safety properties established by the archived queue remain the baseline.
   continuity tests. Use `borz` to prove a refresh resumes a nonzero day and
   night scene on port 5234, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-038 — Balance and harden the redesigned scenery system.**
+- [x] **TRAIN-038 — Balance and harden the redesigned scenery system.**
   Perform a final multi-seed, long-route pass across all five regions, all
   palettes, every set piece, station states, refresh restore, compact desktop,
   normal desktop, and ultrawide layouts. Tune density, cooldowns, contrast,

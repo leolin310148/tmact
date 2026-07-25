@@ -501,136 +501,279 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--town-edge {
-  --train-town-edge-surface: color-mix(
+  --train-town-edge-wall-a: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface) 84%,
+    var(--train-palette-far-surface)
+  );
+  --train-town-edge-wall-b: color-mix(
     in srgb,
     var(--train-palette-mid-surface) 72%,
-    var(--train-palette-haze)
+    var(--train-palette-far-surface)
   );
-  --train-town-edge-shadow: color-mix(
+  --train-town-edge-roof: color-mix(
     in srgb,
-    var(--train-palette-silhouette) 64%,
-    var(--train-palette-haze)
+    var(--train-palette-silhouette) 74%,
+    var(--train-palette-mid-surface)
+  );
+  --train-town-edge-detail: color-mix(
+    in srgb,
+    var(--train-palette-silhouette) 52%,
+    var(--train-palette-mid-surface)
   );
   bottom: 17px;
-  height: 76px;
+  height: 78px;
+  opacity: 1;
   background:
+    linear-gradient(
+        90deg,
+        transparent 0 56px,
+        var(--train-town-edge-roof) 56px 61px,
+        transparent 61px 192px
+      )
+      var(--train-set-piece-phase) 2px / 192px 8px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 157px,
+        var(--train-town-edge-roof) 157px 163px,
+        transparent 163px 192px
+      )
+      var(--train-set-piece-phase) 12px / 192px 9px repeat-x,
+    linear-gradient(
+        90deg,
+        var(--train-town-edge-roof) 0 34px,
+        transparent 34px 47px,
+        var(--train-town-edge-roof) 47px 74px,
+        transparent 74px 88px,
+        var(--train-town-edge-roof) 88px 133px,
+        transparent 133px 148px,
+        var(--train-town-edge-roof) 148px 184px,
+        transparent 184px 192px
+      )
+      var(--train-set-piece-phase) 22px / 192px 6px repeat-x,
     repeating-linear-gradient(
       90deg,
-      var(--train-town-edge-surface) 0 30px,
-      transparent 30px 36px,
-      var(--train-town-edge-shadow) 36px 56px,
-      var(--train-town-edge-surface) 56px 78px,
-      transparent 78px 84px
-    );
-  background-position-x: var(--train-set-piece-phase);
-  clip-path: polygon(
-    0 100%,
-    0 52%,
-    10% 52%,
-    10% 28%,
-    24% 28%,
-    24% 61%,
-    39% 61%,
-    39% 12%,
-    58% 12%,
-    58% 43%,
-    74% 43%,
-    74% 24%,
-    90% 24%,
-    90% 55%,
-    100% 55%,
-    100% 100%
-  );
-  transition: opacity 450ms ease;
+      var(--train-town-edge-wall-a) 0 34px,
+      transparent 34px 192px
+    )
+      var(--train-set-piece-phase) 28px / 192px 50px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 47px,
+      var(--train-town-edge-wall-b) 47px 74px,
+      transparent 74px 192px
+    )
+      var(--train-set-piece-phase) 10px / 192px 68px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 88px,
+      var(--train-town-edge-wall-a) 88px 133px,
+      transparent 133px 192px
+    )
+      var(--train-set-piece-phase) 28px / 192px 50px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 148px,
+      var(--train-town-edge-wall-b) 148px 184px,
+      transparent 184px 192px
+    )
+      var(--train-set-piece-phase) 21px / 192px 57px repeat-x;
+  image-rendering: pixelated;
+}
+
+.train-set-piece--town-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+        90deg,
+        transparent 0 7px,
+        var(--train-town-edge-detail) 7px 11px,
+        transparent 11px 21px,
+        var(--train-town-edge-detail) 21px 25px,
+        transparent 25px 192px
+      )
+      var(--train-set-piece-phase) 39px / 192px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 7px,
+        var(--train-town-edge-detail) 7px 11px,
+        transparent 11px 21px,
+        var(--train-town-edge-detail) 21px 25px,
+        transparent 25px 192px
+      )
+      var(--train-set-piece-phase) 52px / 192px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 52px,
+        var(--train-town-edge-detail) 52px 56px,
+        transparent 56px 65px,
+        var(--train-town-edge-detail) 65px 69px,
+        transparent 69px 192px
+      )
+      var(--train-set-piece-phase) 24px / 192px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 96px,
+        var(--train-town-edge-detail) 96px 101px,
+        transparent 101px 110px,
+        var(--train-town-edge-detail) 110px 115px,
+        transparent 115px 123px,
+        var(--train-town-edge-detail) 123px 128px,
+        transparent 128px 192px
+      )
+      var(--train-set-piece-phase) 43px / 192px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 154px,
+        var(--train-town-edge-detail) 154px 159px,
+        transparent 159px 169px,
+        var(--train-town-edge-detail) 169px 174px,
+        transparent 174px 192px
+      )
+      var(--train-set-piece-phase) 37px / 192px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 91px,
+        var(--train-town-edge-detail) 91px 130px,
+        transparent 130px 192px
+      )
+      var(--train-set-piece-phase) 58px / 192px 3px repeat-x;
 }
 
 .train-set-piece--town-edge.train-set-piece--variant-1 {
-  height: 70px;
+  height: 74px;
   background:
     linear-gradient(
-        135deg,
-        transparent 0 47%,
-        var(--train-town-edge-shadow) 48% 100%
+        90deg,
+        transparent 0 13px,
+        var(--train-town-edge-roof) 13px 18px,
+        transparent 18px 117px,
+        var(--train-town-edge-roof) 117px 122px,
+        transparent 122px 216px
       )
-      0 0 / 48px 25px repeat-x,
+      var(--train-set-piece-phase) 3px / 216px 8px repeat-x,
     linear-gradient(
-        225deg,
-        transparent 0 47%,
-        var(--train-town-edge-surface) 48% 100%
+        90deg,
+        var(--train-town-edge-roof) 0 27px,
+        transparent 27px 39px,
+        var(--train-town-edge-roof) 39px 82px,
+        transparent 82px 96px,
+        var(--train-town-edge-roof) 96px 128px,
+        transparent 128px 142px,
+        var(--train-town-edge-roof) 142px 198px,
+        transparent 198px 216px
       )
-      24px 0 / 48px 25px repeat-x,
+      var(--train-set-piece-phase) 17px / 216px 6px repeat-x,
     repeating-linear-gradient(
       90deg,
-      var(--train-town-edge-shadow) 0 22px,
-      transparent 22px 28px,
-      var(--train-town-edge-surface) 28px 66px,
-      transparent 66px 72px
-    );
-  background-position:
-    var(--train-set-piece-phase) 0,
-    calc(var(--train-set-piece-phase) + 24px) 0,
-    var(--train-set-piece-phase) 0;
+      var(--train-town-edge-wall-b) 0 27px,
+      transparent 27px 216px
+    )
+      var(--train-set-piece-phase) 23px / 216px 51px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 39px,
+      var(--train-town-edge-wall-a) 39px 82px,
+      transparent 82px 216px
+    )
+      var(--train-set-piece-phase) 35px / 216px 39px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 96px,
+      var(--train-town-edge-wall-b) 96px 128px,
+      transparent 128px 216px
+    )
+      var(--train-set-piece-phase) 11px / 216px 63px repeat-x,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 142px,
+      var(--train-town-edge-wall-a) 142px 198px,
+      transparent 198px 216px
+    )
+      var(--train-set-piece-phase) 28px / 216px 46px repeat-x;
+}
+
+.train-set-piece--town-edge.train-set-piece--variant-1::before {
+  background:
+    linear-gradient(
+        90deg,
+        transparent 0 6px,
+        var(--train-town-edge-detail) 6px 10px,
+        transparent 10px 17px,
+        var(--train-town-edge-detail) 17px 21px,
+        transparent 21px 216px
+      )
+      var(--train-set-piece-phase) 38px / 216px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 46px,
+        var(--train-town-edge-detail) 46px 51px,
+        transparent 51px 60px,
+        var(--train-town-edge-detail) 60px 65px,
+        transparent 65px 73px,
+        var(--train-town-edge-detail) 73px 78px,
+        transparent 78px 216px
+      )
+      var(--train-set-piece-phase) 46px / 216px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 102px,
+        var(--train-town-edge-detail) 102px 107px,
+        transparent 107px 117px,
+        var(--train-town-edge-detail) 117px 122px,
+        transparent 122px 216px
+      )
+      var(--train-set-piece-phase) 27px / 216px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 149px,
+        var(--train-town-edge-detail) 149px 154px,
+        transparent 154px 164px,
+        var(--train-town-edge-detail) 164px 169px,
+        transparent 169px 179px,
+        var(--train-town-edge-detail) 179px 184px,
+        transparent 184px 216px
+      )
+      var(--train-set-piece-phase) 42px / 216px 4px repeat-x,
+    linear-gradient(
+        90deg,
+        transparent 0 145px,
+        var(--train-town-edge-detail) 145px 195px,
+        transparent 195px 216px
+      )
+      var(--train-set-piece-phase) 61px / 216px 3px repeat-x;
+}
+
+.train-set-piece--town-edge.train-set-piece--entry {
   clip-path: polygon(
     0 100%,
-    0 64%,
-    12% 64%,
-    12% 36%,
-    28% 36%,
-    28% 18%,
-    42% 18%,
-    42% 54%,
-    61% 54%,
-    61% 28%,
-    78% 28%,
-    78% 48%,
-    91% 48%,
-    91% 70%,
-    100% 70%,
+    0 88%,
+    12% 88%,
+    12% 72%,
+    24% 72%,
+    24% 48%,
+    36% 48%,
+    36% 0,
+    100% 0,
     100% 100%
   );
 }
 
-.train-set-piece--town-edge.train-set-piece--entry {
-  opacity: 0.3;
-}
-
-.train-set-piece--town-edge.train-set-piece--body {
-  opacity: 0.42;
-}
-
 .train-set-piece--town-edge.train-set-piece--exit {
-  opacity: 0.36;
-  transform: scaleX(-1);
-}
-
-.train-layout-world[data-time-of-day="sunset"]
-  .train-set-piece--town-edge.train-set-piece--entry {
-  opacity: 0.34;
-}
-
-.train-layout-world[data-time-of-day="sunset"]
-  .train-set-piece--town-edge.train-set-piece--body {
-  opacity: 0.46;
-}
-
-.train-layout-world[data-time-of-day="sunset"]
-  .train-set-piece--town-edge.train-set-piece--exit {
-  opacity: 0.4;
-}
-
-.train-layout-world[data-time-of-day="night"]
-  .train-set-piece--town-edge.train-set-piece--entry {
-  opacity: 0.38;
-}
-
-.train-layout-world[data-time-of-day="night"]
-  .train-set-piece--town-edge.train-set-piece--body {
-  opacity: 0.5;
-}
-
-.train-layout-world[data-time-of-day="night"]
-  .train-set-piece--town-edge.train-set-piece--exit {
-  opacity: 0.44;
+  clip-path: polygon(
+    0 0,
+    64% 0,
+    64% 48%,
+    76% 48%,
+    76% 72%,
+    88% 72%,
+    88% 88%,
+    100% 88%,
+    100% 100%,
+    0 100%
+  );
 }
 
 .train-set-piece--station {

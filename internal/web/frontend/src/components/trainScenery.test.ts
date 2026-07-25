@@ -15,6 +15,8 @@ import {
   TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_SPACING_PX,
+  TRAIN_NIGHT_LIFE_MAX_INTENSITY,
+  TRAIN_NIGHT_LIFE_MIN_INTENSITY,
   TRAIN_REGION_NIGHT_LIFE,
   TRAIN_REGION_OPEN_VIEW_TARGET,
   TRAIN_REGION_SCENERY_PROFILES,
@@ -513,6 +515,168 @@ describe("train scenery asset kit", () => {
     expect(regionSignature("day-composition-b", -240, 240)).not.toEqual(first);
   });
 
+  it("keeps multi-seed regional variety and rare-feature cadence statistically balanced", () => {
+    const seeds = [
+      "balance-alpine",
+      "balance-harbor",
+      "balance-local",
+      "balance-night-mail",
+      "balance-orchard",
+      "balance-river",
+      "balance-steel",
+      "balance-winter",
+    ];
+    const statistics = Object.fromEntries(
+      (Object.keys(REGION_LANDMARK_IDS) as TrainRegionName[]).map((region) => [
+        region,
+        {
+          regions: 0,
+          chunks: 0,
+          openChunks: 0,
+          denseChunks: 0,
+          landmarks: 0,
+          midgroundPlacements: 0,
+          nearPlacements: 0,
+          eligibleNightLife: 0,
+          activeNightLife: 0,
+          assetIDs: new Set<string>(),
+          landmarkSequence: [] as boolean[],
+        },
+      ]),
+    ) as Record<
+      TrainRegionName,
+      {
+        regions: number;
+        chunks: number;
+        openChunks: number;
+        denseChunks: number;
+        landmarks: number;
+        midgroundPlacements: number;
+        nearPlacements: number;
+        eligibleNightLife: number;
+        activeNightLife: number;
+        assetIDs: Set<string>;
+        landmarkSequence: boolean[];
+      }
+    >;
+    const setPieceTypes = new Set<string>();
+    const setPieceVariants = new Map<string, Set<number>>();
+
+    for (const seed of seeds) {
+      for (let regionIndex = -120; regionIndex <= 120; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        const sample = statistics[region];
+        sample.regions++;
+        let hasLandmark = false;
+
+        for (const chunk of chunks) {
+          sample.chunks++;
+          const composition = trainRegionCompositionForChunk(chunk);
+          if (composition === "open") sample.openChunks++;
+          if (composition === "dense") sample.denseChunks++;
+          if (chunk.setPiece) {
+            setPieceTypes.add(chunk.setPiece.type);
+            const variants =
+              setPieceVariants.get(chunk.setPiece.type) ?? new Set<number>();
+            variants.add(chunk.setPiece.visualVariant);
+            setPieceVariants.set(chunk.setPiece.type, variants);
+          }
+
+          const midground = trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+          );
+          const near = trainSceneryPlacementsForChunk("near", chunk);
+          sample.midgroundPlacements += midground.length;
+          sample.nearPlacements += near.length;
+          for (const placement of [...midground, ...near]) {
+            sample.assetIDs.add(placement.asset.id);
+            if (placement.landmark) {
+              hasLandmark = true;
+              sample.landmarks++;
+            }
+          }
+
+          const nightOwners = new Set<string>(
+            TRAIN_REGION_NIGHT_LIFE[region].owners.map(
+              (owner) => owner.assetId,
+            ),
+          );
+          midground.forEach((placement, ordinal) => {
+            if (nightOwners.has(placement.asset.id)) {
+              sample.eligibleNightLife++;
+            }
+            if (trainNightLifeForPlacement(chunk, placement, ordinal)) {
+              sample.activeNightLife++;
+            }
+          });
+        }
+        sample.landmarkSequence.push(hasLandmark);
+      }
+    }
+
+    const longestRun = (values: readonly boolean[], target: boolean) => {
+      let longest = 0;
+      let current = 0;
+      for (const value of values) {
+        current = value === target ? current + 1 : 0;
+        longest = Math.max(longest, current);
+      }
+      return longest;
+    };
+
+    for (const region of Object.keys(statistics) as TrainRegionName[]) {
+      const sample = statistics[region];
+      const profile = TRAIN_REGION_SCENERY_PROFILES[region];
+      const expectedIDs = new Set([
+        ...(profile.layers.midground?.assetIds ?? []),
+        ...(profile.layers.near?.assetIds ?? []),
+        ...profile.landmark.assetIds,
+      ]);
+      const landmarkRate = sample.landmarks / sample.regions;
+      const openRate = sample.openChunks / sample.chunks;
+      const midgroundRate = sample.midgroundPlacements / sample.chunks;
+      const nearRate = sample.nearPlacements / sample.chunks;
+      const nightLifeChunkRate = sample.activeNightLife / sample.chunks;
+
+      expect(sample.regions, region).toBeGreaterThan(150);
+      expect(
+        [...expectedIDs].filter((assetID) => sample.assetIDs.has(assetID))
+          .length / expectedIDs.size,
+        region,
+      ).toBeGreaterThan(0.74);
+      expect(landmarkRate, region).toBeGreaterThan(0.16);
+      expect(landmarkRate, region).toBeLessThan(0.55);
+      expect(openRate, region).toBeGreaterThan(0.12);
+      expect(openRate, region).toBeLessThan(0.25);
+      expect(sample.denseChunks / sample.chunks, region).toBeGreaterThan(0.2);
+      expect(midgroundRate, region).toBeGreaterThan(0.15);
+      expect(midgroundRate, region).toBeLessThan(1.5);
+      expect(nearRate, region).toBeGreaterThan(0.06);
+      expect(nearRate, region).toBeLessThan(0.24);
+      expect(nightLifeChunkRate, region).toBeGreaterThan(0.01);
+      expect(nightLifeChunkRate, region).toBeLessThan(0.14);
+      expect(sample.activeNightLife, region).toBeLessThan(
+        sample.eligibleNightLife,
+      );
+      expect(longestRun(sample.landmarkSequence, true), region).toBeLessThan(
+        12,
+      );
+      expect(longestRun(sample.landmarkSequence, false), region).toBeLessThan(
+        28,
+      );
+    }
+
+    expect(setPieceTypes).toEqual(
+      new Set(["bridge", "coast-reveal", "station", "town-edge", "tunnel"]),
+    );
+    for (const type of ["bridge", "coast-reveal", "town-edge", "tunnel"]) {
+      expect(setPieceVariants.get(type), type).toEqual(new Set([0, 1]));
+    }
+    expect(setPieceVariants.get("station")).toEqual(new Set([0]));
+  });
+
   it("builds sparse deterministic region-owned nighttime life catalogues", () => {
     const signature = (seed: string) =>
       Array.from({ length: 2401 }, (_, offset) =>
@@ -558,8 +722,12 @@ describe("train scenery asset kit", () => {
         rule.owners.some((owner) => owner.assetId === plan.ownerAssetId),
       ).toBe(true);
       expect(plan.asset).toBe(plan.ownerAssetId);
-      expect(plan.intensity).toBeGreaterThanOrEqual(0.62);
-      expect(plan.intensity).toBeLessThan(0.88);
+      expect(plan.intensity).toBeGreaterThanOrEqual(
+        TRAIN_NIGHT_LIFE_MIN_INTENSITY,
+      );
+      expect(plan.intensity).toBeLessThan(
+        TRAIN_NIGHT_LIFE_MAX_INTENSITY,
+      );
       expect(plan.points.length).toBeLessThanOrEqual(6);
       expect(plan.pairedReflection).toBe(plan.region === "coast");
       if (plan.kind === "forest-fireflies") {

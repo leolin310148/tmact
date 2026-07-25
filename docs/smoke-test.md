@@ -323,6 +323,35 @@ showed legible wheels seated on the rails with unchanged couplers, train scale,
 sky area, and controls; `borz errors --json` reported no page errors. No private
 pane names, output, or payloads were recorded.
 
+TRAIN-038 scenery-balance run 2026-07-26: repeated the complete HTTP 200,
+plain `/src/main.tsx` freshness, open, viewport, hard-reload, and exact
+`window.innerWidth`/`window.innerHeight` protocol at 390×844, 1280×800, and
+2560×900. Deterministic `train-038-town-edge` positions displayed both
+town-edge variants without a near-layer station overlap. For every viewport,
+the fixed train and debug overlay were hidden only in the live DOM, day and
+night screenshots were captured, and the DOM was restored before the next
+check. All visible town-edge segments had computed opacity `1`, their solid
+background colors contained no fractional alpha, and the screenshots showed
+opaque low-contrast building faces, hard-edged roof-height variation,
+architectural window/ledge detail, and intentional sky gaps instead of
+translucent near-track rectangles. The twelve retained screenshots are
+`/private/tmp/train-038-town-edge-v{0,1}-{compact,desktop,ultrawide}-{day,night}.png`.
+
+The ultrawide `train-038-sustained` traversal then ran at 96 px/s for 418,659 ms
+between its first and last of 60 five-second samples. Route position advanced
+from `3967.152px` to `37815.585px`; `.train-parallax-chunk` stayed exactly 64
+while `.train-scenery-asset` recycled within 28–39. Night, day, and sunset were
+all sampled. The natural run covered town, industrial, coast, and mountain;
+deterministic position checks added forest and the bridge, tunnel, and
+unobscured coast-reveal compositions in day and night, complementing the
+town-edge and station coverage. A 100 ms station sample captured `approach →
+decelerate → platform → dwell → depart → cruise`; platform and dwell both held
+at `3680px`. A normal refresh without a position or station override restored a
+nonzero same-seed cruise snapshot with `data-journey-restored="true"` and
+advanced only `0.001px` over the next second at the requested 0.001 px/s.
+Manual palette state was not restored. `borz errors --json` reported no page
+errors, and no private pane names, output, or payloads were recorded.
+
 ## Notes Template
 
 ```text

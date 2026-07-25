@@ -44,6 +44,8 @@ import {
   TRAIN_PARALLAX_LAYERS,
 } from "./trainRoute";
 import {
+  TRAIN_NIGHT_LIFE_MAX_INTENSITY,
+  TRAIN_NIGHT_LIFE_MIN_INTENSITY,
   TRAIN_REGION_NIGHT_LIFE,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
@@ -1324,7 +1326,7 @@ describe("TrainLayout", () => {
         expect(spriteOpacity * chunkOpacity).toBe(1);
       }
       for (const setPiece of container.querySelectorAll<HTMLElement>(
-        ".train-set-piece:not(.train-set-piece--town-edge)",
+        ".train-set-piece",
       )) {
         expect(getComputedStyle(setPiece).opacity).toBe("1");
       }
@@ -1342,7 +1344,7 @@ describe("TrainLayout", () => {
     expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
   });
 
-  it("attenuates generated town-edge atmosphere without weakening solid sprites", () => {
+  it("builds the town-edge from opaque detailed solids with a varied roof and gap rhythm", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
     window.history.replaceState(
@@ -1372,11 +1374,18 @@ describe("TrainLayout", () => {
     const timeToggle = screen.getByRole("button", {
       name: "Cycle train lighting (day / sunset / night)",
     });
-    const expectedOpacity = {
-      day: [0.3, 0.42, 0.36],
-      sunset: [0.34, 0.46, 0.4],
-      night: [0.38, 0.5, 0.44],
-    } as const;
+    const townEdgeBaseRule = trainLayoutCss.match(
+      /\.train-set-piece--town-edge\s*\{([\s\S]*?)\n\}/,
+    )?.[1];
+    const townEdgeDetailRule = trainLayoutCss.match(
+      /\.train-set-piece--town-edge::before\s*\{([\s\S]*?)\n\}/,
+    )?.[1];
+    const townEdgeVariantRule = trainLayoutCss.match(
+      /\.train-set-piece--town-edge\.train-set-piece--variant-1\s*\{([\s\S]*?)\n\}/,
+    )?.[1];
+    const townEdgeVariantDetailRule = trainLayoutCss.match(
+      /\.train-set-piece--town-edge\.train-set-piece--variant-1::before\s*\{([\s\S]*?)\n\}/,
+    )?.[1];
 
     expect(townEdge.map((segment) => segment.dataset.setPieceRole)).toEqual([
       "entry",
@@ -1384,11 +1393,49 @@ describe("TrainLayout", () => {
       "exit",
     ]);
     expect(detailedBuildings.length).toBeGreaterThan(0);
+    expect(townEdgeBaseRule).toBeDefined();
+    expect(townEdgeDetailRule).toBeDefined();
+    expect(townEdgeVariantRule).toBeDefined();
+    expect(townEdgeVariantDetailRule).toBeDefined();
+    const solidPaletteTokens = [
+      ...townEdgeBaseRule!.matchAll(
+        /--train-town-edge-(?:wall-a|wall-b|roof|detail):\s*color-mix\(([\s\S]*?)\);/g,
+      ),
+    ];
+    expect(solidPaletteTokens).toHaveLength(4);
+    for (const token of solidPaletteTokens) {
+      expect(token[1]).not.toMatch(
+        /transparent|rgba?\(|var\(--train-palette-haze\)/i,
+      );
+    }
+    expect(townEdgeBaseRule).toMatch(/opacity:\s*1;/);
+    expect(townEdgeBaseRule!.match(/repeat-x/g)).toHaveLength(7);
+    expect(townEdgeVariantRule!.match(/repeat-x/g)).toHaveLength(6);
+    expect(townEdgeDetailRule!.match(/repeat-x/g)).toHaveLength(6);
+    expect(townEdgeVariantDetailRule!.match(/repeat-x/g)).toHaveLength(5);
+    expect(townEdgeBaseRule).toMatch(
+      /wall-a\) 0 34px,\s*transparent 34px 192px/,
+    );
+    expect(townEdgeBaseRule).toMatch(
+      /transparent 34px 47px,[\s\S]*?transparent 74px 88px,[\s\S]*?transparent 133px 148px/,
+    );
+    expect(townEdgeVariantRule).toMatch(
+      /transparent 27px 39px,[\s\S]*?transparent 82px 96px,[\s\S]*?transparent 128px 142px/,
+    );
+    expect(townEdgeDetailRule!.match(/--train-town-edge-detail/g)!.length).toBe(
+      12,
+    );
+    expect(
+      townEdgeVariantDetailRule!.match(/--train-town-edge-detail/g)!.length,
+    ).toBe(11);
     expect(trainLayoutCss).toMatch(
-      /--train-town-edge-surface:\s*color-mix\([\s\S]*?var\(--train-palette-mid-surface\)[\s\S]*?var\(--train-palette-haze\)/,
+      /\.train-set-piece--town-edge\.train-set-piece--entry\s*\{[\s\S]*?clip-path:\s*polygon\([\s\S]*?12% 88%[\s\S]*?36% 0/,
     );
     expect(trainLayoutCss).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-set-piece--town-edge,[\s\S]*?transition-duration:\s*0\.01ms;/,
+      /\.train-set-piece--town-edge\.train-set-piece--exit\s*\{[\s\S]*?clip-path:\s*polygon\([\s\S]*?64% 48%[\s\S]*?88% 88%/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /data-time-of-day="(?:day|sunset|night)"[\s\S]{0,160}\.train-set-piece--town-edge[\s\S]{0,120}opacity:/,
     );
 
     for (const mode of ["day", "sunset", "night"] as const) {
@@ -1397,7 +1444,7 @@ describe("TrainLayout", () => {
         townEdge.map((segment) =>
           Number.parseFloat(getComputedStyle(segment).opacity),
         ),
-      ).toEqual(expectedOpacity[mode]);
+      ).toEqual([1, 1, 1]);
       for (const segment of townEdge) {
         expect(getComputedStyle(segment).pointerEvents).toBe("none");
       }
@@ -2223,9 +2270,21 @@ describe("TrainLayout", () => {
     );
 
     rendered.rerender(view("night"));
-    expect(
-      rendered.container.querySelectorAll("[data-night-life-region]"),
-    ).toHaveLength(5);
+    const nightSignatures =
+      rendered.container.querySelectorAll<HTMLElement>(
+        "[data-night-life-region]",
+      );
+    expect(nightSignatures).toHaveLength(5);
+    for (const signature of nightSignatures) {
+      const intensity = Number.parseFloat(
+        signature.style.getPropertyValue("--train-night-life-intensity"),
+      );
+      expect(intensity).toBeGreaterThanOrEqual(
+        TRAIN_NIGHT_LIFE_MIN_INTENSITY,
+      );
+      expect(intensity).toBeLessThan(TRAIN_NIGHT_LIFE_MAX_INTENSITY);
+      expect(signature).toHaveAttribute("data-emissive-owner");
+    }
     expect(trainLayoutCss).toMatch(
       /\.train-layout-world\[data-time-of-day="night"\] \.train-night-life\s*\{\s*opacity:\s*var\(--train-night-life-intensity\);/,
     );
