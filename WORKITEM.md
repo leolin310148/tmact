@@ -3,7 +3,7 @@
 Completed TRAIN-001–026 are archived in
 [docs/archive/train-layout-workitems-001-026.md](docs/archive/train-layout-workitems-001-026.md).
 
-This active queue contains twelve dependency-ordered, independently verifiable
+This active queue contains thirteen dependency-ordered, independently verifiable
 work items that rebuild scenery compositing and daylight art before expanding
 regional day/night richness. The fixed train, route engine, station behavior,
 and safety properties established by the archived queue remain the baseline.
@@ -153,6 +153,27 @@ and safety properties established by the archived queue remain the baseline.
   multi-seed distribution tests. Traverse all five regions in day mode with
   `borz` at compact and ultrawide sizes, then run the frontend suite, build,
   and `make test`.
+
+- [ ] **TRAIN-032A — Restore atmospheric depth to the town-edge skyline.**
+  Fix the TRAIN-027 regression that changed the code-native town-edge
+  entry/body/exit skyline from restrained atmospheric silhouettes into fully
+  opaque single-color blocks. Treat this generated skyline as a distant
+  atmospheric composition rather than a solid raster object: restore
+  deliberate depth attenuation or equivalent palette-aware translucent color
+  mixing, retain visible roofline/gap rhythm, and keep its entry/body/exit
+  transition coherent without producing a solid wall behind the train. Do not
+  weaken the opaque compositor for real terrain, vegetation, building,
+  landmark, bridge, or prop sprites; their solid interiors and the revised
+  daylight-neutral town-building art must remain effectively opaque. Preserve
+  route geometry, set-piece spans, window emissive-mask alignment, train
+  readability, bounded DOM, pointer inertness, and palette crossfades. Add a
+  focused regression test that distinguishes atmospheric generated scenery
+  from solid sprite policy, asserts restrained town-edge computed presentation
+  in day/sunset/night, and proves detailed building sprites remain opaque.
+  Force a deterministic town-edge traversal with `borz` in day and night at
+  compact and wide sizes, checking that the flat color blocks are gone and real
+  building detail remains visible; then run the frontend suite, build, and
+  `make test`.
 
 - [ ] **TRAIN-033 — Build a richer deterministic day-and-sunset sky system.**
   Preserve TRAIN-023's seeded cloud grammar but retune cloud art and grading so
