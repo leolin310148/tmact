@@ -1,6 +1,6 @@
 # Train Layout — Infinite Journey Background Work Items
 
-This queue turns the train-theme background plan into twenty-five dependency-ordered,
+This queue turns the train-theme background plan into twenty-six dependency-ordered,
 independently verifiable work items. The finished scene must make the fixed
 train feel as if it is travelling forever through coherent regions, support
 day/sunset/night presentation, remain deterministic enough to test, and allow a
@@ -363,3 +363,20 @@ future station stop without growing the DOM or memory usage over time.
   palette-visibility, cleanup, and long-run bounds tests. Inspect compact,
   desktop, and ultrawide night skies with `borz`, then run the frontend suite,
   build, and `make test`.
+
+- [ ] **TRAIN-026 — Seat the train naturally into the track plane.**
+  Lower the locomotive and every carriage together by one small shared layout
+  offset so the lower edges of the wheels overlap the upper portion of the
+  perspective track plane and sleepers, making the fixed consist read as riding
+  on the rails instead of floating above them. Keep the overlap restrained:
+  wheels must remain legible, visibly aligned with the rails, unclipped, and
+  connected by unchanged coupler geometry at compact, desktop, and ultrawide
+  sizes. Preserve the world-owned track position and route motion, distance-based
+  wheel rotation, current 90% artwork scale, enlarged character hit targets,
+  transparent windows, focus outlines, train inspection scrolling, layout
+  height, and sky area. Do not move scenery, passengers, menus, or the track to
+  simulate the effect. Express the adjustment through an explicit shared CSS
+  token or equivalent single source of truth and add focused layout/style
+  contract tests covering the common offset, overlap, responsive behavior, and
+  preserved interaction geometry. Compare day and night with `borz` at compact
+  and wide sizes, then run the frontend suite, build, and `make test`.
