@@ -228,6 +228,60 @@ describe("TrainLayout", () => {
     expect(trainLayoutCss).not.toContain(".train-layout-track");
   });
 
+  it("seats the complete consist into the track with one responsive-safe offset", () => {
+    const { container } = render(
+      <TrainLayout
+        panes={[pane({ pane_id: "%1", session: "alpha", runtime: "codex" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    const consist = container.querySelector<HTMLElement>(
+      ".train-layout-consist",
+    )!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
+
+    expect(consist).toContainElement(
+      container.querySelector<HTMLElement>(".train-locomotive-more"),
+    );
+    expect(consist).toContainElement(
+      container.querySelector<HTMLElement>(".train-carriage"),
+    );
+    expect(consist).toContainElement(
+      container.querySelector<HTMLElement>(".train-seat"),
+    );
+    expect(consist).not.toContainElement(track);
+    expect(
+      trainLayoutCss.match(/--train-consist-track-overlap:\s*4px;/g),
+    ).toHaveLength(1);
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-consist\s*\{[\s\S]*?height:\s*calc\(100% - var\(--train-track-h\)\);[\s\S]*?margin-bottom:\s*var\(--train-track-h\);[\s\S]*?transform:\s*translateY\(var\(--train-consist-track-overlap\)\);/,
+    );
+
+    const trackHeight = Number(
+      trainLayoutCss.match(/--train-track-h:\s*(\d+)px;/)?.[1],
+    );
+    const overlap = Number(
+      trainLayoutCss.match(/--train-consist-track-overlap:\s*(\d+)px;/)?.[1],
+    );
+    expect(overlap).toBeGreaterThan(0);
+    expect(overlap).toBeLessThan(trackHeight / 2);
+
+    const compactRules = trainLayoutCss.slice(
+      trainLayoutCss.indexOf("@media (max-width: 760px)"),
+    );
+    expect(compactRules).not.toContain("--train-consist-track-overlap:");
+    expect(trainLayoutCss).toMatch(
+      /\.train-carriage\s*\{[\s\S]*?height:\s*var\(--train-artwork-scale\);[\s\S]*?margin-left:\s*clamp\(-19\.8px,\s*-1\.8vh,\s*-10\.8px\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /--train-seat-target-size:\s*max\(\s*var\(--train-seat-target-min\),\s*18\.8888888889cqw\s*\);/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.(?:train-locomotive-more|train-layout-locomotive|train-carriage|train-seat)\s*\{[^}]*translateY\(/,
+    );
+  });
+
   it("mounts code-native rims at bounded locomotive and carriage wheel centers", () => {
     const { container, rerender } = render(
       <TrainLayout

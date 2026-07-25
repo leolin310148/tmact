@@ -6,6 +6,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout {
   --train-track-h: 19px;
+  --train-consist-track-overlap: 4px;
   --train-artwork-band-height: clamp(118px, 18vh, 160px);
   --train-artwork-scale: 90%;
   --train-seat-target-min: 44px;
@@ -1025,6 +1026,9 @@ html[data-pane-switcher-layout="train"] .statusline {
   flex: 0 0 auto;
   height: calc(100% - var(--train-track-h));
   margin-bottom: var(--train-track-h);
+  /* Seat the complete fixed consist into the world-owned track without
+     changing vehicle, coupler, passenger, or interaction geometry. */
+  transform: translateY(var(--train-consist-track-overlap));
 }
 
 .train-carriage-image {

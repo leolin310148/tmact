@@ -309,6 +309,20 @@ and showed varied heights, scales, spacing, and open areas without a repeated
 row, chunk-edge rhythm, seam, or control collision. `borz errors --json`
 reported no page errors.
 
+TRAIN-026 consist/track-overlap run 2026-07-25: repeated the complete HTTP 200,
+plain-module freshness, open, viewport, hard-reload, and actual-dimension
+protocol at 390×844 and 1920×900. Both sizes resolved the single shared consist
+offset to `4px` against the unchanged `19px` world-owned track plane. Every
+visible locomotive/carriage bottom stayed on the same baseline, while visible
+wheel rims extended between roughly 3.7px and 8.2px into the track's upper
+portion as their route-driven rotation changed. All rims remained unclipped,
+the track covered the viewport, and horizontal train inspection preserved the
+track node, route position, and geometry. Compact seat targets stayed at least
+44×44px and wide targets at least 49.547×49.547px. Day and night screenshots
+showed legible wheels seated on the rails with unchanged couplers, train scale,
+sky area, and controls; `borz errors --json` reported no page errors. No private
+pane names, output, or payloads were recorded.
+
 ## Notes Template
 
 ```text

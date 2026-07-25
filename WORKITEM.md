@@ -364,7 +364,7 @@ future station stop without growing the DOM or memory usage over time.
   desktop, and ultrawide night skies with `borz`, then run the frontend suite,
   build, and `make test`.
 
-- [ ] **TRAIN-026 — Seat the train naturally into the track plane.**
+- [x] **TRAIN-026 — Seat the train naturally into the track plane.**
   Lower the locomotive and every carriage together by one small shared layout
   offset so the lower edges of the wheels overlap the upper portion of the
   perspective track plane and sleepers, making the fixed consist read as riding
