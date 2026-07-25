@@ -77,7 +77,7 @@ and safety properties established by the archived queue remain the baseline.
   with `borz` at compact and wide sizes, then run the frontend suite, build,
   and `make test`.
 
-- [ ] **TRAIN-028 — Rebuild the town-building lighting pipeline from daylight-neutral art.**
+- [x] **TRAIN-028 — Rebuild the town-building lighting pipeline from daylight-neutral art.**
   Follow the imagegen skill in edit mode to revise the rowhouse, apartments,
   and cottage assets into crisp daylight-neutral pixel art with fully opaque
   wall/roof interiors, transparent exteriors, distinct materials, and no

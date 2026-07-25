@@ -1,7 +1,10 @@
 import bridgeTrussUrl from "../assets/train-theme/sprites/scenery/bridge-truss.png";
 import buildingApartmentsUrl from "../assets/train-theme/sprites/scenery/building-apartments.png";
+import buildingApartmentsEmissiveUrl from "../assets/train-theme/sprites/scenery/building-apartments-emissive.png";
 import buildingCottageUrl from "../assets/train-theme/sprites/scenery/building-cottage.png";
+import buildingCottageEmissiveUrl from "../assets/train-theme/sprites/scenery/building-cottage-emissive.png";
 import buildingRowhouseUrl from "../assets/train-theme/sprites/scenery/building-rowhouse.png";
+import buildingRowhouseEmissiveUrl from "../assets/train-theme/sprites/scenery/building-rowhouse-emissive.png";
 import buildingWarehouseUrl from "../assets/train-theme/sprites/scenery/building-warehouse.png";
 import buildingWaterTowerUrl from "../assets/train-theme/sprites/scenery/building-water-tower.png";
 import buildingWorkshopUrl from "../assets/train-theme/sprites/scenery/building-workshop.png";
@@ -49,6 +52,14 @@ export type TrainSceneryDayNightTreatment =
   | "emissive-windows"
   | "water-reflection";
 
+export interface TrainSceneryEmissiveAsset {
+  kind: "windows";
+  fileName: string;
+  src: string;
+  width: number;
+  height: number;
+}
+
 export interface TrainSceneryAsset {
   id: string;
   fileName: string;
@@ -60,6 +71,7 @@ export interface TrainSceneryAsset {
   height: number;
   safeScale: readonly [minimum: number, maximum: number];
   dayNightTreatment: TrainSceneryDayNightTreatment;
+  emissive?: TrainSceneryEmissiveAsset;
 }
 
 function asset(
@@ -238,6 +250,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 92,
     safeScale: [0.65, 1],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-rowhouse-emissive.png",
+      src: buildingRowhouseEmissiveUrl,
+      width: 46,
+      height: 92,
+    },
   }),
   asset({
     id: "building-workshop",
@@ -262,6 +281,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 92,
     safeScale: [0.6, 0.95],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-apartments-emissive.png",
+      src: buildingApartmentsEmissiveUrl,
+      width: 91,
+      height: 92,
+    },
   }),
   asset({
     id: "building-cottage",
@@ -274,6 +300,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 79,
     safeScale: [0.65, 1],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-cottage-emissive.png",
+      src: buildingCottageEmissiveUrl,
+      width: 100,
+      height: 79,
+    },
   }),
   asset({
     id: "building-warehouse",

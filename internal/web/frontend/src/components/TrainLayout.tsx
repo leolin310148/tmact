@@ -602,7 +602,7 @@ function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
   };
 }
 
-const TrainRouteChunk = memo(function TrainRouteChunk({
+export const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk,
   layer,
 }: {
@@ -741,7 +741,7 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
               : `${placement.altitudePercent}%`,
           "--train-scenery-scale": placement.scale,
         };
-        return (
+        const sprites = [
           <img
             className={[
               "train-scenery-asset",
@@ -775,12 +775,47 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
               placement.routePositionPx?.toFixed(3) ?? undefined
             }
             style={sceneryStyle}
-            key={`${asset.id}-${ordinal}`}
-          />
-        );
+            key={`base-${asset.id}-${ordinal}`}
+          />,
+        ];
+        if (asset.emissive) {
+          sprites.push(
+            <img
+              className="train-emissive-overlay train-scenery-emissive-mask"
+              src={asset.emissive.src}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              loading="lazy"
+              decoding="async"
+              width={asset.emissive.width}
+              height={asset.emissive.height}
+              data-emissive="building-windows"
+              data-emissive-kind={asset.emissive.kind}
+              data-emissive-owner={asset.id}
+              data-emissive-load="pending"
+              data-scenery-anchor={asset.anchor}
+              data-scenery-manifest-layer={asset.layer}
+              onLoad={(event) => {
+                event.currentTarget.dataset.emissiveLoad = "loaded";
+              }}
+              onError={(event) => {
+                event.currentTarget.dataset.emissiveLoad = "failed";
+                event.currentTarget.hidden = true;
+              }}
+              style={sceneryStyle}
+              key={`emissive-${asset.id}-${ordinal}`}
+            />,
+          );
+        }
+        return sprites;
       })}
       {sceneryPlacements
-        .filter((placement) => placement.asset.category === "building")
+        .filter(
+          (placement) =>
+            placement.asset.category === "building" &&
+            !placement.asset.emissive,
+        )
         .map((placement, ordinal) => (
           <span
             className="train-emissive-overlay train-emissive-overlay--windows"

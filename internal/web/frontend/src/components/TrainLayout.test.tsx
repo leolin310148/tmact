@@ -21,6 +21,7 @@ import {
   trainWorldCruiseSpeed,
   trainWorldTrackTransform,
   TrainLayout,
+  TrainRouteChunk,
 } from "./TrainLayout";
 import {
   trainWheelRotationDegrees,
@@ -32,6 +33,11 @@ import {
   TRAIN_STATION_DEFAULT_DWELL_MS,
   TRAIN_STATION_PLATFORM_SETTLE_MS,
 } from "./trainStation";
+import {
+  generateRouteChunk,
+  TRAIN_PARALLAX_LAYERS,
+} from "./trainRoute";
+import { trainSceneryPlacementsForChunk } from "./trainScenery";
 
 const trainLayoutCss = readFileSync(
   resolve(process.cwd(), "src/components/TrainLayout.css"),
@@ -1588,7 +1594,92 @@ describe("TrainLayout", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("keeps every emissive treatment separate from the scenery sprites", () => {
+  it("aligns bounded town window masks, isolates palette state, and fails unlit", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const layer = TRAIN_PARALLAX_LAYERS.find(
+      (candidate) => candidate.name === "midground",
+    )!;
+    const chunk = Array.from({ length: 180 }, (_, index) =>
+      generateRouteChunk("town-mask-render", index),
+    ).find(
+      (candidate) =>
+        candidate.region === "town" &&
+        trainSceneryPlacementsForChunk("midground", candidate).some(
+          (placement) => placement.asset.emissive,
+        ),
+    )!;
+    expect(chunk).toBeDefined();
+    const routeChunk = (timeOfDay: "day" | "sunset" | "night") => (
+      <div className="train-layout-world" data-time-of-day={timeOfDay}>
+        <TrainRouteChunk chunk={chunk} layer={layer} />
+      </div>
+    );
+    const rendered = render(routeChunk("day"));
+    const masks = [
+      ...rendered.container.querySelectorAll<HTMLImageElement>(
+        ".train-scenery-emissive-mask",
+      ),
+    ];
+
+    expect(masks.length).toBeGreaterThan(0);
+    const { container } = rendered;
+    const bases = container.querySelectorAll<HTMLImageElement>(
+      "[data-scenery-asset^='building-']",
+    );
+    expect(masks.length).toBeLessThanOrEqual(bases.length);
+
+    for (const mask of masks) {
+      const owner = mask.dataset.emissiveOwner!;
+      const chunk = mask.closest<HTMLElement>(".train-parallax-chunk")!;
+      const base = chunk.querySelector<HTMLImageElement>(
+        `[data-scenery-asset="${owner}"]`,
+      )!;
+      expect(base).not.toBeNull();
+      expect(mask).toHaveAttribute("data-emissive-kind", "windows");
+      expect(mask).toHaveAttribute("data-emissive-load", "pending");
+      expect(mask.dataset.sceneryAnchor).toBe(base.dataset.sceneryAnchor);
+      expect(mask.dataset.sceneryManifestLayer).toBe(
+        base.dataset.sceneryManifestLayer,
+      );
+      expect(mask.width).toBe(base.width);
+      expect(mask.height).toBe(base.height);
+      expect(mask.style.left).toBe(base.style.left);
+      expect(mask.style.top).toBe(base.style.top);
+      expect(mask.style.getPropertyValue("--train-scenery-scale")).toBe(
+        base.style.getPropertyValue("--train-scenery-scale"),
+      );
+      const genericAtOwner = [
+        ...chunk.querySelectorAll<HTMLElement>(
+          ".train-emissive-overlay--windows:not(.train-emissive-overlay--town-edge-windows)",
+        ),
+      ].filter((overlay) => overlay.style.left === mask.style.left);
+      expect(genericAtOwner).toHaveLength(0);
+    }
+
+    const mask = masks[0]!;
+    const ownerBase = mask
+      .closest<HTMLElement>(".train-parallax-chunk")!
+      .querySelector<HTMLImageElement>(
+        `[data-scenery-asset="${mask.dataset.emissiveOwner}"]`,
+      )!;
+    expect(getComputedStyle(mask).opacity).toBe("0");
+    rendered.rerender(routeChunk("sunset"));
+    expect(getComputedStyle(mask).opacity).toBe("0.38");
+    rendered.rerender(routeChunk("night"));
+    expect(getComputedStyle(mask).opacity).toBe("0.88");
+
+    fireEvent.load(mask);
+    expect(mask).toHaveAttribute("data-emissive-load", "loaded");
+    fireEvent.error(mask);
+    expect(mask).toHaveAttribute("data-emissive-load", "failed");
+    expect(mask.hidden).toBe(true);
+    expect(ownerBase.hidden).toBe(false);
+  });
+
+  it("keeps every emissive treatment separate from its owning solid art", () => {
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
@@ -1598,19 +1689,31 @@ describe("TrainLayout", () => {
       ),
     );
 
-    expect(emissiveKinds).toEqual(
-      new Set([
-        "stars",
-        "moon",
-        "windows",
-        "streetlight",
-        "station-lamp",
-        "signal",
-        "water-reflection",
-      ]),
-    );
+    const requiredKinds = [
+      "stars",
+      "moon",
+      "windows",
+      "streetlight",
+      "station-lamp",
+      "signal",
+      "water-reflection",
+    ];
+    for (const kind of requiredKinds) {
+      expect(emissiveKinds).toContain(kind);
+    }
+    expect(
+      [...emissiveKinds].every(
+        (kind) => requiredKinds.includes(kind!) || kind === "building-windows",
+      ),
+    ).toBe(true);
     for (const overlay of container.querySelectorAll("[data-emissive]")) {
-      expect(overlay.tagName).not.toBe("IMG");
+      if (overlay.tagName === "IMG") {
+        expect(overlay).toHaveClass("train-scenery-emissive-mask");
+        expect(overlay).toHaveAttribute("data-emissive", "building-windows");
+        expect(overlay).toHaveAttribute("data-emissive-owner");
+      } else {
+        expect(overlay).not.toHaveAttribute("data-scenery-asset");
+      }
     }
   });
 

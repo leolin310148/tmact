@@ -665,6 +665,30 @@ html[data-pane-switcher-layout="train"] .statusline {
   transform: translateX(-50%) scale(var(--train-scenery-scale));
 }
 
+.train-scenery-emissive-mask {
+  max-width: none;
+  object-fit: contain;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(
+    0 0 3px color-mix(in srgb, var(--train-palette-emissive), transparent 24%)
+  );
+}
+
+.train-scenery-emissive-mask[data-scenery-anchor="center"] {
+  transform: translate(-50%, -50%) scale(var(--train-scenery-scale));
+}
+
+.train-scenery-emissive-mask[data-scenery-anchor="bottom-center"] {
+  transform: translateX(-50%) scale(var(--train-scenery-scale));
+}
+
+.train-scenery-emissive-mask[hidden] {
+  display: none;
+}
+
 .train-parallax-chunk--sky .train-scenery-asset {
   top: calc(16% + 6px);
   opacity: 0.64;
@@ -710,6 +734,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-parallax-chunk--midground .train-scenery-asset {
+  bottom: calc(var(--train-chunk-terrain-height) - 12px);
+}
+
+.train-parallax-chunk--midground .train-scenery-emissive-mask {
   bottom: calc(var(--train-chunk-terrain-height) - 12px);
 }
 
