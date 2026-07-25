@@ -248,7 +248,7 @@ future station stop without growing the DOM or memory usage over time.
   compact and wide sizes, without weakening seat clicks, focus states, or text
   contrast. Run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-018 — Match the office layout height and reveal more sky.**
+- [x] **TRAIN-018 — Match the office layout height and reveal more sky.**
   Make the train and office pane-switcher layouts resolve to the same outer
   height at both desktop and the existing ≤760px compact breakpoint. Define one
   shared height contract/token or shared calculation so the two layouts cannot

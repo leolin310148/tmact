@@ -7,7 +7,7 @@
    One front-facing desk per active pane. --ds is the pixel-art scale; all
    sprite metrics derive from it so the whole block scales together. */
 .office-desks {
-  --ds: 1.7;
+  --ds: var(--pane-switcher-scene-scale);
   /* Wood plank floor tile + walnut slat wall tile (both 128x128 source).
      The floor tile uses integer CSS pixels at each room scale; fractional
      repeated background sizes can show browser sampling seams.
@@ -65,7 +65,8 @@
      +10px of extra floor at the bottom drops the (bottom-anchored) desk row
      10px lower against the wall; the wall decor below compensates with +10px
      so only the desks move, not the sideboard/bookcase. */
-  min-height: calc(var(--wall-h) + var(--floor-apron) + 10px);
+  height: var(--pane-switcher-layout-height);
+  min-height: var(--pane-switcher-layout-height);
   /* Scroll viewport only. The room (floor + wall + decor + desks) lives in
      .office-desks-floor at width:max-content, so the whole scene pans together
      here instead of the desks sliding over a frozen wall/floor. */
@@ -673,7 +674,6 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
    collide in the tight horizontal space. */
 @media (max-width: 760px) {
   .office-desks {
-    --ds: 1.36;
     --floor-tile: 87px;
   }
   /* Each label only has to clear its same-row neighbour (two desks away, since

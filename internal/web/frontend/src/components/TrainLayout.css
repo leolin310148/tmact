@@ -6,11 +6,12 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout {
   --train-track-h: 19px;
+  --train-artwork-band-height: clamp(118px, 18vh, 160px);
   position: relative;
   isolation: isolate;
   flex: 0 0 auto;
   width: 100%;
-  height: clamp(118px, 18vh, 160px);
+  height: var(--pane-switcher-layout-height);
   overflow: hidden;
   border-top: 1px solid var(--border);
   background: #07111f;
@@ -916,6 +917,8 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-layout-inspection {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: flex-end;
   width: 100%;
   height: 100%;
   overflow-x: auto;
@@ -926,7 +929,9 @@ html[data-pane-switcher-layout="train"] .statusline {
   position: relative;
   min-width: 100%;
   width: max-content;
-  height: 100%;
+  height: var(--train-artwork-band-height);
+  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-end;
   justify-content: flex-start;
@@ -1133,7 +1138,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 @media (max-width: 760px) {
   .train-layout {
-    height: clamp(104px, 16vh, 132px);
+    --train-artwork-band-height: clamp(104px, 16vh, 132px);
   }
 
   .train-layout-scene {

@@ -239,6 +239,18 @@ The ultrawide scene retained 64 bounded parallax chunks, screenshots showed
 continuous wheel alignment and sleepers from compact through ultrawide, and
 `borz errors --json` reported no page errors.
 
+TRAIN-018 height run 2026-07-25: repeated the complete freshness and viewport
+protocol at 390×844, 1280×800, and 2560×900, switching between train and office
+after each exact viewport assertion. The train and office outer heights matched
+at `149.25px` compact and `184.078125px` desktop/ultrawide. The bottom-anchored
+train artwork retained its `132px`, `144px`, and `160px` height bands while the
+world gained `17.25px`, `40.078125px`, and `24.078125px` of visible sky,
+respectively. The track/wheel baseline and initial horizontal inspection
+position stayed fixed; screenshots showed continuous scenery with no blank
+band, clipped consist, or altered office composition. `borz errors --json`
+reported no page errors, and no pane output or private identifiers were
+recorded in this evidence.
+
 ## Notes Template
 
 ```text
