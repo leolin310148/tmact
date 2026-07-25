@@ -6,7 +6,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout {
   --train-track-h: 19px;
-  --train-consist-track-overlap: 4px;
+  --train-consist-track-overlap: 12px;
   --train-artwork-band-height: clamp(118px, 18vh, 160px);
   --train-artwork-scale: 90%;
   --train-seat-target-min: 44px;

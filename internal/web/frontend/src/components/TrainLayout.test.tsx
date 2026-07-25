@@ -252,7 +252,7 @@ describe("TrainLayout", () => {
     );
     expect(consist).not.toContainElement(track);
     expect(
-      trainLayoutCss.match(/--train-consist-track-overlap:\s*4px;/g),
+      trainLayoutCss.match(/--train-consist-track-overlap:\s*12px;/g),
     ).toHaveLength(1);
     expect(trainLayoutCss).toMatch(
       /\.train-layout-consist\s*\{[\s\S]*?height:\s*calc\(100% - var\(--train-track-h\)\);[\s\S]*?margin-bottom:\s*var\(--train-track-h\);[\s\S]*?transform:\s*translateY\(var\(--train-consist-track-overlap\)\);/,
@@ -265,7 +265,7 @@ describe("TrainLayout", () => {
       trainLayoutCss.match(/--train-consist-track-overlap:\s*(\d+)px;/)?.[1],
     );
     expect(overlap).toBeGreaterThan(0);
-    expect(overlap).toBeLessThan(trackHeight / 2);
+    expect(overlap).toBeLessThan(trackHeight);
 
     const compactRules = trainLayoutCss.slice(
       trainLayoutCss.indexOf("@media (max-width: 760px)"),
