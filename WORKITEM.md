@@ -1,6 +1,6 @@
 # Train Layout — Infinite Journey Background Work Items
 
-This queue turns the train-theme background plan into twenty dependency-ordered,
+This queue turns the train-theme background plan into twenty-five dependency-ordered,
 independently verifiable work items. The finished scene must make the fixed
 train feel as if it is travelling forever through coherent regions, support
 day/sunset/night presentation, remain deterministic enough to test, and allow a
@@ -290,3 +290,76 @@ future station stop without growing the DOM or memory usage over time.
   stale-state, exclusivity, and reduced-motion coverage. Use `borz` to inspect
   the effect in day, sunset, and night palettes with compact and wide occupied
   carriages, then run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-021 — Give the moving railway track shallow perspective.**
+  Replace the current flat side-on/cross-section presentation with a restrained
+  three-quarter track plane: rails and sleepers should read slightly diagonal
+  and recede gently into the scene while remaining aligned beneath every wheel.
+  Keep the track owned by the travelling world from TRAIN-016, driven by the
+  same bounded route transform and moving in the same direction as near
+  scenery. Do not reattach it to train inspection, create a tall ballast wall,
+  introduce blank seams, distort the train, or change the established
+  track/wheel baseline. The perspective must remain legible without excessive
+  aliasing at compact, desktop, and ultrawide sizes, including station dwell,
+  resize, hidden-tab resume, and reduced-motion steps. Add focused ownership,
+  perspective/style, transform, seam, lifecycle, and bounded-DOM tests. Validate
+  the full moving traversal with `borz`, then run the frontend suite, build, and
+  `make test`.
+
+- [ ] **TRAIN-022 — Rotate every visible train wheel from route distance.**
+  Add code-native wheel/rim layers at the actual visible wheel centers of the
+  locomotive and each carriage. Derive one deterministic counter-clockwise
+  rotation angle from travelled route distance and wheel circumference inside
+  the existing motion owner; do not add an independent animation-frame loop or
+  a free-running CSS animation. Rotation must therefore slow during approach,
+  stop exactly at platform/dwell, accelerate during departure, remain unchanged
+  while hidden, and advance only with restrained route steps under reduced
+  motion. Keep the wheel artwork crisp, bottom-aligned, and visually integrated
+  with the existing pixel-art bogies without rotating car bodies, hit targets,
+  focus rings, or passengers. Wheel nodes must stay bounded across filler
+  carriages, resize, theme switch, and remount. Add focused angle/direction,
+  speed-state, lifecycle, cleanup, alignment, count, and reduced-motion tests.
+  Use `borz` to inspect cruise, stop, and departure at compact and wide sizes,
+  then run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-023 — Naturalize deterministic cloud distribution.**
+  Replace the visibly uniform cloud placement with a seeded region-scale sky
+  plan that varies horizontal offset, altitude, scale, spacing, and density.
+  Allow believable open-sky gaps and occasional loose groups while preventing
+  collisions, repeated single-height rows, immediate asset repetition, or
+  obvious chunk-boundary rhythms. Clouds must remain deterministic for the same
+  seed/chunk/viewport inputs, transition continuously across regions, stay in
+  the sky band, preserve all three cloud variants, and keep mounted objects
+  bounded during long travel and resize. Extend placement data rather than
+  introducing per-render randomness; retain day/sunset/night filtering and
+  reduced-motion behavior. Add multi-seed statistical bounds for altitude and
+  spacing variance, determinism, cooldown, cross-chunk continuity, gaps/groups,
+  and long-route DOM limits. Inspect multiple seeds at compact and ultrawide
+  sizes with `borz`, then run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-024 — Make the daytime sky clearly blue.**
+  Retune only the day palette so the upper sky reads as a confident natural blue
+  and the horizon as a lighter blue/cyan haze instead of the current muted
+  green-gray gradient. Preserve the existing route geometry, crossfade timing,
+  cloud/terrain readability, transparent carriage-window view, and accessible
+  train controls. Sunset and night colors must remain unchanged, and the result
+  must avoid neon cyan, crushed silhouettes, or reduced foreground contrast.
+  Add exact palette-isolation and color/contrast assertions that demonstrate
+  stronger blue chroma than the previous day values while keeping all existing
+  accessibility thresholds. Compare day/sunset/night with `borz` at compact and
+  wide sizes, then run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-025 — Replace the tiled night stars with a natural seeded field.**
+  Remove the two repeating radial-gradient star grids and create one bounded,
+  deterministic star catalogue for the visible sky. Vary position, brightness,
+  size, and restrained cool/warm tint with a mix of sparse bright stars, dimmer
+  background stars, small loose groupings, and open negative space. Avoid rows,
+  diagonals, repeated tiles, equal spacing, dense noise, terrain overlap, and
+  the moon's immediate halo. The same seed and viewport must reproduce the same
+  field; resizing may regenerate deterministically with a bounded count, but
+  route travel must not grow DOM or flicker. Stars remain fully readable only at
+  night, faint at sunset, absent by day, and static under reduced motion. Add
+  determinism, distribution/lattice-rejection, moon-exclusion, responsive-count,
+  palette-visibility, cleanup, and long-run bounds tests. Inspect compact,
+  desktop, and ultrawide night skies with `borz`, then run the frontend suite,
+  build, and `make test`.
