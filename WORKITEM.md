@@ -229,7 +229,7 @@ future station stop without growing the DOM or memory usage over time.
   the exact viewport procedure documented by TRAIN-015, then run the frontend
   suite, build, and `make test`.
 
-- [ ] **TRAIN-017 — Cut transparent scenery windows into the carriage sprite.**
+- [x] **TRAIN-017 — Cut transparent scenery windows into the carriage sprite.**
   Edit
   `internal/web/frontend/src/assets/train-theme/sprites/train-carriage-empty-v2.png`
   so the two large upper/lower passenger-window interiors have genuine alpha
