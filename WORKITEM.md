@@ -235,7 +235,7 @@ and safety properties established by the archived queue remain the baseline.
   compact and ultrawide sizes, then run the frontend suite, build, and
   `make test`.
 
-- [ ] **TRAIN-037 — Resume the deterministic journey across ordinary refreshes.**
+- [x] **TRAIN-037 — Resume the deterministic journey across ordinary refreshes.**
   Persist a versioned journey snapshot in local storage containing the route
   seed and a station-safe route position/checkpoint so a normal refresh resumes
   the last scenery instead of always returning to the same opening chunk.

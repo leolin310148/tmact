@@ -87,6 +87,15 @@ import {
   TRAIN_STATION_PLATFORM_SETTLE_MS,
   trainStationDevelopmentTrigger,
 } from "./trainStation";
+import {
+  loadTrainJourneySnapshot,
+  TRAIN_JOURNEY_SNAPSHOT_VERSION,
+  trainJourneyCheckpoint,
+  trainJourneyPersistenceDue,
+  trainJourneyStorage,
+  writeTrainJourneySnapshot,
+  type TrainJourneySnapshot,
+} from "./trainJourneySnapshot";
 import "./TrainLayout.css";
 
 export { advanceTrainWorldRoutePosition } from "./trainMotion";
@@ -1107,18 +1116,56 @@ function TrainWorld({
   const [cruiseSpeed] = useState(() =>
     trainWorldCruiseSpeed(window.location.search),
   );
-  const [routeEngines] = useState(() =>
-    createRouteEngines(trainWorldRouteSeed(window.location.search)),
-  );
-  const seed = routeEngines.near.seed;
-  const [initialStationJourney] = useState(() =>
-    createTrainStationJourney(
-      seed,
-      trainWorldRoutePosition(window.location.search),
-      { cruiseSpeed },
-      trainStationDevelopmentTrigger(window.location.search),
-    ),
-  );
+  const [journeyStorage] = useState(trainJourneyStorage);
+  const [initialJourney] = useState(() => {
+    const search = window.location.search;
+    const parameters = new URLSearchParams(search);
+    const stored = loadTrainJourneySnapshot(
+      journeyStorage,
+      TRAIN_ROUTE_SEED_VERSION,
+    );
+    const requestedSeed = parameters.get(TRAIN_WORLD_SEED_PARAM)?.trim();
+    const hasSeedOverride = import.meta.env.DEV && Boolean(requestedSeed);
+    const hasPositionOverride =
+      import.meta.env.DEV && parameters.has(TRAIN_WORLD_POSITION_PARAM);
+    const trigger = trainStationDevelopmentTrigger(search);
+    const seed = hasSeedOverride
+      ? trainWorldRouteSeed(search)
+      : stored?.routeSeed ?? trainWorldRouteSeed(search);
+    const restoreCandidate =
+      !hasPositionOverride &&
+      trigger === null &&
+      stored?.routeSeed === seed
+        ? createTrainStationJourney(
+            seed,
+            stored.routePosition,
+            { cruiseSpeed },
+            null,
+          )
+        : null;
+    const canRestore = restoreCandidate?.state === "cruise";
+    const routePosition = hasPositionOverride
+      ? trainWorldRoutePosition(search)
+      : canRestore && restoreCandidate
+        ? restoreCandidate.routePosition
+        : 0;
+    return {
+      restored: canRestore,
+      restoredSnapshot: canRestore ? stored : null,
+      stationJourney:
+        canRestore && restoreCandidate
+          ? restoreCandidate
+          : createTrainStationJourney(
+              seed,
+              routePosition,
+              { cruiseSpeed },
+              trigger,
+            ),
+    };
+  });
+  const initialStationJourney = initialJourney.stationJourney;
+  const seed = initialStationJourney.seed;
+  const [routeEngines] = useState(() => createRouteEngines(seed));
   const [routeWindows, setRouteWindows] = useState(() =>
     Object.fromEntries(
       TRAIN_PARALLAX_LAYERS.map((layer) => [
@@ -1143,6 +1190,13 @@ function TrainWorld({
   const routeWindowsRef = useRef(routeWindows);
   const stationJourneyRef = useRef(initialStationJourney);
   const routePositionRef = useRef(initialStationJourney.routePosition);
+  const safeCheckpointRef = useRef<TrainJourneySnapshot | null>(
+    trainJourneyCheckpoint(initialStationJourney, TRAIN_ROUTE_SEED_VERSION),
+  );
+  const persistedCheckpointRef = useRef<TrainJourneySnapshot | null>(
+    initialJourney.restoredSnapshot,
+  );
+  const lastPersistenceAttemptRef = useRef(Date.now());
   routeWindowsRef.current = routeWindows;
 
   useEffect(() => {
@@ -1158,6 +1212,29 @@ function TrainWorld({
     let routeWindowUpdateCount = 0;
 
     const viewportWidth = () => Math.max(1, world.clientWidth || initialWorldWidth());
+    const persistJourney = (force = false) => {
+      const checkpoint = safeCheckpointRef.current;
+      if (!checkpoint) return;
+      const previous = persistedCheckpointRef.current;
+      if (
+        previous?.seedVersion === checkpoint.seedVersion &&
+        previous.routeSeed === checkpoint.routeSeed &&
+        previous.routePosition === checkpoint.routePosition
+      ) {
+        return;
+      }
+      const now = Date.now();
+      if (
+        !force &&
+        !trainJourneyPersistenceDue(lastPersistenceAttemptRef.current, now)
+      ) {
+        return;
+      }
+      lastPersistenceAttemptRef.current = now;
+      const saved = writeTrainJourneySnapshot(journeyStorage, checkpoint);
+      world.dataset.journeyPersistence = saved ? "saved" : "unavailable";
+      if (saved) persistedCheckpointRef.current = checkpoint;
+    };
     const applyRoutePosition = () => {
       const routePosition = routePositionRef.current;
       routeApplyCount += 1;
@@ -1173,6 +1250,17 @@ function TrainWorld({
         layout.dataset.wheelRotation = wheelRotation;
       }
       const stationJourney = stationJourneyRef.current;
+      const safeCheckpoint = trainJourneyCheckpoint(
+        stationJourney,
+        TRAIN_ROUTE_SEED_VERSION,
+      );
+      if (safeCheckpoint) safeCheckpointRef.current = safeCheckpoint;
+      const checkpointPosition = safeCheckpointRef.current?.routePosition;
+      world.dataset.journeyCheckpointPosition =
+        checkpointPosition === undefined
+          ? "none"
+          : `${checkpointPosition.toFixed(3)}px`;
+      persistJourney();
       world.dataset.stationState = stationJourney.state;
       world.dataset.stationTargetSpeed =
         stationJourney.targetSpeed.toFixed(3);
@@ -1393,12 +1481,14 @@ function TrainWorld({
       cancelScheduledMotion();
       previousTimestamp = null;
       if (documentIsHidden()) {
+        persistJourney(true);
         setMotionState("suspended");
         world.dataset.stationAmbient = "suspended";
         return;
       }
       scheduleMotion();
     };
+    const handlePageHide = () => persistJourney(true);
 
     applyRoutePosition();
     const observer =
@@ -1408,6 +1498,7 @@ function TrainWorld({
     observer?.observe(world);
     const handleResize = applyRoutePosition;
     window.addEventListener("resize", handleResize);
+    window.addEventListener("pagehide", handlePageHide);
     document.addEventListener("visibilitychange", handleVisibility);
     if (documentIsHidden()) {
       setMotionState("suspended");
@@ -1419,9 +1510,10 @@ function TrainWorld({
       cancelScheduledMotion();
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("pagehide", handlePageHide);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [cruiseSpeed, reducedMotion, routeEngines, seed]);
+  }, [cruiseSpeed, journeyStorage, reducedMotion, routeEngines, seed]);
 
   const nearWindow = routeWindows.near;
 
@@ -1435,6 +1527,16 @@ function TrainWorld({
       data-route-position={`${initialStationJourney.routePosition.toFixed(3)}px`}
       data-route-seed={seed}
       data-route-seed-version={TRAIN_ROUTE_SEED_VERSION}
+      data-journey-snapshot-version={TRAIN_JOURNEY_SNAPSHOT_VERSION}
+      data-journey-restored={initialJourney.restored ? "true" : "false"}
+      data-journey-persistence={
+        journeyStorage ? (initialJourney.restored ? "restored" : "ready") : "unavailable"
+      }
+      data-journey-checkpoint-position={
+        safeCheckpointRef.current
+          ? `${safeCheckpointRef.current.routePosition.toFixed(3)}px`
+          : "none"
+      }
       data-route-chunk-indices={nearWindow.chunks
         .map((chunk) => chunk.index)
         .join(",")}

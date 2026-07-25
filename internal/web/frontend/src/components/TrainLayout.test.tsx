@@ -35,6 +35,11 @@ import {
   TRAIN_STATION_PLATFORM_SETTLE_MS,
 } from "./trainStation";
 import {
+  TRAIN_JOURNEY_PERSIST_INTERVAL_MS,
+  TRAIN_JOURNEY_STORAGE_KEY,
+  type TrainJourneySnapshot,
+} from "./trainJourneySnapshot";
+import {
   generateRouteChunk,
   TRAIN_PARALLAX_LAYERS,
 } from "./trainRoute";
@@ -64,6 +69,7 @@ vi.mock("../api/client", () => ({
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   document
     .querySelectorAll("style[data-train-layout-test-styles]")
     .forEach((style) => style.remove());
@@ -398,6 +404,195 @@ describe("TrainLayout", () => {
     );
     expect(trainWorldRoutePosition("?train-route-position=-1")).toBe(0);
     expect(trainWorldRoutePosition("?train-route-position=nope")).toBe(0);
+  });
+
+  it("persists at a restrained cadence and remounts at identical route geometry", () => {
+    vi.useFakeTimers();
+    const startedAt = new Date(2026, 0, 1, 12, 0).getTime();
+    vi.setSystemTime(startedAt);
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=resume-geometry",
+    );
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const first = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world =
+      first.container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    animation.run(0);
+    vi.setSystemTime(startedAt + TRAIN_JOURNEY_PERSIST_INTERVAL_MS - 1);
+    animation.run(100);
+    expect(localStorage.getItem(TRAIN_JOURNEY_STORAGE_KEY)).toBeNull();
+
+    vi.setSystemTime(startedAt + TRAIN_JOURNEY_PERSIST_INTERVAL_MS);
+    animation.run(200);
+    const persisted = JSON.parse(
+      localStorage.getItem(TRAIN_JOURNEY_STORAGE_KEY)!,
+    ) as TrainJourneySnapshot;
+    expect(persisted.routeSeed).toBe("resume-geometry");
+    expect(persisted.routePosition).toBeGreaterThan(0);
+    expect(world).toHaveAttribute("data-journey-persistence", "saved");
+    const savedPosition = world.dataset.routePosition;
+    const savedGeometry = routeGeometryFingerprint(first.container);
+
+    first.unmount();
+    vi.setSystemTime(startedAt + 86_400_000);
+    const second = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const restored =
+      second.container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    expect(restored).toHaveAttribute("data-journey-restored", "true");
+    expect(restored).toHaveAttribute("data-route-position", savedPosition);
+    expect(restored).toHaveAttribute(
+      "data-journey-checkpoint-position",
+      savedPosition,
+    );
+    expect(routeGeometryFingerprint(second.container)).toEqual(savedGeometry);
+    animation.run(86_400_000);
+    expect(restored).toHaveAttribute("data-route-position", savedPosition);
+    animation.run(86_400_100);
+    expect(
+      Number.parseFloat(restored.dataset.routePosition!),
+    ).toBeCloseTo(Number.parseFloat(savedPosition!) + 2.4, 3);
+  });
+
+  it("keeps station phases out of lifecycle checkpoints and resumes safely after departure", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=station-resume&train-cruise-speed=96&train-station-trigger=approach",
+    );
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const first = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world =
+      first.container.querySelector<HTMLElement>(".train-layout-world")!;
+    const firstStation = world.dataset.stationEventId;
+    const unsafeStates = new Set([
+      "approach",
+      "decelerate",
+      "platform",
+      "dwell",
+      "depart",
+    ]);
+    const observedUnsafeStates = new Set<string>();
+    let timestamp = 0;
+
+    animation.run(timestamp);
+    for (
+      let frame = 0;
+      frame < 400 &&
+      !(
+        world.dataset.stationState === "cruise" &&
+        world.dataset.stationEventId !== firstStation
+      );
+      frame++
+    ) {
+      const state = world.dataset.stationState!;
+      if (unsafeStates.has(state) && !observedUnsafeStates.has(state)) {
+        observedUnsafeStates.add(state);
+        act(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+        expect(localStorage.getItem(TRAIN_JOURNEY_STORAGE_KEY)).toBeNull();
+      }
+      timestamp += 250;
+      animation.run(timestamp);
+    }
+
+    expect(observedUnsafeStates).toEqual(unsafeStates);
+    expect(world).toHaveAttribute("data-station-state", "cruise");
+    act(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    const checkpoint = JSON.parse(
+      localStorage.getItem(TRAIN_JOURNEY_STORAGE_KEY)!,
+    ) as TrainJourneySnapshot;
+    expect(checkpoint.routePosition).toBe(
+      Number.parseFloat(world.dataset.routePosition!),
+    );
+
+    first.unmount();
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=station-resume&train-cruise-speed=96",
+    );
+    const second = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const restored =
+      second.container.querySelector<HTMLElement>(".train-layout-world")!;
+    expect(restored).toHaveAttribute("data-journey-restored", "true");
+    expect(restored).toHaveAttribute("data-station-state", "cruise");
+    expect(restored).toHaveAttribute(
+      "data-route-position",
+      `${checkpoint.routePosition.toFixed(3)}px`,
+    );
+  });
+
+  it("falls back deterministically when a valid-schema checkpoint is not station-safe", () => {
+    localStorage.setItem(
+      TRAIN_JOURNEY_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        seedVersion: "tmact-train-route-v1",
+        routeSeed: "unsafe-station-checkpoint",
+        routePosition: 3_680,
+      }),
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    expect(world).toHaveAttribute(
+      "data-route-seed",
+      "unsafe-station-checkpoint",
+    );
+    expect(world).toHaveAttribute("data-journey-restored", "false");
+    expect(world).toHaveAttribute("data-route-position", "0.000px");
+    expect(world).toHaveAttribute("data-station-state", "cruise");
+  });
+
+  it("persists and restores the discrete reduced-motion checkpoint", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    mockReducedMotion();
+    mockVisibility();
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=reduced-resume",
+    );
+    const first = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world =
+      first.container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    act(() =>
+      vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS * 2),
+    );
+    const checkpointPosition = world.dataset.routePosition;
+    expect(Number.parseFloat(checkpointPosition!)).toBeGreaterThan(0);
+    act(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    first.unmount();
+
+    const second = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const restored =
+      second.container.querySelector<HTMLElement>(".train-layout-world")!;
+    expect(restored).toHaveAttribute("data-motion", "reduced");
+    expect(restored).toHaveAttribute("data-journey-restored", "true");
+    expect(restored).toHaveAttribute("data-route-position", checkpointPosition);
   });
 
   it("completes a deterministic journey across regions, station, resize, theme switch, and remount", () => {
