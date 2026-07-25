@@ -9,30 +9,33 @@ import {
   TRAIN_PARALLAX_LAYERS,
   TRAIN_REGION_CHUNK_LENGTH,
   TRAIN_ROUTE_CHUNK_WIDTH,
+  type TrainRegionName,
 } from "./trainRoute";
 import {
   TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_SPACING_PX,
+  TRAIN_REGION_OPEN_VIEW_TARGET,
   TRAIN_REGION_SCENERY_PROFILES,
   TRAIN_SCENERY_ASSETS,
   TRAIN_SCENERY_BRIDGES,
   TRAIN_SCENERY_BUILDINGS,
   TRAIN_SCENERY_CLOUDS,
   TRAIN_SCENERY_COASTS,
+  TRAIN_SCENERY_LANDMARKS,
   TRAIN_SCENERY_PROPS,
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
   trainCloudPlacementsForChunk,
+  trainRegionCompositionForChunk,
   trainSceneryPlacementsForChunk,
   trainSceneryScale,
   type TrainRegionSceneryProfile,
 } from "./trainScenery";
 
 function cloudLine(seed: string, firstIndex: number, lastIndex: number) {
-  return Array.from(
-    { length: lastIndex - firstIndex + 1 },
-    (_, offset) => generateRouteChunk(seed, firstIndex + offset),
+  return Array.from({ length: lastIndex - firstIndex + 1 }, (_, offset) =>
+    generateRouteChunk(seed, firstIndex + offset),
   )
     .flatMap((chunk) =>
       trainCloudPlacementsForChunk(chunk).map((placement) => ({
@@ -44,16 +47,47 @@ function cloudLine(seed: string, firstIndex: number, lastIndex: number) {
     .sort((left, right) => left.routePositionPx! - right.routePositionPx!);
 }
 
+const REGION_LANDMARK_IDS = {
+  forest: "landmark-forest-clearing",
+  mountain: "landmark-mountain-lookout",
+  town: "landmark-town-church",
+  coast: "landmark-coast-lighthouse",
+  industrial: "landmark-industrial-gantry",
+} as const satisfies Record<TrainRegionName, string>;
+
+function regionChunks(seed: string, regionIndex: number) {
+  return Array.from({ length: TRAIN_REGION_CHUNK_LENGTH }, (_, offset) =>
+    generateRouteChunk(seed, regionIndex * TRAIN_REGION_CHUNK_LENGTH + offset),
+  );
+}
+
+function regionSignature(seed: string, firstIndex: number, lastIndex: number) {
+  return Array.from({ length: lastIndex - firstIndex + 1 }, (_, offset) =>
+    generateRouteChunk(seed, firstIndex + offset),
+  ).map((chunk) => ({
+    index: chunk.index,
+    region: chunk.region,
+    composition: trainRegionCompositionForChunk(chunk),
+    layers: TRAIN_PARALLAX_LAYERS.map((layer) =>
+      trainSceneryPlacementsForChunk(layer.name, chunk).map(
+        (placement) =>
+          `${placement.asset.id}:${placement.landmark}:${placement.offsetPercent.toFixed(3)}`,
+      ),
+    ),
+  }));
+}
+
 describe("train scenery asset kit", () => {
   it("records the complete reusable kit and rendering metadata", () => {
     expect(TRAIN_SCENERY_CLOUDS).toHaveLength(3);
     expect(TRAIN_SCENERY_TERRAIN).toHaveLength(3);
     expect(TRAIN_SCENERY_VEGETATION).toHaveLength(6);
     expect(TRAIN_SCENERY_BUILDINGS).toHaveLength(6);
+    expect(TRAIN_SCENERY_LANDMARKS).toHaveLength(5);
     expect(TRAIN_SCENERY_BRIDGES).toHaveLength(1);
     expect(TRAIN_SCENERY_COASTS).toHaveLength(1);
     expect(TRAIN_SCENERY_PROPS).toHaveLength(8);
-    expect(TRAIN_SCENERY_ASSETS).toHaveLength(28);
+    expect(TRAIN_SCENERY_ASSETS).toHaveLength(33);
     expect(new Set(TRAIN_SCENERY_ASSETS.map((asset) => asset.id)).size).toBe(
       TRAIN_SCENERY_ASSETS.length,
     );
@@ -134,9 +168,7 @@ describe("train scenery asset kit", () => {
             profile.landmark?.layer === layer.name &&
             profile.landmark.assetIds.includes(placement.asset.id);
           expect(
-            isAllowedNormal ||
-              isAllowedLandmark ||
-              placement.setPiece !== null,
+            isAllowedNormal || isAllowedLandmark || placement.setPiece !== null,
             `${chunk.region}/${layer.name}/${placement.asset.id}`,
           ).toBe(true);
 
@@ -218,8 +250,7 @@ describe("train scenery asset kit", () => {
           );
           ids.push(
             ...trainSceneryPlacementsForChunk(layer.name, chunk).map(
-              (placement) =>
-                placement.setPiece ? "" : placement.asset.id,
+              (placement) => (placement.setPiece ? "" : placement.asset.id),
             ),
           );
         }
@@ -252,6 +283,197 @@ describe("train scenery asset kit", () => {
     }
   });
 
+  it("gives every region a distinct daytime profile and landmark vocabulary", () => {
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.forest.layers.midground.assetIds,
+    ).toEqual([
+      "vegetation-conifer-tall",
+      "vegetation-conifer-squat",
+      "vegetation-deciduous",
+      "vegetation-hedgerow",
+    ]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.mountain.layers.midground.assetIds,
+    ).toEqual([
+      "vegetation-conifer-tall",
+      "vegetation-conifer-squat",
+      "vegetation-coastal-pine",
+    ]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.town.layers.midground.assetIds,
+    ).toEqual([
+      "building-rowhouse",
+      "building-apartments",
+      "building-cottage",
+      "vegetation-deciduous",
+      "vegetation-hedgerow",
+    ]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.coast.layers.midground.assetIds,
+    ).toEqual([
+      "vegetation-coastal-pine",
+      "vegetation-reeds",
+      "vegetation-hedgerow",
+      "building-cottage",
+    ]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.industrial.layers.midground.assetIds,
+    ).toEqual([
+      "building-workshop",
+      "building-warehouse",
+      "building-water-tower",
+    ]);
+
+    for (const [region, landmarkID] of Object.entries(REGION_LANDMARK_IDS) as [
+      TrainRegionName,
+      string,
+    ][]) {
+      const profile = TRAIN_REGION_SCENERY_PROFILES[region];
+      expect(profile.landmark).toMatchObject({
+        layer: "midground",
+        assetIds: [landmarkID],
+        maxPerRegion: 1,
+        spanChunks: 2,
+        edgeClearanceChunks: 1,
+      });
+      expect(profile.landmark.probability).toBeGreaterThan(0.45);
+      expect(profile.landmark.probability).toBeLessThan(0.65);
+    }
+  });
+
+  it("keeps landmarks rare, region-owned, and capped at one major asset per region", () => {
+    const regionCounts = new Map<TrainRegionName, number>();
+    const landmarkCounts = new Map<TrainRegionName, number>();
+
+    for (const seed of [
+      "regional-day-a",
+      "regional-day-b",
+      "regional-day-c",
+      "regional-day-d",
+      "regional-day-e",
+      "regional-day-f",
+    ]) {
+      for (let regionIndex = -48; regionIndex <= 48; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1);
+        const landmarks = chunks.flatMap((chunk) =>
+          trainSceneryPlacementsForChunk("midground", chunk).filter(
+            (placement) => placement.landmark,
+          ),
+        );
+        expect(
+          landmarks.length,
+          `${seed}/${regionIndex}/${region}`,
+        ).toBeLessThanOrEqual(1);
+        for (const placement of landmarks) {
+          expect(placement.asset.id).toBe(REGION_LANDMARK_IDS[region]);
+        }
+        if (landmarks.length === 1) {
+          landmarkCounts.set(region, (landmarkCounts.get(region) ?? 0) + 1);
+        }
+      }
+    }
+
+    for (const region of Object.keys(
+      REGION_LANDMARK_IDS,
+    ) as TrainRegionName[]) {
+      const regions = regionCounts.get(region) ?? 0;
+      const landmarks = landmarkCounts.get(region) ?? 0;
+      expect(regions, region).toBeGreaterThan(40);
+      expect(landmarks, region).toBeGreaterThan(regions * 0.12);
+      expect(landmarks, region).toBeLessThan(regions * 0.75);
+    }
+  });
+
+  it("reserves landmark spans before filler and alternates them with open views", () => {
+    for (const seed of ["composition-a", "composition-b", "composition-c"]) {
+      for (let regionIndex = -60; regionIndex <= 60; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const compositions = chunks.map((chunk) =>
+          trainRegionCompositionForChunk(chunk),
+        );
+        const openOffsets = compositions.flatMap((composition, offset) =>
+          composition === "open" ? [offset] : [],
+        );
+        expect(
+          openOffsets.length,
+          `${seed}/${regionIndex}`,
+        ).toBeGreaterThanOrEqual(1);
+        expect(
+          openOffsets.length,
+          `${seed}/${regionIndex}`,
+        ).toBeLessThanOrEqual(TRAIN_REGION_OPEN_VIEW_TARGET);
+        for (let index = 1; index < openOffsets.length; index++) {
+          expect(
+            openOffsets[index]! - openOffsets[index - 1]!,
+          ).toBeGreaterThanOrEqual(2);
+        }
+
+        for (const chunk of chunks) {
+          const composition = trainRegionCompositionForChunk(chunk);
+          const midground = trainSceneryPlacementsForChunk("midground", chunk);
+          const near = trainSceneryPlacementsForChunk("near", chunk);
+          if (composition === "open") {
+            expect(midground, `${seed}/${chunk.index}/midground`).toEqual([]);
+          }
+          if (composition === "landmark") {
+            expect(chunk.setPiece).toBeNull();
+            expect(near, `${seed}/${chunk.index}/near`).toEqual([]);
+            expect(midground.length).toBeLessThanOrEqual(1);
+            expect(midground.every((placement) => placement.landmark)).toBe(
+              true,
+            );
+          }
+        }
+
+        const landmarkOffsets = compositions.flatMap((composition, offset) =>
+          composition === "landmark" ? [offset] : [],
+        );
+        if (landmarkOffsets.length > 0) {
+          expect(landmarkOffsets).toHaveLength(2);
+          const first = landmarkOffsets[0]!;
+          const last = landmarkOffsets.at(-1)!;
+          for (
+            let offset = Math.max(0, first - 1);
+            offset <= Math.min(chunks.length - 1, last + 1);
+            offset++
+          ) {
+            expect(chunks[offset]!.setPiece).toBeNull();
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps composition deterministic across calls and varied across seeds", () => {
+    const first = regionSignature("day-composition-a", -240, 240);
+    expect(regionSignature("day-composition-a", -240, 240)).toEqual(first);
+    expect(regionSignature("day-composition-b", -240, 240)).not.toEqual(first);
+  });
+
+  it("does not increase the established long-route scenery node bound", () => {
+    let maximumNodes = 0;
+    for (const seed of ["bounded-day-a", "bounded-day-b", "bounded-day-c"]) {
+      for (let index = -900; index <= 900; index++) {
+        const chunk = generateRouteChunk(seed, index);
+        const nodeCount = TRAIN_PARALLAX_LAYERS.reduce(
+          (total, layer) =>
+            total +
+            trainSceneryPlacementsForChunk(layer.name, chunk).reduce(
+              (layerTotal, placement) =>
+                layerTotal + 1 + (placement.asset.emissive ? 1 : 0),
+              0,
+            ),
+          0,
+        );
+        maximumNodes = Math.max(maximumNodes, nodeCount);
+        expect(nodeCount, `${seed}/${index}`).toBeLessThanOrEqual(9);
+      }
+    }
+    expect(maximumNodes).toBeGreaterThanOrEqual(7);
+  });
+
   it("builds deterministic region-scale cloud plans that vary by seed", () => {
     const first = cloudLine("natural-clouds-a", -90, 90);
     const repeated = cloudLine("natural-clouds-a", -90, 90);
@@ -259,14 +481,12 @@ describe("train scenery asset kit", () => {
 
     expect(repeated).toEqual(first);
     expect(secondSeed).not.toEqual(first);
-    expect(
-      new Set(first.map((placement) => placement.asset.id)),
-    ).toEqual(
+    expect(new Set(first.map((placement) => placement.asset.id))).toEqual(
       new Set(["cloud-cumulus", "cloud-wisp", "cloud-storm"]),
     );
-    expect(
-      new Set(first.map((placement) => placement.cloudPattern)),
-    ).toEqual(new Set(["open", "grouped", "scattered"]));
+    expect(new Set(first.map((placement) => placement.cloudPattern))).toEqual(
+      new Set(["open", "grouped", "scattered"]),
+    );
   });
 
   it("varies cloud altitude, scale, spacing, density, gaps, and loose groups across seeds", () => {
@@ -298,11 +518,13 @@ describe("train scenery asset kit", () => {
       TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
     );
     expect(Math.max(...altitudes) - Math.min(...altitudes)).toBeGreaterThan(28);
-    expect(new Set(altitudes.map((value) => value.toFixed(1))).size).toBeGreaterThan(
-      100,
-    );
+    expect(
+      new Set(altitudes.map((value) => value.toFixed(1))).size,
+    ).toBeGreaterThan(100);
     expect(Math.max(...scales) - Math.min(...scales)).toBeGreaterThan(0.3);
-    expect(new Set(offsets.map((value) => Math.floor(value / 10))).size).toBe(10);
+    expect(new Set(offsets.map((value) => Math.floor(value / 10))).size).toBe(
+      10,
+    );
     expect(Math.min(...spacings)).toBeGreaterThanOrEqual(
       TRAIN_CLOUD_MIN_SPACING_PX,
     );
@@ -319,11 +541,8 @@ describe("train scenery asset kit", () => {
       for (let index = 1; index < samples.length; index++) {
         const previous = samples[index - 1]!;
         const current = samples[index]!;
-        const spacing =
-          current.routePositionPx! - previous.routePositionPx!;
-        expect(spacing).toBeGreaterThanOrEqual(
-          TRAIN_CLOUD_MIN_SPACING_PX,
-        );
+        const spacing = current.routePositionPx! - previous.routePositionPx!;
+        expect(spacing).toBeGreaterThanOrEqual(TRAIN_CLOUD_MIN_SPACING_PX);
         expect(spacing).toBeGreaterThanOrEqual(
           previous.collisionWidth / 2 + current.collisionWidth / 2,
         );

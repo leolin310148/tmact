@@ -138,7 +138,7 @@ and safety properties established by the archived queue remain the baseline.
   bounded-DOM tests. Inspect every region in day and night at compact and wide
   sizes with `borz`, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-032 — Redesign daytime regional compositions and landmarks.**
+- [x] **TRAIN-032 — Redesign daytime regional compositions and landmarks.**
   Rebalance forest, mountain, town, coast, and industrial profiles around the
   revised asset kit so each region has a readable daytime identity rather than
   the same dark silhouettes in different combinations. Add one restrained,

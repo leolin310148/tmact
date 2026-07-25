@@ -15,6 +15,11 @@ import cloudCumulusUrl from "../assets/train-theme/sprites/scenery/cloud-cumulus
 import cloudStormUrl from "../assets/train-theme/sprites/scenery/cloud-storm.png";
 import cloudWispUrl from "../assets/train-theme/sprites/scenery/cloud-wisp.png";
 import coastShoreUrl from "../assets/train-theme/sprites/scenery/coast-shore.png";
+import landmarkCoastLighthouseUrl from "../assets/train-theme/sprites/scenery/landmark-coast-lighthouse.png";
+import landmarkForestClearingUrl from "../assets/train-theme/sprites/scenery/landmark-forest-clearing.png";
+import landmarkIndustrialGantryUrl from "../assets/train-theme/sprites/scenery/landmark-industrial-gantry.png";
+import landmarkMountainLookoutUrl from "../assets/train-theme/sprites/scenery/landmark-mountain-lookout.png";
+import landmarkTownChurchUrl from "../assets/train-theme/sprites/scenery/landmark-town-church.png";
 import propCrossingMarkerUrl from "../assets/train-theme/sprites/scenery/prop-crossing-marker.png";
 import propFenceUrl from "../assets/train-theme/sprites/scenery/prop-fence.png";
 import propLampPostUrl from "../assets/train-theme/sprites/scenery/prop-lamp-post.png";
@@ -45,13 +50,7 @@ import {
 } from "./trainRoute";
 
 export type TrainSceneryCategory =
-  | "cloud"
-  | "terrain"
-  | "vegetation"
-  | "building"
-  | "bridge"
-  | "coast"
-  | "prop";
+  "cloud" | "terrain" | "vegetation" | "building" | "bridge" | "coast" | "prop";
 
 export type TrainSceneryAnchor = "center" | "bottom-center";
 
@@ -367,6 +366,74 @@ export const TRAIN_SCENERY_BUILDINGS = [
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
 
+export const TRAIN_SCENERY_LANDMARKS = [
+  asset({
+    id: "landmark-forest-clearing",
+    fileName: "landmark-forest-clearing.png",
+    src: landmarkForestClearingUrl,
+    category: "vegetation",
+    layer: "midground",
+    anchor: "bottom-center",
+    width: 192,
+    height: 96,
+    collisionWidth: 176,
+    safeScale: [0.62, 0.82],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "landmark-mountain-lookout",
+    fileName: "landmark-mountain-lookout.png",
+    src: landmarkMountainLookoutUrl,
+    category: "building",
+    layer: "midground",
+    anchor: "bottom-center",
+    width: 176,
+    height: 104,
+    collisionWidth: 160,
+    safeScale: [0.58, 0.78],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "landmark-town-church",
+    fileName: "landmark-town-church.png",
+    src: landmarkTownChurchUrl,
+    category: "building",
+    layer: "midground",
+    anchor: "bottom-center",
+    width: 168,
+    height: 112,
+    collisionWidth: 150,
+    safeScale: [0.58, 0.78],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "landmark-coast-lighthouse",
+    fileName: "landmark-coast-lighthouse.png",
+    src: landmarkCoastLighthouseUrl,
+    category: "building",
+    layer: "midground",
+    anchor: "bottom-center",
+    width: 184,
+    height: 112,
+    collisionWidth: 160,
+    safeScale: [0.58, 0.78],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "landmark-industrial-gantry",
+    fileName: "landmark-industrial-gantry.png",
+    src: landmarkIndustrialGantryUrl,
+    category: "building",
+    layer: "midground",
+    anchor: "bottom-center",
+    width: 200,
+    height: 96,
+    collisionWidth: 184,
+    safeScale: [0.6, 0.82],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+] as const satisfies readonly TrainSceneryAsset[];
+
 export const TRAIN_SCENERY_BRIDGES = [
   asset({
     id: "bridge-truss",
@@ -544,6 +611,7 @@ export const TRAIN_SCENERY_ASSETS = [
   ...TRAIN_SCENERY_TERRAIN,
   ...TRAIN_SCENERY_VEGETATION,
   ...TRAIN_SCENERY_BUILDINGS,
+  ...TRAIN_SCENERY_LANDMARKS,
   ...TRAIN_SCENERY_BRIDGES,
   ...TRAIN_SCENERY_COASTS,
   ...TRAIN_SCENERY_PROPS,
@@ -562,13 +630,20 @@ export interface TrainRegionSceneryProfile {
   layers: Readonly<
     Partial<Record<TrainParallaxLayerName, TrainRegionLayerRule>>
   >;
-  landmark?: {
+  landmark: {
     layer: TrainParallaxLayerName;
     assetIds: readonly string[];
     probability: number;
     maxPerRegion: 1;
+    spanChunks: 2;
+    edgeClearanceChunks: 1;
   };
 }
+
+export type TrainRegionComposition =
+  "dense" | "open" | "landmark" | "set-piece";
+
+export const TRAIN_REGION_OPEN_VIEW_TARGET = 2;
 
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
 export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
@@ -610,18 +685,26 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-deciduous",
           "vegetation-hedgerow",
         ],
-        density: 1.35,
+        density: 1.65,
         maxPerChunk: 2,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.forest,
-        density: 0.38,
+        density: 0.34,
         maxPerChunk: 1,
         minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
         cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["landmark-forest-clearing"],
+      probability: 0.54,
+      maxPerRegion: 1,
+      spanChunks: 2,
+      edgeClearanceChunks: 1,
     },
   },
   mountain: {
@@ -654,18 +737,26 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-conifer-squat",
           "vegetation-coastal-pine",
         ],
-        density: 0.72,
+        density: 0.64,
         maxPerChunk: 1,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.mountain,
-        density: 0.3,
+        density: 0.26,
         maxPerChunk: 1,
         minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
         cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["landmark-mountain-lookout"],
+      probability: 0.52,
+      maxPerRegion: 1,
+      spanChunks: 2,
+      edgeClearanceChunks: 1,
     },
   },
   town: {
@@ -700,18 +791,26 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-deciduous",
           "vegetation-hedgerow",
         ],
-        density: 1.5,
+        density: 1.7,
         maxPerChunk: 2,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.town,
-        density: 0.46,
+        density: 0.42,
         maxPerChunk: 1,
         minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
         cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["landmark-town-church"],
+      probability: 0.6,
+      maxPerRegion: 1,
+      spanChunks: 2,
+      edgeClearanceChunks: 1,
     },
   },
   coast: {
@@ -745,18 +844,26 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-hedgerow",
           "building-cottage",
         ],
-        density: 0.78,
+        density: 0.62,
         maxPerChunk: 1,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.coast,
-        density: 0.32,
+        density: 0.28,
         maxPerChunk: 1,
         minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
         cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
+    },
+    landmark: {
+      layer: "midground",
+      assetIds: ["landmark-coast-lighthouse"],
+      probability: 0.56,
+      maxPerRegion: 1,
+      spanChunks: 2,
+      edgeClearanceChunks: 1,
     },
   },
   industrial: {
@@ -787,16 +894,16 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         assetIds: [
           "building-workshop",
           "building-warehouse",
-          "building-apartments",
+          "building-water-tower",
         ],
-        density: 1.42,
+        density: 1.52,
         maxPerChunk: 2,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.industrial,
-        density: 0.5,
+        density: 0.46,
         maxPerChunk: 1,
         minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
         cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
@@ -804,9 +911,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
     },
     landmark: {
       layer: "midground",
-      assetIds: ["building-water-tower"],
-      probability: 0.58,
+      assetIds: ["landmark-industrial-gantry"],
+      probability: 0.55,
       maxPerRegion: 1,
+      spanChunks: 2,
+      edgeClearanceChunks: 1,
     },
   },
 } as const satisfies Record<TrainRegionName, TrainRegionSceneryProfile>;
@@ -1038,8 +1147,7 @@ function cloudCandidate(
     altitudePercent:
       TRAIN_CLOUD_MIN_ALTITUDE_PERCENT +
       trainRouteRandomUnit(`${key}:altitude`) *
-        (TRAIN_CLOUD_MAX_ALTITUDE_PERCENT -
-          TRAIN_CLOUD_MIN_ALTITUDE_PERCENT),
+        (TRAIN_CLOUD_MAX_ALTITUDE_PERCENT - TRAIN_CLOUD_MIN_ALTITUDE_PERCENT),
     scaleUnit: trainRouteRandomUnit(`${key}:scale`),
     group,
   };
@@ -1068,12 +1176,9 @@ function cloudCandidatesForRegion(
   );
   const width = maximum - minimum;
   const gapWidth =
-    width *
-    (0.18 + trainRouteRandomUnit(`${key}:gap-width`) * 0.15);
+    width * (0.18 + trainRouteRandomUnit(`${key}:gap-width`) * 0.15);
   const groupCenter =
-    minimum +
-    width *
-      (0.2 + trainRouteRandomUnit(`${key}:group-center`) * 0.6);
+    minimum + width * (0.2 + trainRouteRandomUnit(`${key}:group-center`) * 0.6);
   const gapCenter =
     pattern === "grouped"
       ? groupCenter < minimum + width / 2
@@ -1098,8 +1203,7 @@ function cloudCandidatesForRegion(
       trainRouteRandomUnit(`${key}:group-spacing`) * 44;
     for (let groupOffset = 0; groupOffset < groupSize; groupOffset++) {
       const routePositionPx =
-        groupCenter +
-        (groupOffset - (groupSize - 1) / 2) * groupSpacing;
+        groupCenter + (groupOffset - (groupSize - 1) / 2) * groupSpacing;
       if (
         routePositionPx >= minimum &&
         routePositionPx <= maximum &&
@@ -1195,23 +1299,23 @@ function cloudPlacementsForRegion(
       CLOUD_IDS.length,
     );
     const assetID =
-      Array.from({ length: CLOUD_IDS.length }, (_, offset) =>
-        CLOUD_IDS[positiveModulo(start + offset, CLOUD_IDS.length)]!,
+      Array.from(
+        { length: CLOUD_IDS.length },
+        (_, offset) =>
+          CLOUD_IDS[positiveModulo(start + offset, CLOUD_IDS.length)]!,
       ).find((id) => !blockedIDs.includes(id)) ?? CLOUD_IDS[start]!;
     const resolvedAsset = assetForID(assetID);
     previousAsset = resolvedAsset;
     const [minimumScale, maximumScale] = resolvedAsset.safeScale;
     const scale =
-      minimumScale +
-      candidate.scaleUnit * (maximumScale - minimumScale);
+      minimumScale + candidate.scaleUnit * (maximumScale - minimumScale);
     const chunkIndex = Math.floor(
       candidate.routePositionPx / TRAIN_ROUTE_CHUNK_WIDTH,
     );
     return {
       asset: resolvedAsset,
       offsetPercent:
-        ((candidate.routePositionPx -
-          chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH) /
+        ((candidate.routePositionPx - chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH) /
           TRAIN_ROUTE_CHUNK_WIDTH) *
         100,
       scale,
@@ -1285,6 +1389,206 @@ function nearTrackCandidateCount(
   );
 }
 
+interface TrainRegionLandmarkPlan {
+  startOffset: number;
+  endOffset: number;
+  placementOffset: number;
+  assetIds: readonly string[];
+}
+
+interface TrainRegionCompositionPlan {
+  landmark: TrainRegionLandmarkPlan | null;
+  openViewOffsets: readonly number[];
+  setPieces: readonly (TrainSetPieceSegment | null)[];
+}
+
+const TRAIN_REGION_COMPOSITION_CACHE_LIMIT = 64;
+const trainRegionCompositionCache = new Map<
+  string,
+  TrainRegionCompositionPlan
+>();
+
+function regionSetPieceAtOffset(
+  routeSeed: string,
+  regionIndex: number,
+  regionOffset: number,
+  seedVersion: string,
+): TrainSetPieceSegment | null {
+  return trainRouteSetPieceForChunk(
+    routeSeed,
+    regionIndex * TRAIN_REGION_CHUNK_LENGTH + regionOffset,
+    seedVersion,
+  );
+}
+
+function regionLandmarkPlan(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+  profile: TrainRegionSceneryProfile,
+  setPieces: readonly (TrainSetPieceSegment | null)[],
+): TrainRegionLandmarkPlan | null {
+  const { landmark } = profile;
+  const key =
+    `${seedVersion}:${routeSeed}:region-plan:` + `${regionIndex}:landmark`;
+  if (trainRouteRandomUnit(`${key}:enabled`) >= landmark.probability) {
+    return null;
+  }
+
+  const firstStart = landmark.edgeClearanceChunks;
+  const lastStart =
+    TRAIN_REGION_CHUNK_LENGTH -
+    landmark.edgeClearanceChunks -
+    landmark.spanChunks;
+  const candidates = Array.from(
+    { length: Math.max(0, lastStart - firstStart + 1) },
+    (_, index) => firstStart + index,
+  )
+    .filter((startOffset) => {
+      const endOffset = startOffset + landmark.spanChunks - 1;
+      const clearanceStart = Math.max(0, startOffset - 1);
+      const clearanceEnd = Math.min(
+        TRAIN_REGION_CHUNK_LENGTH - 1,
+        endOffset + 1,
+      );
+      for (
+        let regionOffset = clearanceStart;
+        regionOffset <= clearanceEnd;
+        regionOffset++
+      ) {
+        if (setPieces[regionOffset]) {
+          return false;
+        }
+      }
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        trainRouteRandomUnit(`${key}:candidate:${left}`) -
+        trainRouteRandomUnit(`${key}:candidate:${right}`),
+    );
+
+  const startOffset = candidates[0];
+  if (startOffset === undefined) return null;
+  return {
+    startOffset,
+    endOffset: startOffset + landmark.spanChunks - 1,
+    placementOffset: startOffset + Math.floor((landmark.spanChunks - 1) / 2),
+    assetIds: landmark.assetIds,
+  };
+}
+
+function regionOpenViewOffsets(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+  landmark: TrainRegionLandmarkPlan | null,
+  setPieces: readonly (TrainSetPieceSegment | null)[],
+): readonly number[] {
+  const key =
+    `${seedVersion}:${routeSeed}:region-plan:` + `${regionIndex}:open-view`;
+  const candidates = Array.from(
+    { length: TRAIN_REGION_CHUNK_LENGTH - 2 },
+    (_, index) => index + 1,
+  )
+    .filter(
+      (regionOffset) =>
+        !setPieces[regionOffset] &&
+        !(
+          landmark &&
+          regionOffset >= landmark.startOffset &&
+          regionOffset <= landmark.endOffset
+        ),
+    )
+    .sort(
+      (left, right) =>
+        trainRouteRandomUnit(`${key}:candidate:${left}`) -
+        trainRouteRandomUnit(`${key}:candidate:${right}`),
+    );
+  const selected: number[] = [];
+  for (const candidate of candidates) {
+    if (selected.every((offset) => Math.abs(offset - candidate) >= 2)) {
+      selected.push(candidate);
+    }
+    if (selected.length === TRAIN_REGION_OPEN_VIEW_TARGET) break;
+  }
+  return selected.sort((left, right) => left - right);
+}
+
+function regionCompositionPlan(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+  profile: TrainRegionSceneryProfile,
+): TrainRegionCompositionPlan {
+  const key = `${seedVersion}:${routeSeed}:${regionIndex}`;
+  const cached = trainRegionCompositionCache.get(key);
+  if (cached) {
+    trainRegionCompositionCache.delete(key);
+    trainRegionCompositionCache.set(key, cached);
+    return cached;
+  }
+
+  const setPieces = Array.from(
+    { length: TRAIN_REGION_CHUNK_LENGTH },
+    (_, regionOffset) =>
+      regionSetPieceAtOffset(routeSeed, regionIndex, regionOffset, seedVersion),
+  );
+  const landmark = regionLandmarkPlan(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+    profile,
+    setPieces,
+  );
+  const plan = {
+    landmark,
+    openViewOffsets: regionOpenViewOffsets(
+      routeSeed,
+      regionIndex,
+      seedVersion,
+      landmark,
+      setPieces,
+    ),
+    setPieces,
+  };
+  trainRegionCompositionCache.set(key, plan);
+  if (trainRegionCompositionCache.size > TRAIN_REGION_COMPOSITION_CACHE_LIMIT) {
+    const oldestKey = trainRegionCompositionCache.keys().next().value;
+    if (oldestKey !== undefined) trainRegionCompositionCache.delete(oldestKey);
+  }
+  return plan;
+}
+
+function regionCompositionAtOffset(
+  regionOffset: number,
+  plan: TrainRegionCompositionPlan,
+): TrainRegionComposition {
+  if (plan.setPieces[regionOffset]) return "set-piece";
+  if (
+    plan.landmark &&
+    regionOffset >= plan.landmark.startOffset &&
+    regionOffset <= plan.landmark.endOffset
+  ) {
+    return "landmark";
+  }
+  return plan.openViewOffsets.includes(regionOffset) ? "open" : "dense";
+}
+
+export function trainRegionCompositionForChunk(
+  chunk: RouteChunk,
+): TrainRegionComposition {
+  const profile: TrainRegionSceneryProfile =
+    TRAIN_REGION_SCENERY_PROFILES[chunk.region];
+  const plan = regionCompositionPlan(
+    chunk.routeSeed,
+    chunk.regionIndex,
+    chunk.seedVersion,
+    profile,
+  );
+  return regionCompositionAtOffset(chunk.regionChunkOffset, plan);
+}
+
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
@@ -1297,20 +1601,13 @@ function regionLayerPlan(
   const regionKey =
     `${chunk.seedVersion}:${chunk.routeSeed}:region-plan:` +
     `${chunk.regionIndex}:${layer}`;
-  const landmark =
-    profile.landmark?.layer === layer &&
-    trainRouteRandomUnit(`${regionKey}:landmark:enabled`) <
-      profile.landmark.probability
-      ? {
-          offset:
-            2 +
-            Math.floor(
-              trainRouteRandomUnit(`${regionKey}:landmark:offset`) *
-                (TRAIN_REGION_CHUNK_LENGTH - 4),
-            ),
-          assetIds: profile.landmark.assetIds,
-        }
-      : null;
+  const compositionPlan = regionCompositionPlan(
+    chunk.routeSeed,
+    chunk.regionIndex,
+    chunk.seedVersion,
+    profile,
+  );
+  const { landmark } = compositionPlan;
   const previousRegion =
     layer === "near"
       ? trainRegionAtIndex(
@@ -1328,27 +1625,62 @@ function regionLayerPlan(
       : [];
   const plan: TrainSceneryPlacement[][] = [];
 
-  for (let localOffset = 0; localOffset < TRAIN_REGION_CHUNK_LENGTH; localOffset++) {
+  for (
+    let localOffset = 0;
+    localOffset < TRAIN_REGION_CHUNK_LENGTH;
+    localOffset++
+  ) {
     const chunkKey = `${regionKey}:chunk:${localOffset}`;
-    const setPiece = trainRouteSetPieceForChunk(
-      chunk.routeSeed,
-      chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset,
-      chunk.seedVersion,
-    );
+    const setPiece = compositionPlan.setPieces[localOffset] ?? null;
     if (setPiece?.reservedLayers.includes(layer)) {
       const placement = setPiecePlacement(setPiece, layer);
       plan.push(placement ? [placement] : []);
       continue;
     }
-    const isLandmark = landmark?.offset === localOffset;
-    const assetIds = isLandmark ? landmark.assetIds : rule.assetIds;
-    const candidateCount = isLandmark
-      ? 1
-      : objectCount(
-          rule.density,
-          rule.maxPerChunk,
-          trainRouteRandomUnit(`${chunkKey}:density`),
-        );
+    const composition = regionCompositionAtOffset(localOffset, compositionPlan);
+    if (
+      composition === "landmark" &&
+      landmark &&
+      (layer === profile.landmark.layer || layer === "near")
+    ) {
+      if (
+        layer !== profile.landmark.layer ||
+        localOffset !== landmark.placementOffset
+      ) {
+        plan.push([]);
+        continue;
+      }
+      const landmarkAsset = chooseAsset(
+        landmark.assetIds,
+        trainRouteRandomUnit(`${chunkKey}:asset:0`),
+        [],
+      );
+      const landmarkVariant = Math.floor(
+        trainRouteRandomUnit(`${chunkKey}:variant:0`) * 5,
+      );
+      const landmarkScale = trainSceneryScale(landmarkAsset, landmarkVariant);
+      plan.push([
+        {
+          asset: landmarkAsset,
+          offsetPercent: 75,
+          scale: landmarkScale,
+          collisionWidth: landmarkAsset.collisionWidth * landmarkScale,
+          minimumSpacingPx: 0,
+          landmark: true,
+          setPiece: null,
+        },
+      ]);
+      continue;
+    }
+    if (composition === "open" && layer === "midground") {
+      plan.push([]);
+      continue;
+    }
+    const candidateCount = objectCount(
+      rule.density,
+      rule.maxPerChunk,
+      trainRouteRandomUnit(`${chunkKey}:density`),
+    );
     const absoluteChunkIndex =
       chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset;
     const count =
@@ -1360,15 +1692,13 @@ function regionLayerPlan(
       ) > 0
         ? 0
         : candidateCount;
-    const offsets = isLandmark
-      ? [50]
-      : placementOffsets(
-          count,
-          trainRouteRandomUnit(`${chunkKey}:offset`),
-        );
+    const offsets = placementOffsets(
+      count,
+      trainRouteRandomUnit(`${chunkKey}:offset`),
+    );
     const placements = offsets.map((offsetPercent, ordinal) => {
       const asset = chooseAsset(
-        assetIds,
+        rule.assetIds,
         trainRouteRandomUnit(`${chunkKey}:asset:${ordinal}`),
         recentIDs,
       );
@@ -1384,7 +1714,7 @@ function regionLayerPlan(
         scale,
         collisionWidth: asset.collisionWidth * scale,
         minimumSpacingPx: rule.minimumSpacingPx,
-        landmark: isLandmark,
+        landmark: false,
         setPiece: null,
       };
     });
