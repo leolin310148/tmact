@@ -227,6 +227,18 @@ Approach/dwell and sustained-run screenshots showed no blank edge or station
 occlusion of the fixed controls, and `borz errors --json` reported no page
 errors.
 
+TRAIN-016 track run 2026-07-25: repeated the complete freshness and viewport
+protocol at 390×844, 1280×800, and 2560×900. Each size mounted exactly one
+`.train-world-track` directly under `.train-layout-world`, outside
+`.train-layout-inspection`. Its bounded overscan covered both viewport edges
+at every size, and scrolling train inspection left the track position and DOM
+identity unchanged. During desktop cruise, route and track both advanced
+`28.8px` over a 300ms sample at 96 px/s. Compact and ultrawide dwell samples
+held both at `3680px`; departure resumed without a track edge or discontinuity.
+The ultrawide scene retained 64 bounded parallax chunks, screenshots showed
+continuous wheel alignment and sleepers from compact through ultrawide, and
+`borz errors --json` reported no page errors.
+
 ## Notes Template
 
 ```text

@@ -9,6 +9,7 @@ import {
   minimumCarriagesForWidth,
   trainPaletteContrastRatio,
   trainWorldCruiseSpeed,
+  trainWorldTrackTransform,
   TrainLayout,
 } from "./TrainLayout";
 import {
@@ -162,11 +163,19 @@ describe("TrainLayout", () => {
     const layout = container.querySelector(".train-layout");
     const world = container.querySelector(".train-layout-world");
     const inspection = container.querySelector(".train-layout-inspection");
+    const track = container.querySelector(".train-world-track");
     expect(layout).toContainElement(world as HTMLElement);
     expect(layout).toContainElement(inspection as HTMLElement);
+    expect(world).toContainElement(track as HTMLElement);
     expect(world).toHaveAttribute("data-layer", "world");
     expect(world).toHaveAttribute("data-route-direction", "right");
+    expect(track).toHaveAttribute("data-world-track", "railway");
+    expect(track).toHaveAttribute("data-route-direction", "right");
+    expect(track).toHaveAttribute("data-speed-ratio", "1");
     expect(inspection).toHaveAttribute("data-layer", "train");
+    expect(inspection).not.toContainElement(track as HTMLElement);
+    expect(container.querySelectorAll(".train-world-track")).toHaveLength(1);
+    expect(container.querySelector(".train-layout-track")).not.toBeInTheDocument();
     expect(world?.nextElementSibling).toBe(inspection);
   });
 
@@ -174,6 +183,27 @@ describe("TrainLayout", () => {
     expect(advanceTrainWorldRoutePosition(10, 200)).toBe(12.4);
     expect(advanceTrainWorldRoutePosition(10, 500)).toBe(13);
     expect(advanceTrainWorldRoutePosition(16, -100)).toBe(16);
+  });
+
+  it("wraps the right-moving track transform to one bounded tile", () => {
+    expect(trainWorldTrackTransform(0)).toBe(0);
+    expect(trainWorldTrackTransform(12.4)).toBeCloseTo(12.4);
+    expect(trainWorldTrackTransform(252.4)).toBeCloseTo(12.4);
+    expect(trainWorldTrackTransform(-12)).toBe(228);
+    expect(trainWorldTrackTransform(Number.NaN)).toBe(0);
+  });
+
+  it("shares wheel clearance with one overscanned world-owned track strip", () => {
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout\s*\{[\s\S]*?--train-track-h:\s*19px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-consist\s*\{[\s\S]*?height:\s*calc\(100% - var\(--train-track-h\)\);[\s\S]*?margin-bottom:\s*var\(--train-track-h\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-world-track\s*\{[\s\S]*?z-index:\s*5;[\s\S]*?right:\s*-240px;[\s\S]*?bottom:\s*0;[\s\S]*?left:\s*-240px;[\s\S]*?height:\s*var\(--train-track-h\);[\s\S]*?repeat-x;[\s\S]*?transform:\s*translate3d\(var\(--train-track-transform\), 0, 0\);/,
+    );
+    expect(trainLayoutCss).not.toContain(".train-layout-track");
   });
 
   it("accepts a bounded development cruise-speed override", () => {
@@ -414,6 +444,7 @@ describe("TrainLayout", () => {
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
     const states = new Set<string>([world.dataset.stationState!]);
     const firstStation = world.dataset.stationEventId;
     let timestamp = 0;
@@ -433,10 +464,13 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-station-positional-motion", "stopped");
     expect(world).toHaveAttribute("data-station-ambient", "running");
     const dwellPosition = world.dataset.routePosition;
+    const dwellTrackPosition = track.dataset.trackPosition;
+    expect(dwellTrackPosition).toBe(dwellPosition);
 
     timestamp += 250;
     animation.run(timestamp);
     expect(world.dataset.routePosition).toBe(dwellPosition);
+    expect(track.dataset.trackPosition).toBe(dwellTrackPosition);
 
     for (
       let frame = 0;
@@ -481,20 +515,24 @@ describe("TrainLayout", () => {
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
 
     animation.run(1_000);
     animation.run(1_250);
     const pausedPosition = world.dataset.routePosition;
     const pausedSpeed = world.dataset.stationCurrentSpeed;
+    const pausedTrackPosition = track.dataset.trackPosition;
 
     visibility.set("hidden");
     expect(world).toHaveAttribute("data-motion-state", "suspended");
+    expect(track).toHaveAttribute("data-motion-state", "suspended");
     expect(world).toHaveAttribute("data-station-ambient", "suspended");
     expect(animation.pending()).toBe(0);
 
     visibility.set("visible");
     animation.run(100_000);
     expect(world.dataset.routePosition).toBe(pausedPosition);
+    expect(track.dataset.trackPosition).toBe(pausedTrackPosition);
     expect(world.dataset.stationCurrentSpeed).toBe(pausedSpeed);
     animation.run(100_250);
     expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
@@ -509,6 +547,7 @@ describe("TrainLayout", () => {
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
     const consist = container.querySelector(".train-layout-consist");
 
     animation.run(1_000);
@@ -518,6 +557,11 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-route-position", "2.400px");
     expect(world).toHaveAttribute("data-route-apply-count", "2");
     expect(world).toHaveAttribute("data-route-window-updates", "1");
+    expect(track).toHaveAttribute("data-track-position", "2.400px");
+    expect(track).toHaveAttribute("data-track-transform", "2.400px");
+    expect(track.style.getPropertyValue("--train-track-transform")).toBe(
+      "2.400px",
+    );
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
 
@@ -603,6 +647,7 @@ describe("TrainLayout", () => {
     expect(Number(world.dataset.routeWindowUpdates)).toBeGreaterThan(0);
     expect(nearChunks).toHaveLength(Number(world.dataset.routeMountedChunks));
     expect(allChunks.length).toBeLessThanOrEqual(50);
+    expect(container.querySelectorAll(".train-world-track")).toHaveLength(1);
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
 
@@ -822,6 +867,10 @@ describe("TrainLayout", () => {
     const layers = container.querySelectorAll(".train-world-layer");
 
     expect(world).toHaveAttribute("data-motion", "reduced");
+    expect(container.querySelector(".train-world-track")).toHaveAttribute(
+      "data-motion",
+      "reduced",
+    );
     expect(layers).toHaveLength(5);
     for (const layer of layers) {
       expect(layer).toHaveAttribute("data-motion", "reduced");
@@ -837,11 +886,15 @@ describe("TrainLayout", () => {
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
 
     act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS - 1));
     expect(world).toHaveAttribute("data-route-position", "0.000px");
+    expect(track).toHaveAttribute("data-track-position", "0.000px");
     act(() => vi.advanceTimersByTime(1));
     expect(world).toHaveAttribute("data-route-position", "1.200px");
+    expect(track).toHaveAttribute("data-track-position", "1.200px");
+    expect(track).toHaveAttribute("data-track-transform", "1.200px");
     expect(
       container.querySelector<HTMLElement>('[data-world-layer="near"]')!
         .dataset.layerPosition,
@@ -911,16 +964,20 @@ describe("TrainLayout", () => {
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const track = container.querySelector<HTMLElement>(".train-world-track")!;
 
     advanceReducedMotionToState(world, "platform");
     act(() => vi.advanceTimersByTime(100));
+    const hiddenTrackPosition = track.dataset.trackPosition;
     visibility.set("hidden");
     expect(world).toHaveAttribute("data-motion-state", "suspended");
+    expect(track).toHaveAttribute("data-motion-state", "suspended");
     // Positional/station motion is fully suspended; only the independent
     // next-palette-boundary clock remains scheduled.
     expect(vi.getTimerCount()).toBe(1);
     act(() => vi.advanceTimersByTime(60_000));
     expect(world).toHaveAttribute("data-station-state", "platform");
+    expect(track.dataset.trackPosition).toBe(hiddenTrackPosition);
 
     visibility.set("visible");
     act(() => vi.advanceTimersByTime(149));
@@ -1136,16 +1193,25 @@ describe("TrainLayout", () => {
     const inspection = container.querySelector<HTMLElement>(
       ".train-layout-inspection",
     );
+    const track = container.querySelector<HTMLElement>(".train-world-track");
     expect(world).not.toBeNull();
     expect(inspection).not.toBeNull();
+    expect(track).not.toBeNull();
 
     const routePosition = world!.dataset.routePosition;
+    const trackPosition = track!.dataset.trackPosition;
+    const trackTransform = track!.style.transform;
     inspection!.scrollLeft = 240;
     fireEvent.scroll(inspection!);
 
     expect(inspection).toHaveProperty("scrollLeft", 240);
     expect(world!.dataset.routePosition).toBe(routePosition);
+    expect(track!.dataset.trackPosition).toBe(trackPosition);
+    expect(track!.style.transform).toBe(trackTransform);
+    expect(container.querySelector(".train-world-track")).toBe(track);
+    expect(container.querySelectorAll(".train-world-track")).toHaveLength(1);
     expect(inspection!.contains(world)).toBe(false);
+    expect(inspection!.contains(track)).toBe(false);
   });
 
   it("renders an empty starter carriage when no panes exist", () => {
@@ -1164,7 +1230,7 @@ describe("TrainLayout", () => {
       "true",
     );
     expect(container.querySelectorAll(".train-seat--empty")).toHaveLength(4);
-    expect(container.querySelector(".train-layout-track")).toBeInTheDocument();
+    expect(container.querySelector(".train-world-track")).toBeInTheDocument();
   });
 
   it("calculates enough overlapping carriages to cover a wide viewport", () => {

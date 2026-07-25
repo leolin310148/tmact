@@ -105,6 +105,8 @@ const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
 const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_PALETTE_TRANSITION_MS = 450;
+const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
+const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
 
 interface TrainTimePalette {
   skyTop: string;
@@ -209,6 +211,15 @@ export function trainWorldCruiseSpeed(search: string): number {
     return TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND;
   }
   return Math.min(96, requested);
+}
+
+export function trainWorldTrackTransform(routePosition: number): number {
+  if (!Number.isFinite(routePosition)) return 0;
+  return (
+    ((routePosition % TRAIN_WORLD_TRACK_TILE_WIDTH) +
+      TRAIN_WORLD_TRACK_TILE_WIDTH) %
+    TRAIN_WORLD_TRACK_TILE_WIDTH
+  );
 }
 
 // Calculate the least number of carriage layers needed for the consist to
@@ -867,6 +878,24 @@ function TrainWorld({
           : "moving";
       world.dataset.stationAmbient =
         stationJourney.state === "dwell" ? "running" : "available";
+      const trackPosition = trainParallaxLayerPosition(
+        routePosition,
+        TRAIN_WORLD_TRACK_SPEED_RATIO,
+      );
+      const track = world.querySelector<HTMLElement>(
+        '[data-world-track="railway"]',
+      );
+      if (track) {
+        const trackPositionValue = `${trackPosition.toFixed(3)}px`;
+        const trackTransformValue =
+          `${trainWorldTrackTransform(trackPosition).toFixed(3)}px`;
+        track.style.setProperty(
+          "--train-track-transform",
+          trackTransformValue,
+        );
+        track.dataset.trackPosition = trackPositionValue;
+        track.dataset.trackTransform = trackTransformValue;
+      }
       const width = viewportWidth();
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
@@ -929,6 +958,13 @@ function TrainWorld({
     };
 
     const documentIsHidden = () => document.visibilityState === "hidden";
+    const setMotionState = (state: "running" | "suspended") => {
+      world.dataset.motionState = state;
+      const track = world.querySelector<HTMLElement>(
+        '[data-world-track="railway"]',
+      );
+      if (track) track.dataset.motionState = state;
+    };
     const cancelScheduledMotion = () => {
       if (frame !== null) {
         window.cancelAnimationFrame(frame);
@@ -974,7 +1010,7 @@ function TrainWorld({
       ) {
         return;
       }
-      world.dataset.motionState = "running";
+      setMotionState("running");
       if (reducedMotion) {
         const phaseDuration = reducedPhaseDuration();
         const delay =
@@ -1035,7 +1071,7 @@ function TrainWorld({
       cancelScheduledMotion();
       previousTimestamp = null;
       if (documentIsHidden()) {
-        world.dataset.motionState = "suspended";
+        setMotionState("suspended");
         world.dataset.stationAmbient = "suspended";
         return;
       }
@@ -1052,7 +1088,7 @@ function TrainWorld({
     window.addEventListener("resize", handleResize);
     document.addEventListener("visibilitychange", handleVisibility);
     if (documentIsHidden()) {
-      world.dataset.motionState = "suspended";
+      setMotionState("suspended");
     } else {
       scheduleMotion();
     }
@@ -1160,6 +1196,20 @@ function TrainWorld({
           </div>
         );
       })}
+      <div
+        className="train-world-track"
+        data-world-track="railway"
+        data-route-direction="right"
+        data-speed-ratio={TRAIN_WORLD_TRACK_SPEED_RATIO}
+        data-track-position={`${initialStationJourney.routePosition.toFixed(3)}px`}
+        data-track-transform={`${trainWorldTrackTransform(
+          initialStationJourney.routePosition,
+        ).toFixed(3)}px`}
+        data-motion={reducedMotion ? "reduced" : "full"}
+        data-motion-state={
+          document.visibilityState === "hidden" ? "suspended" : "running"
+        }
+      />
       {debug ? (
         <div
           className="train-world-debug-grid"
@@ -1298,7 +1348,6 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
               </div>
             ))}
           </div>
-          <div className="train-layout-track" aria-hidden="true" />
         </div>
       </div>
       <button

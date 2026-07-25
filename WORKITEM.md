@@ -213,7 +213,7 @@ future station stop without growing the DOM or memory usage over time.
   found; if one is found, leave this item unchecked and report it instead of
   expanding scope.
 
-- [ ] **TRAIN-016 — Move the railway track into the travelling world.**
+- [x] **TRAIN-016 — Move the railway track into the travelling world.**
   Remove the track strip from the horizontally scrollable fixed-train
   inspection scene and render it as a dedicated bounded world element behind
   the wheels. The track and sleepers must follow route/world position at the

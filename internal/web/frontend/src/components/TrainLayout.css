@@ -5,6 +5,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-layout {
+  --train-track-h: 19px;
   position: relative;
   isolation: isolate;
   flex: 0 0 auto;
@@ -85,6 +86,23 @@ html[data-pane-switcher-layout="train"] .statusline {
   position: absolute;
   inset: 0;
   transform: translate3d(var(--train-layer-position), 0, 0);
+  will-change: transform;
+}
+
+.train-world-track {
+  --train-track-transform: 0px;
+  position: absolute;
+  z-index: 5;
+  right: -240px;
+  bottom: 0;
+  left: -240px;
+  height: var(--train-track-h);
+  background:
+    url("../assets/train-theme/sprites/train-track-tile.png")
+    0 0 / 240px 100% repeat-x;
+  image-rendering: pixelated;
+  pointer-events: none;
+  transform: translate3d(var(--train-track-transform), 0, 0);
   will-change: transform;
 }
 
@@ -905,7 +923,6 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-layout-scene {
-  --train-track-h: 19px;
   position: relative;
   min-width: 100%;
   width: max-content;
@@ -1090,20 +1107,9 @@ html[data-pane-switcher-layout="train"] .statusline {
   box-shadow: 0 0 5px rgba(255, 193, 7, 0.45);
 }
 
-.train-layout-track {
-  position: absolute;
-  z-index: 1;
-  inset: auto 0 0;
-  height: var(--train-track-h);
-  background:
-    url("../assets/train-theme/sprites/train-track-tile.png")
-    0 0 / auto 100% repeat-x;
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .train-world-layer-track {
+  .train-world-layer-track,
+  .train-world-track {
     will-change: auto;
   }
 
