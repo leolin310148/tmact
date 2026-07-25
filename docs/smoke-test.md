@@ -279,6 +279,22 @@ the same `410.699px`; all sampled track bounds covered both viewport edges, the
 appeared. Deterministic station departure resumed into cruise with route and
 track positions aligned, and `borz errors --json` reported no page errors.
 
+TRAIN-022 route-driven wheel run 2026-07-25: repeated the complete HTTP 200,
+plain-module freshness, open, viewport, hard-reload, and actual-dimension
+protocol at 390×844 and 1920×900. Compact mounted 2 filler carriages and 11
+wheel rims; wide mounted 8 filler carriages and 35 rims. In both cases the
+declared bounded count exactly matched the DOM count, every rim remained
+pointer-inert, and measured rim centers matched their sprite-relative centers
+(the wide worst-case error was under 0.015px). At station dwell, route position
+held at `3680px` and the shared wheel angle held at `-27.608deg` across a 250ms
+sample. Departure and 96px/s cruise resumed both values together; a 300ms wide
+cruise sample advanced from `4332.858px` to `4361.658px`. Compact and wide
+screenshots showed crisp code-native rims integrated with the locomotive and
+bogies, aligned over the moving perspective track without rotating bodies,
+passengers, hit targets, or focus geometry. No private pane identifiers or
+output were recorded in this evidence, and `borz errors --json` reported no
+page errors.
+
 ## Notes Template
 
 ```text

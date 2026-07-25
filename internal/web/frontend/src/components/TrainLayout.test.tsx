@@ -8,7 +8,9 @@ import type { PaneStatus } from "../types/server";
 import {
   advanceTrainWorldRoutePosition,
   minimumCarriagesForWidth,
+  TRAIN_CARRIAGE_WHEEL_COUNT,
   TRAIN_ARTWORK_SCALE,
+  TRAIN_LOCOMOTIVE_WHEEL_COUNT,
   TRAIN_MIN_SEAT_TARGET_PX,
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
@@ -18,6 +20,7 @@ import {
   TrainLayout,
 } from "./TrainLayout";
 import {
+  trainWheelRotationDegrees,
   TRAIN_WORLD_MAX_FRAME_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
@@ -224,6 +227,92 @@ describe("TrainLayout", () => {
     expect(trainLayoutCss).not.toContain(".train-layout-track");
   });
 
+  it("mounts code-native rims at bounded locomotive and carriage wheel centers", () => {
+    const { container, rerender } = render(
+      <TrainLayout
+        panes={Array.from({ length: 12 }, (_, index) =>
+          pane({
+            pane_id: `%${index + 1}`,
+            target: `s:0.${index}`,
+            session: `session-${index}`,
+            runtime: "codex",
+          }),
+        )}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
+    const locomotiveLayer = container.querySelector(
+      '[data-wheel-layer="locomotive"]',
+    );
+    const carriageLayers = container.querySelectorAll(
+      '[data-wheel-layer="carriage"]',
+    );
+
+    expect(locomotiveLayer).toHaveAttribute(
+      "data-wheel-count",
+      String(TRAIN_LOCOMOTIVE_WHEEL_COUNT),
+    );
+    expect(
+      locomotiveLayer?.querySelectorAll('[data-wheel-rim="locomotive"]'),
+    ).toHaveLength(TRAIN_LOCOMOTIVE_WHEEL_COUNT);
+    expect(carriageLayers).toHaveLength(3);
+    for (const layer of carriageLayers) {
+      expect(layer).toHaveAttribute(
+        "data-wheel-count",
+        String(TRAIN_CARRIAGE_WHEEL_COUNT),
+      );
+    }
+    expect(container.querySelectorAll(".train-wheel-rim")).toHaveLength(15);
+    expect(layout).toHaveAttribute("data-wheel-node-count", "15");
+    expect(
+      [...container.querySelectorAll<HTMLElement>(".train-wheel-rim")].every(
+        (rim) =>
+          Boolean(rim.dataset.wheelCenter) &&
+          rim.style.getPropertyValue("--train-wheel-center-x").endsWith("%") &&
+          rim.style.getPropertyValue("--train-wheel-center-y").endsWith("%"),
+      ),
+    ).toBe(true);
+
+    rerender(<TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />);
+    expect(container.querySelectorAll(".train-wheel-rim")).toHaveLength(7);
+    expect(layout).toHaveAttribute("data-wheel-node-count", "7");
+    expect(trainLayoutCss).toMatch(
+      /\.train-wheel-rim\s*\{[\s\S]*?transform:\s*translate\(-50%, -50%\) rotate\(var\(--train-wheel-rotation\)\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-wheel-layer\s*\{[\s\S]*?pointer-events:\s*none;/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.(?:train-carriage|train-layout-locomotive)\s*\{[^}]*rotate\(/,
+    );
+  });
+
+  it("updates all wheel rims from route distance in the existing motion owner", () => {
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
+    const consist = container.querySelector(".train-layout-consist");
+    const rims = [...container.querySelectorAll(".train-wheel-rim")];
+
+    expect(layout).toHaveAttribute("data-wheel-rotation", "0.000deg");
+    animation.run(1_000);
+    animation.run(1_200);
+    expect(layout).toHaveAttribute(
+      "data-wheel-rotation",
+      `${trainWheelRotationDegrees(2.4).toFixed(3)}deg`,
+    );
+    expect(container.querySelector(".train-layout-consist")).toBe(consist);
+    expect([...container.querySelectorAll(".train-wheel-rim")]).toEqual(rims);
+    expect(
+      layout.style.getPropertyValue("--train-wheel-rotation"),
+    ).toBe(layout.dataset.wheelRotation);
+  });
+
   it("accepts a bounded development cruise-speed override", () => {
     expect(trainWorldCruiseSpeed("?train-cruise-speed=24")).toBe(24);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=999")).toBe(96);
@@ -247,7 +336,9 @@ describe("TrainLayout", () => {
     );
     const { container, rerender } = render(journey());
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
     const initialPosition = world.dataset.routePosition;
+    const initialWheelRotation = layout.dataset.wheelRotation;
     const initialGeometry = routeGeometryFingerprint(container);
     const firstStation = world.dataset.stationEventId;
     const visitedRegions = new Set<string>();
@@ -346,9 +437,13 @@ describe("TrainLayout", () => {
     expect(container.querySelectorAll(".train-parallax-chunk").length).toBe(
       Number(world.dataset.routeTotalMountedChunks),
     );
+    expect(container.querySelectorAll(".train-wheel-rim")).toHaveLength(
+      Number(layout.dataset.wheelNodeCount),
+    );
 
     rerender(<div data-active-theme="office" />);
     expect(container.querySelector(".train-layout")).not.toBeInTheDocument();
+    expect(container.querySelector(".train-wheel-rim")).not.toBeInTheDocument();
     expect(animation.pending()).toBe(0);
     expect(removeDocumentListener).toHaveBeenCalledWith(
       "visibilitychange",
@@ -362,8 +457,14 @@ describe("TrainLayout", () => {
     rerender(journey());
     const remountedWorld =
       container.querySelector<HTMLElement>(".train-layout-world")!;
+    const remountedLayout =
+      container.querySelector<HTMLElement>(".train-layout")!;
     expect(remountedWorld).not.toBe(world);
     expect(remountedWorld.dataset.routePosition).toBe(initialPosition);
+    expect(remountedLayout.dataset.wheelRotation).toBe(initialWheelRotation);
+    expect(container.querySelectorAll(".train-wheel-rim")).toHaveLength(
+      Number(remountedLayout.dataset.wheelNodeCount),
+    );
     expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
     expect(remountedWorld).toHaveAttribute("data-route-apply-count", "1");
   });
@@ -463,6 +564,7 @@ describe("TrainLayout", () => {
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const track = container.querySelector<HTMLElement>(".train-world-track")!;
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
     const states = new Set<string>([world.dataset.stationState!]);
     const firstStation = world.dataset.stationEventId;
     let timestamp = 0;
@@ -483,12 +585,19 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-station-ambient", "running");
     const dwellPosition = world.dataset.routePosition;
     const dwellTrackPosition = track.dataset.trackPosition;
+    const dwellWheelRotation = layout.dataset.wheelRotation;
     expect(dwellTrackPosition).toBe(dwellPosition);
+    expect(dwellWheelRotation).toBe(
+      `${trainWheelRotationDegrees(
+        Number.parseFloat(dwellPosition!),
+      ).toFixed(3)}deg`,
+    );
 
     timestamp += 250;
     animation.run(timestamp);
     expect(world.dataset.routePosition).toBe(dwellPosition);
     expect(track.dataset.trackPosition).toBe(dwellTrackPosition);
+    expect(layout.dataset.wheelRotation).toBe(dwellWheelRotation);
 
     for (
       let frame = 0;
@@ -518,6 +627,7 @@ describe("TrainLayout", () => {
     expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
       Number.parseFloat(dwellPosition!),
     );
+    expect(layout.dataset.wheelRotation).not.toBe(dwellWheelRotation);
     expect(world).toHaveAttribute("data-station-target-speed", "12.000");
   });
 
@@ -534,16 +644,19 @@ describe("TrainLayout", () => {
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const track = container.querySelector<HTMLElement>(".train-world-track")!;
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
 
     animation.run(1_000);
     animation.run(1_250);
     const pausedPosition = world.dataset.routePosition;
     const pausedSpeed = world.dataset.stationCurrentSpeed;
     const pausedTrackPosition = track.dataset.trackPosition;
+    const pausedWheelRotation = layout.dataset.wheelRotation;
 
     visibility.set("hidden");
     expect(world).toHaveAttribute("data-motion-state", "suspended");
     expect(track).toHaveAttribute("data-motion-state", "suspended");
+    expect(layout).toHaveAttribute("data-wheel-motion-state", "suspended");
     expect(world).toHaveAttribute("data-station-ambient", "suspended");
     expect(animation.pending()).toBe(0);
 
@@ -551,11 +664,14 @@ describe("TrainLayout", () => {
     animation.run(100_000);
     expect(world.dataset.routePosition).toBe(pausedPosition);
     expect(track.dataset.trackPosition).toBe(pausedTrackPosition);
+    expect(layout.dataset.wheelRotation).toBe(pausedWheelRotation);
     expect(world.dataset.stationCurrentSpeed).toBe(pausedSpeed);
     animation.run(100_250);
     expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
       Number.parseFloat(pausedPosition!),
     );
+    expect(layout.dataset.wheelRotation).not.toBe(pausedWheelRotation);
+    expect(layout).toHaveAttribute("data-wheel-motion-state", "running");
   });
 
   it("progresses from the animation clock without rerendering the train", () => {
@@ -905,6 +1021,8 @@ describe("TrainLayout", () => {
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const track = container.querySelector<HTMLElement>(".train-world-track")!;
+    const layout = container.querySelector<HTMLElement>(".train-layout")!;
+    const initialWheelRotation = layout.dataset.wheelRotation;
 
     act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS - 1));
     expect(world).toHaveAttribute("data-route-position", "0.000px");
@@ -913,6 +1031,10 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-route-position", "1.200px");
     expect(track).toHaveAttribute("data-track-position", "1.200px");
     expect(track).toHaveAttribute("data-track-transform", "1.200px");
+    expect(layout.dataset.wheelRotation).not.toBe(initialWheelRotation);
+    expect(layout.dataset.wheelRotation).toBe(
+      `${trainWheelRotationDegrees(1.2).toFixed(3)}deg`,
+    );
     expect(
       container.querySelector<HTMLElement>('[data-world-layer="near"]')!
         .dataset.layerPosition,

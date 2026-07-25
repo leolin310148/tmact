@@ -63,6 +63,7 @@ import {
   type SceneMode,
 } from "./sceneTime";
 import {
+  trainWheelRotationDegrees,
   TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND,
   TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
@@ -110,6 +111,30 @@ export const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
 export const TRAIN_WORLD_TRACK_PERSPECTIVE = "shallow-three-quarter";
 export const TRAIN_ARTWORK_SCALE = 0.9;
 export const TRAIN_MIN_SEAT_TARGET_PX = 44;
+export const TRAIN_LOCOMOTIVE_WHEEL_COUNT = 3;
+export const TRAIN_CARRIAGE_WHEEL_COUNT = 4;
+
+interface TrainWheelSpec {
+  centerX: number;
+  centerY: number;
+  diameter: number;
+}
+
+// Coordinates are percentages of the unscaled sprite canvases. Keeping the
+// rims in the same responsive container as each PNG preserves their measured
+// centers through compact/desktop scaling and locomotive clipping.
+const LOCOMOTIVE_WHEELS: readonly TrainWheelSpec[] = [
+  { centerX: 23.88, centerY: 89.56, diameter: 19.58 },
+  { centerX: 43.44, centerY: 85.12, diameter: 27.15 },
+  { centerX: 60.5, centerY: 85.64, diameter: 25.59 },
+];
+
+const CARRIAGE_WHEELS: readonly TrainWheelSpec[] = [
+  { centerX: 16.08, centerY: 93.47, diameter: 11.49 },
+  { centerX: 30.94, centerY: 93.47, diameter: 11.49 },
+  { centerX: 67.72, centerY: 93.47, diameter: 11.49 },
+  { centerX: 83.43, centerY: 93.47, diameter: 11.49 },
+];
 
 interface TrainTimePalette {
   skyTop: string;
@@ -344,6 +369,47 @@ function EmptyTrainSeat({ seatIndex }: { seatIndex: number }) {
   );
 }
 
+type TrainWheelRimStyle = CSSProperties & {
+  "--train-wheel-center-x": string;
+  "--train-wheel-center-y": string;
+  "--train-wheel-diameter": number;
+};
+
+function TrainWheelLayer({
+  vehicle,
+  wheels,
+}: {
+  vehicle: "locomotive" | "carriage";
+  wheels: readonly TrainWheelSpec[];
+}) {
+  return (
+    <span
+      className={`train-wheel-layer train-wheel-layer--${vehicle}`}
+      aria-hidden="true"
+      data-wheel-layer={vehicle}
+      data-wheel-count={wheels.length}
+    >
+      {wheels.map((wheel, wheelIndex) => {
+        const style: TrainWheelRimStyle = {
+          "--train-wheel-center-x": `${wheel.centerX}%`,
+          "--train-wheel-center-y": `${wheel.centerY}%`,
+          "--train-wheel-diameter": wheel.diameter,
+        };
+        return (
+          <span
+            className="train-wheel-rim"
+            data-wheel-rim={vehicle}
+            data-wheel-index={wheelIndex}
+            data-wheel-center={`${wheel.centerX},${wheel.centerY}`}
+            style={style}
+            key={`${vehicle}-wheel-${wheelIndex}`}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 function TrainLocomotiveMore({
   items,
   onSelect,
@@ -392,6 +458,7 @@ function TrainLocomotiveMore({
           alt=""
           draggable={false}
         />
+        <TrainWheelLayer vehicle="locomotive" wheels={LOCOMOTIVE_WHEELS} />
       </button>
       {pop.open && pos
         ? createPortal(
@@ -869,6 +936,13 @@ function TrainWorld({
       world.style.setProperty("--train-route-position", value);
       world.dataset.routePosition = value;
       world.dataset.routeApplyCount = String(routeApplyCount);
+      const layout = world.closest<HTMLElement>(".train-layout");
+      const wheelRotation =
+        `${trainWheelRotationDegrees(routePosition).toFixed(3)}deg`;
+      if (layout) {
+        layout.style.setProperty("--train-wheel-rotation", wheelRotation);
+        layout.dataset.wheelRotation = wheelRotation;
+      }
       const stationJourney = stationJourneyRef.current;
       world.dataset.stationState = stationJourney.state;
       world.dataset.stationTargetSpeed =
@@ -967,6 +1041,8 @@ function TrainWorld({
     const documentIsHidden = () => document.visibilityState === "hidden";
     const setMotionState = (state: "running" | "suspended") => {
       world.dataset.motionState = state;
+      const layout = world.closest<HTMLElement>(".train-layout");
+      if (layout) layout.dataset.wheelMotionState = state;
       const track = world.querySelector<HTMLElement>(
         '[data-world-track="railway"]',
       );
@@ -1310,6 +1386,13 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
       aria-label="Train pane switcher"
       data-artwork-scale={TRAIN_ARTWORK_SCALE}
       data-minimum-carriages={minimumCarriages}
+      data-wheel-node-count={
+        TRAIN_LOCOMOTIVE_WHEEL_COUNT +
+        renderedCarriageCount * TRAIN_CARRIAGE_WHEEL_COUNT
+      }
+      data-wheel-motion-state={
+        document.visibilityState === "hidden" ? "suspended" : "running"
+      }
       style={trainPaletteStyle(timeOfDay)}
     >
       <TrainWorld
@@ -1337,6 +1420,7 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
                   alt=""
                   draggable={false}
                 />
+                <TrainWheelLayer vehicle="carriage" wheels={CARRIAGE_WHEELS} />
                 {SEAT_CLASSES.map((_, seatIndex) => {
                   const item = carriage[seatIndex];
                   const globalIndex = carriageIndex * 4 + seatIndex;

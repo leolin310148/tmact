@@ -9,6 +9,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   --train-artwork-band-height: clamp(118px, 18vh, 160px);
   --train-artwork-scale: 90%;
   --train-seat-target-min: 44px;
+  --train-wheel-rotation: 0deg;
   position: relative;
   isolation: isolate;
   flex: 0 0 auto;
@@ -1028,6 +1029,65 @@ html[data-pane-switcher-layout="train"] .statusline {
   -webkit-user-drag: none;
 }
 
+.train-wheel-layer {
+  position: absolute;
+  z-index: 1;
+  overflow: visible;
+  container-type: size;
+  pointer-events: none;
+}
+
+.train-wheel-layer--locomotive {
+  right: 0;
+  bottom: 0;
+  width: auto;
+  height: var(--train-artwork-scale);
+  aspect-ratio: 762 / 383;
+}
+
+.train-wheel-layer--carriage {
+  inset: 0;
+}
+
+.train-wheel-rim {
+  position: absolute;
+  top: var(--train-wheel-center-y);
+  left: var(--train-wheel-center-x);
+  display: block;
+  width: calc(var(--train-wheel-diameter) * 1cqh);
+  aspect-ratio: 1;
+  border: max(1px, 0.7cqh) solid rgba(18, 20, 22, 0.92);
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle,
+      #21160f 0 12%,
+      #d49a4f 13% 20%,
+      #49301f 21% 28%,
+      transparent 29%
+    ),
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(202, 139, 68, 0.9) 0deg 5deg,
+      transparent 5deg 40deg,
+      rgba(202, 139, 68, 0.9) 40deg 45deg
+    ),
+    radial-gradient(
+      circle,
+      transparent 0 58%,
+      rgba(181, 119, 53, 0.9) 59% 69%,
+      #15191c 70% 100%
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(238, 179, 90, 0.36),
+    0 0 0 1px rgba(3, 5, 7, 0.72);
+  image-rendering: pixelated;
+  opacity: 0.86;
+  transform: translate(-50%, -50%) rotate(var(--train-wheel-rotation));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
 .train-locomotive-more:hover .train-layout-locomotive,
 .train-locomotive-more.open .train-layout-locomotive {
   filter: brightness(1.08);
@@ -1241,7 +1301,8 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 @media (prefers-reduced-motion: reduce) {
   .train-world-layer-track,
-  .train-world-track {
+  .train-world-track,
+  .train-wheel-rim {
     will-change: auto;
   }
 

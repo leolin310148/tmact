@@ -306,7 +306,7 @@ future station stop without growing the DOM or memory usage over time.
   the full moving traversal with `borz`, then run the frontend suite, build, and
   `make test`.
 
-- [ ] **TRAIN-022 — Rotate every visible train wheel from route distance.**
+- [x] **TRAIN-022 — Rotate every visible train wheel from route distance.**
   Add code-native wheel/rim layers at the actual visible wheel centers of the
   locomotive and each carriage. Derive one deterministic counter-clockwise
   rotation angle from travelled route distance and wheel circumference inside
