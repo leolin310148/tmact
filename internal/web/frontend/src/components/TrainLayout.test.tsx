@@ -1853,6 +1853,113 @@ describe("TrainLayout", () => {
     );
   });
 
+  it("renders a bounded seeded day-sky catalogue behind terrain and controls", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const catalogue = container.querySelector<HTMLElement>(
+      "[data-day-sky-catalogue]",
+    )!;
+    const anchors = [
+      ...catalogue.querySelectorAll<HTMLElement>("[data-day-sky-anchor]"),
+    ];
+    const [gapStart, gapEnd] = catalogue.dataset.daySkyNegativeSpace!
+      .split("-")
+      .map(Number);
+
+    expect(container.querySelectorAll("[data-day-sky-catalogue]")).toHaveLength(
+      1,
+    );
+    expect(catalogue).toHaveAttribute("data-sky-plane", "behind-terrain");
+    expect(catalogue).toHaveAttribute("data-control-contrast", "preserved");
+    expect(catalogue.dataset.daySkyWeather).toMatch(
+      /^(clear|fair|breezy|showery)$/,
+    );
+    expect(anchors).toHaveLength(Number(catalogue.dataset.daySkyCount));
+    expect(anchors).toHaveLength(Number(world.dataset.daySkyCount));
+    expect(anchors.length).toBeLessThanOrEqual(5);
+    expect(
+      catalogue.querySelectorAll("[data-day-sky-anchor='sun']"),
+    ).toHaveLength(1);
+    expect(
+      catalogue.querySelectorAll("[data-day-sky-anchor='wisp']").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(gapEnd! - gapStart!).toBeGreaterThanOrEqual(22);
+    expect(gapEnd! - gapStart!).toBeLessThanOrEqual(32);
+    expect(trainLayoutCss).toMatch(
+      /\.train-sky-emissive\s*\{[\s\S]*?z-index:\s*1;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-inspection\s*\{[\s\S]*?z-index:\s*1;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\s*\{[\s\S]*?z-index:\s*0;/,
+    );
+  });
+
+  it("keeps cloud and sky-anchor geometry isolated from palette changes", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const geometry = () => ({
+      sky: [
+        ...container.querySelectorAll<HTMLElement>(
+          "[data-day-sky-anchor]",
+        ),
+      ].map((anchor) => `${anchor.dataset.daySkyAnchor}:${anchor.style.cssText}`),
+      clouds: [
+        ...container.querySelectorAll<HTMLElement>(
+          "[data-scenery-category='cloud']",
+        ),
+      ].map(
+        (cloud) =>
+          `${cloud.dataset.sceneryAsset}:${cloud.dataset.cloudRoutePosition}:${cloud.style.cssText}`,
+      ),
+    });
+    const beforeMode = world.dataset.timeOfDay;
+    const before = geometry();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cycle train lighting (day / sunset / night)",
+      }),
+    );
+
+    expect(world.dataset.timeOfDay).not.toBe(beforeMode);
+    expect(geometry()).toEqual(before);
+    for (const cloud of container.querySelectorAll(
+      "[data-scenery-category='cloud']",
+    )) {
+      expect(cloud).toHaveAttribute(
+        "data-cloud-rendering",
+        "palette-specific",
+      );
+    }
+  });
+
+  it("uses crisp palette-owned cloud grading without a blanket sunset sepia", () => {
+    const dayRule = trainLayoutCss.match(
+      /\.train-layout-world\[data-time-of-day="day"\]\s+\.train-parallax-chunk--sky\s+\.train-scenery-asset--cloud\s*\{([^}]*)\}/,
+    )?.[1];
+    const sunsetRule = trainLayoutCss.match(
+      /\.train-layout-world\[data-time-of-day="sunset"\]\s+\.train-parallax-chunk--sky\s+\.train-scenery-asset--cloud\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(dayRule).toContain("opacity: 0.96");
+    expect(dayRule).toContain("saturate(0.28)");
+    expect(dayRule).toContain("brightness(3.1)");
+    expect(dayRule).toContain("contrast(0.78)");
+    expect(sunsetRule).toContain("opacity: 0.88");
+    expect(sunsetRule).toContain("rgba(255, 224, 174, 0.88)");
+    expect(sunsetRule).toContain("rgba(111, 61, 91, 0.68)");
+    expect(sunsetRule).not.toContain("sepia");
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="night"\] \.train-day-sky\s*\{\s*opacity:\s*0;/,
+    );
+  });
+
   it("keeps the seeded star field static under reduced motion", () => {
     vi.useFakeTimers();
     mockReducedMotion();
@@ -1872,6 +1979,29 @@ describe("TrainLayout", () => {
     expect(animation.pending()).toBeLessThanOrEqual(1);
     expect(trainLayoutCss).toMatch(
       /\.train-emissive-overlay--stars\[data-motion="reduced"\] \.train-star\s*\{[\s\S]*?animation:\s*none;/,
+    );
+  });
+
+  it("keeps day-sky anchors static under reduced motion", () => {
+    vi.useFakeTimers();
+    mockReducedMotion();
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const catalogue = container.querySelector<HTMLElement>(
+      "[data-day-sky-catalogue]",
+    )!;
+    const anchors = [...catalogue.querySelectorAll("[data-day-sky-anchor]")];
+
+    expect(catalogue).toHaveAttribute("data-motion", "reduced");
+    act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS * 2));
+    expect([...catalogue.querySelectorAll("[data-day-sky-anchor]")]).toEqual(
+      anchors,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-day-sky-anchor\s*\{[\s\S]*?animation:\s*none;/,
     );
   });
 

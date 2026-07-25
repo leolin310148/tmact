@@ -175,7 +175,7 @@ and safety properties established by the archived queue remain the baseline.
   building detail remains visible; then run the frontend suite, build, and
   `make test`.
 
-- [ ] **TRAIN-033 — Build a richer deterministic day-and-sunset sky system.**
+- [x] **TRAIN-033 — Build a richer deterministic day-and-sunset sky system.**
   Preserve TRAIN-023's seeded cloud grammar but retune cloud art and grading so
   daytime clouds are crisp white/blue-gray forms instead of translucent dark
   smudges, with sunset receiving deliberate warm rim/shadow treatment rather

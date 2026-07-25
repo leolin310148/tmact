@@ -60,6 +60,10 @@ import {
   type TrainStar,
 } from "./trainStars";
 import {
+  generateTrainDaySkyCatalogue,
+  type TrainDaySkyAnchor,
+} from "./trainSky";
+import {
   SCENE_MODES,
   clockSceneMode,
   nextClockSceneModeBoundary,
@@ -584,6 +588,12 @@ type TrainStarStyle = CSSProperties & {
   "--train-star-size": string;
 };
 
+type TrainDaySkyAnchorStyle = CSSProperties & {
+  "--train-sky-anchor-opacity": number;
+  "--train-sky-anchor-width": string;
+  "--train-sky-anchor-height": string;
+};
+
 function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
   const palette = TRAIN_TIME_PALETTES[mode];
   const grade = TRAIN_SCENERY_TIME_GRADES[mode];
@@ -782,6 +792,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             }
             data-cloud-pattern={placement.cloudPattern}
             data-cloud-group={placement.cloudGroup || undefined}
+            data-cloud-rendering={
+              asset.category === "cloud" ? "palette-specific" : undefined
+            }
             data-cloud-route-position={
               placement.routePositionPx?.toFixed(3) ?? undefined
             }
@@ -1001,6 +1014,9 @@ function TrainWorld({
   const [starCatalogue, setStarCatalogue] = useState(() =>
     generateTrainStarCatalogue(seed, initialWorldWidth()),
   );
+  const [daySkyCatalogue, setDaySkyCatalogue] = useState(() =>
+    generateTrainDaySkyCatalogue(seed, initialWorldWidth()),
+  );
   const starViewportWidthRef = useRef(starCatalogue.viewportWidth);
   const routeWindowsRef = useRef(routeWindows);
   const stationJourneyRef = useRef(initialStationJourney);
@@ -1073,6 +1089,9 @@ function TrainWorld({
       if (starViewportWidthRef.current !== starViewportWidth) {
         starViewportWidthRef.current = starViewportWidth;
         setStarCatalogue(generateTrainStarCatalogue(seed, starViewportWidth));
+        setDaySkyCatalogue(
+          generateTrainDaySkyCatalogue(seed, starViewportWidth),
+        );
       }
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
@@ -1313,6 +1332,9 @@ function TrainWorld({
       data-route-window-updates="0"
       data-star-count={starCatalogue.stars.length}
       data-star-viewport-width={starCatalogue.viewportWidth}
+      data-day-sky-count={daySkyCatalogue.elementCount}
+      data-day-sky-weather={daySkyCatalogue.weather}
+      data-day-sky-viewport-width={daySkyCatalogue.viewportWidth}
       data-time-of-day={timeOfDay}
       data-time-source={timeSource}
       data-palette-transition={paletteTransition}
@@ -1340,6 +1362,42 @@ function TrainWorld({
         data-star-viewport-width={starCatalogue.viewportWidth}
         aria-hidden="true"
       >
+        <span
+          className={[
+            "train-day-sky",
+            `train-day-sky--${daySkyCatalogue.weather}`,
+          ].join(" ")}
+          data-day-sky-catalogue={daySkyCatalogue.seed}
+          data-day-sky-count={daySkyCatalogue.elementCount}
+          data-day-sky-weather={daySkyCatalogue.weather}
+          data-day-sky-negative-space={`${daySkyCatalogue.negativeSpaceStartPercent.toFixed(
+            3,
+          )}-${daySkyCatalogue.negativeSpaceEndPercent.toFixed(3)}`}
+          data-sky-plane="behind-terrain"
+          data-control-contrast="preserved"
+          data-motion={reducedMotion ? "reduced" : "full"}
+        >
+          {[daySkyCatalogue.sun, ...daySkyCatalogue.wisps].map(
+            (anchor: TrainDaySkyAnchor) => {
+              const style: TrainDaySkyAnchorStyle = {
+                left: `${anchor.xPercent}%`,
+                top: `${anchor.yPercent}%`,
+                "--train-sky-anchor-opacity": anchor.opacity,
+                "--train-sky-anchor-width": `${anchor.widthPx.toFixed(3)}px`,
+                "--train-sky-anchor-height": `${anchor.heightPx.toFixed(3)}px`,
+              };
+              return (
+                <i
+                  className={`train-day-sky-anchor train-day-sky-anchor--${anchor.kind}`}
+                  data-day-sky-anchor={anchor.kind}
+                  data-day-sky-anchor-id={anchor.id}
+                  style={style}
+                  key={anchor.id}
+                />
+              );
+            },
+          )}
+        </span>
         <span
           className="train-emissive-overlay train-emissive-overlay--stars"
           data-emissive="stars"
