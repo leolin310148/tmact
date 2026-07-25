@@ -1,6 +1,6 @@
 # Train Layout — Infinite Journey Background Work Items
 
-This queue turns the train-theme background plan into fifteen dependency-ordered,
+This queue turns the train-theme background plan into seventeen dependency-ordered,
 independently verifiable work items. The finished scene must make the fixed
 train feel as if it is travelling forever through coherent regions, support
 day/sunset/night presentation, remain deterministic enough to test, and allow a
@@ -212,3 +212,38 @@ future station stop without growing the DOM or memory usage over time.
   keep this item documentation-only unless a reproducible product defect is
   found; if one is found, leave this item unchecked and report it instead of
   expanding scope.
+
+- [ ] **TRAIN-016 — Move the railway track into the travelling world.**
+  Remove the track strip from the horizontally scrollable fixed-train
+  inspection scene and render it as a dedicated bounded world element behind
+  the wheels. The track and sleepers must follow route/world position at the
+  near-layer speed, travelling with the scenery rather than with the locomotive
+  and carriages; they must stop during station dwell, suspend while hidden, and
+  retain the restrained stepped behavior under reduced motion. Horizontal train
+  inspection must never translate, resize, duplicate, or reveal an edge in the
+  track. Preserve the existing wheel alignment, track height, fixed consist,
+  pointer boundaries, station continuity, and compact-to-ultrawide coverage.
+  Add focused tests for DOM ownership, route transform/direction, inspection
+  independence, dwell/visibility/reduced-motion lifecycle, cleanup, and bounded
+  rendering. Validate with `borz` at compact, desktop, and ultrawide sizes using
+  the exact viewport procedure documented by TRAIN-015, then run the frontend
+  suite, build, and `make test`.
+
+- [ ] **TRAIN-017 — Cut transparent scenery windows into the carriage sprite.**
+  Edit
+  `internal/web/frontend/src/assets/train-theme/sprites/train-carriage-empty-v2.png`
+  so the two large upper/lower passenger-window interiors have genuine alpha
+  transparency and reveal the moving world behind the carriage. Follow the
+  imagegen skill in built-in edit mode: inspect the local edit target first,
+  preserve the existing pixel-art carriage body, window frames, lamps,
+  staircase, couplers, wheels, palette, silhouette, dimensions, and alignment,
+  and change only the pane interiors. Use the skill's flat chroma-key plus local
+  removal workflow if needed; do not silently switch to the CLI/native-alpha
+  fallback. The final committed sprite must remain exactly 821×383 RGBA, retain
+  transparent exterior corners, contain transparent pane centers without
+  chroma fringe, and keep the frames/body opaque. Add deterministic asset checks
+  for dimensions and representative alpha regions. With the world moving
+  independently behind it, use `borz` to verify scenery is visibly readable
+  through both empty and occupied carriage windows in day, sunset, and night at
+  compact and wide sizes, without weakening seat clicks, focus states, or text
+  contrast. Run the frontend suite, build, and `make test`.
