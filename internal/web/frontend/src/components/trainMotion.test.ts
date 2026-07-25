@@ -14,16 +14,16 @@ import {
 
 describe("train world motion", () => {
   it("advances from elapsed time at the configured cruise speed", () => {
-    expect(advanceTrainWorldRoutePosition(10, 200)).toBe(12.4);
+    expect(advanceTrainWorldRoutePosition(10, 200)).toBe(14.8);
     expect(advanceTrainWorldRoutePosition(10, 200, 30)).toBe(16);
-    expect(TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND).toBe(12);
+    expect(TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND).toBe(24);
   });
 
   it("clamps throttled frames and rejects invalid elapsed time", () => {
     expect(clampTrainWorldElapsedMs(10_000)).toBe(
       TRAIN_WORLD_MAX_FRAME_ELAPSED_MS,
     );
-    expect(advanceTrainWorldRoutePosition(10, 10_000)).toBe(13);
+    expect(advanceTrainWorldRoutePosition(10, 10_000)).toBe(16);
     expect(advanceTrainWorldRoutePosition(10, -1)).toBe(10);
     expect(advanceTrainWorldRoutePosition(10, Number.NaN)).toBe(10);
   });
@@ -35,7 +35,7 @@ describe("train world motion", () => {
     );
     expect(
       advanceTrainWorldRoutePosition(0, TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS),
-    ).toBeLessThan(2);
+    ).toBeLessThan(3);
   });
 
   it("derives one bounded counter-clockwise wheel angle from route distance", () => {

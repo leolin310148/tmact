@@ -197,8 +197,8 @@ describe("TrainLayout", () => {
   });
 
   it("advances the world to the right from a single route position", () => {
-    expect(advanceTrainWorldRoutePosition(10, 200)).toBe(12.4);
-    expect(advanceTrainWorldRoutePosition(10, 500)).toBe(13);
+    expect(advanceTrainWorldRoutePosition(10, 200)).toBe(14.8);
+    expect(advanceTrainWorldRoutePosition(10, 500)).toBe(16);
     expect(advanceTrainWorldRoutePosition(16, -100)).toBe(16);
   });
 
@@ -359,7 +359,7 @@ describe("TrainLayout", () => {
     animation.run(1_200);
     expect(layout).toHaveAttribute(
       "data-wheel-rotation",
-      `${trainWheelRotationDegrees(2.4).toFixed(3)}deg`,
+      `${trainWheelRotationDegrees(4.8).toFixed(3)}deg`,
     );
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
     expect([...container.querySelectorAll(".train-wheel-rim")]).toEqual(rims);
@@ -371,7 +371,7 @@ describe("TrainLayout", () => {
   it("accepts a bounded development cruise-speed override", () => {
     expect(trainWorldCruiseSpeed("?train-cruise-speed=24")).toBe(24);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=999")).toBe(96);
-    expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(12);
+    expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(24);
   });
 
   it("completes a deterministic journey across regions, station, resize, theme switch, and remount", () => {
@@ -547,7 +547,7 @@ describe("TrainLayout", () => {
     );
 
     expect(world).toHaveAttribute("data-station-state", "approach");
-    expect(world).toHaveAttribute("data-station-target-speed", "8.400");
+    expect(world).toHaveAttribute("data-station-target-speed", "16.800");
     expect(stationSegments).toHaveLength(6);
     expect(stationSegments.map((segment) => segment.dataset.setPieceRole)).toEqual(
       ["entry", "body", "body", "body", "body", "exit"],
@@ -683,7 +683,7 @@ describe("TrainLayout", () => {
       Number.parseFloat(dwellPosition!),
     );
     expect(layout.dataset.wheelRotation).not.toBe(dwellWheelRotation);
-    expect(world).toHaveAttribute("data-station-target-speed", "12.000");
+    expect(world).toHaveAttribute("data-station-target-speed", "24.000");
   });
 
   it("pauses station departure while hidden and resumes without a leap", () => {
@@ -742,14 +742,14 @@ describe("TrainLayout", () => {
     animation.run(1_000);
     animation.run(1_200);
 
-    expect(world).toHaveAttribute("data-cruise-speed", "12");
-    expect(world).toHaveAttribute("data-route-position", "2.400px");
+    expect(world).toHaveAttribute("data-cruise-speed", "24");
+    expect(world).toHaveAttribute("data-route-position", "4.800px");
     expect(world).toHaveAttribute("data-route-apply-count", "2");
     expect(world).toHaveAttribute("data-route-window-updates", "1");
-    expect(track).toHaveAttribute("data-track-position", "2.400px");
-    expect(track).toHaveAttribute("data-track-transform", "2.400px");
+    expect(track).toHaveAttribute("data-track-position", "4.800px");
+    expect(track).toHaveAttribute("data-track-transform", "4.800px");
     expect(track.style.getPropertyValue("--train-track-transform")).toBe(
-      "2.400px",
+      "4.800px",
     );
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
@@ -765,7 +765,7 @@ describe("TrainLayout", () => {
     animation.run(100);
     animation.run(100 + TRAIN_WORLD_MAX_FRAME_ELAPSED_MS + 20_000);
 
-    expect(world).toHaveAttribute("data-route-position", "3.000px");
+    expect(world).toHaveAttribute("data-route-position", "6.000px");
   });
 
   it("suspends while hidden and resumes from a fresh timestamp", () => {
@@ -778,7 +778,7 @@ describe("TrainLayout", () => {
 
     animation.run(1_000);
     animation.run(1_100);
-    expect(world).toHaveAttribute("data-route-position", "1.200px");
+    expect(world).toHaveAttribute("data-route-position", "2.400px");
 
     visibility.set("hidden");
     expect(world).toHaveAttribute("data-motion-state", "suspended");
@@ -786,9 +786,9 @@ describe("TrainLayout", () => {
 
     visibility.set("visible");
     animation.run(100_000);
-    expect(world).toHaveAttribute("data-route-position", "1.200px");
-    animation.run(100_100);
     expect(world).toHaveAttribute("data-route-position", "2.400px");
+    animation.run(100_100);
+    expect(world).toHaveAttribute("data-route-position", "4.800px");
     expect(world).toHaveAttribute("data-motion-state", "running");
   });
 
@@ -1161,17 +1161,17 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-route-position", "0.000px");
     expect(track).toHaveAttribute("data-track-position", "0.000px");
     act(() => vi.advanceTimersByTime(1));
-    expect(world).toHaveAttribute("data-route-position", "1.200px");
-    expect(track).toHaveAttribute("data-track-position", "1.200px");
-    expect(track).toHaveAttribute("data-track-transform", "1.200px");
+    expect(world).toHaveAttribute("data-route-position", "2.400px");
+    expect(track).toHaveAttribute("data-track-position", "2.400px");
+    expect(track).toHaveAttribute("data-track-transform", "2.400px");
     expect(layout.dataset.wheelRotation).not.toBe(initialWheelRotation);
     expect(layout.dataset.wheelRotation).toBe(
-      `${trainWheelRotationDegrees(1.2).toFixed(3)}deg`,
+      `${trainWheelRotationDegrees(2.4).toFixed(3)}deg`,
     );
     expect(
       container.querySelector<HTMLElement>('[data-world-layer="near"]')!
         .dataset.layerPosition,
-    ).toBe("1.200px");
+    ).toBe("2.400px");
   });
 
   it("keeps reduced-motion approach restrained while station phases use wall-clock time", () => {

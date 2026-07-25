@@ -46,7 +46,7 @@ describe("train station journey", () => {
     );
     expect(first.stopPosition).toBe(3_680);
     expect(approachPosition).toBe(3_536);
-    expect(approachSeconds).toBeCloseTo(294.666_666_667, 9);
+    expect(approachSeconds).toBeCloseTo(147.333_333_333, 9);
     expect(first.startChunk % TRAIN_STATION_REGION_ALIGNMENT_CHUNKS).toBe(0);
     expect(
       Math.floor(first.startChunk / TRAIN_STATION_REGION_ALIGNMENT_CHUNKS),
@@ -77,16 +77,16 @@ describe("train station journey", () => {
         DEFAULT_TRAIN_STATION_JOURNEY_OPTIONS.cruiseSpeed;
 
       expect(approachSeconds, seed || "fallback seed").toBeGreaterThanOrEqual(
-        3 * 60,
+        2 * 60,
       );
       expect(approachSeconds, seed || "fallback seed").toBeLessThanOrEqual(
-        5 * 60,
+        3 * 60,
       );
       expect(repeatSeconds, seed || "fallback seed").toBeGreaterThanOrEqual(
-        6 * 60,
+        3 * 60,
       );
       expect(repeatSeconds, seed || "fallback seed").toBeLessThanOrEqual(
-        9 * 60,
+        5 * 60,
       );
       expect(second.startChunk % TRAIN_STATION_REGION_ALIGNMENT_CHUNKS).toBe(0);
       expect(second.startChunk).toBeGreaterThan(first.endChunk + 1);
@@ -266,7 +266,7 @@ describe("train station journey", () => {
         (speed, index) => index === 0 || speed >= departingSpeeds[index - 1]!,
       ),
     ).toBe(true);
-    expect(Math.max(...departingSpeeds)).toBeLessThanOrEqual(12);
+    expect(Math.max(...departingSpeeds)).toBeLessThanOrEqual(24);
   });
 
   it("offers deterministic development triggers for arriving and leaving", () => {
