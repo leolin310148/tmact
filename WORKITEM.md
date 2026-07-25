@@ -93,7 +93,7 @@ and safety properties established by the archived queue remain the baseline.
   Compare all three buildings in every time palette with `borz` at compact and
   wide sizes, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-029 — Rebuild the industrial-building lighting pipeline from daylight-neutral art.**
+- [x] **TRAIN-029 — Rebuild the industrial-building lighting pipeline from daylight-neutral art.**
   Apply the proven TRAIN-028 base-plus-emissive treatment to the workshop,
   warehouse, and water tower. Use the imagegen skill in edit mode; retain exact
   dimensions, anchors, silhouettes, perspective, and safe scale while replacing

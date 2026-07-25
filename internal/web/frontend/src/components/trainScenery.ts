@@ -6,8 +6,11 @@ import buildingCottageEmissiveUrl from "../assets/train-theme/sprites/scenery/bu
 import buildingRowhouseUrl from "../assets/train-theme/sprites/scenery/building-rowhouse.png";
 import buildingRowhouseEmissiveUrl from "../assets/train-theme/sprites/scenery/building-rowhouse-emissive.png";
 import buildingWarehouseUrl from "../assets/train-theme/sprites/scenery/building-warehouse.png";
+import buildingWarehouseEmissiveUrl from "../assets/train-theme/sprites/scenery/building-warehouse-emissive.png";
 import buildingWaterTowerUrl from "../assets/train-theme/sprites/scenery/building-water-tower.png";
+import buildingWaterTowerEmissiveUrl from "../assets/train-theme/sprites/scenery/building-water-tower-emissive.png";
 import buildingWorkshopUrl from "../assets/train-theme/sprites/scenery/building-workshop.png";
+import buildingWorkshopEmissiveUrl from "../assets/train-theme/sprites/scenery/building-workshop-emissive.png";
 import cloudCumulusUrl from "../assets/train-theme/sprites/scenery/cloud-cumulus.png";
 import cloudStormUrl from "../assets/train-theme/sprites/scenery/cloud-storm.png";
 import cloudWispUrl from "../assets/train-theme/sprites/scenery/cloud-wisp.png";
@@ -269,6 +272,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 28,
     safeScale: [0.75, 1.2],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-workshop-emissive.png",
+      src: buildingWorkshopEmissiveUrl,
+      width: 100,
+      height: 28,
+    },
   }),
   asset({
     id: "building-apartments",
@@ -319,6 +329,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 84,
     safeScale: [0.65, 1.05],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-warehouse-emissive.png",
+      src: buildingWarehouseEmissiveUrl,
+      width: 99,
+      height: 84,
+    },
   }),
   asset({
     id: "building-water-tower",
@@ -331,6 +348,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 100,
     safeScale: [0.55, 0.9],
     dayNightTreatment: "emissive-windows",
+    emissive: {
+      kind: "windows",
+      fileName: "building-water-tower-emissive.png",
+      src: buildingWaterTowerEmissiveUrl,
+      width: 56,
+      height: 100,
+    },
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
 
@@ -577,12 +601,6 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         minimumSpacingPx: 144,
         cooldownChunks: 2,
       },
-    },
-    landmark: {
-      layer: "midground",
-      assetIds: ["building-water-tower"],
-      probability: 0.42,
-      maxPerRegion: 1,
     },
   },
   coast: {

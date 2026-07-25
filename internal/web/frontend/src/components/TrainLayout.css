@@ -897,28 +897,6 @@ html[data-pane-switcher-layout="train"] .statusline {
   opacity: 0.16;
 }
 
-.train-emissive-overlay--windows {
-  bottom: calc(var(--train-chunk-terrain-height) + 7px);
-  width: 18px;
-  height: 9px;
-  transform: translateX(-50%);
-  background:
-    repeating-linear-gradient(
-      90deg,
-      var(--train-palette-emissive) 0 2px,
-      transparent 2px 5px
-    );
-  filter: drop-shadow(0 0 3px var(--train-palette-emissive));
-}
-
-.train-emissive-overlay--town-edge-windows {
-  right: 12%;
-  bottom: 36px;
-  left: 12%;
-  width: auto;
-  transform: none;
-}
-
 .train-emissive-overlay--streetlight,
 .train-emissive-overlay--station-lamp,
 .train-emissive-overlay--signal {

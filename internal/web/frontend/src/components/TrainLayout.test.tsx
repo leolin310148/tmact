@@ -1594,7 +1594,7 @@ describe("TrainLayout", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("aligns bounded town window masks, isolates palette state, and fails unlit", () => {
+  it("aligns bounded industrial masks, isolates palette state, and fails unlit", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
@@ -1606,9 +1606,14 @@ describe("TrainLayout", () => {
       generateRouteChunk("town-mask-render", index),
     ).find(
       (candidate) =>
-        candidate.region === "town" &&
+        candidate.region === "industrial" &&
         trainSceneryPlacementsForChunk("midground", candidate).some(
-          (placement) => placement.asset.emissive,
+          (placement) =>
+            [
+              "building-workshop",
+              "building-warehouse",
+              "building-water-tower",
+            ].includes(placement.asset.id),
         ),
     )!;
     expect(chunk).toBeDefined();
@@ -1629,7 +1634,7 @@ describe("TrainLayout", () => {
     const bases = container.querySelectorAll<HTMLImageElement>(
       "[data-scenery-asset^='building-']",
     );
-    expect(masks.length).toBeLessThanOrEqual(bases.length);
+    expect(masks.length).toBe(bases.length);
 
     for (const mask of masks) {
       const owner = mask.dataset.emissiveOwner!;
@@ -1651,12 +1656,9 @@ describe("TrainLayout", () => {
       expect(mask.style.getPropertyValue("--train-scenery-scale")).toBe(
         base.style.getPropertyValue("--train-scenery-scale"),
       );
-      const genericAtOwner = [
-        ...chunk.querySelectorAll<HTMLElement>(
-          ".train-emissive-overlay--windows:not(.train-emissive-overlay--town-edge-windows)",
-        ),
-      ].filter((overlay) => overlay.style.left === mask.style.left);
-      expect(genericAtOwner).toHaveLength(0);
+      expect(
+        chunk.querySelectorAll(".train-emissive-overlay--windows"),
+      ).toHaveLength(0);
     }
 
     const mask = masks[0]!;
@@ -1692,7 +1694,6 @@ describe("TrainLayout", () => {
     const requiredKinds = [
       "stars",
       "moon",
-      "windows",
       "streetlight",
       "station-lamp",
       "signal",
@@ -1715,6 +1716,14 @@ describe("TrainLayout", () => {
         expect(overlay).not.toHaveAttribute("data-scenery-asset");
       }
     }
+    expect(
+      container.querySelectorAll(".train-emissive-overlay--windows"),
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll(".train-scenery-emissive-mask").length,
+    ).toBeLessThanOrEqual(
+      container.querySelectorAll("[data-scenery-category='building']").length,
+    );
   });
 
   it("renders one bounded seeded star catalogue instead of repeating CSS grids", () => {

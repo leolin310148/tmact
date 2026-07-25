@@ -810,28 +810,6 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
         }
         return sprites;
       })}
-      {sceneryPlacements
-        .filter(
-          (placement) =>
-            placement.asset.category === "building" &&
-            !placement.asset.emissive,
-        )
-        .map((placement, ordinal) => (
-          <span
-            className="train-emissive-overlay train-emissive-overlay--windows"
-            data-emissive="windows"
-            style={{ left: `${placement.offsetPercent}%` }}
-            key={`windows-${placement.asset.id}-${ordinal}`}
-          />
-        ))}
-      {layer.name === "midground" &&
-      chunk.setPiece?.type === "town-edge" ? (
-        <span
-          className="train-emissive-overlay train-emissive-overlay--windows train-emissive-overlay--town-edge-windows"
-          data-emissive="windows"
-          data-set-piece-id={chunk.setPiece.id}
-        />
-      ) : null}
       {layer.name === "midground" ? (
         <span
           className="train-emissive-overlay train-emissive-overlay--streetlight"

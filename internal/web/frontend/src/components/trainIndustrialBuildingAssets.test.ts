@@ -5,8 +5,11 @@ import { resolve } from "node:path";
 import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
+import { generateRouteChunk, TRAIN_PARALLAX_LAYERS } from "./trainRoute";
 import {
+  TRAIN_REGION_SCENERY_PROFILES,
   TRAIN_SCENERY_BUILDINGS,
+  trainSceneryPlacementsForChunk,
   type TrainSceneryAsset,
 } from "./trainScenery";
 
@@ -16,11 +19,23 @@ interface DecodedPng {
   pixels: Uint8Array;
 }
 
-const TOWN_BUILDING_IDS = [
-  "building-rowhouse",
-  "building-apartments",
-  "building-cottage",
+const INDUSTRIAL_BUILDING_IDS = [
+  "building-workshop",
+  "building-warehouse",
+  "building-water-tower",
 ] as const;
+
+const EXPECTED_OPAQUE_PIXELS: Record<string, number> = {
+  "building-workshop": 2127,
+  "building-warehouse": 6347,
+  "building-water-tower": 2748,
+} as const;
+
+const EXPECTED_EMISSIVE_PIXELS: Record<string, number> = {
+  "building-workshop": 28,
+  "building-warehouse": 26,
+  "building-water-tower": 8,
+} as const;
 
 function paeth(left: number, above: number, upperLeft: number): number {
   const estimate = left + above - upperLeft;
@@ -98,37 +113,33 @@ function decodeRgbaPng(fileName: string): DecodedPng {
   return { width, height, pixels };
 }
 
-function townBuildings(): TrainSceneryAsset[] {
-  return TOWN_BUILDING_IDS.map((id) => {
+function industrialBuildings(): TrainSceneryAsset[] {
+  return INDUSTRIAL_BUILDING_IDS.map((id) => {
     const asset = TRAIN_SCENERY_BUILDINGS.find((candidate) => candidate.id === id);
     expect(asset).toBeDefined();
     return asset!;
   });
 }
 
-describe("town building base and emissive assets", () => {
-  it("records exact geometry-aligned mask metadata without changing base geometry", () => {
-    for (const asset of townBuildings()) {
+describe("industrial building base and emissive assets", () => {
+  it("records exact geometry-aligned masks for every industrial structure", () => {
+    for (const asset of industrialBuildings()) {
       expect(asset.emissive).toMatchObject({
         kind: "windows",
         width: asset.width,
         height: asset.height,
       });
-      expect(asset.emissive?.fileName).toBe(
-        `${asset.id}-emissive.png`,
-      );
+      expect(asset.emissive?.fileName).toBe(`${asset.id}-emissive.png`);
       expect(asset.emissive?.src).toBeTruthy();
     }
 
     expect(
-      townBuildings()
-        .filter((asset) => asset.emissive)
-        .map((asset) => asset.id),
-    ).toEqual(TOWN_BUILDING_IDS);
+      TRAIN_SCENERY_BUILDINGS.filter((asset) => !asset.emissive),
+    ).toHaveLength(0);
   });
 
-  it("ships binary-alpha opaque bases and sparse masks aligned only to solid pixels", () => {
-    for (const asset of townBuildings()) {
+  it("ships opaque daylight bases with sparse masks on real solid pixels", () => {
+    for (const asset of industrialBuildings()) {
       const base = decodeRgbaPng(asset.fileName);
       const emissive = decodeRgbaPng(asset.emissive!.fileName);
       expect([base.width, base.height]).toEqual([asset.width, asset.height]);
@@ -137,7 +148,6 @@ describe("town building base and emissive assets", () => {
         asset.height,
       ]);
 
-      let transparentBasePixels = 0;
       let opaqueBasePixels = 0;
       let litPixels = 0;
       const materialColors = new Set<string>();
@@ -148,9 +158,7 @@ describe("town building base and emissive assets", () => {
         expect([0, 255]).toContain(baseAlpha);
         expect([0, 255]).toContain(maskAlpha);
 
-        if (baseAlpha === 0) {
-          transparentBasePixels++;
-        } else {
+        if (baseAlpha === 255) {
           opaqueBasePixels++;
           materialColors.add(
             `${base.pixels[offset]},${base.pixels[offset + 1]},${base.pixels[offset + 2]}`,
@@ -168,16 +176,78 @@ describe("town building base and emissive assets", () => {
         }
       }
 
-      expect(transparentBasePixels).toBeGreaterThan(0);
-      expect(opaqueBasePixels).toBeGreaterThan(base.width);
+      expect(opaqueBasePixels).toBe(EXPECTED_OPAQUE_PIXELS[asset.id]);
+      expect(litPixels).toBe(EXPECTED_EMISSIVE_PIXELS[asset.id]);
       expect(materialColors.size).toBeGreaterThan(24);
-      expect(litPixels).toBeGreaterThan(8);
-      expect(litPixels).toBeLessThan(base.width * base.height * 0.08);
+      expect(litPixels).toBeLessThan(base.width * base.height * 0.02);
     }
   });
 
-  it("keeps the committed PNG bytes deterministic across repeated decoding", () => {
-    for (const asset of townBuildings()) {
+  it("keeps industrial structures owned only by the industrial region", () => {
+    const owners = new Map<string, Set<string>>(
+      INDUSTRIAL_BUILDING_IDS.map((id) => [id, new Set<string>()]),
+    );
+
+    for (const [region, profile] of Object.entries(
+      TRAIN_REGION_SCENERY_PROFILES,
+    )) {
+      for (const rule of Object.values(profile.layers)) {
+        for (const id of rule?.assetIds ?? []) {
+          owners.get(id)?.add(region);
+        }
+      }
+      for (const id of "landmark" in profile ? profile.landmark.assetIds : []) {
+        owners.get(id)?.add(region);
+      }
+    }
+
+    for (const id of INDUSTRIAL_BUILDING_IDS) {
+      expect(owners.get(id), id).toEqual(new Set(["industrial"]));
+    }
+  });
+
+  it("renders industrial ownership deterministically without changing bounds", () => {
+    const collect = (seed: string) =>
+      Array.from({ length: 2401 }, (_, offset) => offset - 1200).flatMap(
+        (index) => {
+          const chunk = generateRouteChunk(seed, index);
+          return TRAIN_PARALLAX_LAYERS.flatMap((layer) =>
+            trainSceneryPlacementsForChunk(layer.name, chunk)
+              .filter((placement) =>
+                INDUSTRIAL_BUILDING_IDS.includes(
+                  placement.asset.id as (typeof INDUSTRIAL_BUILDING_IDS)[number],
+                ),
+              )
+              .map((placement) => ({
+                chunk: chunk.index,
+                region: chunk.region,
+                layer: layer.name,
+                asset: placement.asset.id,
+                offset: placement.offsetPercent,
+                scale: placement.scale,
+                landmark: placement.landmark,
+              })),
+          );
+        },
+      );
+
+    const first = collect("industrial-lighting");
+    expect(collect("industrial-lighting")).toEqual(first);
+    expect(new Set(first.map((placement) => placement.asset))).toEqual(
+      new Set(INDUSTRIAL_BUILDING_IDS),
+    );
+    expect(
+      first.every(
+        (placement) =>
+          placement.region === "industrial" &&
+          placement.layer === "midground",
+      ),
+    ).toBe(true);
+    expect(first.length).toBeLessThan(2401 * 2);
+  });
+
+  it("keeps committed PNG decoding deterministic", () => {
+    for (const asset of industrialBuildings()) {
       expect(decodeRgbaPng(asset.fileName)).toEqual(
         decodeRgbaPng(asset.fileName),
       );
