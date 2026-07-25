@@ -15,7 +15,12 @@ import cloudCumulusUrl from "../assets/train-theme/sprites/scenery/cloud-cumulus
 import cloudStormUrl from "../assets/train-theme/sprites/scenery/cloud-storm.png";
 import cloudWispUrl from "../assets/train-theme/sprites/scenery/cloud-wisp.png";
 import coastShoreUrl from "../assets/train-theme/sprites/scenery/coast-shore.png";
+import propCrossingMarkerUrl from "../assets/train-theme/sprites/scenery/prop-crossing-marker.png";
 import propFenceUrl from "../assets/train-theme/sprites/scenery/prop-fence.png";
+import propLampPostUrl from "../assets/train-theme/sprites/scenery/prop-lamp-post.png";
+import propMaintenanceEquipmentUrl from "../assets/train-theme/sprites/scenery/prop-maintenance-equipment.png";
+import propMilepostUrl from "../assets/train-theme/sprites/scenery/prop-milepost.png";
+import propSignalCabinetUrl from "../assets/train-theme/sprites/scenery/prop-signal-cabinet.png";
 import propTelegraphPoleUrl from "../assets/train-theme/sprites/scenery/prop-telegraph-pole.png";
 import propWarningSignUrl from "../assets/train-theme/sprites/scenery/prop-warning-sign.png";
 import terrainAlpineUrl from "../assets/train-theme/sprites/scenery/terrain-alpine.png";
@@ -53,6 +58,7 @@ export type TrainSceneryAnchor = "center" | "bottom-center";
 export type TrainSceneryDayNightTreatment =
   | "atmospheric-filter"
   | "emissive-windows"
+  | "solid-palette-grade"
   | "water-reflection";
 
 export interface TrainSceneryEmissiveAsset {
@@ -72,17 +78,20 @@ export interface TrainSceneryAsset {
   anchor: TrainSceneryAnchor;
   width: number;
   height: number;
+  collisionWidth: number;
   safeScale: readonly [minimum: number, maximum: number];
   dayNightTreatment: TrainSceneryDayNightTreatment;
   emissive?: TrainSceneryEmissiveAsset;
 }
 
 function asset(
-  definition: Omit<TrainSceneryAsset, "safeScale"> & {
+  definition: Omit<TrainSceneryAsset, "collisionWidth" | "safeScale"> & {
+    collisionWidth?: number;
     safeScale?: TrainSceneryAsset["safeScale"];
   },
 ): TrainSceneryAsset {
   return {
+    collisionWidth: definition.width,
     safeScale: [0.75, 1.2],
     ...definition,
   };
@@ -177,7 +186,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 35,
     height: 84,
     safeScale: [0.65, 1.05],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "vegetation-conifer-squat",
@@ -189,7 +198,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 73,
     height: 84,
     safeScale: [0.6, 1],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "vegetation-deciduous",
@@ -201,7 +210,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 70,
     height: 84,
     safeScale: [0.6, 1],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "vegetation-coastal-pine",
@@ -213,7 +222,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 43,
     height: 84,
     safeScale: [0.65, 1.05],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "vegetation-hedgerow",
@@ -225,7 +234,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 112,
     height: 52,
     safeScale: [0.7, 1.1],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "vegetation-reeds",
@@ -237,7 +246,7 @@ export const TRAIN_SCENERY_VEGETATION = [
     width: 27,
     height: 68,
     safeScale: [0.7, 1.15],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
 
@@ -399,7 +408,7 @@ export const TRAIN_SCENERY_PROPS = [
     width: 34,
     height: 84,
     safeScale: [0.65, 1],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "prop-warning-sign",
@@ -411,7 +420,7 @@ export const TRAIN_SCENERY_PROPS = [
     width: 51,
     height: 84,
     safeScale: [0.55, 0.85],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
   }),
   asset({
     id: "prop-fence",
@@ -423,9 +432,112 @@ export const TRAIN_SCENERY_PROPS = [
     width: 124,
     height: 34,
     safeScale: [0.7, 1],
-    dayNightTreatment: "atmospheric-filter",
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "prop-milepost",
+    fileName: "prop-milepost.png",
+    src: propMilepostUrl,
+    category: "prop",
+    layer: "near",
+    anchor: "bottom-center",
+    width: 32,
+    height: 68,
+    collisionWidth: 24,
+    safeScale: [0.7, 1],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "prop-signal-cabinet",
+    fileName: "prop-signal-cabinet.png",
+    src: propSignalCabinetUrl,
+    category: "prop",
+    layer: "near",
+    anchor: "bottom-center",
+    width: 68,
+    height: 52,
+    collisionWidth: 58,
+    safeScale: [0.65, 0.95],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "prop-crossing-marker",
+    fileName: "prop-crossing-marker.png",
+    src: propCrossingMarkerUrl,
+    category: "prop",
+    layer: "near",
+    anchor: "bottom-center",
+    width: 54,
+    height: 84,
+    collisionWidth: 42,
+    safeScale: [0.55, 0.85],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "prop-lamp-post",
+    fileName: "prop-lamp-post.png",
+    src: propLampPostUrl,
+    category: "prop",
+    layer: "near",
+    anchor: "bottom-center",
+    width: 40,
+    height: 92,
+    collisionWidth: 24,
+    safeScale: [0.55, 0.85],
+    dayNightTreatment: "solid-palette-grade",
+  }),
+  asset({
+    id: "prop-maintenance-equipment",
+    fileName: "prop-maintenance-equipment.png",
+    src: propMaintenanceEquipmentUrl,
+    category: "prop",
+    layer: "near",
+    anchor: "bottom-center",
+    width: 96,
+    height: 48,
+    collisionWidth: 82,
+    safeScale: [0.65, 0.95],
+    dayNightTreatment: "solid-palette-grade",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
+
+export const TRAIN_NEAR_TRACK_PROP_POOLS = {
+  forest: [
+    "prop-fence",
+    "prop-telegraph-pole",
+    "prop-milepost",
+    "prop-maintenance-equipment",
+  ],
+  mountain: [
+    "prop-warning-sign",
+    "prop-milepost",
+    "prop-crossing-marker",
+    "prop-maintenance-equipment",
+  ],
+  town: [
+    "prop-telegraph-pole",
+    "prop-fence",
+    "prop-crossing-marker",
+    "prop-lamp-post",
+    "prop-signal-cabinet",
+  ],
+  coast: [
+    "prop-fence",
+    "prop-milepost",
+    "prop-lamp-post",
+    "prop-maintenance-equipment",
+  ],
+  industrial: [
+    "prop-telegraph-pole",
+    "prop-crossing-marker",
+    "prop-lamp-post",
+    "prop-signal-cabinet",
+    "prop-maintenance-equipment",
+  ],
+} as const satisfies Record<TrainRegionName, readonly string[]>;
+
+export const TRAIN_NEAR_TRACK_MIN_SPACING_PX = 320;
+export const TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS = 3;
 
 export const TRAIN_SCENERY_ASSETS = [
   ...TRAIN_SCENERY_CLOUDS,
@@ -459,7 +571,6 @@ export interface TrainRegionSceneryProfile {
 }
 
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
-const PROP_IDS = TRAIN_SCENERY_PROPS.map((asset) => asset.id);
 export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
 export const TRAIN_CLOUD_MAX_ALTITUDE_PERCENT = 42;
 export const TRAIN_CLOUD_MIN_SPACING_PX = 168;
@@ -505,11 +616,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
       near: {
-        assetIds: ["prop-fence", "prop-telegraph-pole"],
-        density: 0.42,
+        assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.forest,
+        density: 0.38,
         maxPerChunk: 1,
-        minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
+        cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
     },
   },
@@ -549,11 +660,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
       near: {
-        assetIds: ["prop-warning-sign", "prop-telegraph-pole"],
-        density: 0.28,
+        assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.mountain,
+        density: 0.3,
         maxPerChunk: 1,
-        minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
+        cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
     },
   },
@@ -595,11 +706,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
       near: {
-        assetIds: PROP_IDS,
-        density: 0.52,
+        assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.town,
+        density: 0.46,
         maxPerChunk: 1,
-        minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
+        cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
     },
   },
@@ -640,11 +751,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
       near: {
-        assetIds: ["prop-fence", "prop-warning-sign"],
-        density: 0.3,
+        assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.coast,
+        density: 0.32,
         maxPerChunk: 1,
-        minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
+        cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
     },
   },
@@ -684,11 +795,11 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 2,
       },
       near: {
-        assetIds: PROP_IDS,
-        density: 0.62,
+        assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.industrial,
+        density: 0.5,
         maxPerChunk: 1,
-        minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        minimumSpacingPx: TRAIN_NEAR_TRACK_MIN_SPACING_PX,
+        cooldownChunks: TRAIN_NEAR_TRACK_COOLDOWN_CHUNKS,
       },
     },
     landmark: {
@@ -1104,7 +1215,7 @@ function cloudPlacementsForRegion(
           TRAIN_ROUTE_CHUNK_WIDTH) *
         100,
       scale,
-      collisionWidth: resolvedAsset.width * scale,
+      collisionWidth: resolvedAsset.collisionWidth * scale,
       minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
       landmark: false,
       setPiece: null,
@@ -1147,11 +1258,31 @@ function setPiecePlacement(
     asset: resolvedAsset,
     offsetPercent: 50,
     scale,
-    collisionWidth: resolvedAsset.width * scale,
+    collisionWidth: resolvedAsset.collisionWidth * scale,
     minimumSpacingPx: 0,
     landmark: false,
     setPiece,
   };
+}
+
+function nearTrackCandidateCount(
+  routeSeed: string,
+  chunkIndex: number,
+  seedVersion: string,
+): number {
+  const regionIndex = Math.floor(chunkIndex / TRAIN_REGION_CHUNK_LENGTH);
+  const region = trainRegionAtIndex(routeSeed, regionIndex, seedVersion);
+  const rule = TRAIN_REGION_SCENERY_PROFILES[region].layers.near;
+  if (!rule) return 0;
+  const regionOffset = positiveModulo(chunkIndex, TRAIN_REGION_CHUNK_LENGTH);
+  const chunkKey =
+    `${seedVersion}:${routeSeed}:region-plan:` +
+    `${regionIndex}:near:chunk:${regionOffset}`;
+  return objectCount(
+    rule.density,
+    rule.maxPerChunk,
+    trainRouteRandomUnit(`${chunkKey}:density`),
+  );
 }
 
 function regionLayerPlan(
@@ -1180,7 +1311,21 @@ function regionLayerPlan(
           assetIds: profile.landmark.assetIds,
         }
       : null;
-  const recentIDs: string[] = [];
+  const previousRegion =
+    layer === "near"
+      ? trainRegionAtIndex(
+          chunk.routeSeed,
+          chunk.regionIndex - 1,
+          chunk.seedVersion,
+        )
+      : null;
+  const previousRule = previousRegion
+    ? TRAIN_REGION_SCENERY_PROFILES[previousRegion].layers.near
+    : null;
+  const recentIDs: string[] =
+    layer === "near" && previousRule
+      ? previousRule.assetIds.filter((id) => rule.assetIds.includes(id))
+      : [];
   const plan: TrainSceneryPlacement[][] = [];
 
   for (let localOffset = 0; localOffset < TRAIN_REGION_CHUNK_LENGTH; localOffset++) {
@@ -1197,13 +1342,24 @@ function regionLayerPlan(
     }
     const isLandmark = landmark?.offset === localOffset;
     const assetIds = isLandmark ? landmark.assetIds : rule.assetIds;
-    const count = isLandmark
+    const candidateCount = isLandmark
       ? 1
       : objectCount(
           rule.density,
           rule.maxPerChunk,
           trainRouteRandomUnit(`${chunkKey}:density`),
         );
+    const absoluteChunkIndex =
+      chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset;
+    const count =
+      layer === "near" &&
+      nearTrackCandidateCount(
+        chunk.routeSeed,
+        absoluteChunkIndex - 1,
+        chunk.seedVersion,
+      ) > 0
+        ? 0
+        : candidateCount;
     const offsets = isLandmark
       ? [50]
       : placementOffsets(
@@ -1226,7 +1382,7 @@ function regionLayerPlan(
         asset,
         offsetPercent,
         scale,
-        collisionWidth: asset.width * scale,
+        collisionWidth: asset.collisionWidth * scale,
         minimumSpacingPx: rule.minimumSpacingPx,
         landmark: isLandmark,
         setPiece: null,

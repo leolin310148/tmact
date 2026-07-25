@@ -52,8 +52,8 @@ describe("train scenery asset kit", () => {
     expect(TRAIN_SCENERY_BUILDINGS).toHaveLength(6);
     expect(TRAIN_SCENERY_BRIDGES).toHaveLength(1);
     expect(TRAIN_SCENERY_COASTS).toHaveLength(1);
-    expect(TRAIN_SCENERY_PROPS).toHaveLength(3);
-    expect(TRAIN_SCENERY_ASSETS).toHaveLength(23);
+    expect(TRAIN_SCENERY_PROPS).toHaveLength(8);
+    expect(TRAIN_SCENERY_ASSETS).toHaveLength(28);
     expect(new Set(TRAIN_SCENERY_ASSETS.map((asset) => asset.id)).size).toBe(
       TRAIN_SCENERY_ASSETS.length,
     );
@@ -63,10 +63,12 @@ describe("train scenery asset kit", () => {
       expect(asset.anchor).toMatch(/^(center|bottom-center)$/);
       expect(asset.width).toBeGreaterThan(0);
       expect(asset.height).toBeGreaterThan(0);
+      expect(asset.collisionWidth).toBeGreaterThan(0);
+      expect(asset.collisionWidth).toBeLessThanOrEqual(asset.width);
       expect(asset.safeScale[0]).toBeGreaterThan(0);
       expect(asset.safeScale[1]).toBeGreaterThanOrEqual(asset.safeScale[0]);
       expect(asset.dayNightTreatment).toMatch(
-        /^(atmospheric-filter|emissive-windows|water-reflection)$/,
+        /^(atmospheric-filter|emissive-windows|solid-palette-grade|water-reflection)$/,
       );
     }
   });

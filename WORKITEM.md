@@ -123,7 +123,7 @@ and safety properties established by the archived queue remain the baseline.
   all three palettes with `borz`, then run the frontend suite, build, and
   `make test`.
 
-- [ ] **TRAIN-031 — Regrade vegetation and expand the near-track prop vocabulary.**
+- [x] **TRAIN-031 — Regrade vegetation and expand the near-track prop vocabulary.**
   Audit the six vegetation sprites and three existing near-track props under
   the opaque compositor, editing night-biased or hazy assets with the imagegen
   skill while preserving their dimensions and anchors. Add at least five
