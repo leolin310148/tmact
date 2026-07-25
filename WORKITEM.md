@@ -337,7 +337,7 @@ future station stop without growing the DOM or memory usage over time.
   and long-route DOM limits. Inspect multiple seeds at compact and ultrawide
   sizes with `borz`, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-024 — Make the daytime sky clearly blue.**
+- [x] **TRAIN-024 — Make the daytime sky clearly blue.**
   Retune only the day palette so the upper sky reads as a confident natural blue
   and the horizon as a lighter blue/cyan haze instead of the current muted
   green-gray gradient. Preserve the existing route geometry, crossfade timing,

@@ -152,9 +152,9 @@ interface TrainTimePalette {
 
 export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> = {
   day: {
-    skyTop: "#78b9d5",
-    skyBottom: "#d9ead3",
-    haze: "rgba(231, 244, 221, 0.48)",
+    skyTop: "#54a8d8",
+    skyBottom: "#b9e4ef",
+    haze: "rgba(194, 229, 239, 0.44)",
     silhouette: "#53767b",
     farSurface: "#426e64",
     midSurface: "#315c51",

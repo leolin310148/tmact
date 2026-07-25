@@ -12,6 +12,7 @@ import {
   TRAIN_ARTWORK_SCALE,
   TRAIN_LOCOMOTIVE_WHEEL_COUNT,
   TRAIN_MIN_SEAT_TARGET_PX,
+  TRAIN_TIME_PALETTES,
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
@@ -1390,6 +1391,79 @@ describe("TrainLayout", () => {
     expect(trainPaletteContrastRatio("day")).toBeGreaterThanOrEqual(4.5);
     expect(trainPaletteContrastRatio("sunset")).toBeGreaterThanOrEqual(4.5);
     expect(trainPaletteContrastRatio("night")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("retunes only the day atmosphere to a stronger natural blue", () => {
+    const previousDaySky = {
+      skyTop: "#78b9d5",
+      skyBottom: "#d9ead3",
+      haze: "rgba(231, 244, 221, 0.48)",
+    };
+    const rgbChannels = (hex: string) =>
+      hex
+        .slice(1)
+        .match(/.{2}/g)!
+        .map((channel) => Number.parseInt(channel, 16));
+    const blueBias = (hex: string) => {
+      const [red, , blue] = rgbChannels(hex);
+      return blue! - red!;
+    };
+    const chroma = (hex: string) => {
+      const channels = rgbChannels(hex);
+      return Math.max(...channels) - Math.min(...channels);
+    };
+
+    expect(TRAIN_TIME_PALETTES.day).toEqual({
+      skyTop: "#54a8d8",
+      skyBottom: "#b9e4ef",
+      haze: "rgba(194, 229, 239, 0.44)",
+      silhouette: "#53767b",
+      farSurface: "#426e64",
+      midSurface: "#315c51",
+      nearSurface: "#183f3b",
+      water: "#4c9db5",
+      foregroundContrast: "#10243a",
+      controlSurface: "#f4fbff",
+      emissive: "#fff2ad",
+    });
+    expect(blueBias(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(
+      blueBias(previousDaySky.skyTop),
+    );
+    expect(blueBias(TRAIN_TIME_PALETTES.day.skyBottom)).toBeGreaterThan(
+      blueBias(previousDaySky.skyBottom),
+    );
+    expect(chroma(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(
+      chroma(previousDaySky.skyTop),
+    );
+    expect(chroma(TRAIN_TIME_PALETTES.day.skyBottom)).toBeGreaterThan(
+      chroma(previousDaySky.skyBottom),
+    );
+    expect(TRAIN_TIME_PALETTES.sunset).toEqual({
+      skyTop: "#7b527a",
+      skyBottom: "#e49a69",
+      haze: "rgba(255, 190, 129, 0.42)",
+      silhouette: "#59455d",
+      farSurface: "#58465b",
+      midSurface: "#463b50",
+      nearSurface: "#2b3042",
+      water: "#9a6173",
+      foregroundContrast: "#fff6df",
+      controlSurface: "#4b263f",
+      emissive: "#ffd889",
+    });
+    expect(TRAIN_TIME_PALETTES.night).toEqual({
+      skyTop: "#09172b",
+      skyBottom: "#102740",
+      haze: "rgba(68, 101, 135, 0.25)",
+      silhouette: "#142d47",
+      farSurface: "#153752",
+      midSurface: "#123149",
+      nearSurface: "#0c2639",
+      water: "#174b68",
+      foregroundContrast: "#eaf6ff",
+      controlSurface: "#07111f",
+      emissive: "#ffe596",
+    });
   });
 
   it("keeps world position independent from horizontal train inspection", () => {
