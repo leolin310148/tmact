@@ -277,7 +277,7 @@ future station stop without growing the DOM or memory usage over time.
   Validate empty/occupied compact, desktop, and ultrawide layouts with `borz`,
   then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-020 — Give selected passengers a Diablo-II-style golden set aura.**
+- [x] **TRAIN-020 — Give selected passengers a Diablo-II-style golden set aura.**
   Replace the selected passenger's current cyan sprite outline with a restrained
   golden equipped-set treatment inspired by Diablo II: a crisp pale-gold inner
   silhouette, warm amber outer glow, and subtle localized aura behind or below

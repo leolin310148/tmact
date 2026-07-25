@@ -1356,8 +1356,62 @@ describe("TrainLayout", () => {
     expect(onSelect).toHaveBeenCalledWith("%1");
   });
 
-  it("preserves selected and stale passenger state on the scaled artwork layer", () => {
-    render(
+  it("keeps a golden set aura exclusive to the selected passenger", () => {
+    const panes = [
+      pane({ pane_id: "%1", session: "alpha", runtime: "codex" }),
+      pane({ pane_id: "%2", session: "beta", runtime: "codex" }),
+    ];
+    const { container, rerender } = render(
+      <TrainLayout panes={panes} selected="%1" onSelect={vi.fn()} />,
+    );
+
+    const alpha = screen.getByRole("button", {
+      name: "Select pane alpha, idle",
+    });
+    const beta = screen.getByRole("button", {
+      name: "Select pane beta, idle",
+    });
+    expect(alpha.querySelector(".train-selected-set-aura")).toBeInTheDocument();
+    expect(beta.querySelector(".train-selected-set-aura")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".train-selected-set-aura")).toHaveLength(1);
+
+    rerender(<TrainLayout panes={panes} selected="%2" onSelect={vi.fn()} />);
+    expect(alpha.querySelector(".train-selected-set-aura")).not.toBeInTheDocument();
+    expect(beta.querySelector(".train-selected-set-aura")).toBeInTheDocument();
+    expect(container.querySelectorAll(".train-selected-set-aura")).toHaveLength(1);
+
+    rerender(<TrainLayout panes={panes} selected={null} onSelect={vi.fn()} />);
+    expect(container.querySelector(".train-selected-set-aura")).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus independent from the selected golden treatment", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <TrainLayout
+        panes={[pane({ pane_id: "%1", session: "alpha", runtime: "codex" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    await user.tab();
+    await user.tab();
+    const passenger = screen.getByRole("button", {
+      name: "Select pane alpha, idle",
+    });
+    expect(passenger).toHaveFocus();
+    expect(passenger).not.toHaveClass("selected");
+    expect(container.querySelector(".train-selected-set-aura")).not.toBeInTheDocument();
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--accent\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat\.selected \.train-seat-sprite\s*\{[\s\S]*?#fff1ad[\s\S]*?rgba\(224,\s*145,\s*29,\s*0\.95\)/,
+    );
+  });
+
+  it("preserves a legible golden selection when the passenger is stale", () => {
+    const { container, rerender } = render(
       <TrainLayout
         panes={[
           pane({
@@ -1380,11 +1434,47 @@ describe("TrainLayout", () => {
     expect(
       passenger.querySelector(".train-seat-artwork .train-seat-sprite"),
     ).toBeInTheDocument();
+    expect(passenger.querySelector(".train-selected-set-aura")).toBeInTheDocument();
     expect(trainLayoutCss).toMatch(
-      /\.train-seat\.selected \.train-seat-sprite\s*\{[\s\S]*?drop-shadow/,
+      /\.train-seat\.selected\.stale \.train-seat-sprite\s*\{[\s\S]*?opacity:\s*0\.68;[\s\S]*?grayscale\(0\.32\)[\s\S]*?#fff1ad/,
     );
     expect(trainLayoutCss).toMatch(
-      /\.train-seat\.stale \.train-seat-sprite\s*\{[\s\S]*?opacity:\s*0\.55;/,
+      /\.train-seat\.stale:not\(\.selected\) \.train-seat-sprite\s*\{[\s\S]*?opacity:\s*0\.55;/,
+    );
+
+    rerender(
+      <TrainLayout
+        panes={[
+          pane({
+            pane_id: "%1",
+            session: "alpha",
+            runtime: "codex",
+            stale: true,
+          }),
+        ]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".train-selected-set-aura")).not.toBeInTheDocument();
+  });
+
+  it("uses a static but equally explicit golden aura for reduced motion", () => {
+    mockReducedMotion();
+    const { container } = render(
+      <TrainLayout
+        panes={[pane({ pane_id: "%1", session: "alpha", runtime: "codex" })]}
+        selected="%1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".train-selected-set-aura")).toHaveLength(1);
+    expect(trainLayoutCss).toMatch(
+      /@keyframes train-selected-set-shimmer\s*\{[\s\S]*?filter:\s*brightness\(1\.08\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-selected-set-aura\s*\{[\s\S]*?animation:\s*none;[\s\S]*?opacity:\s*0\.78;[\s\S]*?filter:\s*none;/,
     );
   });
 

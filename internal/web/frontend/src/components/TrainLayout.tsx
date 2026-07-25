@@ -301,6 +301,7 @@ function TrainPassenger({
       onClick={() => onSelect(paneID)}
     >
       <span className="train-seat-artwork" aria-hidden="true">
+        {selected ? <span className="train-selected-set-aura" /> : null}
         <img
           className="train-seat-sprite train-seat-sprite--occupied"
           src={OCCUPIED_SEAT_URLS[characterIndex]}

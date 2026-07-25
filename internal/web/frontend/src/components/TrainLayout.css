@@ -1085,6 +1085,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   position: absolute;
   top: calc(var(--train-seat-art-center-y) - var(--train-seat-target-center-y) + 50%);
   left: calc(var(--train-seat-art-center-x) - var(--train-seat-target-center-x) + 50%);
+  isolation: isolate;
   display: block;
   width: 17cqw;
   height: 17cqw;
@@ -1092,7 +1093,32 @@ html[data-pane-switcher-layout="train"] .statusline {
   pointer-events: none;
 }
 
+.train-selected-set-aura {
+  position: absolute;
+  z-index: 0;
+  bottom: 1%;
+  left: 50%;
+  width: 82%;
+  height: 44%;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(255, 244, 184, 0.52) 0 16%,
+      rgba(232, 168, 49, 0.38) 38%,
+      rgba(198, 112, 15, 0.16) 58%,
+      transparent 74%
+    );
+  box-shadow: 0 0 7px 1px rgba(220, 139, 23, 0.52);
+  opacity: 0.78;
+  transform: translateX(-50%);
+  animation: train-selected-set-shimmer 4.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .train-seat-sprite {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -1119,15 +1145,27 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-seat.selected .train-seat-sprite {
   filter:
-    drop-shadow(1px 0 0 #4ee9ff)
-    drop-shadow(-1px 0 0 #4ee9ff)
-    drop-shadow(0 1px 0 #4ee9ff)
-    drop-shadow(0 -1px 0 #4ee9ff);
+    drop-shadow(1px 0 0 #fff1ad)
+    drop-shadow(-1px 0 0 #fff1ad)
+    drop-shadow(0 1px 0 #fff1ad)
+    drop-shadow(0 -1px 0 #fff1ad)
+    drop-shadow(0 0 4px rgba(224, 145, 29, 0.95));
 }
 
-.train-seat.stale .train-seat-sprite {
+.train-seat.stale:not(.selected) .train-seat-sprite {
   opacity: 0.55;
   filter: grayscale(0.55);
+}
+
+.train-seat.selected.stale .train-seat-sprite {
+  opacity: 0.68;
+  filter:
+    grayscale(0.32)
+    drop-shadow(1px 0 0 #fff1ad)
+    drop-shadow(-1px 0 0 #fff1ad)
+    drop-shadow(0 1px 0 #fff1ad)
+    drop-shadow(0 -1px 0 #fff1ad)
+    drop-shadow(0 0 4px rgba(224, 145, 29, 0.95));
 }
 
 .train-seat:focus-visible {
@@ -1152,6 +1190,19 @@ html[data-pane-switcher-layout="train"] .statusline {
   box-shadow: 0 0 5px rgba(255, 193, 7, 0.45);
 }
 
+@keyframes train-selected-set-shimmer {
+  0%,
+  100% {
+    opacity: 0.7;
+    filter: brightness(0.96);
+  }
+
+  50% {
+    opacity: 0.86;
+    filter: brightness(1.08);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .train-world-layer-track,
   .train-world-track {
@@ -1173,6 +1224,12 @@ html[data-pane-switcher-layout="train"] .statusline {
 
   .train-station-signal::before {
     animation: none !important;
+  }
+
+  .train-selected-set-aura {
+    animation: none;
+    opacity: 0.78;
+    filter: none;
   }
 }
 
