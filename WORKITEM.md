@@ -108,7 +108,7 @@ and safety properties established by the archived queue remain the baseline.
   `borz` at compact and wide sizes, then run the frontend suite, build, and
   `make test`.
 
-- [ ] **TRAIN-030 — Regrade the distant terrain, coast, and bridge kit for clear daylight.**
+- [x] **TRAIN-030 — Regrade the distant terrain, coast, and bridge kit for clear daylight.**
   Audit the three terrain silhouettes, coast shore, and bridge truss against
   the new compositor. Use the imagegen skill in edit mode for any asset that
   cannot meet the visual contract through palette tokens alone. Daylight must

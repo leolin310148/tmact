@@ -19,6 +19,7 @@ import {
   TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
   trainWorldCruiseSpeed,
+  trainWorldRoutePosition,
   trainWorldTrackTransform,
   TrainLayout,
   TrainRouteChunk,
@@ -383,6 +384,15 @@ describe("TrainLayout", () => {
     expect(trainWorldCruiseSpeed("?train-cruise-speed=24")).toBe(24);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=999")).toBe(96);
     expect(trainWorldCruiseSpeed("?train-cruise-speed=nope")).toBe(24);
+  });
+
+  it("accepts a bounded development route-position override", () => {
+    expect(trainWorldRoutePosition("?train-route-position=5760")).toBe(5760);
+    expect(trainWorldRoutePosition("?train-route-position=9999999")).toBe(
+      1_000_000,
+    );
+    expect(trainWorldRoutePosition("?train-route-position=-1")).toBe(0);
+    expect(trainWorldRoutePosition("?train-route-position=nope")).toBe(0);
   });
 
   it("completes a deterministic journey across regions, station, resize, theme switch, and remount", () => {

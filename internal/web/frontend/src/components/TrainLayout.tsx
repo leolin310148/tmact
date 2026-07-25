@@ -109,6 +109,8 @@ const OCCUPIED_SEAT_URLS = [
 const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
 const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
+const TRAIN_WORLD_POSITION_PARAM = "train-route-position";
+const TRAIN_WORLD_MAX_DEVELOPMENT_POSITION = 1_000_000;
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
 export const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
@@ -273,6 +275,15 @@ export function trainWorldCruiseSpeed(search: string): number {
     return TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND;
   }
   return Math.min(96, requested);
+}
+
+export function trainWorldRoutePosition(search: string): number {
+  if (!import.meta.env.DEV) return 0;
+  const requested = Number.parseFloat(
+    new URLSearchParams(search).get(TRAIN_WORLD_POSITION_PARAM) ?? "",
+  );
+  if (!Number.isFinite(requested) || requested < 0) return 0;
+  return Math.min(TRAIN_WORLD_MAX_DEVELOPMENT_POSITION, requested);
 }
 
 export function trainWorldTrackTransform(routePosition: number): number {
@@ -968,7 +979,7 @@ function TrainWorld({
   const [initialStationJourney] = useState(() =>
     createTrainStationJourney(
       seed,
-      0,
+      trainWorldRoutePosition(window.location.search),
       { cruiseSpeed },
       trainStationDevelopmentTrigger(window.location.search),
     ),
