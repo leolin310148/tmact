@@ -9,9 +9,11 @@ import {
   TRAIN_REGION_CHUNK_LENGTH,
   TRAIN_REGION_PROFILES,
   TRAIN_SET_PIECE_DEFINITIONS,
+  TRAIN_SET_PIECE_VISUAL_VARIANT_COUNT,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
   trainSetPiecesAreIncompatible,
+  trainSetPieceVisualVariant,
   trainRegionAtIndex,
   trainParallaxLayerPosition,
   trainParallaxLayerTransform,
@@ -45,6 +47,7 @@ describe("train route chunks", () => {
         endIndex: 43,
         span: 4,
         segmentOffset: 2,
+        visualVariant: 0,
         renderLayer: "midground",
         reservedLayers: ["midground", "near"],
         incompatibleWith: ["tunnel", "coast-reveal", "town-edge", "station"],
@@ -179,6 +182,9 @@ describe("train route chunks", () => {
           ),
         );
       expect(new Set(segments.map((segment) => segment.id)).size).toBe(1);
+      expect(
+        new Set(segments.map((segment) => segment.visualVariant)).size,
+      ).toBe(1);
     }
 
     expect(complete.some((segments) => segments[0]?.type === "bridge")).toBe(true);
@@ -189,6 +195,72 @@ describe("train route chunks", () => {
           segments[0]?.type === "tunnel",
       ),
     ).toBe(true);
+  });
+
+  it("selects two stable visual compositions per major set piece without changing route contracts", () => {
+    const majorTypes = [
+      "bridge",
+      "tunnel",
+      "coast-reveal",
+      "town-edge",
+    ] as const;
+    const observed = new Map(
+      majorTypes.map((type) => [type, new Set<number>()]),
+    );
+    const firstPass = Array.from({ length: 7_201 }, (_, offset) =>
+      generateRouteChunk("variant-frequency-line", offset - 3_600),
+    );
+    const repeated = Array.from({ length: firstPass.length }, (_, offset) =>
+      generateRouteChunk("variant-frequency-line", offset - 3_600),
+    );
+
+    expect(repeated).toEqual(firstPass);
+    for (const chunk of firstPass) {
+      const setPiece = chunk.setPiece;
+      if (!setPiece || setPiece.type === "station") {
+        if (setPiece) expect(setPiece.visualVariant).toBe(0);
+        continue;
+      }
+      observed.get(setPiece.type)!.add(setPiece.visualVariant);
+      expect(setPiece.span).toBe(TRAIN_SET_PIECE_DEFINITIONS[setPiece.type].span);
+      expect(setPiece.incompatibleWith).toEqual(
+        TRAIN_SET_PIECE_DEFINITIONS[setPiece.type].incompatibleWith,
+      );
+    }
+
+    for (const type of majorTypes) {
+      expect(TRAIN_SET_PIECE_VISUAL_VARIANT_COUNT[type]).toBe(2);
+      expect(observed.get(type), type).toEqual(new Set([0, 1]));
+    }
+  });
+
+  it("keys visual variants by route version, seed, and set-piece identity", () => {
+    const ids = Array.from(
+      { length: 64 },
+      (_, index) => `tmact-train-route-v1:visual-key:set-piece:${index}:bridge`,
+    );
+    const catalogue = ids.map((id) =>
+      trainSetPieceVisualVariant("visual-key", id, "bridge"),
+    );
+    const repeated = ids.map((id) =>
+      trainSetPieceVisualVariant("visual-key", id, "bridge"),
+    );
+    const otherSeed = ids.map((id) =>
+      trainSetPieceVisualVariant("visual-key-b", id, "bridge"),
+    );
+    const otherVersion = ids.map((id) =>
+      trainSetPieceVisualVariant(
+        "visual-key",
+        id,
+        "bridge",
+        "tmact-train-route-v2",
+      ),
+    );
+
+    expect(repeated).toEqual(catalogue);
+    expect(otherSeed).not.toEqual(catalogue);
+    expect(otherVersion).not.toEqual(catalogue);
+    expect(new Set(catalogue)).toEqual(new Set([0, 1]));
   });
 
   it("declares symmetric incompatibility and bounded region reservations", () => {

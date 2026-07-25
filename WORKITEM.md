@@ -220,7 +220,7 @@ and safety properties established by the archived queue remain the baseline.
   five regions at night with `borz` at compact and wide sizes, then run the
   frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-036 — Add deterministic visual variants to major set pieces.**
+- [x] **TRAIN-036 — Add deterministic visual variants to major set pieces.**
   Create at least two coherent visual compositions for bridge, tunnel/cutting,
   coast reveal, and town edge while preserving their existing logical spans
   and station incompatibility rules. Reuse the revised kit where possible and

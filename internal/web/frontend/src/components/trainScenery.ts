@@ -1470,9 +1470,17 @@ function setPiecePlacement(
   if (!assetID) return null;
   const resolvedAsset = assetForID(assetID);
   const scale = resolvedAsset.safeScale[1];
+  const variantOffset =
+    setPiece.visualVariant === 0
+      ? 50
+      : setPiece.role === "entry"
+        ? 62
+        : setPiece.role === "exit"
+          ? 38
+          : 50;
   return {
     asset: resolvedAsset,
-    offsetPercent: 50,
+    offsetPercent: variantOffset,
     scale,
     collisionWidth: resolvedAsset.collisionWidth * scale,
     minimumSpacingPx: 0,

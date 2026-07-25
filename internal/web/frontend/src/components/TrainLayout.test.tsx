@@ -173,6 +173,7 @@ function routeGeometryFingerprint(container: HTMLElement): string[] {
         chunk.dataset.routeChunkIndex,
         chunk.dataset.routeRegion,
         chunk.dataset.routeSetPiece,
+        chunk.dataset.routeSetPieceVariant,
         chunk.style.left,
         chunk.style.width,
       ].join(":"),
@@ -1349,11 +1350,116 @@ describe("TrainLayout", () => {
     for (const segment of segments) {
       expect(segment).toHaveAttribute("data-set-piece-occlusion", "restrained");
       expect(segment.dataset.setPieceRole).toMatch(/^(entry|body|exit)$/);
+      expect(segment.dataset.setPieceVariant).toMatch(/^[01]$/);
+      expect(segment).toHaveClass(
+        `train-set-piece--variant-${segment.dataset.setPieceVariant}`,
+      );
       expect(Number(segment.dataset.setPieceSpan)).toBeGreaterThanOrEqual(3);
       expect(Number(segment.dataset.setPieceStart)).toBeLessThanOrEqual(
         Number(segment.dataset.setPieceEnd),
       );
     }
+  });
+
+  it("renders two continuous palette-token compositions for every major set piece", () => {
+    const majorTypes = [
+      "bridge",
+      "tunnel",
+      "coast-reveal",
+      "town-edge",
+    ] as const;
+    const representatives = new Map<
+      string,
+      ReturnType<typeof generateRouteChunk>[]
+    >();
+
+    for (let index = -3_600; index <= 3_600; index++) {
+      const chunk = generateRouteChunk("layout-variant-catalogue", index);
+      const setPiece = chunk.setPiece;
+      if (
+        !setPiece ||
+        setPiece.role !== "entry" ||
+        !majorTypes.includes(setPiece.type as (typeof majorTypes)[number])
+      ) {
+        continue;
+      }
+      const key = `${setPiece.type}:${setPiece.visualVariant}`;
+      if (representatives.has(key)) continue;
+      representatives.set(
+        key,
+        Array.from({ length: setPiece.span }, (_, offset) =>
+          generateRouteChunk(
+            "layout-variant-catalogue",
+            setPiece.startIndex + offset,
+          ),
+        ),
+      );
+    }
+
+    expect(new Set(representatives.keys())).toEqual(
+      new Set(
+        majorTypes.flatMap((type) => [`${type}:0`, `${type}:1`]),
+      ),
+    );
+
+    const { container } = render(
+      <>
+        {[...representatives.entries()].flatMap(([key, chunks]) =>
+          chunks.map((chunk) => (
+            <TrainRouteChunk
+              chunk={chunk}
+              layer={
+                TRAIN_PARALLAX_LAYERS.find(
+                  (layer) => layer.name === chunk.setPiece!.renderLayer,
+                )!
+              }
+              key={`${key}:${chunk.index}`}
+            />
+          )),
+        )}
+      </>,
+    );
+
+    for (const [key, chunks] of representatives) {
+      const [type, variant] = key.split(":");
+      const rendered = [
+        ...container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-type="${type}"][data-set-piece-variant="${variant}"]`,
+        ),
+      ];
+      expect(rendered).toHaveLength(chunks.length);
+      expect(rendered.map((segment) => segment.dataset.setPieceRole)).toEqual([
+        "entry",
+        ...Array.from({ length: chunks.length - 2 }, () => "body"),
+        "exit",
+      ]);
+      expect(
+        rendered.map((segment) =>
+          segment.style.getPropertyValue("--train-set-piece-phase"),
+        ),
+      ).toEqual(
+        Array.from(
+          { length: chunks.length },
+          (_, offset) => `${-offset * 320}px`,
+        ),
+      );
+      expect(
+        new Set(rendered.map((segment) => segment.dataset.setPieceId)),
+      ).toHaveProperty("size", 1);
+    }
+
+    for (const type of majorTypes) {
+      expect(trainLayoutCss).toContain(
+        `.train-set-piece--${type}.train-set-piece--variant-1`,
+      );
+    }
+    const variantRules = [
+      ...trainLayoutCss.matchAll(
+        /\.train-set-piece--(?:bridge|tunnel|coast-reveal|town-edge)\.train-set-piece--variant-1[\s\S]*?\n\}/g,
+      ),
+    ].map((match) => match[0]);
+    expect(variantRules.length).toBeGreaterThanOrEqual(4);
+    expect(variantRules.join("\n")).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });
 
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {

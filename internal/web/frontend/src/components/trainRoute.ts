@@ -37,6 +37,7 @@ export type TrainSetPieceType =
   | "station";
 
 export type TrainSetPieceRole = "entry" | "body" | "exit";
+export type TrainSetPieceVisualVariant = 0 | 1;
 
 export interface TrainSetPieceDefinition {
   type: TrainSetPieceType;
@@ -54,6 +55,7 @@ export interface TrainSetPieceSegment {
   endIndex: number;
   span: number;
   segmentOffset: number;
+  visualVariant: TrainSetPieceVisualVariant;
   renderLayer: TrainParallaxLayerName;
   reservedLayers: readonly TrainParallaxLayerName[];
   incompatibleWith: readonly TrainSetPieceType[];
@@ -96,6 +98,14 @@ export const TRAIN_SET_PIECE_DEFINITIONS = {
     incompatibleWith: ["bridge", "tunnel", "coast-reveal", "town-edge"],
   },
 } as const satisfies Record<TrainSetPieceType, TrainSetPieceDefinition>;
+
+export const TRAIN_SET_PIECE_VISUAL_VARIANT_COUNT = {
+  bridge: 2,
+  tunnel: 2,
+  "coast-reveal": 2,
+  "town-edge": 2,
+  station: 1,
+} as const satisfies Record<TrainSetPieceType, number>;
 
 export interface TrainRegionProfile {
   name: TrainRegionName;
@@ -295,6 +305,22 @@ function trainSetPieceTypeForRegion(
     : "tunnel";
 }
 
+export function trainSetPieceVisualVariant(
+  seed: string,
+  setPieceID: string,
+  type: TrainSetPieceType,
+  seedVersion = TRAIN_ROUTE_SEED_VERSION,
+): TrainSetPieceVisualVariant {
+  const count = TRAIN_SET_PIECE_VISUAL_VARIANT_COUNT[type];
+  if (count === 1) return 0;
+  const resolvedSeed = seed || DEFAULT_TRAIN_ROUTE_SEED;
+  return Math.floor(
+    trainRouteRandomUnit(
+      `${seedVersion}:${resolvedSeed}:set-piece-visual:${setPieceID}`,
+    ) * count,
+  ) as TrainSetPieceVisualVariant;
+}
+
 export function trainRouteSetPieceForChunk(
   seed: string,
   chunkIndex: number,
@@ -309,8 +335,9 @@ export function trainRouteSetPieceForChunk(
   });
   if (station) {
     const segmentOffset = chunkIndex - station.startChunk;
+    const id = station.id;
     return {
-      id: station.id,
+      id,
       type: "station",
       role:
         segmentOffset === 0
@@ -322,6 +349,12 @@ export function trainRouteSetPieceForChunk(
       endIndex: station.endChunk,
       span: station.spanChunks,
       segmentOffset,
+      visualVariant: trainSetPieceVisualVariant(
+        resolvedSeed,
+        id,
+        "station",
+        seedVersion,
+      ),
       renderLayer: "near",
       reservedLayers: ["midground", "near"],
       incompatibleWith: ["bridge", "tunnel", "coast-reveal", "town-edge"],
@@ -366,14 +399,21 @@ export function trainRouteSetPieceForChunk(
         ? "exit"
         : "body";
 
+  const id = `${seedVersion}:${resolvedSeed}:set-piece:${region.index}:${type}`;
   return {
-    id: `${seedVersion}:${resolvedSeed}:set-piece:${region.index}:${type}`,
+    id,
     type,
     role,
     startIndex,
     endIndex: startIndex + definition.span - 1,
     span: definition.span,
     segmentOffset,
+    visualVariant: trainSetPieceVisualVariant(
+      resolvedSeed,
+      id,
+      type,
+      seedVersion,
+    ),
     renderLayer: definition.renderLayer,
     reservedLayers: definition.reservedLayers,
     incompatibleWith: definition.incompatibleWith,

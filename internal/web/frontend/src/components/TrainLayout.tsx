@@ -547,6 +547,10 @@ type TrainRouteChunkStyle = CSSProperties & {
   "--train-chunk-feature-offset": string;
 };
 
+type TrainSetPieceStyle = CSSProperties & {
+  "--train-set-piece-phase": string;
+};
+
 type TrainWorldLayerStyle = CSSProperties & {
   "--train-layer-order": number;
   "--train-layer-position": string;
@@ -791,6 +795,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-route-region-offset={chunk.regionChunkOffset}
       data-route-set-piece={chunk.setPiece?.type ?? "none"}
       data-route-set-piece-role={chunk.setPiece?.role ?? "none"}
+      data-route-set-piece-variant={
+        chunk.setPiece?.visualVariant ?? "none"
+      }
       data-route-set-piece-reserved-layers={
         chunk.setPiece?.reservedLayers.join(",") ?? ""
       }
@@ -805,15 +812,24 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               "train-set-piece",
               `train-set-piece--${chunk.setPiece.type}`,
               `train-set-piece--${chunk.setPiece.role}`,
+              `train-set-piece--variant-${chunk.setPiece.visualVariant}`,
             ].join(" ")}
             data-set-piece-id={chunk.setPiece.id}
             data-set-piece-type={chunk.setPiece.type}
             data-set-piece-role={chunk.setPiece.role}
             data-set-piece-segment={chunk.setPiece.segmentOffset}
             data-set-piece-span={chunk.setPiece.span}
+            data-set-piece-variant={chunk.setPiece.visualVariant}
             data-set-piece-start={chunk.setPiece.startIndex}
             data-set-piece-end={chunk.setPiece.endIndex}
             data-set-piece-occlusion="restrained"
+            style={
+              {
+                "--train-set-piece-phase": `${
+                  -chunk.setPiece.segmentOffset * TRAIN_ROUTE_CHUNK_WIDTH
+                }px`,
+              } as TrainSetPieceStyle
+            }
             data-station-assets={
               stationSegment
                 ? "platform,building,canopy,lamps"
@@ -920,6 +936,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-landmark={placement.landmark ? "true" : "false"}
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
+            data-scenery-set-piece-variant={
+              placement.setPiece?.visualVariant ?? "none"
+            }
             data-scenery-collision-width={placement.collisionWidth.toFixed(3)}
             data-scenery-minimum-spacing={placement.minimumSpacingPx}
             data-cloud-altitude={
