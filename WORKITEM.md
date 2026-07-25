@@ -1,6 +1,6 @@
 # Train Layout — Infinite Journey Background Work Items
 
-This queue turns the train-theme background plan into seventeen dependency-ordered,
+This queue turns the train-theme background plan into twenty dependency-ordered,
 independently verifiable work items. The finished scene must make the fixed
 train feel as if it is travelling forever through coherent regions, support
 day/sunset/night presentation, remain deterministic enough to test, and allow a
@@ -247,3 +247,46 @@ future station stop without growing the DOM or memory usage over time.
   through both empty and occupied carriage windows in day, sunset, and night at
   compact and wide sizes, without weakening seat clicks, focus states, or text
   contrast. Run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-018 — Match the office layout height and reveal more sky.**
+  Make the train and office pane-switcher layouts resolve to the same outer
+  height at both desktop and the existing ≤760px compact breakpoint. Define one
+  shared height contract/token or shared calculation so the two layouts cannot
+  silently drift apart again; do not duplicate unrelated office internals into
+  the train component. Use the train's added vertical space for atmosphere and
+  sky above the consist: keep the track/wheel baseline, fixed-train behavior,
+  carriage proportions, controls, and horizontal inspection position stable
+  rather than stretching or vertically centering the train artwork. Preserve
+  the office scene's current appearance and height. Add focused contract tests,
+  then use `borz` at 390×844, normal desktop, and ultrawide sizes to assert the
+  two rendered layout heights are equal and the train gains visible sky without
+  clipping or blank scenery. Run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-019 — Scale the train artwork to 90% while enlarging hit targets.**
+  Reduce the visible locomotive, carriages, wheels, seats, and passenger artwork
+  to exactly 90% of their post-TRAIN-018 size, bottom-anchored to the unchanged
+  moving-world track baseline. Do not scale the world, track, layout height,
+  menus, labels, focus rings, or pointer target geometry. Compensate for the
+  smaller artwork by making every passenger seat target at least 44×44 CSS
+  pixels at compact and desktop sizes, with sensible non-overlapping hit slop
+  that still selects the intended passenger near each target edge. Keep the
+  locomotive overflow trigger comfortably tappable, recalculate filler
+  carriages so the consist still covers wide viewports, and preserve keyboard
+  navigation, visible focus, horizontal inspection, and selected/stale states.
+  Add focused scale, measurement, packing, pointer-edge, and keyboard tests.
+  Validate empty/occupied compact, desktop, and ultrawide layouts with `borz`,
+  then run the frontend suite, build, and `make test`.
+
+- [ ] **TRAIN-020 — Give selected passengers a Diablo-II-style golden set aura.**
+  Replace the selected passenger's current cyan sprite outline with a restrained
+  golden equipped-set treatment inspired by Diablo II: a crisp pale-gold inner
+  silhouette, warm amber outer glow, and subtle localized aura behind or below
+  the character. Apply it only to the selected passenger, not the carriage,
+  empty seats, hover state, or keyboard focus ring. It must not shift layout,
+  blur character identity, cover adjacent targets, reduce labels/controls
+  contrast, or depend on a raster duplicate. A slow subtle shimmer is allowed
+  for full motion; `prefers-reduced-motion` must use an equally legible static
+  gold treatment with no pulsing. Add focused selection/unselection, focus,
+  stale-state, exclusivity, and reduced-motion coverage. Use `borz` to inspect
+  the effect in day, sunset, and night palettes with compact and wide occupied
+  carriages, then run the frontend suite, build, and `make test`.
