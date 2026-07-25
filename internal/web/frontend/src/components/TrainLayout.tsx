@@ -53,7 +53,10 @@ import {
   type TrainParallaxLayerName,
 } from "./trainRoute";
 import {
+  trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
+  type TrainNightLifePlan,
+  type TrainSceneryPlacement,
 } from "./trainScenery";
 import {
   generateTrainNightSkyCatalogue,
@@ -557,6 +560,11 @@ type TrainSceneryAssetStyle = CSSProperties & {
   "--train-scenery-scale": number;
 };
 
+type TrainNightLifeStyle = CSSProperties & {
+  "--train-night-life-intensity": number;
+  "--train-scenery-scale": number;
+};
+
 type TrainPaletteStyle = CSSProperties & {
   "--train-palette-sky-top": string;
   "--train-palette-sky-bottom": string;
@@ -582,6 +590,111 @@ type TrainAtmosphereStyle = CSSProperties & {
 type TrainDepthVeilPaletteStyle = CSSProperties & {
   "--train-depth-veil-color": string;
 };
+
+function TrainNightLife({
+  plan,
+  placement,
+}: {
+  plan: TrainNightLifePlan;
+  placement: TrainSceneryPlacement;
+}) {
+  const { asset } = placement;
+  const style: TrainNightLifeStyle = {
+    left: `${placement.offsetPercent}%`,
+    width: `${asset.width}px`,
+    height: `${asset.height}px`,
+    "--train-night-life-intensity": plan.intensity,
+    "--train-scenery-scale": placement.scale,
+  };
+
+  return (
+    <span
+      className={[
+        "train-night-life",
+        `train-night-life--${plan.kind}`,
+        `train-night-life--variant-${plan.variant}`,
+      ].join(" ")}
+      data-emissive={plan.kind}
+      data-emissive-owner={plan.ownerAssetId}
+      data-night-life-region={plan.region}
+      data-night-life-kind={plan.kind}
+      data-night-life-variant={plan.variant}
+      data-night-life-intensity={plan.intensity.toFixed(3)}
+      data-night-life-plane="midground-behind-train"
+      data-night-life-reflection={plan.pairedReflection ? "paired" : "none"}
+      style={style}
+    >
+      {plan.kind === "forest-fireflies"
+        ? plan.points.map((point, pointIndex) => (
+            <span
+              className="train-night-life__firefly"
+              data-night-life-detail="firefly"
+              style={{
+                left: `${point.xPercent}%`,
+                top: `${point.yPercent}%`,
+                animationDelay: `${point.delayMs}ms`,
+              }}
+              key={pointIndex}
+            />
+          ))
+        : null}
+      {plan.kind === "mountain-lookout-glow" ? (
+        <>
+          <span
+            className="train-night-life__lookout-window"
+            data-night-life-detail="lookout-window"
+          />
+          <span
+            className="train-night-life__camp-glow"
+            data-night-life-detail="camp-glow"
+          />
+        </>
+      ) : null}
+      {plan.kind === "town-settlement-glow" ? (
+        <>
+          <span
+            className="train-night-life__church-window train-night-life__church-window--tower"
+            data-night-life-detail="occupied-window"
+          />
+          <span
+            className="train-night-life__church-window train-night-life__church-window--nave"
+            data-night-life-detail="occupied-window"
+          />
+        </>
+      ) : null}
+      {plan.kind === "coast-lighthouse-beacon" ? (
+        <>
+          <span
+            className="train-night-life__lighthouse-lantern"
+            data-night-life-detail="lighthouse-lantern"
+          />
+          <span
+            className="train-night-life__lighthouse-beam"
+            data-night-life-detail="lighthouse-beam"
+          />
+          <span
+            className="train-night-life__lighthouse-reflection"
+            data-emissive="lighthouse-water-reflection"
+            data-emissive-owner={plan.ownerAssetId}
+            data-night-life-detail="paired-reflection"
+          />
+        </>
+      ) : null}
+      {plan.kind === "industrial-beacons" ? (
+        <>
+          <span
+            className="train-night-life__industrial-beacon"
+            data-night-life-detail="industrial-beacon"
+          />
+          <span
+            className="train-night-life__industrial-steam"
+            data-night-life-detail="restrained-steam"
+          />
+        </>
+      ) : null}
+    </span>
+  );
+}
 
 type TrainStarStyle = CSSProperties & {
   "--train-star-brightness": number;
@@ -771,6 +884,11 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
+        const nightLife = trainNightLifeForPlacement(
+          chunk,
+          placement,
+          ordinal,
+        );
         const sceneryStyle: TrainSceneryAssetStyle = {
           left: `${placement.offsetPercent}%`,
           top:
@@ -834,6 +952,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               data-emissive="building-windows"
               data-emissive-kind={asset.emissive.kind}
               data-emissive-owner={asset.id}
+              data-emissive-enabled={nightLife ? "true" : "false"}
+              data-emissive-occupancy={nightLife?.occupancy ?? "none"}
               data-emissive-load="pending"
               data-scenery-anchor={asset.anchor}
               data-scenery-manifest-layer={asset.layer}
@@ -849,51 +969,17 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             />,
           );
         }
+        if (nightLife && !asset.emissive) {
+          sprites.push(
+            <TrainNightLife
+              plan={nightLife}
+              placement={placement}
+              key={`night-life-${asset.id}-${ordinal}`}
+            />,
+          );
+        }
         return sprites;
       })}
-      {layer.name === "midground" ? (
-        <span
-          className="train-emissive-overlay train-emissive-overlay--streetlight"
-          data-emissive="streetlight"
-          data-emissive-enabled={
-            chunk.region === "town" || chunk.region === "industrial"
-              ? "true"
-              : "false"
-          }
-          style={{ left: `${18 + chunk.variant * 14}%` }}
-        />
-      ) : null}
-      {layer.name === "near" ? (
-        <span
-          className="train-emissive-overlay train-emissive-overlay--station-lamp"
-          data-emissive="station-lamp"
-          data-emissive-enabled={
-            chunk.region === "town" && chunk.regionChunkOffset === 0
-              ? "true"
-              : "false"
-          }
-          style={{ left: `${24 + chunk.variant * 11}%` }}
-        />
-      ) : null}
-      {layer.name === "near" ? (
-        <span
-          className="train-emissive-overlay train-emissive-overlay--signal"
-          data-emissive="signal"
-          data-emissive-enabled={
-            chunk.region === "town" || chunk.region === "industrial"
-              ? "true"
-              : "false"
-          }
-          style={{ left: `${78 - chunk.variant * 9}%` }}
-        />
-      ) : null}
-      {layer.name === "far" ? (
-        <span
-          className="train-emissive-overlay train-emissive-overlay--water-reflection"
-          data-emissive="water-reflection"
-          data-emissive-enabled={chunk.region === "coast" ? "true" : "false"}
-        />
-      ) : null}
     </div>
   );
 });

@@ -204,7 +204,7 @@ and safety properties established by the archived queue remain the baseline.
   and DOM-bound tests. Inspect several seeds at compact and ultrawide night
   viewports with `borz`, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-035 — Add region-specific nighttime life and illumination.**
+- [x] **TRAIN-035 — Add region-specific nighttime life and illumination.**
   Give every region a sparse nighttime signature using geometry-aligned light
   and region-owned details instead of uniformly darkening the daytime scene:
   examples include forest fireflies or a distant cabin, a mountain

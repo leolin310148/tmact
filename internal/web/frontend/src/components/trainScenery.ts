@@ -920,6 +920,58 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
   },
 } as const satisfies Record<TrainRegionName, TrainRegionSceneryProfile>;
 
+export type TrainNightLifeKind =
+  | "forest-fireflies"
+  | "mountain-lookout-glow"
+  | "town-settlement-glow"
+  | "coast-lighthouse-beacon"
+  | "industrial-beacons";
+
+export type TrainNightLifeOccupancy = "left" | "center" | "right";
+
+interface TrainNightLifeOwnerRule {
+  assetId: string;
+  probability: number;
+}
+
+export interface TrainRegionNightLifeRule {
+  kind: TrainNightLifeKind;
+  owners: readonly TrainNightLifeOwnerRule[];
+}
+
+export const TRAIN_REGION_NIGHT_LIFE = {
+  forest: {
+    kind: "forest-fireflies",
+    owners: [{ assetId: "landmark-forest-clearing", probability: 0.78 }],
+  },
+  mountain: {
+    kind: "mountain-lookout-glow",
+    owners: [{ assetId: "landmark-mountain-lookout", probability: 0.76 }],
+  },
+  town: {
+    kind: "town-settlement-glow",
+    owners: [
+      { assetId: "landmark-town-church", probability: 0.74 },
+      { assetId: "building-rowhouse", probability: 0.34 },
+      { assetId: "building-apartments", probability: 0.3 },
+      { assetId: "building-cottage", probability: 0.36 },
+    ],
+  },
+  coast: {
+    kind: "coast-lighthouse-beacon",
+    owners: [{ assetId: "landmark-coast-lighthouse", probability: 0.82 }],
+  },
+  industrial: {
+    kind: "industrial-beacons",
+    owners: [
+      { assetId: "landmark-industrial-gantry", probability: 0.72 },
+      { assetId: "building-workshop", probability: 0.26 },
+      { assetId: "building-warehouse", probability: 0.22 },
+      { assetId: "building-water-tower", probability: 0.3 },
+    ],
+  },
+} as const satisfies Record<TrainRegionName, TrainRegionNightLifeRule>;
+
 export interface TrainSceneryPlacement {
   asset: TrainSceneryAsset;
   offsetPercent: number;
@@ -932,6 +984,66 @@ export interface TrainSceneryPlacement {
   cloudPattern?: TrainCloudPattern;
   cloudGroup?: string;
   routePositionPx?: number;
+}
+
+export interface TrainNightLifePoint {
+  xPercent: number;
+  yPercent: number;
+  delayMs: number;
+}
+
+export interface TrainNightLifePlan {
+  kind: TrainNightLifeKind;
+  region: TrainRegionName;
+  ownerAssetId: string;
+  intensity: number;
+  variant: number;
+  occupancy: TrainNightLifeOccupancy;
+  points: readonly TrainNightLifePoint[];
+  pairedReflection: boolean;
+}
+
+export function trainNightLifeForPlacement(
+  chunk: RouteChunk,
+  placement: TrainSceneryPlacement,
+  ordinal: number,
+): TrainNightLifePlan | null {
+  const regionRule: TrainRegionNightLifeRule =
+    TRAIN_REGION_NIGHT_LIFE[chunk.region];
+  const ownerRule = regionRule.owners.find(
+    (candidate) => candidate.assetId === placement.asset.id,
+  );
+  if (!ownerRule || placement.asset.layer !== "midground") return null;
+
+  const key =
+    `${chunk.seedVersion}:${chunk.routeSeed}:night-life:` +
+    `${chunk.regionIndex}:${chunk.index}:${placement.asset.id}:${ordinal}`;
+  if (trainRouteRandomUnit(`${key}:rarity`) >= ownerRule.probability) {
+    return null;
+  }
+
+  const variant = Math.floor(trainRouteRandomUnit(`${key}:variant`) * 3);
+  const pointCount = regionRule.kind === "forest-fireflies" ? 4 + variant : 0;
+  const points = Array.from({ length: pointCount }, (_, pointIndex) => ({
+    xPercent:
+      20 + trainRouteRandomUnit(`${key}:point:${pointIndex}:x`) * 62,
+    yPercent:
+      24 + trainRouteRandomUnit(`${key}:point:${pointIndex}:y`) * 42,
+    delayMs: Math.round(
+      trainRouteRandomUnit(`${key}:point:${pointIndex}:delay`) * 2200,
+    ),
+  }));
+
+  return {
+    kind: regionRule.kind,
+    region: chunk.region,
+    ownerAssetId: placement.asset.id,
+    intensity: 0.62 + trainRouteRandomUnit(`${key}:intensity`) * 0.26,
+    variant,
+    occupancy: (["left", "center", "right"] as const)[variant]!,
+    points,
+    pairedReflection: regionRule.kind === "coast-lighthouse-beacon",
+  };
 }
 
 export type TrainCloudPattern = "open" | "grouped" | "scattered";

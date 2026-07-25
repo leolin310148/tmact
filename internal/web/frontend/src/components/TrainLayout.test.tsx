@@ -38,7 +38,11 @@ import {
   generateRouteChunk,
   TRAIN_PARALLAX_LAYERS,
 } from "./trainRoute";
-import { trainSceneryPlacementsForChunk } from "./trainScenery";
+import {
+  TRAIN_REGION_NIGHT_LIFE,
+  trainNightLifeForPlacement,
+  trainSceneryPlacementsForChunk,
+} from "./trainScenery";
 
 const trainLayoutCss = readFileSync(
   resolve(process.cwd(), "src/components/TrainLayout.css"),
@@ -1698,12 +1702,13 @@ describe("TrainLayout", () => {
       (candidate) =>
         candidate.region === "industrial" &&
         trainSceneryPlacementsForChunk("midground", candidate).some(
-          (placement) =>
+          (placement, ordinal) =>
             [
               "building-workshop",
               "building-warehouse",
               "building-water-tower",
-            ].includes(placement.asset.id),
+            ].includes(placement.asset.id) &&
+            trainNightLifeForPlacement(candidate, placement, ordinal) !== null,
         ),
     )!;
     expect(chunk).toBeDefined();
@@ -1751,7 +1756,10 @@ describe("TrainLayout", () => {
       ).toHaveLength(0);
     }
 
-    const mask = masks[0]!;
+    const mask = masks.find(
+      (candidate) => candidate.dataset.emissiveEnabled === "true",
+    )!;
+    expect(mask).toBeDefined();
     const ownerBase = mask
       .closest<HTMLElement>(".train-parallax-chunk")!
       .querySelector<HTMLImageElement>(
@@ -1781,19 +1789,14 @@ describe("TrainLayout", () => {
       ),
     );
 
-    const requiredKinds = [
-      "stars",
-      "moon",
-      "streetlight",
-      "station-lamp",
-      "signal",
-      "water-reflection",
-    ];
+    const requiredKinds = ["stars", "moon"];
     const allowedKinds = [
       ...requiredKinds,
       "airglow",
       "celestial-accent",
       "building-windows",
+      ...Object.values(TRAIN_REGION_NIGHT_LIFE).map((rule) => rule.kind),
+      "lighthouse-water-reflection",
     ];
     for (const kind of requiredKinds) {
       expect(emissiveKinds).toContain(kind);
@@ -1803,13 +1806,21 @@ describe("TrainLayout", () => {
         (kind) => allowedKinds.includes(kind!),
       ),
     ).toBe(true);
-    for (const overlay of container.querySelectorAll("[data-emissive]")) {
+    const ownerlessSkyKinds = new Set([
+      "stars",
+      "moon",
+      "airglow",
+      "celestial-accent",
+    ]);
+    for (const overlay of container.querySelectorAll<HTMLElement>(
+      "[data-emissive]",
+    )) {
       if (overlay.tagName === "IMG") {
         expect(overlay).toHaveClass("train-scenery-emissive-mask");
         expect(overlay).toHaveAttribute("data-emissive", "building-windows");
         expect(overlay).toHaveAttribute("data-emissive-owner");
-      } else {
-        expect(overlay).not.toHaveAttribute("data-scenery-asset");
+      } else if (!ownerlessSkyKinds.has(overlay.dataset.emissive!)) {
+        expect(overlay).toHaveAttribute("data-emissive-owner");
       }
     }
     expect(
@@ -1819,6 +1830,106 @@ describe("TrainLayout", () => {
       container.querySelectorAll(".train-scenery-emissive-mask").length,
     ).toBeLessThanOrEqual(
       container.querySelectorAll("[data-scenery-category='building']").length,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /train-emissive-overlay--(?:streetlight|station-lamp|signal|water-reflection)/,
+    );
+  });
+
+  it("aligns one sparse owned nighttime signature for every region", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const layer = TRAIN_PARALLAX_LAYERS.find(
+      (candidate) => candidate.name === "midground",
+    )!;
+    const samples = Object.entries(TRAIN_REGION_NIGHT_LIFE).map(
+      ([region, rule]) => {
+        const landmarkOwner = rule.owners[0]!.assetId;
+        const chunk = Array.from({ length: 3600 }, (_, index) =>
+          generateRouteChunk(`night-life-${region}`, index - 1800),
+        ).find(
+          (candidate) =>
+            candidate.region === region &&
+            trainSceneryPlacementsForChunk("midground", candidate).some(
+              (placement, ordinal) =>
+                placement.asset.id === landmarkOwner &&
+                trainNightLifeForPlacement(
+                  candidate,
+                  placement,
+                  ordinal,
+                ) !== null,
+            ),
+        );
+        expect(chunk, `${region}/${landmarkOwner}`).toBeDefined();
+        return chunk!;
+      },
+    );
+
+    const view = (timeOfDay: "day" | "night") => (
+      <div
+        className="train-layout-world"
+        data-time-of-day={timeOfDay}
+        data-motion-state="running"
+      >
+        {samples.map((chunk) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            layer={layer}
+            key={`${chunk.region}:${chunk.index}`}
+          />
+        ))}
+      </div>
+    );
+    const rendered = render(view("day"));
+
+    for (const chunk of samples) {
+      const signature = rendered.container.querySelector<HTMLElement>(
+        `[data-night-life-region="${chunk.region}"]`,
+      )!;
+      expect(signature, chunk.region).not.toBeNull();
+      expect(signature).toHaveAttribute(
+        "data-night-life-kind",
+        TRAIN_REGION_NIGHT_LIFE[chunk.region].kind,
+      );
+      expect(signature).toHaveAttribute(
+        "data-night-life-plane",
+        "midground-behind-train",
+      );
+      const owner = signature
+        .closest<HTMLElement>(".train-parallax-chunk")!
+        .querySelector<HTMLImageElement>(
+          `[data-scenery-asset="${signature.dataset.emissiveOwner}"]`,
+        )!;
+      expect(owner).not.toBeNull();
+      expect(signature.style.left).toBe(owner.style.left);
+      expect(
+        signature.style.getPropertyValue("--train-scenery-scale"),
+      ).toBe(owner.style.getPropertyValue("--train-scenery-scale"));
+      expect(getComputedStyle(signature).opacity).toBe("0");
+    }
+
+    const lighthouse = rendered.container.querySelector<HTMLElement>(
+      '[data-night-life-kind="coast-lighthouse-beacon"]',
+    )!;
+    const reflection = lighthouse.querySelector<HTMLElement>(
+      '[data-night-life-detail="paired-reflection"]',
+    )!;
+    expect(lighthouse).toHaveAttribute("data-night-life-reflection", "paired");
+    expect(reflection.dataset.emissiveOwner).toBe(
+      lighthouse.dataset.emissiveOwner,
+    );
+
+    rendered.rerender(view("night"));
+    expect(
+      rendered.container.querySelectorAll("[data-night-life-region]"),
+    ).toHaveLength(5);
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="night"\] \.train-night-life\s*\{\s*opacity:\s*var\(--train-night-life-intensity\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.train-night-life \*[\s\S]*?animation:\s*none;/,
     );
   });
 

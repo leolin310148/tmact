@@ -15,6 +15,7 @@ import {
   TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_SPACING_PX,
+  TRAIN_REGION_NIGHT_LIFE,
   TRAIN_REGION_OPEN_VIEW_TARGET,
   TRAIN_REGION_SCENERY_PROFILES,
   TRAIN_SCENERY_ASSETS,
@@ -27,6 +28,7 @@ import {
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
   trainCloudPlacementsForChunk,
+  trainNightLifeForPlacement,
   trainRegionCompositionForChunk,
   trainSceneryPlacementsForChunk,
   trainSceneryScale,
@@ -450,6 +452,145 @@ describe("train scenery asset kit", () => {
     const first = regionSignature("day-composition-a", -240, 240);
     expect(regionSignature("day-composition-a", -240, 240)).toEqual(first);
     expect(regionSignature("day-composition-b", -240, 240)).not.toEqual(first);
+  });
+
+  it("builds sparse deterministic region-owned nighttime life catalogues", () => {
+    const signature = (seed: string) =>
+      Array.from({ length: 2401 }, (_, offset) =>
+        generateRouteChunk(seed, offset - 1200),
+      ).flatMap((chunk) =>
+        trainSceneryPlacementsForChunk("midground", chunk).flatMap(
+          (placement, ordinal) => {
+            const plan = trainNightLifeForPlacement(
+              chunk,
+              placement,
+              ordinal,
+            );
+            return plan
+              ? [
+                  {
+                    chunk: chunk.index,
+                    asset: placement.asset.id,
+                    ...plan,
+                  },
+                ]
+              : [];
+          },
+        ),
+      );
+
+    const first = signature("night-life-catalogue-a");
+    expect(signature("night-life-catalogue-a")).toEqual(first);
+    expect(signature("night-life-catalogue-b")).not.toEqual(first);
+    expect(new Set(first.map((plan) => plan.region))).toEqual(
+      new Set<TrainRegionName>([
+        "forest",
+        "mountain",
+        "town",
+        "coast",
+        "industrial",
+      ]),
+    );
+
+    for (const plan of first) {
+      const rule = TRAIN_REGION_NIGHT_LIFE[plan.region];
+      expect(plan.kind).toBe(rule.kind);
+      expect(
+        rule.owners.some((owner) => owner.assetId === plan.ownerAssetId),
+      ).toBe(true);
+      expect(plan.asset).toBe(plan.ownerAssetId);
+      expect(plan.intensity).toBeGreaterThanOrEqual(0.62);
+      expect(plan.intensity).toBeLessThan(0.88);
+      expect(plan.points.length).toBeLessThanOrEqual(6);
+      expect(plan.pairedReflection).toBe(plan.region === "coast");
+      if (plan.kind === "forest-fireflies") {
+        expect(plan.points.length).toBeGreaterThanOrEqual(4);
+        expect(
+          plan.points.every(
+            (point) =>
+              point.xPercent >= 20 &&
+              point.xPercent <= 82 &&
+              point.yPercent >= 24 &&
+              point.yPercent <= 66,
+          ),
+        ).toBe(true);
+      } else {
+        expect(plan.points).toEqual([]);
+      }
+    }
+  });
+
+  it("keeps occupied windows varied, rare, and night-life DOM strictly bounded", () => {
+    const eligibleByRegion = new Map<TrainRegionName, number>();
+    const activeByRegion = new Map<TrainRegionName, number>();
+    const occupancies = new Set<string>();
+    let maximumPlansPerChunk = 0;
+    let maximumDetailNodesPerChunk = 0;
+
+    for (const seed of [
+      "night-life-bounds-a",
+      "night-life-bounds-b",
+      "night-life-bounds-c",
+    ]) {
+      for (let index = -1500; index <= 1500; index++) {
+        const chunk = generateRouteChunk(seed, index);
+        const placements = trainSceneryPlacementsForChunk("midground", chunk);
+        const ownerIDs = new Set<string>(
+          TRAIN_REGION_NIGHT_LIFE[chunk.region].owners.map(
+            (owner) => owner.assetId,
+          ),
+        );
+        const eligible = placements.filter((placement) =>
+          ownerIDs.has(placement.asset.id),
+        );
+        eligibleByRegion.set(
+          chunk.region,
+          (eligibleByRegion.get(chunk.region) ?? 0) + eligible.length,
+        );
+        const plans = placements.flatMap((placement, ordinal) => {
+          const plan = trainNightLifeForPlacement(chunk, placement, ordinal);
+          return plan ? [plan] : [];
+        });
+        activeByRegion.set(
+          chunk.region,
+          (activeByRegion.get(chunk.region) ?? 0) + plans.length,
+        );
+        plans
+          .filter(
+            (plan) =>
+              plan.region === "town" || plan.region === "industrial",
+          )
+          .forEach((plan) => occupancies.add(plan.occupancy));
+        maximumPlansPerChunk = Math.max(maximumPlansPerChunk, plans.length);
+        maximumDetailNodesPerChunk = Math.max(
+          maximumDetailNodesPerChunk,
+          plans.reduce(
+            (total, plan) =>
+              total +
+              1 +
+              (plan.kind === "forest-fireflies"
+                ? plan.points.length
+                : plan.kind === "coast-lighthouse-beacon"
+                  ? 3
+                  : 2),
+            0,
+          ),
+        );
+      }
+    }
+
+    for (const region of Object.keys(
+      TRAIN_REGION_NIGHT_LIFE,
+    ) as TrainRegionName[]) {
+      const eligible = eligibleByRegion.get(region) ?? 0;
+      const active = activeByRegion.get(region) ?? 0;
+      expect(eligible, region).toBeGreaterThan(10);
+      expect(active, region).toBeGreaterThan(0);
+      expect(active, region).toBeLessThan(eligible);
+    }
+    expect(occupancies).toEqual(new Set(["left", "center", "right"]));
+    expect(maximumPlansPerChunk).toBeLessThanOrEqual(2);
+    expect(maximumDetailNodesPerChunk).toBeLessThanOrEqual(8);
   });
 
   it("does not increase the established long-route scenery node bound", () => {
