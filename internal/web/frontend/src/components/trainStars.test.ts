@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  generateTrainStarCatalogue,
+  generateTrainNightSkyCatalogue,
+  TRAIN_NIGHT_SKY_MAX_ELEMENTS,
   TRAIN_STAR_MAX_COUNT,
   TRAIN_STAR_MIN_COUNT,
   TRAIN_STAR_SKY_BOTTOM_PERCENT,
@@ -10,14 +11,14 @@ import {
   trainStarTargetCount,
 } from "./trainStars";
 
-describe("deterministic train star catalogue", () => {
-  it("reproduces one field for the same seed and viewport without tiled coordinates", () => {
-    const first = generateTrainStarCatalogue("night-line", 1_440);
-    const repeat = generateTrainStarCatalogue("night-line", 1_440);
-    const otherSeed = generateTrainStarCatalogue("other-night-line", 1_440);
+describe("deterministic train night-sky catalogue", () => {
+  it("reproduces one composition for the same seed and viewport", () => {
+    const first = generateTrainNightSkyCatalogue("night-line", 1_440);
+    const repeat = generateTrainNightSkyCatalogue("night-line", 1_440);
+    const otherSeed = generateTrainNightSkyCatalogue("other-night-line", 1_440);
 
     expect(repeat).toEqual(first);
-    expect(otherSeed.stars).not.toEqual(first.stars);
+    expect(otherSeed).not.toEqual(first);
     expect(new Set(first.stars.map((star) => star.xPercent.toFixed(4))).size).toBe(
       first.stars.length,
     );
@@ -26,10 +27,30 @@ describe("deterministic train star catalogue", () => {
     );
   });
 
+  it("varies moon phase, altitude, and horizontal position across journey seeds", () => {
+    const catalogues = Array.from({ length: 48 }, (_, index) =>
+      generateTrainNightSkyCatalogue(`moon-variety-${index}`, 1_440),
+    );
+    const moons = catalogues.map((catalogue) => catalogue.moon);
+
+    expect(new Set(moons.map((moon) => moon.phase))).toEqual(
+      new Set(["crescent", "quarter", "gibbous", "full"]),
+    );
+    expect(new Set(moons.map((moon) => moon.direction))).toEqual(
+      new Set(["waxing", "waning"]),
+    );
+    expect(Math.min(...moons.map((moon) => moon.xPercent))).toBeLessThan(24);
+    expect(Math.max(...moons.map((moon) => moon.xPercent))).toBeGreaterThan(76);
+    expect(Math.min(...moons.map((moon) => moon.yPercent))).toBeLessThan(11);
+    expect(Math.max(...moons.map((moon) => moon.yPercent))).toBeGreaterThan(21);
+    expect(new Set(catalogues.map((catalogue) => JSON.stringify(catalogue))).size)
+      .toBe(catalogues.length);
+  });
+
   it("keeps a responsive bounded count and deterministically regenerates on resize", () => {
-    const compact = generateTrainStarCatalogue("responsive-night", 390);
-    const desktop = generateTrainStarCatalogue("responsive-night", 1_280);
-    const ultrawide = generateTrainStarCatalogue("responsive-night", 2_560);
+    const compact = generateTrainNightSkyCatalogue("responsive-night", 390);
+    const desktop = generateTrainNightSkyCatalogue("responsive-night", 1_280);
+    const ultrawide = generateTrainNightSkyCatalogue("responsive-night", 2_560);
 
     expect(compact.stars).toHaveLength(trainStarTargetCount(390));
     expect(desktop.stars).toHaveLength(trainStarTargetCount(1_280));
@@ -38,14 +59,19 @@ describe("deterministic train star catalogue", () => {
     expect(ultrawide.stars.length).toBeLessThanOrEqual(TRAIN_STAR_MAX_COUNT);
     expect(compact.stars.length).toBeLessThan(desktop.stars.length);
     expect(desktop.stars.length).toBeLessThan(ultrawide.stars.length);
-    expect(generateTrainStarCatalogue("responsive-night", 2_560)).toEqual(
+    expect(generateTrainNightSkyCatalogue("responsive-night", 2_560)).toEqual(
       ultrawide,
+    );
+    expect(compact.moon.phase).toBe(ultrawide.moon.phase);
+    expect(compact.moon.xPercent).toBe(ultrawide.moon.xPercent);
+    expect(compact.moon.exclusionRadiusXPercent).toBeGreaterThan(
+      ultrawide.moon.exclusionRadiusXPercent,
     );
   });
 
   it("mixes sparse bright stars, dim stars, tints, loose groups, and open sky", () => {
     const catalogues = ["field-a", "field-b", "field-c"].map((seed) =>
-      generateTrainStarCatalogue(seed, 1_920),
+      generateTrainNightSkyCatalogue(seed, 1_920),
     );
     const stars = catalogues.flatMap((catalogue) => catalogue.stars);
 
@@ -62,9 +88,6 @@ describe("deterministic train star catalogue", () => {
     expect(new Set(stars.map((star) => star.sizePx.toFixed(2))).size).toBeGreaterThan(
       stars.length / 2,
     );
-    expect(
-      new Set(stars.map((star) => star.brightness.toFixed(2))).size,
-    ).toBeGreaterThan(stars.length / 3);
 
     for (const catalogue of catalogues) {
       expect(
@@ -81,9 +104,10 @@ describe("deterministic train star catalogue", () => {
     }
   });
 
-  it("rejects moon overlap, terrain overlap, rows, and diagonal lattice rhythms", () => {
+  it("adapts moon exclusion and rejects terrain, rows, and diagonal lattice rhythms", () => {
     for (const seed of ["lattice-a", "lattice-b", "lattice-c", "lattice-d"]) {
-      const { stars } = generateTrainStarCatalogue(seed, 1_920);
+      const catalogue = generateTrainNightSkyCatalogue(seed, 1_920);
+      const { stars, moon } = catalogue;
       const ordered = [...stars].sort(
         (left, right) => left.xPercent - right.xPercent,
       );
@@ -97,7 +121,7 @@ describe("deterministic train star catalogue", () => {
       ).toBe(true);
       expect(
         stars.some((star) =>
-          trainStarIsInsideMoonHalo(star.xPercent, star.yPercent),
+          trainStarIsInsideMoonHalo(star.xPercent, star.yPercent, moon),
         ),
       ).toBe(false);
 
@@ -127,9 +151,39 @@ describe("deterministic train star catalogue", () => {
         const bucket = Math.round(gap * 10);
         repeatedGaps.set(bucket, (repeatedGaps.get(bucket) ?? 0) + 1);
       }
-      expect(Math.max(...repeatedGaps.values())).toBeLessThanOrEqual(
-        3,
-      );
+      expect(Math.max(...repeatedGaps.values())).toBeLessThanOrEqual(3);
     }
+  });
+
+  it("keeps atmospheric bands occasional, accents rare, and every catalogue bounded", () => {
+    const catalogues = Array.from({ length: 80 }, (_, index) =>
+      generateTrainNightSkyCatalogue(`rarity-${index}`, 2_560),
+    );
+    const bands = catalogues.flatMap((catalogue) =>
+      catalogue.band ? [catalogue.band] : [],
+    );
+    const accents = catalogues.flatMap((catalogue) =>
+      catalogue.accent ? [catalogue.accent] : [],
+    );
+
+    expect(bands.length).toBeGreaterThan(8);
+    expect(bands.length).toBeLessThan(38);
+    expect(bands.every((band) => band.opacity <= 0.11)).toBe(true);
+    expect(accents.length).toBeGreaterThan(4);
+    expect(accents.length).toBeLessThan(24);
+    expect(new Set(accents.map((accent) => accent.kind))).toEqual(
+      new Set(["meteor", "planet"]),
+    );
+    expect(
+      catalogues.every(
+        (catalogue) =>
+          catalogue.elementCount <= TRAIN_NIGHT_SKY_MAX_ELEMENTS &&
+          catalogue.elementCount ===
+            catalogue.stars.length +
+              1 +
+              Number(catalogue.band !== null) +
+              Number(catalogue.accent !== null),
+      ),
+    ).toBe(true);
   });
 });

@@ -190,7 +190,7 @@ and safety properties established by the archived queue remain the baseline.
   desktop, and ultrawide sizes with `borz`, then run the frontend suite, build,
   and `make test`.
 
-- [ ] **TRAIN-034 — Diversify the deterministic night sky without artificial patterns.**
+- [x] **TRAIN-034 — Diversify the deterministic night sky without artificial patterns.**
   Extend TRAIN-025 with a seeded celestial composition catalogue: varied moon
   phase, altitude, and horizontal position; adaptive moon-star exclusion; a
   very subtle airglow or Milky-Way-like band in only some seeds; and rare,

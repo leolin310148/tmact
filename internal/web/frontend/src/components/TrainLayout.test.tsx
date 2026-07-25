@@ -823,10 +823,13 @@ describe("TrainLayout", () => {
 
     expect(animation.pending()).toBeGreaterThan(0);
     expect(container.querySelectorAll(".train-star").length).toBeGreaterThan(0);
+    expect(container.querySelector("[data-night-sky-catalogue]")).toBeInTheDocument();
     unmount();
 
     expect(animation.pending()).toBe(0);
     expect(container.querySelector(".train-star")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-night-sky-catalogue]"))
+      .not.toBeInTheDocument();
     expect(removeListener).toHaveBeenCalledWith(
       "visibilitychange",
       expect.any(Function),
@@ -882,6 +885,10 @@ describe("TrainLayout", () => {
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const compactCount = Number(world.dataset.routeMountedChunks);
     const compactStarCount = Number(world.dataset.starCount);
+    const compactMoon = container.querySelector<HTMLElement>("[data-moon-id]")!;
+    const compactMoonPhase = compactMoon.dataset.moonPhase;
+    const compactMoonLeft = compactMoon.style.left;
+    const compactMoonExclusion = compactMoon.dataset.moonExclusion;
     Object.defineProperty(world, "clientWidth", {
       configurable: true,
       get: () => 1_920,
@@ -908,6 +915,10 @@ describe("TrainLayout", () => {
     expect(container.querySelectorAll(".train-star")).toHaveLength(
       Number(world.dataset.starCount),
     );
+    const wideMoon = container.querySelector<HTMLElement>("[data-moon-id]")!;
+    expect(wideMoon).toHaveAttribute("data-moon-phase", compactMoonPhase);
+    expect(wideMoon.style.left).toBe(compactMoonLeft);
+    expect(wideMoon.dataset.moonExclusion).not.toBe(compactMoonExclusion);
     expect(nearChunks).toHaveLength(wideCount);
     expect(rightmostEdge).toBeGreaterThanOrEqual(1_920);
   });
@@ -1778,12 +1789,18 @@ describe("TrainLayout", () => {
       "signal",
       "water-reflection",
     ];
+    const allowedKinds = [
+      ...requiredKinds,
+      "airglow",
+      "celestial-accent",
+      "building-windows",
+    ];
     for (const kind of requiredKinds) {
       expect(emissiveKinds).toContain(kind);
     }
     expect(
       [...emissiveKinds].every(
-        (kind) => requiredKinds.includes(kind!) || kind === "building-windows",
+        (kind) => allowedKinds.includes(kind!),
       ),
     ).toBe(true);
     for (const overlay of container.querySelectorAll("[data-emissive]")) {
@@ -1813,13 +1830,41 @@ describe("TrainLayout", () => {
     const catalogue = container.querySelector<HTMLElement>(
       "[data-star-catalogue]",
     )!;
+    const nightSky = container.querySelector<HTMLElement>(
+      "[data-night-sky-catalogue]",
+    )!;
+    const moon = nightSky.querySelector<HTMLElement>("[data-moon-id]")!;
     const stars = [...catalogue.querySelectorAll<HTMLElement>(".train-star")];
+    const bands = nightSky.querySelectorAll("[data-celestial-band]");
+    const accents = nightSky.querySelectorAll("[data-celestial-accent]");
 
     expect(container.querySelectorAll("[data-star-catalogue]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-night-sky-catalogue]")).toHaveLength(
+      1,
+    );
     expect(catalogue).toHaveAttribute("data-star-catalogue", "infinite-journey");
+    expect(nightSky).toHaveAttribute(
+      "data-night-sky-catalogue",
+      "infinite-journey",
+    );
+    expect(nightSky).toHaveAttribute("data-night-sky-version", "night-sky-v2");
+    expect(nightSky).toHaveAttribute("data-sky-plane", "behind-terrain");
+    expect(nightSky).toHaveAttribute("data-control-contrast", "preserved");
     expect(stars).toHaveLength(Number(catalogue.dataset.starCount));
     expect(stars).toHaveLength(Number(world.dataset.starCount));
     expect(stars.length).toBeLessThanOrEqual(38);
+    expect(Number(nightSky.dataset.nightSkyCount)).toBe(
+      stars.length + 1 + bands.length + accents.length,
+    );
+    expect(Number(nightSky.dataset.nightSkyCount)).toBeLessThanOrEqual(41);
+    expect(moon.dataset.moonPhase).toMatch(
+      /^(crescent|quarter|gibbous|full)$/,
+    );
+    expect(moon.dataset.moonDirection).toMatch(/^(waxing|waning)$/);
+    expect(moon.style.left).toMatch(/%$/);
+    expect(moon.style.top).toMatch(/%$/);
+    expect(bands.length).toBeLessThanOrEqual(1);
+    expect(accents.length).toBeLessThanOrEqual(1);
     expect(
       [...new Set(stars.map((star) => star.dataset.starTint))],
     ).toEqual(expect.arrayContaining(["cool", "neutral", "warm"]));
@@ -1850,6 +1895,18 @@ describe("TrainLayout", () => {
     );
     expect(trainLayoutCss).toMatch(
       /\.train-layout-world\[data-time-of-day="night"\] \.train-emissive-overlay--stars\s*\{\s*opacity:\s*1;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="day"\] \.train-celestial-band,\s*\.train-layout-world\[data-time-of-day="sunset"\] \.train-celestial-band\s*\{\s*opacity:\s*0;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="night"\] \.train-celestial-band\s*\{\s*opacity:\s*var\(--train-celestial-band-opacity\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="sunset"\] \.train-emissive-overlay--moon\s*\{\s*opacity:\s*0\.14;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="day"\] \.train-celestial-accent,\s*\.train-layout-world\[data-time-of-day="sunset"\] \.train-celestial-accent\s*\{\s*opacity:\s*0;/,
     );
   });
 
@@ -1917,6 +1974,18 @@ describe("TrainLayout", () => {
         (cloud) =>
           `${cloud.dataset.sceneryAsset}:${cloud.dataset.cloudRoutePosition}:${cloud.style.cssText}`,
       ),
+      night: [
+        ...container.querySelectorAll<HTMLElement>(
+          "[data-night-sky-catalogue] [data-moon-id], " +
+            "[data-night-sky-catalogue] [data-star-id], " +
+            "[data-night-sky-catalogue] [data-celestial-band], " +
+            "[data-night-sky-catalogue] [data-celestial-accent]",
+        ),
+      ].map(
+        (element) =>
+          `${element.dataset.moonId ?? element.dataset.starId ?? element.dataset.celestialBand ?? element.dataset.celestialAccent}:` +
+          element.style.cssText,
+      ),
     });
     const beforeMode = world.dataset.timeOfDay;
     const before = geometry();
@@ -1971,14 +2040,23 @@ describe("TrainLayout", () => {
     const catalogue = container.querySelector<HTMLElement>(
       "[data-star-catalogue]",
     )!;
+    const nightSky = container.querySelector<HTMLElement>(
+      "[data-night-sky-catalogue]",
+    )!;
     const stars = [...catalogue.querySelectorAll(".train-star")];
+    const celestialElements = [...nightSky.children];
 
     expect(catalogue).toHaveAttribute("data-motion", "reduced");
+    expect(nightSky).toHaveAttribute("data-motion", "reduced");
     act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS * 2));
     expect([...catalogue.querySelectorAll(".train-star")]).toEqual(stars);
+    expect([...nightSky.children]).toEqual(celestialElements);
     expect(animation.pending()).toBeLessThanOrEqual(1);
     expect(trainLayoutCss).toMatch(
       /\.train-emissive-overlay--stars\[data-motion="reduced"\] \.train-star\s*\{[\s\S]*?animation:\s*none;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-night-sky,[\s\S]*?\.train-celestial-accent\s*\{[\s\S]*?animation:\s*none;/,
     );
   });
 

@@ -80,6 +80,14 @@ html[data-pane-switcher-layout="train"] .statusline {
   pointer-events: none;
 }
 
+.train-night-sky {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .train-day-sky {
   position: absolute;
   inset: 0;
@@ -1074,18 +1082,99 @@ html[data-pane-switcher-layout="train"] .statusline {
   animation: none;
 }
 
+.train-celestial-band {
+  right: -15%;
+  left: -15%;
+  height: var(--train-celestial-band-height);
+  transform: translateY(-50%) rotate(var(--train-celestial-band-rotation));
+  transform-origin: center;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(145, 176, 205, 0.03) 18%,
+    rgba(118, 157, 190, 0.42) 48%,
+    rgba(104, 140, 176, 0.09) 72%,
+    transparent 100%
+  );
+  filter: blur(5px);
+}
+
+.train-layout-world[data-time-of-day="day"] .train-celestial-band,
+.train-layout-world[data-time-of-day="sunset"] .train-celestial-band {
+  opacity: 0;
+}
+
+.train-layout-world[data-time-of-day="night"] .train-celestial-band {
+  opacity: var(--train-celestial-band-opacity);
+}
+
 .train-emissive-overlay--moon {
-  top: 12px;
-  left: 9%;
-  width: 18px;
-  height: 18px;
+  width: var(--train-moon-size);
+  height: var(--train-moon-size);
+  overflow: hidden;
   border-radius: 50%;
   background: var(--train-palette-emissive);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--train-palette-emissive), transparent 45%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--train-palette-emissive), transparent 58%),
+    0 0 12px color-mix(in srgb, var(--train-palette-emissive), transparent 45%);
+  transform: translate(-50%, -50%);
+}
+
+.train-emissive-overlay--moon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: var(--train-moon-shadow-opacity);
+  background: color-mix(
+    in srgb,
+    var(--train-palette-sky-top) 82%,
+    var(--train-palette-sky-bottom)
+  );
+  transform: translateX(var(--train-moon-shadow-offset))
+    scaleX(var(--train-moon-shadow-scale));
 }
 
 .train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay--moon {
-  opacity: 0.16;
+  opacity: 0.14;
+}
+
+.train-layout-world[data-time-of-day="night"] .train-emissive-overlay--moon {
+  opacity: 0.92;
+}
+
+.train-celestial-accent {
+  background: var(--train-palette-emissive);
+}
+
+.train-celestial-accent--meteor {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--train-palette-emissive), transparent 36%)
+  );
+  box-shadow: 1px 0 2px color-mix(in srgb, var(--train-palette-emissive), transparent 48%);
+}
+
+.train-celestial-accent--planet {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(193, 218, 255, 0.32),
+    0 0 4px rgba(174, 205, 255, 0.4);
+}
+
+.train-layout-world[data-time-of-day="day"] .train-celestial-accent,
+.train-layout-world[data-time-of-day="sunset"] .train-celestial-accent {
+  opacity: 0;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-celestial-accent--planet {
+  opacity: calc(var(--train-celestial-accent-opacity) * 0.1);
+}
+
+.train-layout-world[data-time-of-day="night"] .train-celestial-accent {
+  opacity: var(--train-celestial-accent-opacity);
 }
 
 .train-emissive-overlay--streetlight,
@@ -1590,6 +1679,14 @@ html[data-pane-switcher-layout="train"] .statusline {
   }
 
   .train-day-sky-anchor {
+    animation: none;
+  }
+
+  .train-night-sky,
+  .train-star,
+  .train-emissive-overlay--moon,
+  .train-celestial-band,
+  .train-celestial-accent {
     animation: none;
   }
 

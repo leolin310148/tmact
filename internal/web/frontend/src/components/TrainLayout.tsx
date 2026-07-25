@@ -56,7 +56,7 @@ import {
   trainSceneryPlacementsForChunk,
 } from "./trainScenery";
 import {
-  generateTrainStarCatalogue,
+  generateTrainNightSkyCatalogue,
   type TrainStar,
 } from "./trainStars";
 import {
@@ -588,6 +588,23 @@ type TrainStarStyle = CSSProperties & {
   "--train-star-size": string;
 };
 
+type TrainMoonStyle = CSSProperties & {
+  "--train-moon-size": string;
+  "--train-moon-shadow-offset": string;
+  "--train-moon-shadow-opacity": number;
+  "--train-moon-shadow-scale": number;
+};
+
+type TrainCelestialBandStyle = CSSProperties & {
+  "--train-celestial-band-height": string;
+  "--train-celestial-band-opacity": number;
+  "--train-celestial-band-rotation": string;
+};
+
+type TrainCelestialAccentStyle = CSSProperties & {
+  "--train-celestial-accent-opacity": number;
+};
+
 type TrainDaySkyAnchorStyle = CSSProperties & {
   "--train-sky-anchor-opacity": number;
   "--train-sky-anchor-width": string;
@@ -1011,13 +1028,13 @@ function TrainWorld({
       ]),
     ) as TrainRouteWindows,
   );
-  const [starCatalogue, setStarCatalogue] = useState(() =>
-    generateTrainStarCatalogue(seed, initialWorldWidth()),
+  const [nightSkyCatalogue, setNightSkyCatalogue] = useState(() =>
+    generateTrainNightSkyCatalogue(seed, initialWorldWidth()),
   );
   const [daySkyCatalogue, setDaySkyCatalogue] = useState(() =>
     generateTrainDaySkyCatalogue(seed, initialWorldWidth()),
   );
-  const starViewportWidthRef = useRef(starCatalogue.viewportWidth);
+  const nightSkyViewportWidthRef = useRef(nightSkyCatalogue.viewportWidth);
   const routeWindowsRef = useRef(routeWindows);
   const stationJourneyRef = useRef(initialStationJourney);
   const routePositionRef = useRef(initialStationJourney.routePosition);
@@ -1085,12 +1102,14 @@ function TrainWorld({
         track.dataset.trackTransform = trackTransformValue;
       }
       const width = viewportWidth();
-      const starViewportWidth = Math.max(1, Math.round(width));
-      if (starViewportWidthRef.current !== starViewportWidth) {
-        starViewportWidthRef.current = starViewportWidth;
-        setStarCatalogue(generateTrainStarCatalogue(seed, starViewportWidth));
+      const nightSkyViewportWidth = Math.max(1, Math.round(width));
+      if (nightSkyViewportWidthRef.current !== nightSkyViewportWidth) {
+        nightSkyViewportWidthRef.current = nightSkyViewportWidth;
+        setNightSkyCatalogue(
+          generateTrainNightSkyCatalogue(seed, nightSkyViewportWidth),
+        );
         setDaySkyCatalogue(
-          generateTrainDaySkyCatalogue(seed, starViewportWidth),
+          generateTrainDaySkyCatalogue(seed, nightSkyViewportWidth),
         );
       }
       let windowsChanged = false;
@@ -1330,8 +1349,10 @@ function TrainWorld({
       data-station-ambient="available"
       data-route-apply-count="0"
       data-route-window-updates="0"
-      data-star-count={starCatalogue.stars.length}
-      data-star-viewport-width={starCatalogue.viewportWidth}
+      data-star-count={nightSkyCatalogue.stars.length}
+      data-star-viewport-width={nightSkyCatalogue.viewportWidth}
+      data-night-sky-count={nightSkyCatalogue.elementCount}
+      data-night-sky-version={nightSkyCatalogue.version}
       data-day-sky-count={daySkyCatalogue.elementCount}
       data-day-sky-weather={daySkyCatalogue.weather}
       data-day-sky-viewport-width={daySkyCatalogue.viewportWidth}
@@ -1358,8 +1379,9 @@ function TrainWorld({
       </div>
       <div
         className="train-sky-emissive"
-        data-star-count={starCatalogue.stars.length}
-        data-star-viewport-width={starCatalogue.viewportWidth}
+        data-star-count={nightSkyCatalogue.stars.length}
+        data-star-viewport-width={nightSkyCatalogue.viewportWidth}
+        data-night-sky-count={nightSkyCatalogue.elementCount}
         aria-hidden="true"
       >
         <span
@@ -1399,44 +1421,126 @@ function TrainWorld({
           )}
         </span>
         <span
-          className="train-emissive-overlay train-emissive-overlay--stars"
-          data-emissive="stars"
-          data-star-catalogue={starCatalogue.seed}
-          data-star-count={starCatalogue.stars.length}
-          data-star-target-count={starCatalogue.targetCount}
-          data-star-negative-space={`${starCatalogue.negativeSpaceStartPercent.toFixed(
-            3,
-          )}-${starCatalogue.negativeSpaceEndPercent.toFixed(3)}`}
+          className="train-night-sky"
+          data-night-sky-catalogue={nightSkyCatalogue.seed}
+          data-night-sky-version={nightSkyCatalogue.version}
+          data-night-sky-count={nightSkyCatalogue.elementCount}
+          data-sky-plane="behind-terrain"
+          data-control-contrast="preserved"
           data-motion={reducedMotion ? "reduced" : "full"}
         >
-          {starCatalogue.stars.map((star: TrainStar) => {
-            const style: TrainStarStyle = {
-              left: `${star.xPercent}%`,
-              top: `${star.yPercent}%`,
-              "--train-star-size": `${star.sizePx.toFixed(3)}px`,
-              "--train-star-brightness": star.brightness,
-            };
-            return (
-              <i
-                className={[
-                  "train-star",
-                  `train-star--${star.tint}`,
-                  `train-star--${star.intensity}`,
-                ].join(" ")}
-                data-star-id={star.id}
-                data-star-tint={star.tint}
-                data-star-intensity={star.intensity}
-                data-star-group={star.group ?? ""}
-                style={style}
-                key={star.id}
-              />
-            );
-          })}
+          {nightSkyCatalogue.band ? (
+            <i
+              className="train-emissive-overlay train-celestial-band"
+              data-celestial-band={nightSkyCatalogue.band.id}
+              data-emissive="airglow"
+              style={
+                {
+                  top: `${nightSkyCatalogue.band.yPercent}%`,
+                  "--train-celestial-band-height":
+                    `${nightSkyCatalogue.band.heightPx.toFixed(3)}px`,
+                  "--train-celestial-band-opacity":
+                    nightSkyCatalogue.band.opacity,
+                  "--train-celestial-band-rotation":
+                    `${nightSkyCatalogue.band.rotationDeg.toFixed(3)}deg`,
+                } as TrainCelestialBandStyle
+              }
+            />
+          ) : null}
+          <span
+            className="train-emissive-overlay train-emissive-overlay--stars"
+            data-emissive="stars"
+            data-star-catalogue={nightSkyCatalogue.seed}
+            data-star-count={nightSkyCatalogue.stars.length}
+            data-star-target-count={nightSkyCatalogue.targetCount}
+            data-star-negative-space={`${nightSkyCatalogue.negativeSpaceStartPercent.toFixed(
+              3,
+            )}-${nightSkyCatalogue.negativeSpaceEndPercent.toFixed(3)}`}
+            data-motion={reducedMotion ? "reduced" : "full"}
+          >
+            {nightSkyCatalogue.stars.map((star: TrainStar) => {
+              const style: TrainStarStyle = {
+                left: `${star.xPercent}%`,
+                top: `${star.yPercent}%`,
+                "--train-star-size": `${star.sizePx.toFixed(3)}px`,
+                "--train-star-brightness": star.brightness,
+              };
+              return (
+                <i
+                  className={[
+                    "train-star",
+                    `train-star--${star.tint}`,
+                    `train-star--${star.intensity}`,
+                  ].join(" ")}
+                  data-star-id={star.id}
+                  data-star-tint={star.tint}
+                  data-star-intensity={star.intensity}
+                  data-star-group={star.group ?? ""}
+                  style={style}
+                  key={star.id}
+                />
+              );
+            })}
+          </span>
+          <span
+            className={[
+              "train-emissive-overlay",
+              "train-emissive-overlay--moon",
+              `train-emissive-overlay--moon-${nightSkyCatalogue.moon.phase}`,
+              `train-emissive-overlay--moon-${nightSkyCatalogue.moon.direction}`,
+            ].join(" ")}
+            data-emissive="moon"
+            data-moon-id={nightSkyCatalogue.moon.id}
+            data-moon-phase={nightSkyCatalogue.moon.phase}
+            data-moon-direction={nightSkyCatalogue.moon.direction}
+            data-moon-exclusion={`${nightSkyCatalogue.moon.exclusionRadiusXPercent.toFixed(
+              3,
+            )}x${nightSkyCatalogue.moon.exclusionRadiusYPercent.toFixed(3)}`}
+            style={
+              {
+                left: `${nightSkyCatalogue.moon.xPercent}%`,
+                top: `${nightSkyCatalogue.moon.yPercent}%`,
+                "--train-moon-size":
+                  `${nightSkyCatalogue.moon.diameterPx.toFixed(3)}px`,
+                "--train-moon-shadow-offset":
+                  nightSkyCatalogue.moon.direction === "waxing"
+                    ? "-18%"
+                    : "18%",
+                "--train-moon-shadow-opacity":
+                  nightSkyCatalogue.moon.phase === "full" ? 0 : 1,
+                "--train-moon-shadow-scale":
+                  nightSkyCatalogue.moon.phase === "crescent"
+                    ? 0.94
+                    : nightSkyCatalogue.moon.phase === "quarter"
+                      ? 1.45
+                      : 0.54,
+              } as TrainMoonStyle
+            }
+          />
+          {nightSkyCatalogue.accent ? (
+            <i
+              className={[
+                "train-emissive-overlay",
+                "train-celestial-accent",
+                `train-celestial-accent--${nightSkyCatalogue.accent.kind}`,
+              ].join(" ")}
+              data-celestial-accent={nightSkyCatalogue.accent.kind}
+              data-emissive="celestial-accent"
+              style={
+                {
+                  left: `${nightSkyCatalogue.accent.xPercent}%`,
+                  top: `${nightSkyCatalogue.accent.yPercent}%`,
+                  width: `${nightSkyCatalogue.accent.widthPx.toFixed(3)}px`,
+                  height: `${nightSkyCatalogue.accent.heightPx.toFixed(3)}px`,
+                  transform:
+                    `translate(-50%, -50%) rotate(${nightSkyCatalogue.accent.rotationDeg.toFixed(3)}deg)`,
+                  "--train-celestial-accent-opacity":
+                    nightSkyCatalogue.accent.opacity,
+                } as TrainCelestialAccentStyle
+              }
+            />
+          ) : null}
         </span>
-        <span
-          className="train-emissive-overlay train-emissive-overlay--moon"
-          data-emissive="moon"
-        />
       </div>
       {TRAIN_PARALLAX_LAYERS.map((layer, layerIndex) => {
         const layerWindow = routeWindows[layer.name];
