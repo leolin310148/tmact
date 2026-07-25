@@ -1113,7 +1113,7 @@ describe("TrainLayout", () => {
         expect(spriteOpacity * chunkOpacity).toBe(1);
       }
       for (const setPiece of container.querySelectorAll<HTMLElement>(
-        ".train-set-piece",
+        ".train-set-piece:not(.train-set-piece--town-edge)",
       )) {
         expect(getComputedStyle(setPiece).opacity).toBe("1");
       }
@@ -1129,6 +1129,75 @@ describe("TrainLayout", () => {
       "[data-scenery-category='cloud']",
     )!;
     expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
+  });
+
+  it("attenuates generated town-edge atmosphere without weakening solid sprites", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=train-032a-2&train-route-position=1800&train-cruise-speed=0.001",
+    );
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const townEdge = [
+      ...container.querySelectorAll<HTMLElement>(
+        ".train-set-piece--town-edge",
+      ),
+    ];
+    const detailedBuildings = [
+      ...container.querySelectorAll<HTMLElement>(
+        ".train-scenery-asset[data-scenery-asset^='building-']",
+      ),
+    ];
+    const initialGeometry = routeGeometryFingerprint(container);
+    const timeToggle = screen.getByRole("button", {
+      name: "Cycle train lighting (day / sunset / night)",
+    });
+    const expectedOpacity = {
+      day: [0.3, 0.42, 0.36],
+      sunset: [0.34, 0.46, 0.4],
+      night: [0.38, 0.5, 0.44],
+    } as const;
+
+    expect(townEdge.map((segment) => segment.dataset.setPieceRole)).toEqual([
+      "entry",
+      "body",
+      "exit",
+    ]);
+    expect(detailedBuildings.length).toBeGreaterThan(0);
+    expect(trainLayoutCss).toMatch(
+      /--train-town-edge-surface:\s*color-mix\([\s\S]*?var\(--train-palette-mid-surface\)[\s\S]*?var\(--train-palette-haze\)/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-set-piece--town-edge,[\s\S]*?transition-duration:\s*0\.01ms;/,
+    );
+
+    for (const mode of ["day", "sunset", "night"] as const) {
+      expect(world).toHaveAttribute("data-time-of-day", mode);
+      expect(
+        townEdge.map((segment) =>
+          Number.parseFloat(getComputedStyle(segment).opacity),
+        ),
+      ).toEqual(expectedOpacity[mode]);
+      for (const segment of townEdge) {
+        expect(getComputedStyle(segment).pointerEvents).toBe("none");
+      }
+      for (const building of detailedBuildings) {
+        const chunk = building.closest<HTMLElement>(".train-parallax-chunk")!;
+        expect(getComputedStyle(building).opacity).toBe("1");
+        expect(getComputedStyle(chunk).opacity).toBe("1");
+      }
+      expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
+      if (mode !== "night") fireEvent.click(timeToggle);
+    }
   });
 
   it("owns atmospheric alpha in two fixed veils between solid depth layers", () => {

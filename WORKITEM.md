@@ -154,7 +154,7 @@ and safety properties established by the archived queue remain the baseline.
   `borz` at compact and ultrawide sizes, then run the frontend suite, build,
   and `make test`.
 
-- [ ] **TRAIN-032A — Restore atmospheric depth to the town-edge skyline.**
+- [x] **TRAIN-032A — Restore atmospheric depth to the town-edge skyline.**
   Fix the TRAIN-027 regression that changed the code-native town-edge
   entry/body/exit skyline from restrained atmospheric silhouettes into fully
   opaque single-color blocks. Treat this generated skyline as a distant

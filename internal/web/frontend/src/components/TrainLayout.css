@@ -254,14 +254,25 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--town-edge {
+  --train-town-edge-surface: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface) 72%,
+    var(--train-palette-haze)
+  );
+  --train-town-edge-shadow: color-mix(
+    in srgb,
+    var(--train-palette-silhouette) 64%,
+    var(--train-palette-haze)
+  );
   bottom: 17px;
   height: 76px;
   background:
     repeating-linear-gradient(
       90deg,
-      var(--train-palette-mid-surface) 0 30px,
+      var(--train-town-edge-surface) 0 30px,
       transparent 30px 36px,
-      var(--train-palette-mid-surface) 36px 78px,
+      var(--train-town-edge-shadow) 36px 56px,
+      var(--train-town-edge-surface) 56px 78px,
       transparent 78px 84px
     );
   clip-path: polygon(
@@ -282,19 +293,50 @@ html[data-pane-switcher-layout="train"] .statusline {
     100% 55%,
     100% 100%
   );
+  transition: opacity 450ms ease;
 }
 
 .train-set-piece--town-edge.train-set-piece--entry {
-  opacity: 1;
+  opacity: 0.3;
 }
 
 .train-set-piece--town-edge.train-set-piece--body {
-  opacity: 1;
+  opacity: 0.42;
 }
 
 .train-set-piece--town-edge.train-set-piece--exit {
-  opacity: 1;
+  opacity: 0.36;
   transform: scaleX(-1);
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-set-piece--town-edge.train-set-piece--entry {
+  opacity: 0.34;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-set-piece--town-edge.train-set-piece--body {
+  opacity: 0.46;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-set-piece--town-edge.train-set-piece--exit {
+  opacity: 0.4;
+}
+
+.train-layout-world[data-time-of-day="night"]
+  .train-set-piece--town-edge.train-set-piece--entry {
+  opacity: 0.38;
+}
+
+.train-layout-world[data-time-of-day="night"]
+  .train-set-piece--town-edge.train-set-piece--body {
+  opacity: 0.5;
+}
+
+.train-layout-world[data-time-of-day="night"]
+  .train-set-piece--town-edge.train-set-piece--exit {
+  opacity: 0.44;
 }
 
 .train-set-piece--station {
@@ -1391,6 +1433,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-world-atmosphere,
   .train-layout-world,
   .train-scenery-asset,
+  .train-set-piece--town-edge,
   .train-emissive-overlay,
   .train-time-toggle {
     transition-duration: 0.01ms;
