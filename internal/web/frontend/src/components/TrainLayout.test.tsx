@@ -742,14 +742,16 @@ describe("TrainLayout", () => {
     const animation = installAnimationFrame();
     mockVisibility();
     const removeListener = vi.spyOn(document, "removeEventListener");
-    const { unmount } = render(
+    const { container, unmount } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
     );
 
     expect(animation.pending()).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".train-star").length).toBeGreaterThan(0);
     unmount();
 
     expect(animation.pending()).toBe(0);
+    expect(container.querySelector(".train-star")).not.toBeInTheDocument();
     expect(removeListener).toHaveBeenCalledWith(
       "visibilitychange",
       expect.any(Function),
@@ -769,6 +771,7 @@ describe("TrainLayout", () => {
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const consist = container.querySelector(".train-layout-consist");
+    const stars = [...container.querySelectorAll(".train-star")];
 
     animation.run(0);
     for (let frame = 1; frame <= 120; frame++) {
@@ -789,6 +792,8 @@ describe("TrainLayout", () => {
     expect(nearChunks).toHaveLength(Number(world.dataset.routeMountedChunks));
     expect(allChunks.length).toBeLessThanOrEqual(50);
     expect(clouds.length).toBeLessThanOrEqual(skyChunks.length * 2);
+    expect([...container.querySelectorAll(".train-star")]).toEqual(stars);
+    expect(stars).toHaveLength(Number(world.dataset.starCount));
     expect(container.querySelectorAll(".train-world-track")).toHaveLength(1);
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
@@ -801,6 +806,7 @@ describe("TrainLayout", () => {
     );
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const compactCount = Number(world.dataset.routeMountedChunks);
+    const compactStarCount = Number(world.dataset.starCount);
     Object.defineProperty(world, "clientWidth", {
       configurable: true,
       get: () => 1_920,
@@ -822,6 +828,11 @@ describe("TrainLayout", () => {
       ),
     );
     expect(wideCount).toBeGreaterThan(compactCount);
+    expect(world).toHaveAttribute("data-star-viewport-width", "1920");
+    expect(Number(world.dataset.starCount)).toBeGreaterThan(compactStarCount);
+    expect(container.querySelectorAll(".train-star")).toHaveLength(
+      Number(world.dataset.starCount),
+    );
     expect(nearChunks).toHaveLength(wideCount);
     expect(rightmostEdge).toBeGreaterThanOrEqual(1_920);
   });
@@ -1385,6 +1396,76 @@ describe("TrainLayout", () => {
     for (const overlay of container.querySelectorAll("[data-emissive]")) {
       expect(overlay.tagName).not.toBe("IMG");
     }
+  });
+
+  it("renders one bounded seeded star catalogue instead of repeating CSS grids", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const catalogue = container.querySelector<HTMLElement>(
+      "[data-star-catalogue]",
+    )!;
+    const stars = [...catalogue.querySelectorAll<HTMLElement>(".train-star")];
+
+    expect(container.querySelectorAll("[data-star-catalogue]")).toHaveLength(1);
+    expect(catalogue).toHaveAttribute("data-star-catalogue", "infinite-journey");
+    expect(stars).toHaveLength(Number(catalogue.dataset.starCount));
+    expect(stars).toHaveLength(Number(world.dataset.starCount));
+    expect(stars.length).toBeLessThanOrEqual(38);
+    expect(
+      [...new Set(stars.map((star) => star.dataset.starTint))],
+    ).toEqual(expect.arrayContaining(["cool", "neutral", "warm"]));
+    expect(
+      stars.some((star) => star.dataset.starIntensity === "bright"),
+    ).toBe(true);
+    expect(
+      stars.some((star) => star.dataset.starIntensity === "dim"),
+    ).toBe(true);
+    expect(
+      stars.some((star) => Boolean(star.dataset.starGroup)),
+    ).toBe(true);
+
+    const starRule = trainLayoutCss.match(
+      /\.train-emissive-overlay--stars\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(starRule).toBeDefined();
+    expect(starRule).not.toContain("radial-gradient");
+    expect(starRule).not.toContain("background-size");
+    expect(trainLayoutCss).toMatch(
+      /\.train-emissive-overlay\s*\{[\s\S]*?opacity:\s*0;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="day"\] \.train-emissive-overlay--stars\s*\{\s*opacity:\s*0;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="sunset"\] \.train-emissive-overlay--stars\s*\{\s*opacity:\s*0\.09;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-world\[data-time-of-day="night"\] \.train-emissive-overlay--stars\s*\{\s*opacity:\s*1;/,
+    );
+  });
+
+  it("keeps the seeded star field static under reduced motion", () => {
+    vi.useFakeTimers();
+    mockReducedMotion();
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const catalogue = container.querySelector<HTMLElement>(
+      "[data-star-catalogue]",
+    )!;
+    const stars = [...catalogue.querySelectorAll(".train-star")];
+
+    expect(catalogue).toHaveAttribute("data-motion", "reduced");
+    act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS * 2));
+    expect([...catalogue.querySelectorAll(".train-star")]).toEqual(stars);
+    expect(animation.pending()).toBeLessThanOrEqual(1);
+    expect(trainLayoutCss).toMatch(
+      /\.train-emissive-overlay--stars\[data-motion="reduced"\] \.train-star\s*\{[\s\S]*?animation:\s*none;/,
+    );
   });
 
   it("provides accessible foreground contrast in every palette", () => {

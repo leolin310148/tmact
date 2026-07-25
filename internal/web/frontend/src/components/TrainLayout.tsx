@@ -56,6 +56,10 @@ import {
   trainSceneryPlacementsForChunk,
 } from "./trainScenery";
 import {
+  generateTrainStarCatalogue,
+  type TrainStar,
+} from "./trainStars";
+import {
   SCENE_MODES,
   clockSceneMode,
   nextClockSceneModeBoundary,
@@ -525,6 +529,11 @@ type TrainAtmosphereStyle = CSSProperties & {
   "--train-atmosphere-haze": string;
 };
 
+type TrainStarStyle = CSSProperties & {
+  "--train-star-brightness": number;
+  "--train-star-size": string;
+};
+
 function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
   const palette = TRAIN_TIME_PALETTES[mode];
   return {
@@ -923,6 +932,10 @@ function TrainWorld({
       ]),
     ) as TrainRouteWindows,
   );
+  const [starCatalogue, setStarCatalogue] = useState(() =>
+    generateTrainStarCatalogue(seed, initialWorldWidth()),
+  );
+  const starViewportWidthRef = useRef(starCatalogue.viewportWidth);
   const routeWindowsRef = useRef(routeWindows);
   const stationJourneyRef = useRef(initialStationJourney);
   const routePositionRef = useRef(initialStationJourney.routePosition);
@@ -990,6 +1003,11 @@ function TrainWorld({
         track.dataset.trackTransform = trackTransformValue;
       }
       const width = viewportWidth();
+      const starViewportWidth = Math.max(1, Math.round(width));
+      if (starViewportWidthRef.current !== starViewportWidth) {
+        starViewportWidthRef.current = starViewportWidth;
+        setStarCatalogue(generateTrainStarCatalogue(seed, starViewportWidth));
+      }
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
 
@@ -1227,6 +1245,8 @@ function TrainWorld({
       data-station-ambient="available"
       data-route-apply-count="0"
       data-route-window-updates="0"
+      data-star-count={starCatalogue.stars.length}
+      data-star-viewport-width={starCatalogue.viewportWidth}
       data-time-of-day={timeOfDay}
       data-time-source={timeSource}
       data-palette-transition={paletteTransition}
@@ -1248,11 +1268,47 @@ function TrainWorld({
           />
         ))}
       </div>
-      <div className="train-sky-emissive" aria-hidden="true">
+      <div
+        className="train-sky-emissive"
+        data-star-count={starCatalogue.stars.length}
+        data-star-viewport-width={starCatalogue.viewportWidth}
+        aria-hidden="true"
+      >
         <span
           className="train-emissive-overlay train-emissive-overlay--stars"
           data-emissive="stars"
-        />
+          data-star-catalogue={starCatalogue.seed}
+          data-star-count={starCatalogue.stars.length}
+          data-star-target-count={starCatalogue.targetCount}
+          data-star-negative-space={`${starCatalogue.negativeSpaceStartPercent.toFixed(
+            3,
+          )}-${starCatalogue.negativeSpaceEndPercent.toFixed(3)}`}
+          data-motion={reducedMotion ? "reduced" : "full"}
+        >
+          {starCatalogue.stars.map((star: TrainStar) => {
+            const style: TrainStarStyle = {
+              left: `${star.xPercent}%`,
+              top: `${star.yPercent}%`,
+              "--train-star-size": `${star.sizePx.toFixed(3)}px`,
+              "--train-star-brightness": star.brightness,
+            };
+            return (
+              <i
+                className={[
+                  "train-star",
+                  `train-star--${star.tint}`,
+                  `train-star--${star.intensity}`,
+                ].join(" ")}
+                data-star-id={star.id}
+                data-star-tint={star.tint}
+                data-star-intensity={star.intensity}
+                data-star-group={star.group ?? ""}
+                style={style}
+                key={star.id}
+              />
+            );
+          })}
+        </span>
         <span
           className="train-emissive-overlay train-emissive-overlay--moon"
           data-emissive="moon"

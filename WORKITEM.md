@@ -349,7 +349,7 @@ future station stop without growing the DOM or memory usage over time.
   accessibility thresholds. Compare day/sunset/night with `borz` at compact and
   wide sizes, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-025 — Replace the tiled night stars with a natural seeded field.**
+- [x] **TRAIN-025 — Replace the tiled night stars with a natural seeded field.**
   Remove the two repeating radial-gradient star grids and create one bounded,
   deterministic star catalogue for the visible sky. Vary position, brightness,
   size, and restrained cool/warm tint with a mix of sparse bright stars, dimmer

@@ -771,15 +771,55 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-emissive-overlay--stars {
   inset: 0;
-  background-image:
-    radial-gradient(circle, var(--train-palette-emissive) 0 1px, transparent 1.5px),
-    radial-gradient(circle, #d8eeff 0 1px, transparent 1.5px);
-  background-position: 11px 9px, 37px 24px;
-  background-size: 53px 31px, 71px 43px;
+}
+
+.train-layout-world[data-time-of-day="day"] .train-emissive-overlay--stars {
+  opacity: 0;
 }
 
 .train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay--stars {
-  opacity: 0.08;
+  opacity: 0.09;
+}
+
+.train-layout-world[data-time-of-day="night"] .train-emissive-overlay--stars {
+  opacity: 1;
+}
+
+.train-star {
+  position: absolute;
+  display: block;
+  width: var(--train-star-size);
+  height: var(--train-star-size);
+  border-radius: 50%;
+  background: #eef6ff;
+  opacity: var(--train-star-brightness);
+  box-shadow: 0 0 2px currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.train-star--cool {
+  color: #b9dcff;
+  background: #d9ebff;
+}
+
+.train-star--neutral {
+  color: var(--train-palette-emissive);
+  background: #fff5cf;
+}
+
+.train-star--warm {
+  color: #ffd29a;
+  background: #ffe3b5;
+}
+
+.train-star--bright {
+  box-shadow:
+    0 0 2px currentColor,
+    0 0 5px color-mix(in srgb, currentColor, transparent 55%);
+}
+
+.train-emissive-overlay--stars[data-motion="reduced"] .train-star {
+  animation: none;
 }
 
 .train-emissive-overlay--moon {
