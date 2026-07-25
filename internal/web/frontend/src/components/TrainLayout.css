@@ -94,15 +94,51 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-world-track {
   --train-track-transform: 0px;
+  --train-track-tile-width: 240px;
   position: absolute;
   z-index: 5;
   right: -240px;
   bottom: 0;
   left: -240px;
   height: var(--train-track-h);
+  /*
+   * A shallow three-quarter plane: the two rails keep the wheel baseline
+   * level, while diagonal sleepers and a narrow receding bed supply depth
+   * without restoring the old tall side-on ballast wall. The sleeper layer
+   * repeats on the same 240px period used by the bounded route transform.
+   */
   background:
-    url("../assets/train-theme/sprites/train-track-tile.png")
-    0 0 / 240px 100% repeat-x;
+    linear-gradient(
+      to bottom,
+      #d8c99a 0 1px,
+      #746b54 1px 3px,
+      #252b2e 3px 5px,
+      transparent 5px 9px,
+      #b7a371 9px 10px,
+      #5b513e 10px 13px,
+      #22282a 13px 15px,
+      transparent 15px
+    ),
+    repeating-linear-gradient(
+      104deg,
+      transparent 0 15px,
+      #34241c 15px 17px,
+      #795238 17px 22px,
+      #2b1e18 22px 24px,
+      transparent 24px 30px
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0 4px,
+      color-mix(in srgb, var(--train-palette-near-surface), #2b3032 45%) 4px 16px,
+      color-mix(in srgb, var(--train-palette-near-surface), transparent 30%) 16px 100%
+    );
+  background-position: 0 0;
+  background-size:
+    100% 100%,
+    var(--train-track-tile-width) 100%,
+    100% 100%;
+  background-repeat: no-repeat, repeat-x, no-repeat;
   image-rendering: pixelated;
   pointer-events: none;
   transform: translate3d(var(--train-track-transform), 0, 0);

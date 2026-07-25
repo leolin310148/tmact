@@ -266,6 +266,19 @@ moving or exposing the world-owned track. Screenshots showed readable
 empty/occupied windows and consistent bottom anchoring, and `borz errors
 --json` reported no page errors.
 
+TRAIN-021 shallow-perspective track run 2026-07-25: repeated the complete HTTP
+200, plain-module freshness, open, viewport, hard-reload, and actual-dimension
+protocol at 390×844, 1280×800, and 2560×900. The two low rail bands and diagonal
+sleepers remained aligned below every wheel without restoring a tall ballast
+wall. Each size kept exactly one world-owned track node outside train
+inspection, with 31, 44, and 64 bounded parallax chunks respectively. Scrolling
+desktop train inspection preserved the track node and its independent route
+position. During a five-second ultrawide traversal, route and track advanced by
+the same `410.699px`; all sampled track bounds covered both viewport edges, the
+64-chunk count stayed constant, and no blank seam or visible aliasing jump
+appeared. Deterministic station departure resumed into cruise with route and
+track positions aligned, and `borz errors --json` reported no page errors.
+
 ## Notes Template
 
 ```text

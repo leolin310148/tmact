@@ -291,7 +291,7 @@ future station stop without growing the DOM or memory usage over time.
   the effect in day, sunset, and night palettes with compact and wide occupied
   carriages, then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-021 — Give the moving railway track shallow perspective.**
+- [x] **TRAIN-021 — Give the moving railway track shallow perspective.**
   Replace the current flat side-on/cross-section presentation with a restrained
   three-quarter track plane: rails and sleepers should read slightly diagonal
   and recede gently into the scene while remaining aligned beneath every wheel.

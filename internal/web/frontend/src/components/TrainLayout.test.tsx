@@ -10,6 +10,8 @@ import {
   minimumCarriagesForWidth,
   TRAIN_ARTWORK_SCALE,
   TRAIN_MIN_SEAT_TARGET_PX,
+  TRAIN_WORLD_TRACK_PERSPECTIVE,
+  TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
   trainWorldCruiseSpeed,
   trainWorldTrackTransform,
@@ -173,6 +175,14 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-layer", "world");
     expect(world).toHaveAttribute("data-route-direction", "right");
     expect(track).toHaveAttribute("data-world-track", "railway");
+    expect(track).toHaveAttribute(
+      "data-track-perspective",
+      TRAIN_WORLD_TRACK_PERSPECTIVE,
+    );
+    expect(track).toHaveAttribute(
+      "data-track-tile-width",
+      String(TRAIN_WORLD_TRACK_TILE_WIDTH),
+    );
     expect(track).toHaveAttribute("data-route-direction", "right");
     expect(track).toHaveAttribute("data-speed-ratio", "1");
     expect(inspection).toHaveAttribute("data-layer", "train");
@@ -189,6 +199,7 @@ describe("TrainLayout", () => {
   });
 
   it("wraps the right-moving track transform to one bounded tile", () => {
+    expect(TRAIN_WORLD_TRACK_TILE_WIDTH).toBe(240);
     expect(trainWorldTrackTransform(0)).toBe(0);
     expect(trainWorldTrackTransform(12.4)).toBeCloseTo(12.4);
     expect(trainWorldTrackTransform(252.4)).toBeCloseTo(12.4);
@@ -196,7 +207,7 @@ describe("TrainLayout", () => {
     expect(trainWorldTrackTransform(Number.NaN)).toBe(0);
   });
 
-  it("shares wheel clearance with one overscanned world-owned track strip", () => {
+  it("shares wheel clearance with one overscanned perspective track plane", () => {
     expect(trainLayoutCss).toMatch(
       /\.train-layout\s*\{[\s\S]*?--train-track-h:\s*19px;/,
     );
@@ -204,8 +215,12 @@ describe("TrainLayout", () => {
       /\.train-layout-consist\s*\{[\s\S]*?height:\s*calc\(100% - var\(--train-track-h\)\);[\s\S]*?margin-bottom:\s*var\(--train-track-h\);/,
     );
     expect(trainLayoutCss).toMatch(
-      /\.train-world-track\s*\{[\s\S]*?z-index:\s*5;[\s\S]*?right:\s*-240px;[\s\S]*?bottom:\s*0;[\s\S]*?left:\s*-240px;[\s\S]*?height:\s*var\(--train-track-h\);[\s\S]*?repeat-x;[\s\S]*?transform:\s*translate3d\(var\(--train-track-transform\), 0, 0\);/,
+      /\.train-world-track\s*\{[\s\S]*?--train-track-tile-width:\s*240px;[\s\S]*?z-index:\s*5;[\s\S]*?right:\s*-240px;[\s\S]*?bottom:\s*0;[\s\S]*?left:\s*-240px;[\s\S]*?height:\s*var\(--train-track-h\);/,
     );
+    expect(trainLayoutCss).toMatch(
+      /\.train-world-track\s*\{[\s\S]*?repeating-linear-gradient\(\s*104deg,[\s\S]*?background-size:\s*100% 100%,\s*var\(--train-track-tile-width\) 100%,\s*100% 100%;[\s\S]*?background-repeat:\s*no-repeat,\s*repeat-x,\s*no-repeat;[\s\S]*?transform:\s*translate3d\(var\(--train-track-transform\), 0, 0\);/,
+    );
+    expect(trainLayoutCss).not.toContain("train-track-tile.png");
     expect(trainLayoutCss).not.toContain(".train-layout-track");
   });
 

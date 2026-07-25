@@ -106,7 +106,8 @@ const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
-const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
+export const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
+export const TRAIN_WORLD_TRACK_PERSPECTIVE = "shallow-three-quarter";
 export const TRAIN_ARTWORK_SCALE = 0.9;
 export const TRAIN_MIN_SEAT_TARGET_PX = 44;
 
@@ -1205,6 +1206,8 @@ function TrainWorld({
       <div
         className="train-world-track"
         data-world-track="railway"
+        data-track-perspective={TRAIN_WORLD_TRACK_PERSPECTIVE}
+        data-track-tile-width={TRAIN_WORLD_TRACK_TILE_WIDTH}
         data-route-direction="right"
         data-speed-ratio={TRAIN_WORLD_TRACK_SPEED_RATIO}
         data-track-position={`${initialStationJourney.routePosition.toFixed(3)}px`}
