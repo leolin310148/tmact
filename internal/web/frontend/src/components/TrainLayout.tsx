@@ -684,6 +684,10 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
         const { asset } = placement;
         const sceneryStyle: TrainSceneryAssetStyle = {
           left: `${placement.offsetPercent}%`,
+          top:
+            placement.altitudePercent === undefined
+              ? undefined
+              : `${placement.altitudePercent}%`,
           "--train-scenery-scale": placement.scale,
         };
         return (
@@ -711,6 +715,14 @@ const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-collision-width={placement.collisionWidth.toFixed(3)}
             data-scenery-minimum-spacing={placement.minimumSpacingPx}
+            data-cloud-altitude={
+              placement.altitudePercent?.toFixed(3) ?? undefined
+            }
+            data-cloud-pattern={placement.cloudPattern}
+            data-cloud-group={placement.cloudGroup || undefined}
+            data-cloud-route-position={
+              placement.routePositionPx?.toFixed(3) ?? undefined
+            }
             style={sceneryStyle}
             key={`${asset.id}-${ordinal}`}
           />

@@ -23,6 +23,8 @@ import vegetationHedgerowUrl from "../assets/train-theme/sprites/scenery/vegetat
 import vegetationReedsUrl from "../assets/train-theme/sprites/scenery/vegetation-reeds.png";
 import {
   TRAIN_REGION_CHUNK_LENGTH,
+  TRAIN_ROUTE_CHUNK_WIDTH,
+  trainRegionAtIndex,
   trainRouteSetPieceForChunk,
   trainRouteRandomUnit,
   type RouteChunk,
@@ -401,6 +403,12 @@ export interface TrainRegionSceneryProfile {
 
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
 const PROP_IDS = TRAIN_SCENERY_PROPS.map((asset) => asset.id);
+export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
+export const TRAIN_CLOUD_MAX_ALTITUDE_PERCENT = 42;
+export const TRAIN_CLOUD_MIN_SPACING_PX = 168;
+const TRAIN_CLOUD_REGION_WIDTH =
+  TRAIN_REGION_CHUNK_LENGTH * TRAIN_ROUTE_CHUNK_WIDTH;
+const TRAIN_CLOUD_BOUNDARY_CLEARANCE_PX = 184;
 
 export const TRAIN_REGION_SCENERY_PROFILES = {
   forest: {
@@ -409,8 +417,8 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
       sky: {
         assetIds: CLOUD_IDS,
         density: 0.55,
-        maxPerChunk: 1,
-        minimumSpacingPx: 144,
+        maxPerChunk: 2,
+        minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
         cooldownChunks: 1,
       },
       "ultra-far": {
@@ -454,8 +462,8 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
       sky: {
         assetIds: CLOUD_IDS,
         density: 0.72,
-        maxPerChunk: 1,
-        minimumSpacingPx: 144,
+        maxPerChunk: 2,
+        minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
         cooldownChunks: 1,
       },
       "ultra-far": {
@@ -496,10 +504,10 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
     name: "town",
     layers: {
       sky: {
-        assetIds: ["cloud-wisp", "cloud-cumulus"],
+        assetIds: CLOUD_IDS,
         density: 0.38,
-        maxPerChunk: 1,
-        minimumSpacingPx: 144,
+        maxPerChunk: 2,
+        minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
         cooldownChunks: 1,
       },
       "ultra-far": {
@@ -548,10 +556,10 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
     name: "coast",
     layers: {
       sky: {
-        assetIds: ["cloud-wisp", "cloud-storm", "cloud-cumulus"],
+        assetIds: CLOUD_IDS,
         density: 0.62,
-        maxPerChunk: 1,
-        minimumSpacingPx: 144,
+        maxPerChunk: 2,
+        minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
         cooldownChunks: 1,
       },
       "ultra-far": {
@@ -593,10 +601,10 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
     name: "industrial",
     layers: {
       sky: {
-        assetIds: ["cloud-storm", "cloud-wisp"],
+        assetIds: CLOUD_IDS,
         density: 0.48,
-        maxPerChunk: 1,
-        minimumSpacingPx: 144,
+        maxPerChunk: 2,
+        minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
         cooldownChunks: 1,
       },
       "ultra-far": {
@@ -649,7 +657,13 @@ export interface TrainSceneryPlacement {
   minimumSpacingPx: number;
   landmark: boolean;
   setPiece: TrainSetPieceSegment | null;
+  altitudePercent?: number;
+  cloudPattern?: TrainCloudPattern;
+  cloudGroup?: string;
+  routePositionPx?: number;
 }
+
+export type TrainCloudPattern = "open" | "grouped" | "scattered";
 
 const TRAIN_SCENERY_ASSET_BY_ID = new Map(
   TRAIN_SCENERY_ASSETS.map((asset) => [asset.id, asset]),
@@ -696,6 +710,373 @@ function chooseAsset(
     (left, right) => recentIDs.lastIndexOf(left) - recentIDs.lastIndexOf(right),
   )[0]!;
   return assetForID(leastRecentID);
+}
+
+interface TrainCloudCandidate {
+  routePositionPx: number;
+  altitudePercent: number;
+  scaleUnit: number;
+  group: string;
+}
+
+function cloudRuleForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): TrainRegionLayerRule {
+  const region = trainRegionAtIndex(routeSeed, regionIndex, seedVersion);
+  return TRAIN_REGION_SCENERY_PROFILES[region].layers.sky;
+}
+
+function cloudBoundaryRightClearance(
+  routeSeed: string,
+  boundaryRegionIndex: number,
+  seedVersion: string,
+): number {
+  return (
+    64 +
+    trainRouteRandomUnit(
+      `${seedVersion}:${routeSeed}:cloud-boundary:${boundaryRegionIndex}`,
+    ) *
+      56
+  );
+}
+
+function cloudRegionBounds(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): readonly [minimum: number, maximum: number] {
+  const regionStart = regionIndex * TRAIN_CLOUD_REGION_WIDTH;
+  const previousRight = cloudBoundaryRightClearance(
+    routeSeed,
+    regionIndex - 1,
+    seedVersion,
+  );
+  const leftClearance = TRAIN_CLOUD_BOUNDARY_CLEARANCE_PX - previousRight;
+  const rightClearance = cloudBoundaryRightClearance(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+  );
+  return [
+    regionStart + leftClearance,
+    regionStart + TRAIN_CLOUD_REGION_WIDTH - rightClearance,
+  ];
+}
+
+function cloudPatternForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): TrainCloudPattern {
+  const value = trainRouteRandomUnit(
+    `${seedVersion}:${routeSeed}:cloud-plan:${regionIndex}:pattern`,
+  );
+  if (value < 0.27) return "open";
+  if (value < 0.61) return "grouped";
+  return "scattered";
+}
+
+function cloudCountForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+  pattern: TrainCloudPattern,
+): number {
+  const previousDensity = cloudRuleForRegion(
+    routeSeed,
+    regionIndex - 1,
+    seedVersion,
+  ).density;
+  const density = cloudRuleForRegion(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+  ).density;
+  const nextDensity = cloudRuleForRegion(
+    routeSeed,
+    regionIndex + 1,
+    seedVersion,
+  ).density;
+  const blendedDensity =
+    previousDensity * 0.2 + density * 0.6 + nextDensity * 0.2;
+  const weatherFactor =
+    0.82 +
+    trainRouteRandomUnit(
+      `${seedVersion}:${routeSeed}:cloud-plan:${regionIndex}:density`,
+    ) *
+      0.36;
+  const patternFactor =
+    pattern === "open" ? 0.62 : pattern === "grouped" ? 1.08 : 0.9;
+  return Math.max(
+    2,
+    Math.min(
+      7,
+      Math.round(
+        blendedDensity *
+          TRAIN_REGION_CHUNK_LENGTH *
+          weatherFactor *
+          patternFactor,
+      ),
+    ),
+  );
+}
+
+function cloudPositionOutsideGap(
+  randomValue: number,
+  minimum: number,
+  maximum: number,
+  gapStart: number,
+  gapEnd: number,
+): number {
+  const leftWidth = Math.max(0, gapStart - minimum);
+  const rightWidth = Math.max(0, maximum - gapEnd);
+  const availableWidth = leftWidth + rightWidth;
+  const distance = randomValue * availableWidth;
+  return distance <= leftWidth
+    ? minimum + distance
+    : gapEnd + (distance - leftWidth);
+}
+
+function cloudCandidateFits(
+  routePositionPx: number,
+  candidates: readonly TrainCloudCandidate[],
+): boolean {
+  const chunkIndex = Math.floor(routePositionPx / TRAIN_ROUTE_CHUNK_WIDTH);
+  if (
+    candidates.filter(
+      (candidate) =>
+        Math.floor(candidate.routePositionPx / TRAIN_ROUTE_CHUNK_WIDTH) ===
+        chunkIndex,
+    ).length >= 2
+  ) {
+    return false;
+  }
+  return candidates.every(
+    (candidate) =>
+      Math.abs(candidate.routePositionPx - routePositionPx) >=
+      TRAIN_CLOUD_MIN_SPACING_PX,
+  );
+}
+
+function cloudCandidate(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+  ordinal: number,
+  routePositionPx: number,
+  group: string,
+): TrainCloudCandidate {
+  const key =
+    `${seedVersion}:${routeSeed}:cloud-plan:${regionIndex}:` +
+    `candidate:${ordinal}`;
+  return {
+    routePositionPx,
+    altitudePercent:
+      TRAIN_CLOUD_MIN_ALTITUDE_PERCENT +
+      trainRouteRandomUnit(`${key}:altitude`) *
+        (TRAIN_CLOUD_MAX_ALTITUDE_PERCENT -
+          TRAIN_CLOUD_MIN_ALTITUDE_PERCENT),
+    scaleUnit: trainRouteRandomUnit(`${key}:scale`),
+    group,
+  };
+}
+
+function cloudCandidatesForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): {
+  candidates: readonly TrainCloudCandidate[];
+  pattern: TrainCloudPattern;
+} {
+  const key = `${seedVersion}:${routeSeed}:cloud-plan:${regionIndex}`;
+  const pattern = cloudPatternForRegion(routeSeed, regionIndex, seedVersion);
+  const count = cloudCountForRegion(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+    pattern,
+  );
+  const [minimum, maximum] = cloudRegionBounds(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+  );
+  const width = maximum - minimum;
+  const gapWidth =
+    width *
+    (0.18 + trainRouteRandomUnit(`${key}:gap-width`) * 0.15);
+  const groupCenter =
+    minimum +
+    width *
+      (0.2 + trainRouteRandomUnit(`${key}:group-center`) * 0.6);
+  const gapCenter =
+    pattern === "grouped"
+      ? groupCenter < minimum + width / 2
+        ? maximum - gapWidth / 2
+        : minimum + gapWidth / 2
+      : minimum +
+        gapWidth / 2 +
+        trainRouteRandomUnit(`${key}:gap-center`) * (width - gapWidth);
+  const gapStart = gapCenter - gapWidth / 2;
+  const gapEnd = gapCenter + gapWidth / 2;
+  const candidates: TrainCloudCandidate[] = [];
+  let ordinal = 0;
+
+  if (pattern === "grouped") {
+    const groupSize = Math.min(
+      count,
+      2 + Math.floor(trainRouteRandomUnit(`${key}:group-size`) * 2),
+    );
+    const groupSpacing =
+      TRAIN_CLOUD_MIN_SPACING_PX +
+      20 +
+      trainRouteRandomUnit(`${key}:group-spacing`) * 44;
+    for (let groupOffset = 0; groupOffset < groupSize; groupOffset++) {
+      const routePositionPx =
+        groupCenter +
+        (groupOffset - (groupSize - 1) / 2) * groupSpacing;
+      if (
+        routePositionPx >= minimum &&
+        routePositionPx <= maximum &&
+        cloudCandidateFits(routePositionPx, candidates)
+      ) {
+        candidates.push(
+          cloudCandidate(
+            routeSeed,
+            regionIndex,
+            seedVersion,
+            ordinal++,
+            routePositionPx,
+            `${key}:loose-group`,
+          ),
+        );
+      }
+    }
+  }
+
+  for (
+    let attempt = 0;
+    candidates.length < count && attempt < count * 32;
+    attempt++
+  ) {
+    const routePositionPx = cloudPositionOutsideGap(
+      trainRouteRandomUnit(`${key}:position:${attempt}`),
+      minimum,
+      maximum,
+      gapStart,
+      gapEnd,
+    );
+    if (!cloudCandidateFits(routePositionPx, candidates)) continue;
+    candidates.push(
+      cloudCandidate(
+        routeSeed,
+        regionIndex,
+        seedVersion,
+        ordinal++,
+        routePositionPx,
+        "",
+      ),
+    );
+  }
+
+  candidates.sort(
+    (left, right) => left.routePositionPx - right.routePositionPx,
+  );
+  return { candidates, pattern };
+}
+
+function firstCloudAssetForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): TrainSceneryAsset {
+  const start = Math.floor(
+    trainRouteRandomUnit(
+      `${seedVersion}:${routeSeed}:cloud-plan:${regionIndex}:asset-start`,
+    ) * CLOUD_IDS.length,
+  );
+  return assetForID(CLOUD_IDS[start]!);
+}
+
+function cloudPlacementsForRegion(
+  routeSeed: string,
+  regionIndex: number,
+  seedVersion: string,
+): readonly TrainSceneryPlacement[] {
+  const { candidates, pattern } = cloudCandidatesForRegion(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+  );
+  const nextFirstAsset = firstCloudAssetForRegion(
+    routeSeed,
+    regionIndex + 1,
+    seedVersion,
+  );
+  const firstAsset = firstCloudAssetForRegion(
+    routeSeed,
+    regionIndex,
+    seedVersion,
+  );
+  let previousAsset: TrainSceneryAsset | null = null;
+
+  return candidates.map((candidate, ordinal) => {
+    const blockedIDs = [
+      previousAsset?.id,
+      ordinal === candidates.length - 1 ? nextFirstAsset.id : undefined,
+    ].filter((id): id is string => Boolean(id));
+    const start = positiveModulo(
+      CLOUD_IDS.indexOf(firstAsset.id) + ordinal,
+      CLOUD_IDS.length,
+    );
+    const assetID =
+      Array.from({ length: CLOUD_IDS.length }, (_, offset) =>
+        CLOUD_IDS[positiveModulo(start + offset, CLOUD_IDS.length)]!,
+      ).find((id) => !blockedIDs.includes(id)) ?? CLOUD_IDS[start]!;
+    const resolvedAsset = assetForID(assetID);
+    previousAsset = resolvedAsset;
+    const [minimumScale, maximumScale] = resolvedAsset.safeScale;
+    const scale =
+      minimumScale +
+      candidate.scaleUnit * (maximumScale - minimumScale);
+    const chunkIndex = Math.floor(
+      candidate.routePositionPx / TRAIN_ROUTE_CHUNK_WIDTH,
+    );
+    return {
+      asset: resolvedAsset,
+      offsetPercent:
+        ((candidate.routePositionPx -
+          chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH) /
+          TRAIN_ROUTE_CHUNK_WIDTH) *
+        100,
+      scale,
+      collisionWidth: resolvedAsset.width * scale,
+      minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
+      landmark: false,
+      setPiece: null,
+      altitudePercent: candidate.altitudePercent,
+      cloudPattern: pattern,
+      cloudGroup: candidate.group,
+      routePositionPx: candidate.routePositionPx,
+    };
+  });
+}
+
+export function trainCloudPlacementsForChunk(
+  chunk: RouteChunk,
+): readonly TrainSceneryPlacement[] {
+  return cloudPlacementsForRegion(
+    chunk.routeSeed,
+    chunk.regionIndex,
+    chunk.seedVersion,
+  ).filter(
+    (placement) =>
+      Math.floor(placement.routePositionPx! / TRAIN_ROUTE_CHUNK_WIDTH) ===
+      chunk.index,
+  );
 }
 
 function setPiecePlacement(
@@ -809,6 +1190,7 @@ export function trainSceneryPlacementsForChunk(
   layer: TrainParallaxLayerName,
   chunk: RouteChunk,
 ): readonly TrainSceneryPlacement[] {
+  if (layer === "sky") return trainCloudPlacementsForChunk(chunk);
   return regionLayerPlan(chunk, layer)[chunk.regionChunkOffset] ?? [];
 }
 

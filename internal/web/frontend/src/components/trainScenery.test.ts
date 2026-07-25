@@ -11,6 +11,9 @@ import {
   TRAIN_ROUTE_CHUNK_WIDTH,
 } from "./trainRoute";
 import {
+  TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
+  TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
+  TRAIN_CLOUD_MIN_SPACING_PX,
   TRAIN_REGION_SCENERY_PROFILES,
   TRAIN_SCENERY_ASSETS,
   TRAIN_SCENERY_BRIDGES,
@@ -20,10 +23,26 @@ import {
   TRAIN_SCENERY_PROPS,
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
+  trainCloudPlacementsForChunk,
   trainSceneryPlacementsForChunk,
   trainSceneryScale,
   type TrainRegionSceneryProfile,
 } from "./trainScenery";
+
+function cloudLine(seed: string, firstIndex: number, lastIndex: number) {
+  return Array.from(
+    { length: lastIndex - firstIndex + 1 },
+    (_, offset) => generateRouteChunk(seed, firstIndex + offset),
+  )
+    .flatMap((chunk) =>
+      trainCloudPlacementsForChunk(chunk).map((placement) => ({
+        chunkIndex: chunk.index,
+        regionIndex: chunk.regionIndex,
+        ...placement,
+      })),
+    )
+    .sort((left, right) => left.routePositionPx! - right.routePositionPx!);
+}
 
 describe("train scenery asset kit", () => {
   it("records the complete reusable kit and rendering metadata", () => {
@@ -228,6 +247,94 @@ describe("train scenery asset kit", () => {
       expect(scales[0]).toBe(asset.safeScale[0]);
       expect(scales[4]).toBe(asset.safeScale[1]);
       expect(scales).toEqual([...scales].sort((left, right) => left - right));
+    }
+  });
+
+  it("builds deterministic region-scale cloud plans that vary by seed", () => {
+    const first = cloudLine("natural-clouds-a", -90, 90);
+    const repeated = cloudLine("natural-clouds-a", -90, 90);
+    const secondSeed = cloudLine("natural-clouds-b", -90, 90);
+
+    expect(repeated).toEqual(first);
+    expect(secondSeed).not.toEqual(first);
+    expect(
+      new Set(first.map((placement) => placement.asset.id)),
+    ).toEqual(
+      new Set(["cloud-cumulus", "cloud-wisp", "cloud-storm"]),
+    );
+    expect(
+      new Set(first.map((placement) => placement.cloudPattern)),
+    ).toEqual(new Set(["open", "grouped", "scattered"]));
+  });
+
+  it("varies cloud altitude, scale, spacing, density, gaps, and loose groups across seeds", () => {
+    const lines = [
+      "cirrus-line",
+      "harbor-weather",
+      "highland-front",
+      "summer-local",
+      "winter-express",
+    ].map((seed) => cloudLine(seed, -360, 360));
+    const samples = lines.flat();
+    const altitudes = samples.map((placement) => placement.altitudePercent!);
+    const scales = samples.map((placement) => placement.scale);
+    const offsets = samples.map((placement) => placement.offsetPercent);
+    const spacings = lines.flatMap((line) =>
+      line
+        .slice(1)
+        .map(
+          (placement, index) =>
+            placement.routePositionPx! - line[index]!.routePositionPx!,
+        ),
+    );
+    const grouped = samples.filter((placement) => placement.cloudGroup);
+
+    expect(Math.min(...altitudes)).toBeGreaterThanOrEqual(
+      TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
+    );
+    expect(Math.max(...altitudes)).toBeLessThanOrEqual(
+      TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
+    );
+    expect(Math.max(...altitudes) - Math.min(...altitudes)).toBeGreaterThan(28);
+    expect(new Set(altitudes.map((value) => value.toFixed(1))).size).toBeGreaterThan(
+      100,
+    );
+    expect(Math.max(...scales) - Math.min(...scales)).toBeGreaterThan(0.3);
+    expect(new Set(offsets.map((value) => Math.floor(value / 10))).size).toBe(10);
+    expect(Math.min(...spacings)).toBeGreaterThanOrEqual(
+      TRAIN_CLOUD_MIN_SPACING_PX,
+    );
+    expect(Math.max(...spacings)).toBeGreaterThan(700);
+    expect(grouped.length).toBeGreaterThan(100);
+    expect(
+      new Set(grouped.map((placement) => placement.cloudGroup)).size,
+    ).toBeGreaterThan(30);
+  });
+
+  it("keeps clouds collision-free and variant-cooled across chunks and regions", () => {
+    for (const seed of ["boundary-a", "boundary-b", "boundary-c"]) {
+      const samples = cloudLine(seed, -540, 540);
+      for (let index = 1; index < samples.length; index++) {
+        const previous = samples[index - 1]!;
+        const current = samples[index]!;
+        const spacing =
+          current.routePositionPx! - previous.routePositionPx!;
+        expect(spacing).toBeGreaterThanOrEqual(
+          TRAIN_CLOUD_MIN_SPACING_PX,
+        );
+        expect(spacing).toBeGreaterThanOrEqual(
+          previous.collisionWidth / 2 + current.collisionWidth / 2,
+        );
+        expect(current.asset.id).not.toBe(previous.asset.id);
+      }
+
+      for (const sample of samples) {
+        expect(
+          Math.floor(sample.routePositionPx! / TRAIN_ROUTE_CHUNK_WIDTH),
+        ).toBe(sample.chunkIndex);
+        expect(sample.offsetPercent).toBeGreaterThanOrEqual(0);
+        expect(sample.offsetPercent).toBeLessThan(100);
+      }
     }
   });
 });

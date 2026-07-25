@@ -322,7 +322,7 @@ future station stop without growing the DOM or memory usage over time.
   Use `borz` to inspect cruise, stop, and departure at compact and wide sizes,
   then run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-023 — Naturalize deterministic cloud distribution.**
+- [x] **TRAIN-023 — Naturalize deterministic cloud distribution.**
   Replace the visibly uniform cloud placement with a seeded region-scale sky
   plan that varies horizontal offset, altitude, scale, spacing, and density.
   Allow believable open-sky gaps and occasional loose groups while preventing

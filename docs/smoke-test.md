@@ -295,6 +295,20 @@ passengers, hit targets, or focus geometry. No private pane identifiers or
 output were recorded in this evidence, and `borz errors --json` reported no
 page errors.
 
+TRAIN-023 natural-cloud run 2026-07-25: repeated the complete HTTP 200,
+plain-module freshness, open, viewport, hard-reload, and actual-dimension
+protocol for multiple seeds at 390×844 and 2560×900. `natural-clouds-a`
+displayed a loose group using all three cloud variants, while
+`harbor-weather` placed the compact viewport inside an intentional open-sky
+gap. At ultrawide, `highland-front` mounted 8 clouds across 12 bounded sky
+chunks, with 7 visible clouds, 3 group members, altitudes from 11.467% to
+35.640%, and horizontal gaps from 189.781px to 1055.438px. The complete scene
+stayed at 64 parallax chunks and 38 scenery sprites; cloud nodes never exceeded
+the two-per-chunk bound. Screenshots masked all content above the train scene
+and showed varied heights, scales, spacing, and open areas without a repeated
+row, chunk-edge rhythm, seam, or control collision. `borz errors --json`
+reported no page errors.
+
 ## Notes Template
 
 ```text

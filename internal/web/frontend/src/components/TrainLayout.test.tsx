@@ -777,10 +777,17 @@ describe("TrainLayout", () => {
     const nearChunks = container.querySelectorAll(
       '[data-world-layer="near"] .train-route-chunk',
     );
+    const skyChunks = container.querySelectorAll(
+      '[data-world-layer="sky"] .train-parallax-chunk',
+    );
+    const clouds = container.querySelectorAll(
+      '[data-world-layer="sky"] [data-scenery-category="cloud"]',
+    );
     const allChunks = container.querySelectorAll(".train-parallax-chunk");
     expect(Number(world.dataset.routeWindowUpdates)).toBeGreaterThan(0);
     expect(nearChunks).toHaveLength(Number(world.dataset.routeMountedChunks));
     expect(allChunks.length).toBeLessThanOrEqual(50);
+    expect(clouds.length).toBeLessThanOrEqual(skyChunks.length * 2);
     expect(container.querySelectorAll(".train-world-track")).toHaveLength(1);
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
@@ -816,6 +823,51 @@ describe("TrainLayout", () => {
     expect(wideCount).toBeGreaterThan(compactCount);
     expect(nearChunks).toHaveLength(wideCount);
     expect(rightmostEdge).toBeGreaterThanOrEqual(1_920);
+  });
+
+  it("reproduces cloud placements after a compact-wide-compact resize cycle", () => {
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    let width = window.innerWidth;
+    Object.defineProperty(world, "clientWidth", {
+      configurable: true,
+      get: () => width,
+    });
+    const cloudSignature = () =>
+      [
+        ...container.querySelectorAll<HTMLElement>(
+          '[data-world-layer="sky"] [data-scenery-category="cloud"]',
+        ),
+      ]
+        .map(
+          (cloud) =>
+            `${cloud.dataset.sceneryAsset}:` +
+            `${cloud.dataset.cloudRoutePosition}:` +
+            `${cloud.dataset.cloudAltitude}`,
+        )
+        .sort();
+    const initial = cloudSignature();
+
+    width = 2_560;
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    const wideClouds = container.querySelectorAll(
+      '[data-world-layer="sky"] [data-scenery-category="cloud"]',
+    );
+    const wideSkyChunks = container.querySelectorAll(
+      '[data-world-layer="sky"] .train-parallax-chunk',
+    );
+    expect(wideClouds.length).toBeLessThanOrEqual(wideSkyChunks.length * 2);
+    expect(new Set(cloudSignature()).size).toBe(wideClouds.length);
+
+    width = window.innerWidth;
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    expect(cloudSignature()).toEqual(initial);
   });
 
   it("shows the motion grid only when its development flag is enabled", () => {
@@ -921,6 +973,21 @@ describe("TrainLayout", () => {
       expect(sprite.width).toBeGreaterThan(0);
       expect(sprite.height).toBeGreaterThan(0);
       expect(sprite.style.getPropertyValue("--train-scenery-scale")).not.toBe("");
+    }
+
+    const clouds = container.querySelectorAll<HTMLImageElement>(
+      "[data-scenery-category='cloud']",
+    );
+    for (const cloud of clouds) {
+      expect(Number(cloud.dataset.cloudAltitude)).toBeGreaterThanOrEqual(10);
+      expect(Number(cloud.dataset.cloudAltitude)).toBeLessThanOrEqual(42);
+      expect(cloud.dataset.cloudPattern).toMatch(
+        /^(open|grouped|scattered)$/,
+      );
+      expect(
+        Number.isFinite(Number(cloud.dataset.cloudRoutePosition)),
+      ).toBe(true);
+      expect(cloud.style.top).toMatch(/%$/);
     }
 
     for (const chunk of chunks) {
