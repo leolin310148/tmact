@@ -154,6 +154,18 @@ interface TrainTimePalette {
   emissive: string;
 }
 
+interface TrainSceneryDepthProfile {
+  saturation: number;
+  brightness: number;
+  contrast: number;
+}
+
+interface TrainSceneryTimeGrade {
+  saturation: number;
+  brightness: number;
+  warmth: number;
+}
+
 export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> = {
   day: {
     skyTop: "#54a8d8",
@@ -194,6 +206,24 @@ export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> 
     controlSurface: "#07111f",
     emissive: "#ffe596",
   },
+};
+
+export const TRAIN_SCENERY_DEPTH_PROFILES: Readonly<
+  Record<TrainParallaxLayerName, TrainSceneryDepthProfile>
+> = {
+  sky: { saturation: 0.76, brightness: 1.08, contrast: 0.7 },
+  "ultra-far": { saturation: 0.72, brightness: 1.1, contrast: 0.72 },
+  far: { saturation: 0.8, brightness: 1.04, contrast: 0.82 },
+  midground: { saturation: 0.9, brightness: 0.98, contrast: 0.94 },
+  near: { saturation: 1, brightness: 0.94, contrast: 1.06 },
+};
+
+export const TRAIN_SCENERY_TIME_GRADES: Readonly<
+  Record<SceneMode, TrainSceneryTimeGrade>
+> = {
+  day: { saturation: 1, brightness: 1.06, warmth: 0 },
+  sunset: { saturation: 0.94, brightness: 0.94, warmth: 0.12 },
+  night: { saturation: 0.8, brightness: 0.78, warmth: 0 },
 };
 
 function channelLuminance(channel: number): number {
@@ -503,6 +533,9 @@ type TrainWorldLayerStyle = CSSProperties & {
   "--train-layer-order": number;
   "--train-layer-position": string;
   "--train-layer-speed": number;
+  "--train-depth-saturation": number;
+  "--train-depth-brightness": number;
+  "--train-depth-contrast": number;
 };
 
 type TrainSceneryAssetStyle = CSSProperties & {
@@ -521,12 +554,18 @@ type TrainPaletteStyle = CSSProperties & {
   "--train-palette-foreground-contrast": string;
   "--train-palette-control-surface": string;
   "--train-palette-emissive": string;
+  "--train-time-scenery-saturation": number;
+  "--train-time-scenery-brightness": number;
+  "--train-time-scenery-warmth": number;
 };
 
 type TrainAtmosphereStyle = CSSProperties & {
   "--train-atmosphere-sky-top": string;
   "--train-atmosphere-sky-bottom": string;
-  "--train-atmosphere-haze": string;
+};
+
+type TrainDepthVeilPaletteStyle = CSSProperties & {
+  "--train-depth-veil-color": string;
 };
 
 type TrainStarStyle = CSSProperties & {
@@ -536,6 +575,7 @@ type TrainStarStyle = CSSProperties & {
 
 function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
   const palette = TRAIN_TIME_PALETTES[mode];
+  const grade = TRAIN_SCENERY_TIME_GRADES[mode];
   return {
     "--train-palette-sky-top": palette.skyTop,
     "--train-palette-sky-bottom": palette.skyBottom,
@@ -548,6 +588,9 @@ function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
     "--train-palette-foreground-contrast": palette.foregroundContrast,
     "--train-palette-control-surface": palette.controlSurface,
     "--train-palette-emissive": palette.emissive,
+    "--train-time-scenery-saturation": grade.saturation,
+    "--train-time-scenery-brightness": grade.brightness,
+    "--train-time-scenery-warmth": grade.warmth,
   };
 }
 
@@ -556,7 +599,6 @@ function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
   return {
     "--train-atmosphere-sky-top": palette.skyTop,
     "--train-atmosphere-sky-bottom": palette.skyBottom,
-    "--train-atmosphere-haze": palette.haze,
   };
 }
 
@@ -1316,10 +1358,14 @@ function TrainWorld({
       </div>
       {TRAIN_PARALLAX_LAYERS.map((layer, layerIndex) => {
         const layerWindow = routeWindows[layer.name];
+        const depth = TRAIN_SCENERY_DEPTH_PROFILES[layer.name];
         const style: TrainWorldLayerStyle = {
           "--train-layer-order": layerIndex,
           "--train-layer-position": "0.000px",
           "--train-layer-speed": layer.speedRatio,
+          "--train-depth-saturation": depth.saturation,
+          "--train-depth-brightness": depth.brightness,
+          "--train-depth-contrast": depth.contrast,
         };
         return (
           <div
@@ -1328,6 +1374,9 @@ function TrainWorld({
             data-layer-order={layerIndex}
             data-layer-position="0.000px"
             data-speed-ratio={layer.speedRatio}
+            data-depth-saturation={depth.saturation}
+            data-depth-brightness={depth.brightness}
+            data-depth-contrast={depth.contrast}
             data-motion={reducedMotion ? "reduced" : "full"}
             style={style}
             key={layer.name}
@@ -1347,6 +1396,54 @@ function TrainWorld({
           </div>
         );
       })}
+      <span
+        className="train-depth-veil train-depth-veil--ultra-far"
+        data-depth-veil="ultra-far"
+        data-atmosphere-owner="depth-compositor"
+        data-between-layers="ultra-far,far"
+      >
+        {SCENE_MODES.map((mode) => (
+          <i
+            className={[
+              "train-depth-veil-palette",
+              mode === timeOfDay ? "is-active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-depth-veil-palette={mode}
+            style={
+              {
+                "--train-depth-veil-color": TRAIN_TIME_PALETTES[mode].haze,
+              } as TrainDepthVeilPaletteStyle
+            }
+            key={mode}
+          />
+        ))}
+      </span>
+      <span
+        className="train-depth-veil train-depth-veil--far"
+        data-depth-veil="far"
+        data-atmosphere-owner="depth-compositor"
+        data-between-layers="far,midground"
+      >
+        {SCENE_MODES.map((mode) => (
+          <i
+            className={[
+              "train-depth-veil-palette",
+              mode === timeOfDay ? "is-active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-depth-veil-palette={mode}
+            style={
+              {
+                "--train-depth-veil-color": TRAIN_TIME_PALETTES[mode].haze,
+              } as TrainDepthVeilPaletteStyle
+            }
+            key={mode}
+          />
+        ))}
+      </span>
       <div
         className="train-world-track"
         data-world-track="railway"

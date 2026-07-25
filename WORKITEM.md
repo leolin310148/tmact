@@ -58,7 +58,7 @@ and safety properties established by the archived queue remain the baseline.
 
 ## Queue
 
-- [ ] **TRAIN-027 — Replace translucent depth stacking with an opaque scenery compositor.**
+- [x] **TRAIN-027 — Replace translucent depth stacking with an opaque scenery compositor.**
   Remove the compounded layer-and-sprite opacity that currently leaves
   midground buildings at roughly 69% effective opacity and near scenery at
   roughly 58%. Solid terrain, vegetation, buildings, bridges, and props must

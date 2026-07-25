@@ -12,6 +12,8 @@ import {
   TRAIN_ARTWORK_SCALE,
   TRAIN_LOCOMOTIVE_WHEEL_COUNT,
   TRAIN_MIN_SEAT_TARGET_PX,
+  TRAIN_SCENERY_DEPTH_PROFILES,
+  TRAIN_SCENERY_TIME_GRADES,
   TRAIN_TIME_PALETTES,
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
@@ -51,6 +53,9 @@ vi.mock("../api/client", () => ({
 
 afterEach(() => {
   cleanup();
+  document
+    .querySelectorAll("style[data-train-layout-test-styles]")
+    .forEach((style) => style.remove());
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -1006,6 +1011,163 @@ describe("TrainLayout", () => {
         layer.querySelectorAll(".train-parallax-chunk").length,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it("composes monotonic depth and time grading through named CSS tokens", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const depthLayers = ["ultra-far", "far", "midground", "near"] as const;
+    const contrast = depthLayers.map(
+      (name) => TRAIN_SCENERY_DEPTH_PROFILES[name].contrast,
+    );
+
+    expect(contrast).toEqual([...contrast].sort((left, right) => left - right));
+    expect(new Set(contrast).size).toBe(contrast.length);
+    for (const name of depthLayers) {
+      const layer = container.querySelector<HTMLElement>(
+        `[data-world-layer="${name}"]`,
+      )!;
+      const profile = TRAIN_SCENERY_DEPTH_PROFILES[name];
+      expect(layer).toHaveAttribute("data-depth-saturation", String(profile.saturation));
+      expect(layer).toHaveAttribute("data-depth-brightness", String(profile.brightness));
+      expect(layer).toHaveAttribute("data-depth-contrast", String(profile.contrast));
+      expect(layer.style.getPropertyValue("--train-depth-saturation")).toBe(
+        String(profile.saturation),
+      );
+      expect(layer.style.getPropertyValue("--train-depth-brightness")).toBe(
+        String(profile.brightness),
+      );
+      expect(layer.style.getPropertyValue("--train-depth-contrast")).toBe(
+        String(profile.contrast),
+      );
+    }
+
+    expect(world.style.getPropertyValue("--train-time-scenery-saturation")).toBe(
+      String(TRAIN_SCENERY_TIME_GRADES.day.saturation),
+    );
+    expect(world.style.getPropertyValue("--train-time-scenery-brightness")).toBe(
+      String(TRAIN_SCENERY_TIME_GRADES.day.brightness),
+    );
+    expect(world.style.getPropertyValue("--train-time-scenery-warmth")).toBe(
+      String(TRAIN_SCENERY_TIME_GRADES.day.warmth),
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-scenery-asset\s*\{[\s\S]*?saturate\(var\(--train-depth-saturation\)\)[\s\S]*?brightness\(var\(--train-depth-brightness\)\)[\s\S]*?contrast\(var\(--train-depth-contrast\)\)[\s\S]*?saturate\(var\(--train-time-scenery-saturation\)\)[\s\S]*?brightness\(var\(--train-time-scenery-brightness\)\)[\s\S]*?sepia\(var\(--train-time-scenery-warmth\)\)/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-layout-world\[data-time-of-day="[^"]+"\] \.train-scenery-asset/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-parallax-chunk--variant-\d+\s*\{[^}]*filter:/,
+    );
+  });
+
+  it("keeps solid scenery effectively opaque through every time palette", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const initialGeometry = routeGeometryFingerprint(container);
+    const timeToggle = screen.getByRole("button", {
+      name: "Cycle train lighting (day / sunset / night)",
+    });
+    const assertOpaqueSolids = () => {
+      const solidSprites = [
+        ...container.querySelectorAll<HTMLElement>(
+          ".train-scenery-asset:not([data-scenery-category='cloud'])",
+        ),
+      ];
+      expect(solidSprites.length).toBeGreaterThan(0);
+      for (const sprite of solidSprites) {
+        const chunk = sprite.closest<HTMLElement>(".train-parallax-chunk")!;
+        const spriteOpacity = Number.parseFloat(getComputedStyle(sprite).opacity);
+        const chunkOpacity = Number.parseFloat(getComputedStyle(chunk).opacity);
+        expect(spriteOpacity).toBe(1);
+        expect(chunkOpacity).toBe(1);
+        expect(spriteOpacity * chunkOpacity).toBe(1);
+      }
+      for (const setPiece of container.querySelectorAll<HTMLElement>(
+        ".train-set-piece",
+      )) {
+        expect(getComputedStyle(setPiece).opacity).toBe("1");
+      }
+    };
+
+    for (const mode of ["day", "sunset", "night"] as const) {
+      expect(world).toHaveAttribute("data-time-of-day", mode);
+      assertOpaqueSolids();
+      expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
+      if (mode !== "night") fireEvent.click(timeToggle);
+    }
+    const cloud = container.querySelector<HTMLElement>(
+      "[data-scenery-category='cloud']",
+    )!;
+    expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
+  });
+
+  it("owns atmospheric alpha in two fixed veils between solid depth layers", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const veils = [
+      ...container.querySelectorAll<HTMLElement>(".train-depth-veil"),
+    ];
+
+    expect(veils).toHaveLength(2);
+    expect(veils.map((veil) => veil.dataset.depthVeil)).toEqual([
+      "ultra-far",
+      "far",
+    ]);
+    expect(veils.map((veil) => veil.dataset.betweenLayers)).toEqual([
+      "ultra-far,far",
+      "far,midground",
+    ]);
+    for (const veil of veils) {
+      expect(veil).toHaveAttribute("data-atmosphere-owner", "depth-compositor");
+      expect(getComputedStyle(veil).pointerEvents).toBe("none");
+    }
+    expect(getComputedStyle(veils[0]!).zIndex).toBe("1");
+    expect(getComputedStyle(veils[1]!).zIndex).toBe("2");
+    const paletteLayers = [
+      ...container.querySelectorAll<HTMLElement>(
+        ".train-depth-veil-palette",
+      ),
+    ];
+    expect(paletteLayers).toHaveLength(6);
+    expect(
+      paletteLayers.map((layer) => layer.dataset.depthVeilPalette),
+    ).toEqual(["day", "sunset", "night", "day", "sunset", "night"]);
+    expect(
+      paletteLayers.filter((layer) => layer.classList.contains("is-active")),
+    ).toHaveLength(2);
+    const atmosphereRule = trainLayoutCss.match(
+      /\.train-world-atmosphere\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(atmosphereRule).toBeDefined();
+    expect(atmosphereRule).not.toContain("--train-atmosphere-haze");
+    expect(trainLayoutCss).toMatch(
+      /\.train-depth-veil-palette\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?transition:\s*opacity 450ms ease;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-depth-veil-palette\.is-active\s*\{\s*opacity:\s*1;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-depth-veil--far \.train-depth-veil-palette\s*\{[\s\S]*?color-mix\(in srgb, var\(--train-depth-veil-color\), transparent 38%\)/,
+    );
   });
 
   it("renders manifest-backed scenery sprites with explicit anchors and scale bounds", () => {
