@@ -251,6 +251,21 @@ band, clipped consist, or altered office composition. `borz errors --json`
 reported no page errors, and no pane output or private identifiers were
 recorded in this evidence.
 
+TRAIN-019 scale and hit-target run 2026-07-25: repeated the complete freshness
+and viewport protocol at 390×844, 1280×800, and 2560×900 with mixed occupied
+seats and empty filler carriages. The carriage and locomotive artwork measured
+exactly `0.9` of their post-TRAIN-018 containers, while every carriage bottom
+remained equal to the unchanged world-track top. Passenger targets measured
+44×44px at compact and desktop sizes and 49.547×49.547px at ultrawide; no target
+pairs overlapped, and `elementFromPoint` at all four inset corners of every
+occupied target resolved to that intended passenger. The seat focus ring
+remained a separate 2px outline, and the locomotive trigger stayed larger than
+44px. Filler recalculation produced 2, 6, and 10 total carriages respectively;
+the last ultrawide carriage extended beyond the 2560px inspection edge without
+moving or exposing the world-owned track. Screenshots showed readable
+empty/occupied windows and consistent bottom anchoring, and `borz errors
+--json` reported no page errors.
+
 ## Notes Template
 
 ```text

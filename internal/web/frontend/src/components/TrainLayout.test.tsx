@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,8 @@ import type { PaneStatus } from "../types/server";
 import {
   advanceTrainWorldRoutePosition,
   minimumCarriagesForWidth,
+  TRAIN_ARTWORK_SCALE,
+  TRAIN_MIN_SEAT_TARGET_PX,
   trainPaletteContrastRatio,
   trainWorldCruiseSpeed,
   trainWorldTrackTransform,
@@ -1234,9 +1237,155 @@ describe("TrainLayout", () => {
   });
 
   it("calculates enough overlapping carriages to cover a wide viewport", () => {
-    expect(minimumCarriagesForWidth(1920, 143, 242)).toBe(8);
+    expect(minimumCarriagesForWidth(1920, 143, 242 * TRAIN_ARTWORK_SCALE)).toBe(9);
     expect(minimumCarriagesForWidth(900, 143, 242)).toBe(4);
     expect(minimumCarriagesForWidth(0, 0, 0)).toBe(1);
+  });
+
+  it("scales only train artwork to 90% and preserves the fixed world baseline", () => {
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+
+    expect(TRAIN_ARTWORK_SCALE).toBe(0.9);
+    expect(container.querySelector(".train-layout")).toHaveAttribute(
+      "data-artwork-scale",
+      "0.9",
+    );
+    expect(container.querySelector(".train-carriage")).toHaveAttribute(
+      "data-artwork-scale",
+      "0.9",
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout\s*\{[\s\S]*?--train-artwork-scale:\s*90%;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-locomotive\s*\{[\s\S]*?height:\s*var\(--train-artwork-scale\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-carriage\s*\{[\s\S]*?height:\s*var\(--train-artwork-scale\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-world-track\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?height:\s*var\(--train-track-h\);/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-layout-world\s*\{[^}]*transform:\s*scale/,
+    );
+  });
+
+  it("keeps seat hit targets at least 44px without scaling their focus rings", () => {
+    const { container } = render(
+      <TrainLayout
+        panes={[pane({ pane_id: "%1", session: "alpha", runtime: "codex" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    const passenger = screen.getByRole("button", {
+      name: "Select pane alpha, idle",
+    });
+
+    expect(TRAIN_MIN_SEAT_TARGET_PX).toBe(44);
+    expect(passenger).toHaveAttribute("data-min-hit-size", "44");
+    expect(passenger.querySelector(".train-seat-artwork")).toBeInTheDocument();
+    expect(container.querySelectorAll(".train-seat-artwork")).toHaveLength(4);
+    expect(trainLayoutCss).toMatch(
+      /--train-seat-target-size:\s*max\(\s*var\(--train-seat-target-min\),\s*18\.8888888889cqw\s*\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat-artwork\s*\{[\s\S]*?width:\s*17cqw;[\s\S]*?height:\s*17cqw;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat:focus-visible\s*\{[\s\S]*?outline:\s*2px solid var\(--accent\);/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-seat\s*\{[^}]*transform:\s*scale/,
+    );
+  });
+
+  it("keeps packed seat targets non-overlapping and routes edge clicks to one pane", () => {
+    const onSelect = vi.fn();
+    render(
+      <TrainLayout
+        panes={[
+          pane({ pane_id: "%1", session: "alpha", runtime: "codex" }),
+          pane({ pane_id: "%2", session: "beta", runtime: "codex" }),
+          pane({ pane_id: "%3", session: "gamma", runtime: "codex" }),
+          pane({ pane_id: "%4", session: "delta", runtime: "codex" }),
+        ]}
+        selected={null}
+        onSelect={onSelect}
+      />,
+    );
+
+    expect(trainLayoutCss).toMatch(
+      /--train-seat-column-gap:\s*max\([\s\S]*?var\(--train-seat-target-size\),[\s\S]*?calc\(34cqw - 18px\)[\s\S]*?\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /--train-seat-row-gap:\s*max\(var\(--train-seat-target-size\),\s*38cqh\);/,
+    );
+    const beta = screen.getByRole("button", {
+      name: "Select pane beta, idle",
+    });
+    fireEvent.pointerDown(beta, { clientX: 1, clientY: 1 });
+    fireEvent.click(beta, { clientX: 1, clientY: 1 });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith("%2");
+  });
+
+  it("preserves keyboard navigation and activation on enlarged seat targets", async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TrainLayout
+        panes={[pane({ pane_id: "%1", session: "alpha", runtime: "codex" })]}
+        selected={null}
+        onSelect={onSelect}
+      />,
+    );
+
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: "Show recently closed sessions" }),
+    ).toHaveFocus();
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: "Select pane alpha, idle" }),
+    ).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith("%1");
+  });
+
+  it("preserves selected and stale passenger state on the scaled artwork layer", () => {
+    render(
+      <TrainLayout
+        panes={[
+          pane({
+            pane_id: "%1",
+            session: "alpha",
+            runtime: "codex",
+            stale: true,
+          }),
+        ]}
+        selected="%1"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const passenger = screen.getByRole("button", {
+      name: "Select pane alpha, stale",
+    });
+    expect(passenger).toHaveClass("selected", "stale");
+    expect(passenger).toHaveAttribute("aria-pressed", "true");
+    expect(
+      passenger.querySelector(".train-seat-artwork .train-seat-sprite"),
+    ).toBeInTheDocument();
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat\.selected \.train-seat-sprite\s*\{[\s\S]*?drop-shadow/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-seat\.stale \.train-seat-sprite\s*\{[\s\S]*?opacity:\s*0\.55;/,
+    );
   });
 
   it("packs panes into four ordered seats per carriage", () => {

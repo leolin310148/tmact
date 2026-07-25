@@ -262,7 +262,7 @@ future station stop without growing the DOM or memory usage over time.
   two rendered layout heights are equal and the train gains visible sky without
   clipping or blank scenery. Run the frontend suite, build, and `make test`.
 
-- [ ] **TRAIN-019 — Scale the train artwork to 90% while enlarging hit targets.**
+- [x] **TRAIN-019 — Scale the train artwork to 90% while enlarging hit targets.**
   Reduce the visible locomotive, carriages, wheels, seats, and passenger artwork
   to exactly 90% of their post-TRAIN-018 size, bottom-anchored to the unchanged
   moving-world track baseline. Do not scale the world, track, layout height,

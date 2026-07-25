@@ -7,6 +7,8 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-layout {
   --train-track-h: 19px;
   --train-artwork-band-height: clamp(118px, 18vh, 160px);
+  --train-artwork-scale: 90%;
+  --train-seat-target-min: 44px;
   position: relative;
   isolation: isolate;
   flex: 0 0 auto;
@@ -982,7 +984,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 0;
   display: block;
   width: auto;
-  height: 100%;
+  height: var(--train-artwork-scale);
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
@@ -1008,12 +1010,13 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-carriage {
   position: relative;
   flex: 0 0 auto;
-  height: 100%;
+  height: var(--train-artwork-scale);
   aspect-ratio: 821 / 383;
+  container-type: size;
   /* Both PNG ends include a long coupler. Pull neighbouring vehicles over
      those transparent/coupler edges so the visible join stays compact at
      every viewport height. */
-  margin-left: clamp(-22px, -2vh, -12px);
+  margin-left: clamp(-19.8px, -1.8vh, -10.8px);
 }
 
 .train-carriage-image {
@@ -1024,10 +1027,24 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-seat {
+  /* 18.8889cqw is the pre-scale 17% seat box: the carriage is now 90% wide,
+     while pointer geometry remains at its post-TRAIN-018 size. The artwork
+     layer stays 17cqw and therefore becomes exactly 90% as large. */
+  --train-seat-target-size: max(
+    var(--train-seat-target-min),
+    18.8888888889cqw
+  );
+  --train-seat-column-gap: max(
+    var(--train-seat-target-size),
+    calc(34cqw - 18px)
+  );
+  --train-seat-row-gap: max(var(--train-seat-target-size), 38cqh);
   position: absolute;
   z-index: 2;
-  width: 17%;
-  aspect-ratio: 1;
+  top: calc(var(--train-seat-target-center-y) - var(--train-seat-target-size) / 2);
+  left: calc(var(--train-seat-target-center-x) - var(--train-seat-target-size) / 2);
+  width: var(--train-seat-target-size);
+  height: var(--train-seat-target-size);
   margin: 0;
   padding: 0;
   border: 0;
@@ -1037,23 +1054,42 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-seat--upper-left {
-  top: 14%;
-  left: calc(18% + 10px);
+  --train-seat-art-center-x: calc(26.5cqw + 9px);
+  --train-seat-art-center-y: calc(14cqh + 8.5cqw);
+  --train-seat-target-center-x: calc(43.5cqw - var(--train-seat-column-gap) / 2);
+  --train-seat-target-center-y: calc(33cqh + 8.5cqw - var(--train-seat-row-gap) / 2);
 }
 
 .train-seat--upper-right {
-  top: 14%;
-  left: calc(52% - 10px);
+  --train-seat-art-center-x: calc(60.5cqw - 9px);
+  --train-seat-art-center-y: calc(14cqh + 8.5cqw);
+  --train-seat-target-center-x: calc(43.5cqw + var(--train-seat-column-gap) / 2);
+  --train-seat-target-center-y: calc(33cqh + 8.5cqw - var(--train-seat-row-gap) / 2);
 }
 
 .train-seat--lower-left {
-  top: 52%;
-  left: calc(18% + 10px);
+  --train-seat-art-center-x: calc(26.5cqw + 9px);
+  --train-seat-art-center-y: calc(52cqh + 8.5cqw);
+  --train-seat-target-center-x: calc(43.5cqw - var(--train-seat-column-gap) / 2);
+  --train-seat-target-center-y: calc(33cqh + 8.5cqw + var(--train-seat-row-gap) / 2);
 }
 
 .train-seat--lower-right {
-  top: 52%;
-  left: calc(52% - 10px);
+  --train-seat-art-center-x: calc(60.5cqw - 9px);
+  --train-seat-art-center-y: calc(52cqh + 8.5cqw);
+  --train-seat-target-center-x: calc(43.5cqw + var(--train-seat-column-gap) / 2);
+  --train-seat-target-center-y: calc(33cqh + 8.5cqw + var(--train-seat-row-gap) / 2);
+}
+
+.train-seat-artwork {
+  position: absolute;
+  top: calc(var(--train-seat-art-center-y) - var(--train-seat-target-center-y) + 50%);
+  left: calc(var(--train-seat-art-center-x) - var(--train-seat-target-center-x) + 50%);
+  display: block;
+  width: 17cqw;
+  height: 17cqw;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .train-seat-sprite {
@@ -1067,6 +1103,10 @@ html[data-pane-switcher-layout="train"] .statusline {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.train-seat--empty {
+  pointer-events: none;
 }
 
 .train-seat--facing-left .train-seat-sprite {

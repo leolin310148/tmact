@@ -107,6 +107,8 @@ const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
 const TRAIN_WORLD_TRACK_TILE_WIDTH = 240;
+export const TRAIN_ARTWORK_SCALE = 0.9;
+export const TRAIN_MIN_SEAT_TARGET_PX = 44;
 
 interface TrainTimePalette {
   skyTop: string;
@@ -294,20 +296,21 @@ function TrainPassenger({
       data-pane-id={paneID}
       data-seat-index={seatIndex}
       data-character-index={characterIndex}
+      data-min-hit-size={TRAIN_MIN_SEAT_TARGET_PX}
       onPointerDown={onPointerDownNoBlur}
       onClick={() => onSelect(paneID)}
     >
-      <img
-        className="train-seat-sprite train-seat-sprite--occupied"
-        src={OCCUPIED_SEAT_URLS[characterIndex]}
-        alt=""
-        draggable={false}
-      />
-      {pane.asking && !pane.stale ? (
-        <span className="train-person-ask" aria-hidden="true">
-          ?
-        </span>
-      ) : null}
+      <span className="train-seat-artwork" aria-hidden="true">
+        <img
+          className="train-seat-sprite train-seat-sprite--occupied"
+          src={OCCUPIED_SEAT_URLS[characterIndex]}
+          alt=""
+          draggable={false}
+        />
+        {pane.asking && !pane.stale ? (
+          <span className="train-person-ask">?</span>
+        ) : null}
+      </span>
     </button>
   );
 }
@@ -327,12 +330,14 @@ function EmptyTrainSeat({ seatIndex }: { seatIndex: number }) {
       aria-hidden="true"
       data-seat-index={seatIndex}
     >
-      <img
-        className="train-seat-sprite train-seat-sprite--empty"
-        src={emptySeatUrl}
-        alt=""
-        draggable={false}
-      />
+      <span className="train-seat-artwork">
+        <img
+          className="train-seat-sprite train-seat-sprite--empty"
+          src={emptySeatUrl}
+          alt=""
+          draggable={false}
+        />
+      </span>
     </span>
   );
 }
@@ -1299,6 +1304,7 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
       ref={layoutRef}
       className="train-layout"
       aria-label="Train pane switcher"
+      data-artwork-scale={TRAIN_ARTWORK_SCALE}
       data-minimum-carriages={minimumCarriages}
       style={trainPaletteStyle(timeOfDay)}
     >
@@ -1316,6 +1322,7 @@ export function TrainLayout({ panes, selected, onSelect }: TrainLayoutProps) {
                 className="train-carriage"
                 role="group"
                 aria-label={`Train carriage ${carriageIndex + 1}`}
+                data-artwork-scale={TRAIN_ARTWORK_SCALE}
                 data-carriage-index={carriageIndex}
                 data-filler-carriage={carriageIndex >= paneCarriageCount}
                 key={`carriage-${carriageIndex}`}
