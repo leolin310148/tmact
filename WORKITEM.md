@@ -3,7 +3,7 @@
 Completed TRAIN-001–026 are archived in
 [docs/archive/train-layout-workitems-001-026.md](docs/archive/train-layout-workitems-001-026.md).
 
-This active queue contains sixteen dependency-ordered, independently verifiable
+This active queue contains seventeen dependency-ordered, independently verifiable
 work items that rebuild scenery compositing and daylight art before expanding
 regional day/night richness. The fixed train, route engine, station behavior,
 and safety properties established by the archived queue remain the baseline.
@@ -379,3 +379,59 @@ and safety properties established by the archived queue remain the baseline.
   building, canopy, platform, lamps, and signals. Restore the DOM, run the
   frontend suite, build, `make test`, and `rtk git diff --check`, then document
   the retained screenshot evidence.
+
+- [ ] **TRAIN-042 — Recompose station depth, joins, and time-owned illumination.**
+  Correct the defects exposed by a post-TRAIN-041 layer-by-layer audit with the
+  fixed train hidden. The diagonal station crop is gone, but the station still
+  fails the opaque compositor and coherent set-piece contracts in all three
+  palettes. At the deterministic first station around route position 3680,
+  computed station-building backgrounds retain alpha of only about 0.82–0.87
+  because an opaque surface is mixed with the translucent haze token. Each of
+  the six independently drawn station buildings also leaves a 41.34px gap to
+  its neighbour, allowing unrelated far and midground mountains, buildings,
+  and trees to appear embedded in the station façade. Twelve identical platform
+  lamps and four internal signals create an implausible repeated rhythm, while
+  station windows and lamp heads retain the same emissive glow and shadow in
+  broad daylight as at sunset and night.
+
+  Recompose the six-segment station as one readable set piece with intentional
+  architectural ends, bays, doors, windows, canopy supports, and open areas.
+  Remove the repeated accidental chunk gaps and prevent unrelated scenery from
+  showing through solid walls or reading as station-owned detail. Any genuine
+  opening must be explicitly framed and must reveal a plausible view rather
+  than a randomly clipped sprite. Preserve clean entry/exit platform ramps from
+  TRAIN-041, but keep every wall, roof, canopy, platform, post, sign, signal
+  housing, and other physical surface fully opaque in day, sunset, and night.
+  Use value, chroma, and palette-owned grading for depth; never mix translucent
+  haze into a solid station fill.
+
+  Separate physical fixtures from illumination. Daylight windows and lamp
+  fixtures must remain visible but unlit, without emissive drop shadows;
+  sunset may introduce restrained partial lighting, and night may illuminate a
+  sparse believable subset. Keep signal aspects legible in every palette, but
+  place only the operational approach/departure signals needed at intentional
+  station locations rather than repeating them inside four body chunks.
+  Likewise vary or reduce platform lamps and canopy posts by segment role so
+  the station reads as one composition rather than six copied tiles. Preserve
+  station timing/state behavior, deterministic route output, fixed-train and
+  track geometry, parallax ownership, pointer inertness, reduced motion,
+  palette transitions, bounded DOM, and the opacity/lighting contracts of all
+  non-station scenery.
+
+  Add focused tests proving opaque computed station surfaces in all palettes,
+  continuous and explicitly framed architecture across all six segment roles,
+  no accidental inter-segment reveal widths, role-owned sparse lamp/signal
+  placement, day-unlit/sunset-restrained/night-lit emissive states, and
+  unchanged station transitions, timing, state, terrain, and DOM bounds. For
+  browser acceptance, use `borz` on shared port 5234 with the exact HTTP/module-
+  freshness/open/viewport/hard-reload procedure. At route positions 3680 and
+  4480, temporarily hide `.train-layout-inspection`,
+  `.train-world-debug-grid`, and `.train-time-toggle` only in the live DOM.
+  Capture the complete station and then isolate sky, ultra-far, far,
+  midground, and near layers in day, sunset, and night at compact, desktop,
+  and ultrawide widths. Inspect computed alpha, filters, shadows, bounding
+  boxes, segment joins, lamp/signal counts, and the ownership of every visible
+  object. Confirm that ordinary forest, mountain, town, coast, and industrial
+  scenes remain unchanged and opaque. Restore the DOM, run the frontend suite,
+  build, `make test`, and `rtk git diff --check`, then document the retained
+  audit evidence.
