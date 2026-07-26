@@ -38,6 +38,7 @@ import vegetationDeciduousUrl from "../assets/train-theme/sprites/scenery/vegeta
 import vegetationHedgerowUrl from "../assets/train-theme/sprites/scenery/vegetation-hedgerow.png";
 import vegetationReedsUrl from "../assets/train-theme/sprites/scenery/vegetation-reeds.png";
 import {
+  generateRouteChunk,
   TRAIN_REGION_CHUNK_LENGTH,
   TRAIN_ROUTE_CHUNK_WIDTH,
   trainRegionAtIndex,
@@ -731,6 +732,194 @@ export type TrainRegionComposition =
 
 export const TRAIN_REGION_OPEN_VIEW_TARGET = 2;
 
+export type TrainForestMountainRegion = "forest" | "mountain";
+export const TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX =
+  TRAIN_ROUTE_CHUNK_WIDTH * 0.8;
+
+export type TrainForestMountainSceneryRole =
+  | "forest-transition-grove"
+  | "forest-canopy-cluster"
+  | "forest-undergrowth"
+  | "forest-stream"
+  | "forest-clearing"
+  | "forest-fence-line"
+  | "forest-landmark-approach"
+  | "forest-landmark"
+  | "mountain-transition-pines"
+  | "mountain-layered-ridge"
+  | "mountain-cliff"
+  | "mountain-rock-field"
+  | "mountain-alpine-scrub"
+  | "mountain-open-vista"
+  | "mountain-lookout-approach"
+  | "mountain-landmark";
+
+export type TrainForestMountainSilhouetteFamily =
+  | "mixed-grove"
+  | "high-canopy"
+  | "low-understory"
+  | "stream-cleft"
+  | "open-meadow"
+  | "human-scale-edge"
+  | "layered-alpine"
+  | "sheer-cliff"
+  | "broken-rock"
+  | "alpine-scrub"
+  | "open-ridge"
+  | "lookout-perch";
+
+export interface TrainForestMountainSceneryBeat {
+  region: TrainForestMountainRegion;
+  role: TrainForestMountainSceneryRole;
+  silhouetteFamily: TrainForestMountainSilhouetteFamily;
+  templateVariant: number;
+  densityClass: "dense" | "medium" | "sparse" | "gap";
+  transition: "entry" | "interior" | "exit";
+  transitionNeighbor: TrainRegionName | null;
+  humanScaleLandmarkEligible: boolean;
+}
+
+const TRAIN_FOREST_INTERIOR_RHYTHMS = [
+  [
+    "forest-canopy-cluster",
+    "forest-undergrowth",
+    "forest-stream",
+    "forest-clearing",
+    "forest-canopy-cluster",
+    "forest-fence-line",
+    "forest-landmark-approach",
+  ],
+  [
+    "forest-undergrowth",
+    "forest-canopy-cluster",
+    "forest-fence-line",
+    "forest-clearing",
+    "forest-stream",
+    "forest-canopy-cluster",
+    "forest-landmark-approach",
+  ],
+  [
+    "forest-canopy-cluster",
+    "forest-stream",
+    "forest-undergrowth",
+    "forest-clearing",
+    "forest-landmark-approach",
+    "forest-fence-line",
+    "forest-canopy-cluster",
+  ],
+] as const satisfies readonly (readonly TrainForestMountainSceneryRole[])[];
+
+const TRAIN_MOUNTAIN_INTERIOR_RHYTHMS = [
+  [
+    "mountain-layered-ridge",
+    "mountain-rock-field",
+    "mountain-open-vista",
+    "mountain-cliff",
+    "mountain-alpine-scrub",
+    "mountain-lookout-approach",
+    "mountain-open-vista",
+  ],
+  [
+    "mountain-alpine-scrub",
+    "mountain-layered-ridge",
+    "mountain-cliff",
+    "mountain-open-vista",
+    "mountain-rock-field",
+    "mountain-lookout-approach",
+    "mountain-layered-ridge",
+  ],
+  [
+    "mountain-layered-ridge",
+    "mountain-open-vista",
+    "mountain-rock-field",
+    "mountain-alpine-scrub",
+    "mountain-cliff",
+    "mountain-open-vista",
+    "mountain-lookout-approach",
+  ],
+] as const satisfies readonly (readonly TrainForestMountainSceneryRole[])[];
+
+const TRAIN_FOREST_MOUNTAIN_ROLE_GRAMMAR = {
+  "forest-transition-grove": ["mixed-grove", "medium", false],
+  "forest-canopy-cluster": ["high-canopy", "dense", false],
+  "forest-undergrowth": ["low-understory", "medium", false],
+  "forest-stream": ["stream-cleft", "sparse", false],
+  "forest-clearing": ["open-meadow", "gap", false],
+  "forest-fence-line": ["human-scale-edge", "medium", true],
+  "forest-landmark-approach": ["mixed-grove", "sparse", true],
+  "forest-landmark": ["human-scale-edge", "sparse", true],
+  "mountain-transition-pines": ["mixed-grove", "medium", false],
+  "mountain-layered-ridge": ["layered-alpine", "dense", false],
+  "mountain-cliff": ["sheer-cliff", "medium", false],
+  "mountain-rock-field": ["broken-rock", "sparse", true],
+  "mountain-alpine-scrub": ["alpine-scrub", "medium", false],
+  "mountain-open-vista": ["open-ridge", "gap", false],
+  "mountain-lookout-approach": ["lookout-perch", "sparse", true],
+  "mountain-landmark": ["lookout-perch", "sparse", true],
+} as const satisfies Record<
+  TrainForestMountainSceneryRole,
+  readonly [
+    TrainForestMountainSilhouetteFamily,
+    TrainForestMountainSceneryBeat["densityClass"],
+    boolean,
+  ]
+>;
+
+export function trainForestMountainSceneryBeatForChunk(
+  chunk: RouteChunk,
+): TrainForestMountainSceneryBeat | null {
+  if (chunk.region !== "forest" && chunk.region !== "mountain") return null;
+  const templateVariant = Math.floor(
+    trainRouteRandomUnit(
+      `${chunk.seedVersion}:${chunk.routeSeed}:ordinary-rhythm:${chunk.regionIndex}`,
+    ) * 3,
+  );
+  const transition =
+    chunk.regionChunkOffset === 0
+      ? "entry"
+      : chunk.regionChunkOffset === TRAIN_REGION_CHUNK_LENGTH - 1
+        ? "exit"
+        : "interior";
+  const transitionNeighbor =
+    transition === "entry"
+      ? trainRegionAtIndex(
+          chunk.routeSeed,
+          chunk.regionIndex - 1,
+          chunk.seedVersion,
+        )
+      : transition === "exit"
+        ? trainRegionAtIndex(
+            chunk.routeSeed,
+            chunk.regionIndex + 1,
+            chunk.seedVersion,
+          )
+        : null;
+  const role =
+    transition !== "interior"
+      ? chunk.region === "forest"
+        ? "forest-transition-grove"
+        : "mountain-transition-pines"
+      : chunk.region === "forest"
+        ? TRAIN_FOREST_INTERIOR_RHYTHMS[templateVariant]![
+            chunk.regionChunkOffset - 1
+          ]!
+        : TRAIN_MOUNTAIN_INTERIOR_RHYTHMS[templateVariant]![
+            chunk.regionChunkOffset - 1
+          ]!;
+  const [silhouetteFamily, densityClass, humanScaleLandmarkEligible] =
+    TRAIN_FOREST_MOUNTAIN_ROLE_GRAMMAR[role];
+  return {
+    region: chunk.region,
+    role,
+    silhouetteFamily,
+    templateVariant,
+    densityClass,
+    transition,
+    transitionNeighbor,
+    humanScaleLandmarkEligible,
+  };
+}
+
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
 export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
 export const TRAIN_CLOUD_MAX_ALTITUDE_PERCENT = 42;
@@ -751,14 +940,14 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 1,
       },
       "ultra-far": {
-        assetIds: ["terrain-foothills", "terrain-mesa"],
+        assetIds: ["terrain-foothills"],
         density: 1,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
       },
       far: {
-        assetIds: ["terrain-foothills", "terrain-mesa"],
+        assetIds: ["terrain-foothills"],
         density: 0.85,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
@@ -770,6 +959,7 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-conifer-squat",
           "vegetation-deciduous",
           "vegetation-hedgerow",
+          "vegetation-reeds",
         ],
         density: 1.65,
         maxPerChunk: 2,
@@ -804,14 +994,14 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 1,
       },
       "ultra-far": {
-        assetIds: ["terrain-alpine", "terrain-foothills"],
+        assetIds: ["terrain-alpine"],
         density: 1,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
       },
       far: {
-        assetIds: ["terrain-alpine", "terrain-foothills"],
+        assetIds: ["terrain-foothills"],
         density: 0.9,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
@@ -1078,6 +1268,10 @@ export interface TrainSceneryPlacement {
   cloudPattern?: TrainCloudPattern;
   cloudGroup?: string;
   routePositionPx?: number;
+  regionalRole?: TrainForestMountainSceneryRole;
+  silhouetteFamily?: TrainForestMountainSilhouetteFamily;
+  regionalTemplateVariant?: number;
+  regionalTransition?: TrainForestMountainSceneryBeat["transition"];
 }
 
 type TrainSceneryPlacementDefinition = Omit<
@@ -1200,9 +1394,25 @@ function objectCount(
   return Math.min(maximum, base + (randomValue < fractional ? 1 : 0));
 }
 
-function placementOffsets(count: number, randomValue: number): number[] {
+function placementOffsets(
+  count: number,
+  randomValue: number,
+  secondaryRandomValue?: number,
+): number[] {
   if (count <= 0) return [];
-  if (count === 1) return [25 + randomValue * 50];
+  if (count === 1) {
+    return [
+      secondaryRandomValue === undefined
+        ? 25 + randomValue * 50
+        : 32 + randomValue * 36,
+    ];
+  }
+  if (secondaryRandomValue !== undefined) {
+    return [
+      10 + randomValue * 10,
+      70 + secondaryRandomValue * 20,
+    ];
+  }
   const jitter = (randomValue - 0.5) * 2;
   return [25 + jitter, 75 - jitter];
 }
@@ -1623,18 +1833,23 @@ function nearTrackCandidateCount(
   chunkIndex: number,
   seedVersion: string,
 ): number {
-  const regionIndex = Math.floor(chunkIndex / TRAIN_REGION_CHUNK_LENGTH);
-  const region = trainRegionAtIndex(routeSeed, regionIndex, seedVersion);
+  const chunk = generateRouteChunk(routeSeed, chunkIndex, seedVersion);
+  const { regionIndex, region } = chunk;
   const rule = TRAIN_REGION_SCENERY_PROFILES[region].layers.near;
   if (!rule) return 0;
   const regionOffset = positiveModulo(chunkIndex, TRAIN_REGION_CHUNK_LENGTH);
   const chunkKey =
     `${seedVersion}:${routeSeed}:region-plan:` +
     `${regionIndex}:near:chunk:${regionOffset}`;
-  return objectCount(
+  const defaultCount = objectCount(
     rule.density,
     rule.maxPerChunk,
     trainRouteRandomUnit(`${chunkKey}:density`),
+  );
+  return forestMountainCountForLayer(
+    trainForestMountainSceneryBeatForChunk(chunk),
+    "near",
+    defaultCount,
   );
 }
 
@@ -1851,6 +2066,141 @@ export function trainRegionCompositionForChunk(
   return regionCompositionAtOffset(chunk.regionChunkOffset, plan);
 }
 
+function forestMountainCountForLayer(
+  beat: TrainForestMountainSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: number,
+): number {
+  if (!beat || layer === "sky") return fallback;
+  const counts: Partial<Record<TrainParallaxLayerName, number>> =
+    beat.role === "forest-transition-grove"
+      ? { "ultra-far": 1, far: 1, midground: 1, near: 0 }
+      : beat.role === "forest-canopy-cluster"
+        ? { "ultra-far": 1, far: 1, midground: 2, near: 0 }
+        : beat.role === "forest-undergrowth"
+          ? { "ultra-far": 0, far: 1, midground: 2, near: 0 }
+          : beat.role === "forest-stream"
+            ? { "ultra-far": 0, far: 0, midground: 1, near: 0 }
+            : beat.role === "forest-clearing"
+              ? { "ultra-far": 1, far: 0, midground: 0, near: 1 }
+              : beat.role === "forest-fence-line"
+                ? { "ultra-far": 0, far: 1, midground: 2, near: 1 }
+                : beat.role === "forest-landmark-approach"
+                  ? { "ultra-far": 1, far: 0, midground: 1, near: 1 }
+                  : beat.role === "mountain-transition-pines"
+                    ? { "ultra-far": 0, far: 1, midground: 1, near: 0 }
+                    : beat.role === "mountain-layered-ridge"
+                      ? { "ultra-far": 1, far: 1, midground: 1, near: 0 }
+                      : beat.role === "mountain-cliff"
+                        ? { "ultra-far": 1, far: 0, midground: 1, near: 0 }
+                        : beat.role === "mountain-rock-field"
+                          ? { "ultra-far": 0, far: 1, midground: 0, near: 1 }
+                          : beat.role === "mountain-alpine-scrub"
+                            ? {
+                                "ultra-far": 1,
+                                far: 0,
+                                midground: 1,
+                                near: 0,
+                              }
+                            : beat.role === "mountain-open-vista"
+                              ? {
+                                  "ultra-far": 1,
+                                  far: 0,
+                                  midground: 0,
+                                  near: 0,
+                                }
+                              : beat.role === "mountain-lookout-approach"
+                                ? {
+                                    "ultra-far": 1,
+                                    far: 1,
+                                    midground: 1,
+                                    near: 1,
+                                  }
+                                : {};
+  return counts[layer] ?? fallback;
+}
+
+function forestMountainAssetPool(
+  beat: TrainForestMountainSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: readonly string[],
+): readonly string[] {
+  if (!beat) return fallback;
+  if (layer === "midground") {
+    switch (beat.role) {
+      case "forest-transition-grove":
+        return ["vegetation-conifer-tall", "vegetation-conifer-squat"];
+      case "forest-canopy-cluster":
+        return [
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+          "vegetation-deciduous",
+        ];
+      case "forest-undergrowth":
+        return ["vegetation-hedgerow", "vegetation-deciduous"];
+      case "forest-stream":
+        return ["vegetation-reeds", "vegetation-hedgerow"];
+      case "forest-fence-line":
+        return ["vegetation-hedgerow", "vegetation-conifer-tall"];
+      case "forest-landmark-approach":
+        return ["vegetation-deciduous", "vegetation-conifer-tall"];
+      case "mountain-transition-pines":
+        return ["vegetation-conifer-tall", "vegetation-conifer-squat"];
+      case "mountain-layered-ridge":
+        return ["vegetation-coastal-pine", "vegetation-conifer-tall"];
+      case "mountain-cliff":
+        return ["vegetation-conifer-squat", "vegetation-coastal-pine"];
+      case "mountain-alpine-scrub":
+        return ["vegetation-conifer-squat", "vegetation-coastal-pine"];
+      case "mountain-lookout-approach":
+        return ["vegetation-conifer-tall", "vegetation-conifer-squat"];
+      default:
+        return fallback;
+    }
+  }
+  if (layer === "near") {
+    if (beat.role === "forest-clearing") {
+      return ["prop-milepost", "prop-telegraph-pole"];
+    }
+    if (beat.role === "forest-fence-line") return ["prop-fence"];
+    if (beat.role === "forest-landmark-approach") {
+      return ["prop-maintenance-equipment", "prop-telegraph-pole"];
+    }
+    if (beat.role === "mountain-rock-field") {
+      return ["prop-warning-sign", "prop-crossing-marker"];
+    }
+    if (beat.role === "mountain-lookout-approach") {
+      return [
+        "prop-milepost",
+        "prop-warning-sign",
+        "prop-maintenance-equipment",
+      ];
+    }
+  }
+  return fallback;
+}
+
+function forestMountainPlacementMetadata(
+  beat: TrainForestMountainSceneryBeat | null,
+  roleOverride?: TrainForestMountainSceneryRole,
+): Pick<
+  TrainSceneryPlacement,
+  | "regionalRole"
+  | "silhouetteFamily"
+  | "regionalTemplateVariant"
+  | "regionalTransition"
+> {
+  if (!beat) return {};
+  const role = roleOverride ?? beat.role;
+  return {
+    regionalRole: role,
+    silhouetteFamily:
+      TRAIN_FOREST_MOUNTAIN_ROLE_GRAMMAR[role][0],
+    regionalTemplateVariant: beat.templateVariant,
+    regionalTransition: beat.transition,
+  };
+}
+
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
@@ -1895,6 +2245,15 @@ function regionLayerPlan(
     localOffset++
   ) {
     const chunkKey = `${regionKey}:chunk:${localOffset}`;
+    const regionalBeat = trainForestMountainSceneryBeatForChunk(
+      localOffset === chunk.regionChunkOffset
+        ? chunk
+        : generateRouteChunk(
+            chunk.routeSeed,
+            chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset,
+            chunk.seedVersion,
+          ),
+    );
     const setPiece = compositionPlan.setPieces[localOffset] ?? null;
     if (setPiece?.reservedLayers.includes(layer)) {
       const placement = setPiecePlacement(setPiece, layer);
@@ -1933,6 +2292,14 @@ function regionLayerPlan(
           minimumSpacingPx: 0,
           landmark: true,
           setPiece: null,
+          ...forestMountainPlacementMetadata(
+            regionalBeat,
+            chunk.region === "forest"
+              ? "forest-landmark"
+              : chunk.region === "mountain"
+                ? "mountain-landmark"
+                : undefined,
+          ),
         }),
       ]);
       continue;
@@ -1941,10 +2308,18 @@ function regionLayerPlan(
       plan.push([]);
       continue;
     }
-    const candidateCount = objectCount(
+    const defaultCandidateCount = objectCount(
       rule.density,
       rule.maxPerChunk,
       trainRouteRandomUnit(`${chunkKey}:density`),
+    );
+    const candidateCount = Math.min(
+      rule.maxPerChunk,
+      forestMountainCountForLayer(
+        regionalBeat,
+        layer,
+        defaultCandidateCount,
+      ),
     );
     const absoluteChunkIndex =
       chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset;
@@ -1960,10 +2335,18 @@ function regionLayerPlan(
     const offsets = placementOffsets(
       count,
       trainRouteRandomUnit(`${chunkKey}:offset`),
+      regionalBeat
+        ? trainRouteRandomUnit(`${chunkKey}:offset-secondary`)
+        : undefined,
+    );
+    const assetPool = forestMountainAssetPool(
+      regionalBeat,
+      layer,
+      rule.assetIds,
     );
     const placements = offsets.map((offsetPercent, ordinal) => {
       const asset = chooseAsset(
-        rule.assetIds,
+        assetPool,
         trainRouteRandomUnit(`${chunkKey}:asset:${ordinal}`),
         recentIDs,
       );
@@ -1979,6 +2362,7 @@ function regionLayerPlan(
         minimumSpacingPx: rule.minimumSpacingPx,
         landmark: false,
         setPiece: null,
+        ...forestMountainPlacementMetadata(regionalBeat),
       });
     });
     plan.push(placements);

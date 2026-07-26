@@ -628,6 +628,49 @@ absent. `borz errors --json` was empty. The focused scenery/layout/terrain
 suite passed 104 tests, the complete frontend suite and production build
 passed, and `make test` passed.
 
+TRAIN-047 forest-and-mountain composition run 2026-07-26: used the dedicated
+`tmact-train-workitems` borz profile at 390×844, 1280×800, and 2560×900. The
+ordinary forest samples used seed/position `train-047-proof/22754.545`,
+`ordinary-pools-a/404654.545`, and
+`regional-rhythm-cedar/123054.545`; ordinary mountain used
+`train-047-proof/299118.182`, `ordinary-pools-a/426181.818`, and
+`train-047-proof/65454.545`. Forest-to-mountain transitions used
+`train-047-proof` at `99263.636`, `100072.727`, and `101236.364`; the reverse
+transitions used `235409.091`, `236218.182`, and `237381.818`.
+
+Every requested viewport confirmed HTTP 200, fetched the plain non-cache-busted
+`/src/components/TrainLayout.css` module and found the current forest/mountain
+palette and role source, opened the port-5234 page, applied the viewport, issued
+a hard reload, and asserted the exact `window.innerWidth` and
+`window.innerHeight`. The final source recheck also resolved the forest-soil
+and mountain-rock palette variables to `#315944` and `#706b7b`.
+
+The 24 full day/night captures and 24 matching midground-isolated captures are
+`/private/tmp/train-047-proof/{compact,desktop,ultrawide}-{forest,forest-to-mountain,mountain,mountain-to-forest}-{day,night}{,-midground}.png`.
+The 12 inspected contact sheets are
+`/private/tmp/train-047-proof/contact-{compact,desktop,ultrawide}-{day,night}{,-midground}.png`;
+their order is forest, forest-to-mountain, mountain, then mountain-to-forest.
+Inspection found clustered deciduous/conifer forest silhouettes separated by
+clearings, streams, undergrowth, and fence beats; mountain views alternated
+layered ridges, cliffs, rock fields, alpine scrub, and open vistas. Both
+directions of transition changed from green forest soil to gray-purple rock
+without mirrored wallpaper, floating anchors, flat slabs, or repeated
+viewport-wide bands.
+
+Measured forest unions were 218.4–257.5px wide, mountain compositions were
+962–1922px wide and 153.4–183.1px tall, and transition compositions were
+642–3202px wide and 148.3–183.1px tall. The ultrawide ordinary route window
+remained bounded at 64 chunks. The temporary train, debug, control, layer,
+veil, and projection hiding was fully removed: the inspection and time toggle
+restored to `flex` and `grid`, all five world layers and both veils restored to
+`block`, all 18 projected segments were visible, and no temporary markers
+remained. `borz errors --json` was empty; the console contained only Vite and
+React development messages.
+
+The focused scenery/layout suites passed all 105 tests, the complete frontend
+suite passed all 439 tests, the production build passed, and `make test`
+passed.
+
 ## Notes Template
 
 ```text

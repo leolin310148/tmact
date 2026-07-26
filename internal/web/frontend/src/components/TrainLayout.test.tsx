@@ -56,6 +56,7 @@ import {
   TRAIN_NIGHT_LIFE_MAX_INTENSITY,
   TRAIN_NIGHT_LIFE_MIN_INTENSITY,
   TRAIN_REGION_NIGHT_LIFE,
+  trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
 } from "./trainScenery";
@@ -2423,6 +2424,86 @@ describe("TrainLayout", () => {
       expect(chunk).toHaveAttribute("data-route-region-index");
       expect(chunk).toHaveAttribute("data-route-region-offset");
     }
+  });
+
+  it("renders forest and mountain rhythm diagnostics with terrain-owned details", () => {
+    const requestedRoles = [
+      "forest-stream",
+      "forest-canopy-cluster",
+      "mountain-cliff",
+      "mountain-rock-field",
+      "mountain-open-vista",
+    ] as const;
+    const chunks = requestedRoles.map((requestedRole) => {
+      for (let index = -2_000; index <= 2_000; index++) {
+        const chunk = generateRouteChunk("train-047-render-contract", index);
+        if (
+          trainForestMountainSceneryBeatForChunk(chunk)?.role === requestedRole
+        ) {
+          return chunk;
+        }
+      }
+      throw new Error(`missing regional scenery role: ${requestedRole}`);
+    });
+    const midground = TRAIN_PARALLAX_LAYERS.find(
+      (layer) => layer.name === "midground",
+    )!;
+    const { container } = render(
+      <>
+        {chunks.map((chunk) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            layer={midground}
+            includeSetPieces={false}
+            key={chunk.index}
+          />
+        ))}
+      </>,
+    );
+
+    const renderedChunks = [
+      ...container.querySelectorAll<HTMLElement>(
+        "[data-regional-scenery-role]",
+      ),
+    ];
+    expect(renderedChunks).toHaveLength(requestedRoles.length);
+    expect(
+      renderedChunks.map((chunk) => chunk.dataset.regionalSceneryRole),
+    ).toEqual(requestedRoles);
+    for (const chunk of renderedChunks) {
+      expect(chunk.dataset.regionalSilhouette).toBeTruthy();
+      expect(chunk.dataset.regionalRhythmVariant).toMatch(/^[012]$/);
+      expect(chunk.dataset.regionalDensity).toMatch(
+        /^(dense|medium|sparse|gap)$/,
+      );
+      expect(chunk.querySelectorAll(".train-terrain-base")).toHaveLength(1);
+    }
+
+    const sprites = [
+      ...container.querySelectorAll<HTMLElement>(
+        "[data-scenery-regional-role]",
+      ),
+    ];
+    expect(sprites.length).toBeGreaterThan(0);
+    for (const sprite of sprites) {
+      expect(sprite.dataset.scenerySilhouette).toBeTruthy();
+      expect(sprite.dataset.sceneryRhythmVariant).toMatch(/^[012]$/);
+      expect(sprite.dataset.sceneryTransition).toMatch(
+        /^(entry|interior|exit)$/,
+      );
+    }
+    expect(trainLayoutCss).toContain(
+      '[data-regional-scenery-role="forest-stream"]',
+    );
+    expect(trainLayoutCss).toContain(
+      '[data-regional-scenery-role="forest-undergrowth"]',
+    );
+    expect(trainLayoutCss).toContain(
+      '[data-regional-scenery-role="mountain-cliff"]',
+    );
+    expect(trainLayoutCss).toContain(
+      '[data-regional-scenery-role="mountain-rock-field"]',
+    );
   });
 
   it("renders deterministic set-piece segments with restrained occlusion", () => {

@@ -171,7 +171,7 @@ Treat these findings as regression targets:
   regions with the train hidden in day and night at compact, desktop, and
   ultrawide widths; retain isolated-layer images proving monotonic depth.
 
-- [ ] **TRAIN-047 — Recompose ordinary forest and mountain scenery.**
+- [x] **TRAIN-047 — Recompose ordinary forest and mountain scenery.**
   Give forest and mountain routes distinct readable identities using the
   corrected terrain/depth grammar. Forest needs varied tree families, canopy
   clusters, undergrowth, clearings, streams or fences, and occasional small

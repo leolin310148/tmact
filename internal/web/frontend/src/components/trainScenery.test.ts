@@ -15,6 +15,7 @@ import {
   TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_SPACING_PX,
+  TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX,
   TRAIN_NIGHT_LIFE_MAX_INTENSITY,
   TRAIN_NIGHT_LIFE_MIN_INTENSITY,
   TRAIN_REGION_NIGHT_LIFE,
@@ -31,6 +32,7 @@ import {
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
   trainCloudPlacementsForChunk,
+  trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainRegionCompositionForChunk,
   trainSceneryPlacementsForChunk,
@@ -481,7 +483,7 @@ describe("train scenery asset kit", () => {
         }
       }
     }
-    expect(placementCount).toBeGreaterThan(5_000);
+    expect(placementCount).toBeGreaterThan(4_500);
     expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.scaleMultiplier).toBeGreaterThan(
       TRAIN_SCENERY_DEPTH_GRAMMAR.far.scaleMultiplier,
     );
@@ -501,6 +503,7 @@ describe("train scenery asset kit", () => {
       "vegetation-conifer-squat",
       "vegetation-deciduous",
       "vegetation-hedgerow",
+      "vegetation-reeds",
     ]);
     expect(
       TRAIN_REGION_SCENERY_PROFILES.mountain.layers.midground.assetIds,
@@ -548,6 +551,260 @@ describe("train scenery asset kit", () => {
       });
       expect(profile.landmark.probability).toBeGreaterThan(0.45);
       expect(profile.landmark.probability).toBeLessThan(0.65);
+    }
+  });
+
+  it("builds distinct nine-beat forest and mountain identities across seeds", () => {
+    const roles = {
+      forest: new Set<string>(),
+      mountain: new Set<string>(),
+    };
+    const silhouettes = {
+      forest: new Set<string>(),
+      mountain: new Set<string>(),
+    };
+    const variants = {
+      forest: new Set<number>(),
+      mountain: new Set<number>(),
+    };
+    let sampledRegions = 0;
+
+    for (const seed of [
+      "regional-rhythm-cedar",
+      "regional-rhythm-granite",
+      "regional-rhythm-river",
+      "regional-rhythm-summit",
+    ]) {
+      for (let regionIndex = -90; regionIndex <= 90; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        if (region !== "forest" && region !== "mountain") continue;
+        sampledRegions++;
+        const beats = chunks.map((chunk) =>
+          trainForestMountainSceneryBeatForChunk(chunk),
+        );
+        expect(beats.every(Boolean)).toBe(true);
+        expect(beats[0]).toMatchObject({
+          region,
+          transition: "entry",
+          silhouetteFamily: "mixed-grove",
+        });
+        expect(beats.at(-1)).toMatchObject({
+          region,
+          transition: "exit",
+          silhouetteFamily: "mixed-grove",
+        });
+        expect(beats.slice(1, -1).every((beat) => beat!.transition === "interior")).toBe(
+          true,
+        );
+        for (const beat of beats) {
+          roles[region].add(beat!.role);
+          silhouettes[region].add(beat!.silhouetteFamily);
+          variants[region].add(beat!.templateVariant);
+        }
+      }
+    }
+
+    expect(sampledRegions).toBeGreaterThan(200);
+    expect(roles.forest).toEqual(
+      new Set([
+        "forest-transition-grove",
+        "forest-canopy-cluster",
+        "forest-undergrowth",
+        "forest-stream",
+        "forest-clearing",
+        "forest-fence-line",
+        "forest-landmark-approach",
+      ]),
+    );
+    expect(roles.mountain).toEqual(
+      new Set([
+        "mountain-transition-pines",
+        "mountain-layered-ridge",
+        "mountain-cliff",
+        "mountain-rock-field",
+        "mountain-alpine-scrub",
+        "mountain-open-vista",
+        "mountain-lookout-approach",
+      ]),
+    );
+    expect(silhouettes.forest.size).toBeGreaterThanOrEqual(6);
+    expect(silhouettes.mountain.size).toBeGreaterThanOrEqual(6);
+    expect(variants.forest).toEqual(new Set([0, 1, 2]));
+    expect(variants.mountain).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("turns regional rhythm into pools, density gaps, and non-mirrored clusters", () => {
+    const countsByRole = new Map<string, number[]>();
+    const idsByRole = new Map<string, Set<string>>();
+    let asymmetricClusters = 0;
+
+    for (const seed of [
+      "ordinary-pools-a",
+      "ordinary-pools-b",
+      "ordinary-pools-c",
+    ]) {
+      for (let regionIndex = -80; regionIndex <= 80; regionIndex++) {
+        for (const chunk of regionChunks(seed, regionIndex)) {
+          if (chunk.region !== "forest" && chunk.region !== "mountain") {
+            continue;
+          }
+          const beat = trainForestMountainSceneryBeatForChunk(chunk)!;
+          const midground = trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+            { includeSetPieces: false },
+          ).filter((placement) => !placement.landmark);
+          const counts = countsByRole.get(beat.role) ?? [];
+          counts.push(midground.length);
+          countsByRole.set(beat.role, counts);
+          const ids = idsByRole.get(beat.role) ?? new Set<string>();
+          midground.forEach((placement) => {
+            ids.add(placement.asset.id);
+            expect(placement.regionalRole).toBe(beat.role);
+            expect(placement.silhouetteFamily).toBe(beat.silhouetteFamily);
+            expect(placement.regionalTemplateVariant).toBe(
+              beat.templateVariant,
+            );
+          });
+          idsByRole.set(beat.role, ids);
+          if (midground.length === 2) {
+            asymmetricClusters++;
+            expect(
+              Math.abs(
+                midground[0]!.offsetPercent +
+                  midground[1]!.offsetPercent -
+                  100,
+              ),
+            ).toBeGreaterThan(0.01);
+          }
+        }
+      }
+    }
+
+    const average = (role: string) => {
+      const values = countsByRole.get(role)!;
+      return values.reduce((total, value) => total + value, 0) / values.length;
+    };
+    expect(average("forest-canopy-cluster")).toBeGreaterThan(1.1);
+    expect(average("forest-undergrowth")).toBeGreaterThan(1.1);
+    expect(average("forest-clearing")).toBe(0);
+    expect(average("mountain-open-vista")).toBe(0);
+    expect(average("mountain-layered-ridge")).toBeGreaterThan(0.5);
+    expect(asymmetricClusters).toBeGreaterThan(100);
+    expect(idsByRole.get("forest-stream")).toEqual(
+      new Set(["vegetation-reeds", "vegetation-hedgerow"]),
+    );
+    expect(
+      idsByRole.get("mountain-layered-ridge"),
+    ).toEqual(
+      new Set(["vegetation-coastal-pine", "vegetation-conifer-tall"]),
+    );
+  });
+
+  it("spaces repeated silhouettes and preserves forest-mountain edge grammar", () => {
+    let forestToMountain = 0;
+    let mountainToForest = 0;
+    const repeatedDistances: number[] = [];
+
+    for (const seed of [
+      "transition-forest-a",
+      "transition-mountain-b",
+      "transition-highland-c",
+    ]) {
+      for (let regionIndex = -160; regionIndex < 160; regionIndex++) {
+        const leftChunks = regionChunks(seed, regionIndex);
+        const rightChunks = regionChunks(seed, regionIndex + 1);
+        const leftRegion = leftChunks[0]!.region;
+        const rightRegion = rightChunks[0]!.region;
+        if (
+          (leftRegion === "forest" && rightRegion === "mountain") ||
+          (leftRegion === "mountain" && rightRegion === "forest")
+        ) {
+          const exit = trainForestMountainSceneryBeatForChunk(
+            leftChunks.at(-1)!,
+          )!;
+          const entry = trainForestMountainSceneryBeatForChunk(
+            rightChunks[0]!,
+          )!;
+          expect(exit).toMatchObject({
+            transition: "exit",
+            transitionNeighbor: rightRegion,
+            silhouetteFamily: "mixed-grove",
+          });
+          expect(entry).toMatchObject({
+            transition: "entry",
+            transitionNeighbor: leftRegion,
+            silhouetteFamily: "mixed-grove",
+          });
+          if (leftRegion === "forest") forestToMountain++;
+          else mountainToForest++;
+        }
+
+        if (leftRegion !== "forest" && leftRegion !== "mountain") continue;
+        const lastCenterByID = new Map<string, number>();
+        for (const chunk of leftChunks) {
+          for (const placement of trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+            { includeSetPieces: false },
+          ).filter((candidate) => !candidate.landmark)) {
+            const center =
+              chunk.index * TRAIN_ROUTE_CHUNK_WIDTH +
+              (placement.offsetPercent / 100) * TRAIN_ROUTE_CHUNK_WIDTH;
+            const previous = lastCenterByID.get(placement.asset.id);
+            if (previous !== undefined) repeatedDistances.push(center - previous);
+            lastCenterByID.set(placement.asset.id, center);
+          }
+        }
+      }
+    }
+
+    expect(forestToMountain).toBeGreaterThan(20);
+    expect(mountainToForest).toBeGreaterThan(20);
+    expect(repeatedDistances.length).toBeGreaterThan(100);
+    expect(Math.min(...repeatedDistances)).toBeGreaterThanOrEqual(
+      TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX,
+    );
+  });
+
+  it("keeps forest clearings and mountain lookouts occasional across many seeds", () => {
+    const statistics = {
+      forest: { regions: 0, landmarks: 0 },
+      mountain: { regions: 0, landmarks: 0 },
+    };
+
+    for (const seed of [
+      "landmark-cadence-a",
+      "landmark-cadence-b",
+      "landmark-cadence-c",
+      "landmark-cadence-d",
+    ]) {
+      for (let regionIndex = -120; regionIndex <= 120; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        if (region !== "forest" && region !== "mountain") continue;
+        statistics[region].regions++;
+        const landmarks = chunks.flatMap((chunk) =>
+          trainSceneryPlacementsForChunk("midground", chunk, {
+            includeSetPieces: false,
+          }).filter((placement) => placement.landmark),
+        );
+        expect(landmarks.length).toBeLessThanOrEqual(1);
+        if (landmarks.length === 1) {
+          statistics[region].landmarks++;
+          expect(landmarks[0]!.regionalRole).toBe(
+            region === "forest" ? "forest-landmark" : "mountain-landmark",
+          );
+        }
+      }
+    }
+
+    for (const region of ["forest", "mountain"] as const) {
+      const rate =
+        statistics[region].landmarks / statistics[region].regions;
+      expect(rate, region).toBeGreaterThan(0.35);
+      expect(rate, region).toBeLessThan(0.65);
     }
   });
 
@@ -800,7 +1057,9 @@ describe("train scenery asset kit", () => {
       expect(sample.denseChunks / sample.chunks, region).toBeGreaterThan(0.2);
       expect(midgroundRate, region).toBeGreaterThan(0.15);
       expect(midgroundRate, region).toBeLessThan(1.5);
-      expect(nearRate, region).toBeGreaterThan(0.06);
+      expect(nearRate, region).toBeGreaterThan(
+        region === "forest" ? 0.045 : 0.06,
+      );
       expect(nearRate, region).toBeLessThan(0.24);
       expect(nightLifeChunkRate, region).toBeGreaterThan(0.01);
       expect(nightLifeChunkRate, region).toBeLessThan(0.14);

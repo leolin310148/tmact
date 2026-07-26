@@ -65,6 +65,7 @@ import {
   TRAIN_SCENERY_BUILDINGS,
   TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_SCENERY_LANDMARKS,
+  trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
   type TrainNightLifePlan,
@@ -1346,6 +1347,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
         "--train-terrain-point-7": `${terrainContour.points[7]!.heightPx}px`,
       }
     : undefined;
+  const regionalSceneryBeat =
+    trainForestMountainSceneryBeatForChunk(chunk);
 
   return (
     <div
@@ -1364,6 +1367,21 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-route-region={chunk.region}
       data-route-region-index={chunk.regionIndex}
       data-route-region-offset={chunk.regionChunkOffset}
+      data-regional-scenery-role={regionalSceneryBeat?.role}
+      data-regional-silhouette={regionalSceneryBeat?.silhouetteFamily}
+      data-regional-rhythm-variant={regionalSceneryBeat?.templateVariant}
+      data-regional-density={regionalSceneryBeat?.densityClass}
+      data-regional-transition={regionalSceneryBeat?.transition}
+      data-regional-transition-neighbor={
+        regionalSceneryBeat?.transitionNeighbor ?? undefined
+      }
+      data-regional-human-landmark={
+        regionalSceneryBeat?.humanScaleLandmarkEligible
+          ? "eligible"
+          : regionalSceneryBeat
+            ? "not-eligible"
+            : undefined
+      }
       data-route-set-piece={diagnosticSetPiece?.type ?? "none"}
       data-route-set-piece-role={diagnosticSetPiece?.role ?? "none"}
       data-route-set-piece-variant={
@@ -1734,6 +1752,10 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-detail-budget={placement.detailBudget}
             data-scenery-day-night={asset.dayNightTreatment}
             data-scenery-landmark={placement.landmark ? "true" : "false"}
+            data-scenery-regional-role={placement.regionalRole}
+            data-scenery-silhouette={placement.silhouetteFamily}
+            data-scenery-rhythm-variant={placement.regionalTemplateVariant}
+            data-scenery-transition={placement.regionalTransition}
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-set-piece-variant={
