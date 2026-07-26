@@ -1263,6 +1263,218 @@ export function trainTownIndustrialSceneryBeatForChunk(
   };
 }
 
+export const TRAIN_COAST_MIN_LANDMARK_SPACING_PX =
+  TRAIN_REGION_CHUNK_LENGTH * TRAIN_ROUTE_CHUNK_WIDTH;
+
+export type TrainCoastSceneryRole =
+  | "coast-transition-shore"
+  | "coast-open-water"
+  | "coast-beach-cove"
+  | "coast-rock-shelf"
+  | "coast-harbour-reach"
+  | "coast-dune-grass"
+  | "coast-navigation-channel"
+  | "coast-landmark-approach"
+  | "coast-landmark";
+
+export type TrainCoastShoreFamily =
+  | "opening-shore"
+  | "broad-water"
+  | "sandy-cove"
+  | "rock-shelf"
+  | "working-harbour"
+  | "dune-edge"
+  | "navigation-reach"
+  | "lighthouse-headland";
+
+export type TrainCoastWaterKind =
+  | "arrival-tide"
+  | "open-sea"
+  | "cove-shallows"
+  | "shelf-channel"
+  | "harbour-basin"
+  | "dune-shallows"
+  | "navigation-channel";
+
+export type TrainCoastFixtureKind =
+  | "beach"
+  | "rock-shelf"
+  | "pier"
+  | "boat"
+  | "buoy"
+  | "harbour-post"
+  | "dune-grass";
+
+export type TrainCoastTransitionFamily =
+  | "natural-bank"
+  | "settlement-harbour"
+  | "working-port"
+  | "open-horizon";
+
+export interface TrainCoastSceneryBeat {
+  region: "coast";
+  role: TrainCoastSceneryRole;
+  shoreFamily: TrainCoastShoreFamily;
+  waterKind: TrainCoastWaterKind;
+  fixtures: readonly TrainCoastFixtureKind[];
+  templateVariant: number;
+  densityClass: "medium" | "sparse" | "gap";
+  transition: "entry" | "interior" | "exit";
+  transitionNeighbor: TrainRegionName | null;
+  transitionFamily: TrainCoastTransitionFamily;
+}
+
+interface TrainCoastRoleGrammar {
+  shoreFamily: TrainCoastShoreFamily;
+  waterKind: TrainCoastWaterKind;
+  fixtures: readonly TrainCoastFixtureKind[];
+  densityClass: TrainCoastSceneryBeat["densityClass"];
+}
+
+const TRAIN_COAST_INTERIOR_RHYTHMS = [
+  [
+    "coast-open-water",
+    "coast-beach-cove",
+    "coast-rock-shelf",
+    "coast-harbour-reach",
+    "coast-dune-grass",
+    "coast-navigation-channel",
+    "coast-landmark-approach",
+  ],
+  [
+    "coast-beach-cove",
+    "coast-open-water",
+    "coast-dune-grass",
+    "coast-navigation-channel",
+    "coast-rock-shelf",
+    "coast-harbour-reach",
+    "coast-landmark-approach",
+  ],
+  [
+    "coast-rock-shelf",
+    "coast-dune-grass",
+    "coast-open-water",
+    "coast-harbour-reach",
+    "coast-beach-cove",
+    "coast-navigation-channel",
+    "coast-landmark-approach",
+  ],
+] as const satisfies readonly (readonly TrainCoastSceneryRole[])[];
+
+const TRAIN_COAST_ROLE_GRAMMAR = {
+  "coast-transition-shore": {
+    shoreFamily: "opening-shore",
+    waterKind: "arrival-tide",
+    fixtures: ["beach", "dune-grass"],
+    densityClass: "sparse",
+  },
+  "coast-open-water": {
+    shoreFamily: "broad-water",
+    waterKind: "open-sea",
+    fixtures: ["buoy"],
+    densityClass: "gap",
+  },
+  "coast-beach-cove": {
+    shoreFamily: "sandy-cove",
+    waterKind: "cove-shallows",
+    fixtures: ["beach", "dune-grass"],
+    densityClass: "sparse",
+  },
+  "coast-rock-shelf": {
+    shoreFamily: "rock-shelf",
+    waterKind: "shelf-channel",
+    fixtures: ["rock-shelf", "buoy"],
+    densityClass: "sparse",
+  },
+  "coast-harbour-reach": {
+    shoreFamily: "working-harbour",
+    waterKind: "harbour-basin",
+    fixtures: ["pier", "boat", "harbour-post"],
+    densityClass: "medium",
+  },
+  "coast-dune-grass": {
+    shoreFamily: "dune-edge",
+    waterKind: "dune-shallows",
+    fixtures: ["beach", "dune-grass"],
+    densityClass: "sparse",
+  },
+  "coast-navigation-channel": {
+    shoreFamily: "navigation-reach",
+    waterKind: "navigation-channel",
+    fixtures: ["boat", "buoy", "harbour-post"],
+    densityClass: "sparse",
+  },
+  "coast-landmark-approach": {
+    shoreFamily: "lighthouse-headland",
+    waterKind: "navigation-channel",
+    fixtures: ["rock-shelf", "buoy"],
+    densityClass: "sparse",
+  },
+  "coast-landmark": {
+    shoreFamily: "lighthouse-headland",
+    waterKind: "navigation-channel",
+    fixtures: ["rock-shelf", "buoy"],
+    densityClass: "sparse",
+  },
+} as const satisfies Record<TrainCoastSceneryRole, TrainCoastRoleGrammar>;
+
+export function trainCoastTransitionFamilyForRegion(
+  neighbor: TrainRegionName | null,
+): TrainCoastTransitionFamily {
+  if (neighbor === "town") return "settlement-harbour";
+  if (neighbor === "industrial") return "working-port";
+  if (neighbor === "forest" || neighbor === "mountain") {
+    return "natural-bank";
+  }
+  return "open-horizon";
+}
+
+export function trainCoastSceneryBeatForChunk(
+  chunk: RouteChunk,
+): TrainCoastSceneryBeat | null {
+  if (chunk.region !== "coast") return null;
+  const templateVariant = Math.floor(
+    trainRouteRandomUnit(
+      `${chunk.seedVersion}:${chunk.routeSeed}:coast-rhythm:${chunk.regionIndex}`,
+    ) * 3,
+  );
+  const transition =
+    chunk.regionChunkOffset === 0
+      ? "entry"
+      : chunk.regionChunkOffset === TRAIN_REGION_CHUNK_LENGTH - 1
+        ? "exit"
+        : "interior";
+  const transitionNeighbor =
+    transition === "entry"
+      ? trainRegionAtIndex(
+          chunk.routeSeed,
+          chunk.regionIndex - 1,
+          chunk.seedVersion,
+        )
+      : transition === "exit"
+        ? trainRegionAtIndex(
+            chunk.routeSeed,
+            chunk.regionIndex + 1,
+            chunk.seedVersion,
+          )
+        : null;
+  const role =
+    transition === "interior"
+      ? TRAIN_COAST_INTERIOR_RHYTHMS[templateVariant]![
+          chunk.regionChunkOffset - 1
+        ]!
+      : "coast-transition-shore";
+  return {
+    region: "coast",
+    role,
+    ...TRAIN_COAST_ROLE_GRAMMAR[role],
+    templateVariant,
+    transition,
+    transitionNeighbor,
+    transitionFamily: trainCoastTransitionFamilyForRegion(transitionNeighbor),
+  };
+}
+
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
 export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
 export const TRAIN_CLOUD_MAX_ALTITUDE_PERCENT = 42;
@@ -1443,15 +1655,15 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 1,
       },
       "ultra-far": {
-        assetIds: ["terrain-mesa", "terrain-foothills"],
-        density: 0.78,
+        assetIds: ["coast-shore"],
+        density: 0,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
       },
       far: {
         assetIds: ["coast-shore"],
-        density: 1,
+        density: 0,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
@@ -1463,7 +1675,7 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
           "vegetation-hedgerow",
           "building-cottage",
         ],
-        density: 0.62,
+        density: 0.54,
         maxPerChunk: 1,
         minimumSpacingPx: 144,
         cooldownChunks: 2,
@@ -1613,11 +1825,14 @@ export interface TrainSceneryPlacement {
   routePositionPx?: number;
   regionalRole?:
     | TrainForestMountainSceneryRole
-    | TrainTownIndustrialSceneryRole;
+    | TrainTownIndustrialSceneryRole
+    | TrainCoastSceneryRole;
   silhouetteFamily?:
     | TrainForestMountainSilhouetteFamily
-    | TrainTownIndustrialCompositionFamily;
+    | TrainTownIndustrialCompositionFamily
+    | TrainCoastShoreFamily;
   regionalScaleFamily?: TrainTownIndustrialScaleFamily;
+  regionalWaterKind?: TrainCoastWaterKind;
   regionalTemplateVariant?: number;
   regionalTransition?:
     | TrainForestMountainSceneryBeat["transition"]
@@ -2792,6 +3007,88 @@ function townIndustrialPlacementMetadata(
   };
 }
 
+function coastCountForLayer(
+  beat: TrainCoastSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: number,
+): number {
+  if (!beat || layer === "sky") return fallback;
+  if (layer === "ultra-far" || layer === "far") return 0;
+  const counts: Partial<Record<TrainParallaxLayerName, number>> =
+    beat.role === "coast-open-water"
+      ? { midground: 0, near: 0 }
+      : beat.role === "coast-harbour-reach"
+        ? { midground: 1, near: 1 }
+        : beat.role === "coast-navigation-channel"
+          ? { midground: 0, near: 1 }
+          : { midground: 1, near: 0 };
+  return counts[layer] ?? fallback;
+}
+
+function coastAssetPool(
+  beat: TrainCoastSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: readonly string[],
+): readonly string[] {
+  if (!beat) return fallback;
+  if (layer === "midground") {
+    switch (beat.role) {
+      case "coast-transition-shore":
+        return ["vegetation-reeds", "vegetation-hedgerow"];
+      case "coast-beach-cove":
+        return ["vegetation-reeds", "vegetation-coastal-pine"];
+      case "coast-rock-shelf":
+        return ["vegetation-coastal-pine"];
+      case "coast-harbour-reach":
+        return ["building-cottage", "vegetation-hedgerow"];
+      case "coast-dune-grass":
+        return ["vegetation-reeds", "vegetation-hedgerow"];
+      case "coast-landmark-approach":
+        return ["building-cottage", "vegetation-coastal-pine"];
+      default:
+        return fallback;
+    }
+  }
+  if (layer === "near") {
+    if (beat.role === "coast-harbour-reach") {
+      return ["prop-lamp-post", "prop-milepost"];
+    }
+    if (beat.role === "coast-navigation-channel") {
+      return ["prop-milepost", "prop-lamp-post"];
+    }
+    if (
+      beat.role === "coast-beach-cove" ||
+      beat.role === "coast-transition-shore"
+    ) {
+      return ["prop-fence"];
+    }
+  }
+  return fallback;
+}
+
+function coastPlacementMetadata(
+  beat: TrainCoastSceneryBeat | null,
+  roleOverride?: TrainCoastSceneryRole,
+): Pick<
+  TrainSceneryPlacement,
+  | "regionalRole"
+  | "silhouetteFamily"
+  | "regionalWaterKind"
+  | "regionalTemplateVariant"
+  | "regionalTransition"
+> {
+  if (!beat) return {};
+  const role = roleOverride ?? beat.role;
+  const grammar = TRAIN_COAST_ROLE_GRAMMAR[role];
+  return {
+    regionalRole: role,
+    silhouetteFamily: grammar.shoreFamily,
+    regionalWaterKind: grammar.waterKind,
+    regionalTemplateVariant: beat.templateVariant,
+    regionalTransition: beat.transition,
+  };
+}
+
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
@@ -2847,6 +3144,7 @@ function regionLayerPlan(
     const regionalBeat = trainForestMountainSceneryBeatForChunk(localChunk);
     const builtEnvironmentBeat =
       trainTownIndustrialSceneryBeatForChunk(localChunk);
+    const coastBeat = trainCoastSceneryBeatForChunk(localChunk);
     const setPiece = compositionPlan.setPieces[localOffset] ?? null;
     if (setPiece?.reservedLayers.includes(layer)) {
       const placement = setPiecePlacement(setPiece, layer);
@@ -2904,6 +3202,10 @@ function regionLayerPlan(
                 ? "industrial-landmark"
                 : undefined,
           ),
+          ...coastPlacementMetadata(
+            coastBeat,
+            chunk.region === "coast" ? "coast-landmark" : undefined,
+          ),
         }),
       ]);
       continue;
@@ -2924,10 +3226,14 @@ function regionLayerPlan(
     );
     const candidateCount = Math.min(
       rule.maxPerChunk,
-      townIndustrialCountForLayer(
-        builtEnvironmentBeat,
+      coastCountForLayer(
+        coastBeat,
         layer,
-        forestMountainCount,
+        townIndustrialCountForLayer(
+          builtEnvironmentBeat,
+          layer,
+          forestMountainCount,
+        ),
       ),
     );
     const absoluteChunkIndex =
@@ -2958,9 +3264,10 @@ function regionLayerPlan(
       layer,
       forestMountainPool,
     );
+    const coastPool = coastAssetPool(coastBeat, layer, assetPool);
     const placements = offsets.map((offsetPercent, ordinal) => {
       const asset = chooseAsset(
-        assetPool,
+        coastPool,
         trainRouteRandomUnit(`${chunkKey}:asset:${ordinal}`),
         recentIDs,
       );
@@ -2980,6 +3287,7 @@ function regionLayerPlan(
         setPiece: null,
         ...forestMountainPlacementMetadata(regionalBeat),
         ...townIndustrialPlacementMetadata(builtEnvironmentBeat),
+        ...coastPlacementMetadata(coastBeat),
       });
     });
     plan.push(placements);

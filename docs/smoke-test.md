@@ -715,6 +715,44 @@ The focused scenery/layout/asset suites passed all 118 tests, the complete
 frontend suite passed all 444 tests, the production build passed, and
 `make test` passed.
 
+TRAIN-049 coast composition run 2026-07-27: used route seed
+`train-049-proof`, coast region `28`, and ordinary coast chunks `256`, `258`,
+and `260` for arrival, ordinary travel, and departure. Their centred journey
+positions were respectively `149009.091`, `150172.727`, and `151336.364` at
+390×844; `149818.182`, `150981.818`, and `152145.455` at 1280×800; and
+`150981.818`, `152145.455`, and `153309.091` at 2560×900.
+
+Every viewport confirmed HTTP 200, fetched the plain non-cache-busted
+`/src/components/TrainLayout.css` module and found the current coast shore and
+water-plane source, reopened the fixed dedicated tab, set the viewport, issued
+a hard reload, and asserted exact `window.innerWidth` and
+`window.innerHeight`. The train, debug controls, time toggle, and projected set
+pieces were temporarily hidden. Each named chunk had a 322px visible bounding
+box centred at x `195`, `640`, or `1280`; the visible water union was 128px
+deep, had 4–11 participating planes plus matching visible shore profiles, and
+extended beyond both viewport edges through the arrival, ordinary, and
+departure sequence. Ultrawide remained bounded at 64 ordinary route chunks.
+
+The 27 retained captures are
+`/private/tmp/train-049-proof/{compact,desktop,ultrawide}-{arrival,ordinary,departure}-{day,sunset,night}.png`.
+The nine inspected contact sheets are
+`/private/tmp/train-049-proof/contact-{compact,desktop,ultrawide}-{day,sunset,night}.png`;
+their order is arrival, ordinary travel, then departure. Inspection found a
+broad continuous palette-owned sea, separate far and midground movement cues,
+irregular opaque beaches and rock shelves, low coastal horizons, and visible
+piers, boats, buoys, harbour posts, and dune grass. Coast no longer depended on
+metadata, white horizontal bars, repeated water fragments, vertical colour
+blocks, or mountain-dominated ordinary views. Day, sunset, and night retained
+readable water depth and shoreline ownership; lighthouse reflection markup was
+source-owned and clipped by its matching water mask.
+
+The temporary stylesheet was removed afterward. The train inspection and time
+toggle restored to `flex` and `grid`, all projected segments restored visible,
+and no temporary marker remained. `borz errors --json` was empty. The focused
+scenery/layout suites passed all 115 tests, the complete frontend suite passed
+all 449 tests, the production TypeScript/Vite build passed, and `make test`
+passed.
+
 ## Notes Template
 
 ```text

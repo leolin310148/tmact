@@ -203,7 +203,7 @@ Treat these findings as regression targets:
   compact/desktop/ultrawide sequences for town, town→industrial, industrial,
   and industrial→town in all three palettes.
 
-- [ ] **TRAIN-049 — Recompose coast, shore, and water depth.**
+- [x] **TRAIN-049 — Recompose coast, shore, and water depth.**
   Make coast immediately readable without relying on metadata: establish an
   actual shore profile, water planes with depth-appropriate movement cues,
   beaches or rock shelves, harbour details, sparse vegetation, and occasional

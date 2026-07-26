@@ -1644,29 +1644,37 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-terrain-base[data-terrain-material="coast-shore"] {
+  background-color: color-mix(
+    in srgb,
+    var(--train-terrain-surface),
+    var(--train-palette-mid-surface) 24%
+  );
   background-image:
-    repeating-linear-gradient(
-      178deg,
-      transparent 0 7px,
-      color-mix(in srgb, var(--train-palette-water), transparent 18%) 7px 11px,
-      transparent 11px 22px
+    linear-gradient(
+      174deg,
+      transparent 0 42%,
+      color-mix(
+          in srgb,
+          var(--train-terrain-detail),
+          var(--train-palette-silhouette) 42%
+        )
+        43% 48%,
+      transparent 49% 100%
     ),
     repeating-linear-gradient(
       91deg,
-      transparent 0 25px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 48%) 25px 29px,
-      transparent 29px 53px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--train-palette-water), var(--train-terrain-surface) 38%)
-        0 8px,
-      transparent 8px 100%
+      transparent 0 31px,
+      color-mix(
+          in srgb,
+          var(--train-terrain-detail),
+          var(--train-palette-near-surface) 52%
+        )
+        31px 37px,
+      transparent 37px 67px
     );
   background-size:
-    auto,
-    auto,
-    100% 100%;
+    97px 43px,
+    auto;
 }
 
 .train-terrain-base[data-terrain-material="industrial-fill"] {
@@ -1689,6 +1697,306 @@ html[data-pane-switcher-layout="train"] .statusline {
       color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 43px 47px,
       transparent 47px 79px
     );
+}
+
+.train-coast-composition {
+  --train-coast-shore-color: color-mix(
+    in srgb,
+    var(--train-palette-far-surface),
+    var(--train-palette-near-surface) 32%
+  );
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.train-coast-composition--midground {
+  --train-coast-shore-color: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-near-surface) 44%
+  );
+}
+
+.train-coast-water-plane {
+  position: absolute;
+  right: -2px;
+  bottom: 0;
+  left: -2px;
+  display: block;
+  overflow: hidden;
+  background-color: var(--train-palette-water);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--train-palette-water), var(--train-palette-haze) 22%),
+    var(--train-palette-water) 45%,
+    color-mix(
+      in srgb,
+      var(--train-palette-water),
+      var(--train-palette-silhouette) 26%
+    )
+  );
+  background-size: 100% 100%;
+  opacity: 1;
+}
+
+.train-coast-water-plane--far {
+  height: 128px;
+}
+
+.train-coast-water-plane--midground {
+  height: 72px;
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--train-palette-water), var(--train-palette-haze) 24%),
+    var(--train-palette-water) 52%,
+    color-mix(
+      in srgb,
+      var(--train-palette-water),
+      var(--train-palette-silhouette) 30%
+    )
+  );
+  background-size: 100% 100%;
+}
+
+.train-coast-water-cue {
+  position: absolute;
+  display: block;
+  height: 2px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-water),
+    #e8eee4 42%
+  );
+}
+
+.train-coast-water-cue--0 {
+  top: 10px;
+  left: 8%;
+  width: 23%;
+}
+
+.train-coast-water-cue--1 {
+  top: 23px;
+  left: 47%;
+  width: 34%;
+}
+
+.train-coast-water-cue--2 {
+  top: 82px;
+  left: 19%;
+  width: 18%;
+}
+
+.train-coast-water-plane--midground .train-coast-water-cue--0 {
+  top: 7px;
+  left: 13%;
+  width: 18%;
+}
+
+.train-coast-water-plane--midground .train-coast-water-cue--1 {
+  top: 17px;
+  left: 55%;
+  width: 29%;
+}
+
+.train-coast-water-plane--midground .train-coast-water-cue--2 {
+  top: 49px;
+  left: 31%;
+  width: 15%;
+}
+
+.train-coast-shore-profile {
+  position: absolute;
+  right: -2px;
+  bottom: 116px;
+  left: -2px;
+  display: block;
+  height: 24px;
+  background: var(--train-coast-shore-color);
+  clip-path: polygon(
+    0 63%,
+    9% 31%,
+    21% 58%,
+    35% 20%,
+    49% 47%,
+    63% 13%,
+    78% 53%,
+    90% 25%,
+    100% 51%,
+    100% 100%,
+    0 100%
+  );
+}
+
+.train-coast-composition--midground .train-coast-shore-profile {
+  bottom: 62px;
+  height: 19px;
+  background: var(--train-coast-shore-color);
+  clip-path: polygon(
+    0 49%,
+    12% 23%,
+    27% 60%,
+    43% 19%,
+    59% 52%,
+    74% 28%,
+    88% 64%,
+    100% 35%,
+    100% 100%,
+    0 100%
+  );
+}
+
+.train-coast-composition--rock-shelf .train-coast-shore-profile,
+.train-coast-composition--lighthouse-headland .train-coast-shore-profile {
+  background: color-mix(
+    in srgb,
+    var(--train-coast-shore-color),
+    var(--train-palette-silhouette) 34%
+  );
+  clip-path: polygon(
+    0 71%,
+    10% 28%,
+    24% 48%,
+    37% 8%,
+    51% 35%,
+    66% 17%,
+    80% 56%,
+    91% 23%,
+    100% 42%,
+    100% 100%,
+    0 100%
+  );
+}
+
+.train-coast-fixtures {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.train-coast-fixture {
+  position: absolute;
+  bottom: var(--train-coast-fixture-ground-height);
+  display: block;
+  transform: translateX(-50%) scale(var(--train-coast-fixture-scale));
+  transform-origin: 50% 100%;
+  opacity: 1;
+}
+
+.train-coast-fixture--beach {
+  width: 116px;
+  height: 16px;
+  background: #bfa36f;
+  clip-path: polygon(
+    0 72%,
+    13% 29%,
+    31% 54%,
+    49% 17%,
+    67% 43%,
+    84% 24%,
+    100% 62%,
+    100% 100%,
+    0 100%
+  );
+}
+
+.train-coast-fixture--rock-shelf {
+  width: 94px;
+  height: 24px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 35%
+  );
+  clip-path: polygon(
+    0 73%,
+    12% 36%,
+    27% 48%,
+    39% 9%,
+    53% 31%,
+    70% 18%,
+    84% 51%,
+    100% 38%,
+    94% 100%,
+    5% 100%
+  );
+}
+
+.train-coast-fixture--pier {
+  width: 112px;
+  height: 12px;
+  border-top: 5px solid #5f4936;
+  background: repeating-linear-gradient(
+    90deg,
+    #72573d 0 12px,
+    #4f3d30 12px 15px
+  );
+}
+
+.train-coast-pier-piles {
+  position: absolute;
+  inset: 7px 8px auto;
+  height: 27px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 15px,
+    #4c3a2d 15px 20px,
+    transparent 20px 31px
+  );
+}
+
+.train-coast-fixture--boat {
+  bottom: calc(var(--train-coast-fixture-ground-height) + 24px);
+  width: 58px;
+  height: 17px;
+  background: #624637;
+  clip-path: polygon(0 18%, 100% 18%, 84% 100%, 17% 100%);
+}
+
+.train-coast-boat-cabin {
+  position: absolute;
+  bottom: 12px;
+  left: 19px;
+  width: 24px;
+  height: 13px;
+  border: 3px solid #4e3a30;
+  background: #d1c4a4;
+}
+
+.train-coast-fixture--buoy {
+  bottom: calc(var(--train-coast-fixture-ground-height) + 20px);
+  width: 8px;
+  height: 25px;
+  border-top: 7px solid #e3c85a;
+  border-bottom: 8px solid #b74437;
+  background: #f0e0a8;
+}
+
+.train-coast-fixture--harbour-post {
+  bottom: calc(var(--train-coast-fixture-ground-height) + 10px);
+  width: 10px;
+  height: 31px;
+  border-top: 6px solid #d9c27b;
+  background: #594438;
+}
+
+.train-coast-fixture--dune-grass {
+  width: 82px;
+  height: 25px;
+  background:
+    linear-gradient(72deg, transparent 0 45%, #536b42 46% 55%, transparent 56%)
+      0 0 / 17px 25px repeat-x,
+    linear-gradient(
+      108deg,
+      transparent 0 45%,
+      #6f8050 46% 55%,
+      transparent 56%
+    )
+      8px 2px / 19px 23px repeat-x;
 }
 
 .train-built-environment-ground {
@@ -2413,6 +2721,22 @@ html[data-pane-switcher-layout="train"] .statusline {
   --train-terrain-detail: var(--train-palette-far-surface);
 }
 
+.train-parallax-chunk--ultra-far[data-route-region="coast"]
+  .train-terrain-base {
+  clip-path: polygon(
+    0 calc(100% - 68px),
+    12% calc(100% - 74px),
+    27% calc(100% - 65px),
+    43% calc(100% - 79px),
+    59% calc(100% - 69px),
+    76% calc(100% - 76px),
+    90% calc(100% - 66px),
+    100% calc(100% - 72px),
+    100% 100%,
+    0 100%
+  );
+}
+
 .train-parallax-chunk--ultra-far .train-scenery-asset {
   bottom: var(
     --train-scenery-ground-height,
@@ -2673,12 +2997,23 @@ html[data-pane-switcher-layout="train"] .statusline {
   animation-duration: 10s;
 }
 
+.train-coast-reflection-clip {
+  position: absolute;
+  top: 84%;
+  left: 50%;
+  width: 28px;
+  height: 31px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%);
+}
+
 .train-night-life__lighthouse-reflection {
   position: absolute;
-  top: 88%;
+  top: 0;
   left: 50%;
   width: 12px;
-  height: 28px;
+  height: 35px;
   transform: translateX(-50%);
   background: repeating-linear-gradient(
     0deg,

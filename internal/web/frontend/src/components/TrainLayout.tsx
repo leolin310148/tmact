@@ -65,10 +65,12 @@ import {
   TRAIN_SCENERY_BUILDINGS,
   TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_SCENERY_LANDMARKS,
+  trainCoastSceneryBeatForChunk,
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
   trainTownIndustrialSceneryBeatForChunk,
+  type TrainCoastSceneryBeat,
   type TrainNightLifePlan,
   type TrainSceneryAsset,
   type TrainSceneryPlacement,
@@ -650,6 +652,11 @@ type TrainBuiltEnvironmentFixtureStyle = CSSProperties & {
   "--train-built-fixture-ground-height": string;
 };
 
+type TrainCoastFixtureStyle = CSSProperties & {
+  "--train-coast-fixture-scale": number;
+  "--train-coast-fixture-ground-height": string;
+};
+
 type TrainPaletteStyle = CSSProperties & {
   "--train-palette-sky-top": string;
   "--train-palette-sky-bottom": string;
@@ -763,12 +770,14 @@ function TrainNightLife({
   groundHeight,
   contourHeight,
   instanceId,
+  waterOwner,
 }: {
   plan: TrainNightLifePlan;
   placement: TrainSceneryPlacement;
   groundHeight?: number;
   contourHeight?: number;
   instanceId: string;
+  waterOwner?: string;
 }) {
   const { asset } = placement;
   const style: TrainNightLifeStyle = {
@@ -853,11 +862,19 @@ function TrainNightLife({
             data-night-life-detail="lighthouse-beam"
           />
           <span
-            className="train-night-life__lighthouse-reflection"
-            data-emissive="lighthouse-water-reflection"
-            data-emissive-owner={plan.ownerAssetId}
-            data-night-life-detail="paired-reflection"
-          />
+            className="train-coast-reflection-clip"
+            data-reflection-clip="water-only"
+            data-reflection-clip-owner={waterOwner}
+            data-water-owner={waterOwner}
+          >
+            <span
+              className="train-night-life__lighthouse-reflection"
+              data-emissive="lighthouse-water-reflection"
+              data-emissive-owner={plan.ownerAssetId}
+              data-reflection-source-owner={instanceId}
+              data-night-life-detail="paired-reflection"
+            />
+          </span>
         </>
       ) : null}
       {plan.kind === "industrial-beacons" ? (
@@ -1373,6 +1390,132 @@ function TrainBuiltEnvironmentFixtures({
   );
 }
 
+const TRAIN_COAST_FIXTURE_POSITIONS = [
+  [18, 52, 79],
+  [25, 68, 86],
+  [14, 43, 74],
+] as const;
+
+function coastWaterOwner(chunk: RouteChunk, layer: TrainParallaxLayerName) {
+  return (
+    `coast:${chunk.seedVersion}:${chunk.routeSeed}:` +
+    `${chunk.index}:${layer}:water`
+  );
+}
+
+function TrainCoastComposition({
+  beat,
+  contour,
+  chunk,
+  layer,
+}: {
+  beat: TrainCoastSceneryBeat;
+  contour: TrainTerrainContour;
+  chunk: RouteChunk;
+  layer: "far" | "midground";
+}) {
+  const positions =
+    TRAIN_COAST_FIXTURE_POSITIONS[beat.templateVariant] ??
+    TRAIN_COAST_FIXTURE_POSITIONS[0];
+  const waterOwner = coastWaterOwner(chunk, layer);
+  return (
+    <span
+      className={[
+        "train-coast-composition",
+        `train-coast-composition--${layer}`,
+        `train-coast-composition--${beat.shoreFamily}`,
+      ].join(" ")}
+      data-coast-composition={beat.shoreFamily}
+      data-coast-role={beat.role}
+      data-coast-water-kind={beat.waterKind}
+      data-coast-transition={beat.transition}
+      data-coast-transition-neighbor={beat.transitionNeighbor ?? undefined}
+      data-coast-transition-family={beat.transitionFamily}
+      data-coast-rhythm-variant={beat.templateVariant}
+      aria-hidden="true"
+    >
+      <span
+        className={[
+          "train-coast-water-plane",
+          `train-coast-water-plane--${layer}`,
+        ].join(" ")}
+        data-water-plane="continuous"
+        data-water-depth={layer}
+        data-water-owner={waterOwner}
+        data-water-surface="owned"
+        data-water-seam-left={contour.seamLeftHeightPx}
+        data-water-seam-right={contour.seamRightHeightPx}
+      >
+        {[0, 1, 2].map((cue) => (
+          <span
+            className={`train-coast-water-cue train-coast-water-cue--${cue}`}
+            data-water-movement-cue={cue}
+            data-water-depth-owner={waterOwner}
+            key={cue}
+          />
+        ))}
+      </span>
+      <span
+        className="train-coast-shore-profile"
+        data-shore-profile={beat.shoreFamily}
+        data-shore-owner={`${chunk.index}:${layer}`}
+        data-shore-continuity={`${contour.seamLeftHeightPx}:${contour.seamRightHeightPx}`}
+        data-shore-surface="opaque"
+      />
+      {layer === "midground" ? (
+        <span
+          className="train-coast-fixtures"
+          data-coast-fixture-count={beat.fixtures.length}
+        >
+          {beat.fixtures.map((fixture, fixtureIndex) => {
+            const xPercent = positions[fixtureIndex] ?? 50;
+            const groundHeight = trainTerrainHeightAtPercent(contour, xPercent);
+            const owner = `${chunk.index}:${fixtureIndex}:${fixture}`;
+            const style: TrainCoastFixtureStyle = {
+              left: `${xPercent}%`,
+              "--train-coast-fixture-scale":
+                0.88 + ((beat.templateVariant + fixtureIndex) % 3) * 0.08,
+              "--train-coast-fixture-ground-height": `${groundHeight}px`,
+            };
+            return (
+              <span
+                className={[
+                  "train-coast-fixture",
+                  `train-coast-fixture--${fixture}`,
+                ].join(" ")}
+                data-coast-fixture={fixture}
+                data-coast-fixture-owner={owner}
+                data-coast-fixture-surface="opaque"
+                data-coast-fixture-ground-height={groundHeight.toFixed(3)}
+                data-water-owner={
+                  fixture === "boat" || fixture === "buoy"
+                    ? waterOwner
+                    : undefined
+                }
+                style={style}
+                key={owner}
+              >
+                {fixture === "boat" ? (
+                  <span
+                    className="train-coast-boat-cabin"
+                    data-coast-fixture-detail="boat-cabin"
+                  />
+                ) : null}
+                {fixture === "pier" ? (
+                  <span
+                    className="train-coast-pier-piles"
+                    data-coast-fixture-detail="pier-piles"
+                  />
+                ) : null}
+              </span>
+            );
+          })}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk: sourceChunk,
   layer,
@@ -1435,21 +1578,29 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
     trainForestMountainSceneryBeatForChunk(chunk);
   const builtEnvironmentBeat =
     trainTownIndustrialSceneryBeatForChunk(chunk);
+  const coastBeat = trainCoastSceneryBeatForChunk(chunk);
   const regionalRole =
-    regionalSceneryBeat?.role ?? builtEnvironmentBeat?.role;
+    regionalSceneryBeat?.role ?? builtEnvironmentBeat?.role ?? coastBeat?.role;
   const regionalFamily =
     regionalSceneryBeat?.silhouetteFamily ??
-    builtEnvironmentBeat?.compositionFamily;
+    builtEnvironmentBeat?.compositionFamily ??
+    coastBeat?.shoreFamily;
   const regionalTemplateVariant =
     regionalSceneryBeat?.templateVariant ??
-    builtEnvironmentBeat?.templateVariant;
+    builtEnvironmentBeat?.templateVariant ??
+    coastBeat?.templateVariant;
   const regionalDensity =
-    regionalSceneryBeat?.densityClass ?? builtEnvironmentBeat?.densityClass;
+    regionalSceneryBeat?.densityClass ??
+    builtEnvironmentBeat?.densityClass ??
+    coastBeat?.densityClass;
   const regionalTransition =
-    regionalSceneryBeat?.transition ?? builtEnvironmentBeat?.transition;
+    regionalSceneryBeat?.transition ??
+    builtEnvironmentBeat?.transition ??
+    coastBeat?.transition;
   const regionalTransitionNeighbor =
     regionalSceneryBeat?.transitionNeighbor ??
-    builtEnvironmentBeat?.transitionNeighbor;
+    builtEnvironmentBeat?.transitionNeighbor ??
+    coastBeat?.transitionNeighbor;
 
   return (
     <div
@@ -1479,6 +1630,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-built-environment-ground={builtEnvironmentBeat?.groundKind}
       data-built-environment-family={builtEnvironmentBeat?.compositionFamily}
       data-built-environment-scale={builtEnvironmentBeat?.scaleFamily}
+      data-coast-water-kind={coastBeat?.waterKind}
+      data-coast-shore-family={coastBeat?.shoreFamily}
       data-regional-human-landmark={
         regionalSceneryBeat?.humanScaleLandmarkEligible
           ? "eligible"
@@ -1546,6 +1699,17 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             />
           ) : null}
         </span>
+      ) : null}
+      {coastBeat &&
+      terrainContour &&
+      (layer.name === "far" || layer.name === "midground") &&
+      !projection ? (
+        <TrainCoastComposition
+          beat={coastBeat}
+          contour={terrainContour}
+          chunk={chunk}
+          layer={layer.name}
+        />
       ) : null}
       {builtEnvironmentBeat &&
       terrainContour &&
@@ -1883,6 +2047,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-rhythm-variant={placement.regionalTemplateVariant}
             data-scenery-transition={placement.regionalTransition}
             data-scenery-scale-family={placement.regionalScaleFamily}
+            data-scenery-water-kind={placement.regionalWaterKind}
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-set-piece-variant={
@@ -1969,6 +2134,11 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               groundHeight={sceneryGroundHeight}
               contourHeight={sceneryContourHeight}
               instanceId={sceneryInstanceId}
+              waterOwner={
+                chunk.region === "coast"
+                  ? coastWaterOwner(chunk, "midground")
+                  : undefined
+              }
               key={`night-life-${asset.id}-${ordinal}`}
             />,
           );

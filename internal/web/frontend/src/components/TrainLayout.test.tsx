@@ -51,11 +51,13 @@ import {
 import {
   generateRouteChunk,
   TRAIN_PARALLAX_LAYERS,
+  TRAIN_REGION_CHUNK_LENGTH,
 } from "./trainRoute";
 import {
   TRAIN_NIGHT_LIFE_MAX_INTENSITY,
   TRAIN_NIGHT_LIFE_MIN_INTENSITY,
   TRAIN_REGION_NIGHT_LIFE,
+  trainCoastSceneryBeatForChunk,
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
@@ -2126,8 +2128,8 @@ describe("TrainLayout", () => {
       expect(rule).toMatch(/background:\s*none;/);
       expect(rule).not.toMatch(/gradient\(/);
     }
-    const builtEnvironmentStart = trainLayoutCss.indexOf(
-      ".train-built-environment-ground",
+    const coastCompositionStart = trainLayoutCss.indexOf(
+      ".train-coast-composition",
     );
     const regionalTerrainStart = trainLayoutCss.indexOf(
       '.train-parallax-chunk--midground[data-regional-scenery-role="forest-canopy-cluster"]',
@@ -2135,7 +2137,7 @@ describe("TrainLayout", () => {
     const terrainCss =
       trainLayoutCss.slice(
         trainLayoutCss.indexOf(".train-terrain-base"),
-        builtEnvironmentStart,
+        coastCompositionStart,
       ) +
       trainLayoutCss.slice(
         regionalTerrainStart,
@@ -3137,6 +3139,167 @@ describe("TrainLayout", () => {
     expect(remountedWorld).toHaveAttribute("data-time-of-day", "night");
     secondMount.unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("renders continuous owned coast water, opaque shore fixtures, and clipped reflections", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const far = TRAIN_PARALLAX_LAYERS.find(
+      (candidate) => candidate.name === "far",
+    )!;
+    const midground = TRAIN_PARALLAX_LAYERS.find(
+      (candidate) => candidate.name === "midground",
+    )!;
+    const coastRegionIndex = Array.from(
+      { length: 401 },
+      (_, offset) => offset - 200,
+    ).find(
+      (regionIndex) =>
+        generateRouteChunk(
+          "coast-water-render",
+          regionIndex * TRAIN_REGION_CHUNK_LENGTH,
+        ).region === "coast",
+    )!;
+    const chunks = Array.from(
+      { length: TRAIN_REGION_CHUNK_LENGTH },
+      (_, offset) =>
+      generateRouteChunk(
+        "coast-water-render",
+        coastRegionIndex * TRAIN_REGION_CHUNK_LENGTH + offset,
+      ),
+    );
+    const rendered = render(
+      <div className="train-layout-world" data-time-of-day="day">
+        {chunks.map((chunk) => (
+          <div key={chunk.index}>
+            <TrainRouteChunk
+              chunk={chunk}
+              layer={far}
+              includeSetPieces={false}
+            />
+            <TrainRouteChunk
+              chunk={chunk}
+              layer={midground}
+              includeSetPieces={false}
+            />
+          </div>
+        ))}
+      </div>,
+    );
+
+    const farWater = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        ".train-coast-water-plane--far",
+      ),
+    ];
+    const midWater = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        ".train-coast-water-plane--midground",
+      ),
+    ];
+    const shores = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        ".train-coast-shore-profile",
+      ),
+    ];
+    expect(farWater).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
+    expect(midWater).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
+    expect(shores).toHaveLength(TRAIN_REGION_CHUNK_LENGTH * 2);
+    expect(new Set(farWater.map((plane) => plane.dataset.waterOwner)).size).toBe(
+      TRAIN_REGION_CHUNK_LENGTH,
+    );
+    for (const plane of [...farWater, ...midWater]) {
+      expect(plane).toHaveAttribute("data-water-plane", "continuous");
+      expect(plane).toHaveAttribute("data-water-surface", "owned");
+      expect(plane.dataset.waterSeamLeft).toMatch(/^\d+(?:\.\d+)?$/);
+      expect(plane.dataset.waterSeamRight).toMatch(/^\d+(?:\.\d+)?$/);
+      const cues = plane.querySelectorAll<HTMLElement>(
+        "[data-water-movement-cue]",
+      );
+      expect(cues).toHaveLength(3);
+      cues.forEach((cue) =>
+        expect(cue.dataset.waterDepthOwner).toBe(plane.dataset.waterOwner),
+      );
+    }
+    for (const shore of shores) {
+      expect(shore.dataset.shoreContinuity).toMatch(
+        /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/,
+      );
+      expect(shore).toHaveAttribute("data-shore-surface", "opaque");
+    }
+    const fixtures = rendered.container.querySelectorAll<HTMLElement>(
+      "[data-coast-fixture]",
+    );
+    expect(fixtures.length).toBeGreaterThan(8);
+    fixtures.forEach((fixture) =>
+      expect(fixture).toHaveAttribute(
+        "data-coast-fixture-surface",
+        "opaque",
+      ),
+    );
+    expect(
+      new Set(
+        chunks.flatMap(
+          (chunk) => trainCoastSceneryBeatForChunk(chunk)?.fixtures ?? [],
+        ),
+      ),
+    ).toEqual(
+      new Set([
+        "beach",
+        "rock-shelf",
+        "pier",
+        "boat",
+        "buoy",
+        "harbour-post",
+        "dune-grass",
+      ]),
+    );
+
+    rendered.unmount();
+    const lighthouseChunk = Array.from({ length: 6001 }, (_, offset) =>
+      generateRouteChunk("coast-reflection-render", offset - 3000),
+    ).find(
+      (chunk) =>
+        chunk.region === "coast" &&
+        trainSceneryPlacementsForChunk("midground", chunk, {
+          includeSetPieces: false,
+        }).some(
+          (placement, ordinal) =>
+            placement.asset.id === "landmark-coast-lighthouse" &&
+            trainNightLifeForPlacement(chunk, placement, ordinal) !== null,
+        ),
+    )!;
+    expect(lighthouseChunk).toBeDefined();
+    const lighthouse = render(
+      <div className="train-layout-world" data-time-of-day="night">
+        <TrainRouteChunk
+          chunk={lighthouseChunk}
+          layer={midground}
+          includeSetPieces={false}
+        />
+      </div>,
+    );
+    const water = lighthouse.container.querySelector<HTMLElement>(
+      ".train-coast-water-plane--midground",
+    )!;
+    const clip = lighthouse.container.querySelector<HTMLElement>(
+      ".train-coast-reflection-clip",
+    )!;
+    const reflection = clip.querySelector<HTMLElement>(
+      '[data-emissive="lighthouse-water-reflection"]',
+    )!;
+    const owner = reflection.closest<HTMLElement>(".train-night-life")!;
+    expect(clip).toHaveAttribute("data-reflection-clip", "water-only");
+    expect(clip.dataset.reflectionClipOwner).toBe(water.dataset.waterOwner);
+    expect(clip.dataset.waterOwner).toBe(water.dataset.waterOwner);
+    expect(reflection.dataset.reflectionSourceOwner).toBe(
+      owner.dataset.emissiveOwnerInstance,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-coast-reflection-clip\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?clip-path:/,
+    );
   });
 
   it("aligns bounded industrial masks, isolates palette state, and fails unlit", () => {

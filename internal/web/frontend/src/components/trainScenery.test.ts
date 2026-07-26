@@ -15,6 +15,7 @@ import {
   TRAIN_CLOUD_MAX_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
   TRAIN_CLOUD_MIN_SPACING_PX,
+  TRAIN_COAST_MIN_LANDMARK_SPACING_PX,
   TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX,
   TRAIN_NIGHT_LIFE_MAX_INTENSITY,
   TRAIN_NIGHT_LIFE_MIN_INTENSITY,
@@ -33,6 +34,8 @@ import {
   TRAIN_SCENERY_VEGETATION,
   TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX,
   trainCloudPlacementsForChunk,
+  trainCoastSceneryBeatForChunk,
+  trainCoastTransitionFamilyForRegion,
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainRegionCompositionForChunk,
@@ -485,7 +488,7 @@ describe("train scenery asset kit", () => {
         }
       }
     }
-    expect(placementCount).toBeGreaterThan(4_500);
+    expect(placementCount).toBeGreaterThan(4_000);
     expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.scaleMultiplier).toBeGreaterThan(
       TRAIN_SCENERY_DEPTH_GRAMMAR.far.scaleMultiplier,
     );
@@ -1102,6 +1105,206 @@ describe("train scenery asset kit", () => {
       });
       expect(asset.groundInsetPx).toBeLessThanOrEqual(3);
     }
+  });
+
+  it("builds a nine-beat coast from continuous-water, shore, and harbour roles", () => {
+    const roles = new Set<string>();
+    const shores = new Set<string>();
+    const waters = new Set<string>();
+    const fixtures = new Set<string>();
+    const variants = new Set<number>();
+    let sampledRegions = 0;
+
+    for (const seed of [
+      "coast-rhythm-tide",
+      "coast-rhythm-harbour",
+      "coast-rhythm-headland",
+      "coast-rhythm-cove",
+    ]) {
+      for (let regionIndex = -100; regionIndex <= 100; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        if (chunks[0]!.region !== "coast") continue;
+        sampledRegions++;
+        const beats = chunks.map((chunk) =>
+          trainCoastSceneryBeatForChunk(chunk),
+        );
+        expect(beats.every(Boolean)).toBe(true);
+        expect(beats[0]).toMatchObject({
+          region: "coast",
+          role: "coast-transition-shore",
+          transition: "entry",
+          waterKind: "arrival-tide",
+        });
+        expect(beats.at(-1)).toMatchObject({
+          region: "coast",
+          role: "coast-transition-shore",
+          transition: "exit",
+          waterKind: "arrival-tide",
+        });
+        for (const beat of beats) {
+          roles.add(beat!.role);
+          shores.add(beat!.shoreFamily);
+          waters.add(beat!.waterKind);
+          beat!.fixtures.forEach((fixture) => fixtures.add(fixture));
+          variants.add(beat!.templateVariant);
+        }
+      }
+    }
+
+    expect(sampledRegions).toBeGreaterThan(80);
+    expect(roles).toEqual(
+      new Set([
+        "coast-transition-shore",
+        "coast-open-water",
+        "coast-beach-cove",
+        "coast-rock-shelf",
+        "coast-harbour-reach",
+        "coast-dune-grass",
+        "coast-navigation-channel",
+        "coast-landmark-approach",
+      ]),
+    );
+    expect(shores.size).toBeGreaterThanOrEqual(8);
+    expect(waters.size).toBeGreaterThanOrEqual(7);
+    expect(fixtures).toEqual(
+      new Set([
+        "beach",
+        "rock-shelf",
+        "pier",
+        "boat",
+        "buoy",
+        "harbour-post",
+        "dune-grass",
+      ]),
+    );
+    expect(variants).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("keeps ordinary coast pools sparse, water-led, and free of mountain wallpaper", () => {
+    const midgroundIDs = new Set<string>();
+    const countsByRole = new Map<string, number[]>();
+
+    for (const seed of [
+      "coast-pool-shore",
+      "coast-pool-navigation",
+      "coast-pool-port",
+    ]) {
+      for (let regionIndex = -100; regionIndex <= 100; regionIndex++) {
+        for (const chunk of regionChunks(seed, regionIndex)) {
+          if (chunk.region !== "coast") continue;
+          const beat = trainCoastSceneryBeatForChunk(chunk)!;
+          expect(
+            trainSceneryPlacementsForChunk("ultra-far", chunk, {
+              includeSetPieces: false,
+            }),
+          ).toEqual([]);
+          expect(
+            trainSceneryPlacementsForChunk("far", chunk, {
+              includeSetPieces: false,
+            }),
+          ).toEqual([]);
+          const placements = trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+            { includeSetPieces: false },
+          ).filter((placement) => !placement.landmark);
+          const counts = countsByRole.get(beat.role) ?? [];
+          counts.push(placements.length);
+          countsByRole.set(beat.role, counts);
+          for (const placement of placements) {
+            midgroundIDs.add(placement.asset.id);
+            expect(placement.regionalRole).toBe(beat.role);
+            expect(placement.silhouetteFamily).toBe(beat.shoreFamily);
+            expect(placement.regionalWaterKind).toBe(beat.waterKind);
+            expect(placement.asset.category).not.toBe("terrain");
+          }
+        }
+      }
+    }
+
+    expect(countsByRole.get("coast-open-water")!.every((count) => count === 0))
+      .toBe(true);
+    expect(
+      countsByRole
+        .get("coast-harbour-reach")!
+        .some((count) => count === 1),
+    ).toBe(true);
+    expect(midgroundIDs).toEqual(
+      new Set([
+        "vegetation-reeds",
+        "vegetation-hedgerow",
+        "vegetation-coastal-pine",
+        "building-cottage",
+      ]),
+    );
+  });
+
+  it("maps coast boundaries for natural, town, and industrial transitions", () => {
+    expect(trainCoastTransitionFamilyForRegion("forest")).toBe(
+      "natural-bank",
+    );
+    expect(trainCoastTransitionFamilyForRegion("mountain")).toBe(
+      "natural-bank",
+    );
+    expect(trainCoastTransitionFamilyForRegion("town")).toBe(
+      "settlement-harbour",
+    );
+    expect(trainCoastTransitionFamilyForRegion("industrial")).toBe(
+      "working-port",
+    );
+    expect(trainCoastTransitionFamilyForRegion(null)).toBe("open-horizon");
+
+    let actualBoundaries = 0;
+    for (const seed of ["coast-edge-town", "coast-edge-cliff"]) {
+      for (let regionIndex = -200; regionIndex <= 200; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        if (chunks[0]!.region !== "coast") continue;
+        const entry = trainCoastSceneryBeatForChunk(chunks[0]!)!;
+        const exit = trainCoastSceneryBeatForChunk(chunks.at(-1)!)!;
+        expect(entry.transitionNeighbor).toMatch(/^(mountain|town)$/);
+        expect(exit.transitionNeighbor).toMatch(/^(mountain|town)$/);
+        expect(entry.transitionFamily).not.toBe("open-horizon");
+        expect(exit.transitionFamily).not.toBe("open-horizon");
+        actualBoundaries++;
+      }
+    }
+    expect(actualBoundaries).toBeGreaterThan(60);
+  });
+
+  it("caps coast landmarks and keeps lighthouse occurrences widely spaced", () => {
+    let landmarks = 0;
+    for (const seed of [
+      "coast-landmark-beacon",
+      "coast-landmark-channel",
+      "coast-landmark-harbour",
+    ]) {
+      let previousCenter: number | null = null;
+      for (let regionIndex = -160; regionIndex <= 160; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        if (chunks[0]!.region !== "coast") continue;
+        const regionLandmarks = chunks.flatMap((chunk) =>
+          trainSceneryPlacementsForChunk("midground", chunk, {
+            includeSetPieces: false,
+          })
+            .filter((placement) => placement.landmark)
+            .map(
+              (placement) =>
+                chunk.index * TRAIN_ROUTE_CHUNK_WIDTH +
+                (placement.offsetPercent / 100) * TRAIN_ROUTE_CHUNK_WIDTH,
+            ),
+        );
+        expect(regionLandmarks.length).toBeLessThanOrEqual(1);
+        if (regionLandmarks[0] === undefined) continue;
+        landmarks++;
+        if (previousCenter !== null) {
+          expect(regionLandmarks[0] - previousCenter).toBeGreaterThanOrEqual(
+            TRAIN_COAST_MIN_LANDMARK_SPACING_PX,
+          );
+        }
+        previousCenter = regionLandmarks[0];
+      }
+    }
+    expect(landmarks).toBeGreaterThan(40);
   });
 
   it("keeps landmarks rare, region-owned, and capped at one major asset per region", () => {
