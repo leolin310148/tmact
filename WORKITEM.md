@@ -344,7 +344,7 @@ and safety properties established by the archived queue remain the baseline.
   Restore the DOM, run the frontend suite, build, `make test`, and
   `rtk git diff --check`, then document the retained screenshot evidence.
 
-- [ ] **TRAIN-041 — Keep station architecture whole across entry and exit transitions.**
+- [x] **TRAIN-041 — Keep station architecture whole across entry and exit transitions.**
   Fix the night-visible station defect confirmed with the fixed train hidden:
   `.train-set-piece--station.train-set-piece--entry` and `--exit` currently
   apply diagonal `clip-path` polygons to the complete station segment, so the

@@ -403,6 +403,32 @@ chunks, exactly 52 terrain owners, and 38 scenery sprites. `borz errors --json`
 reported no page errors, and no private pane names, output, or payloads were
 recorded.
 
+TRAIN-041 whole-station run 2026-07-26: repeated the HTTP 200, plain
+`/src/main.tsx` import/source-map freshness, current
+`/src/components/TrainLayout.tsx` station-wrapper source, open, viewport,
+hard-reload, and exact `window.innerWidth`/`window.innerHeight` protocol at
+390×844, 1280×800, and 2560×900 with the dedicated
+`tmact-train-workitems` borz profile. The `infinite-journey` first station was
+held at `3680px` and `4480px` with a `0.001px/s` diagnostic speed so its entry
+and exit remained stable for day, sunset, and night captures.
+
+A temporary live-DOM stylesheet hid `.train-layout-inspection`,
+`.train-world-debug-grid`, and `.train-time-toggle` for every capture and was
+removed afterward; their restored displays were `flex`, `block`, and `grid`.
+Computed-style inspection across all six `entry/body/body/body/body/exit`
+segments found `clip-path: none` and `overflow: visible` on every station and
+architecture wrapper. Only the 20px-high entry and exit platform-transition
+wrappers owned polygon clips. Building, canopy, platform, lamp, and signal
+bounding boxes remained rectangular and aligned at both diagnostic positions.
+
+The 18 retained screenshots are
+`/private/tmp/train-041-{entry,exit}-{compact,desktop,ultrawide}-{day,sunset,night}.png`.
+They show clean station joins and whole façades, roofs, canopies, name board,
+lamps, illuminated windows, and platforms without diagonal cuts, triangular
+sky holes, duplicate walls, floating columns, or track gaps. `borz errors
+--json` reported no page errors, and no private pane names, output, or payloads
+were recorded.
+
 ## Notes Template
 
 ```text

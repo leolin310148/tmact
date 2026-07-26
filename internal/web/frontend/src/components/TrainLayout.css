@@ -577,14 +577,24 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 17px;
   height: 112px;
   opacity: 1;
+  clip-path: none;
+  overflow: visible;
 }
 
-.train-station-platform {
+.train-station-transition {
   position: absolute;
+  z-index: 0;
   right: -1px;
   bottom: 0;
   left: -1px;
   height: 20px;
+  overflow: hidden;
+  clip-path: none;
+}
+
+.train-station-platform {
+  position: absolute;
+  inset: 0;
   border-top: 4px solid color-mix(
     in srgb,
     var(--train-palette-foreground-contrast),
@@ -597,6 +607,15 @@ html[data-pane-switcher-layout="train"] .statusline {
       var(--train-palette-mid-surface) 7px 14px
     );
   opacity: 1;
+}
+
+.train-station-architecture {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: visible;
+  clip-path: none;
+  pointer-events: none;
 }
 
 .train-station-building {
@@ -788,12 +807,12 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: 25%;
 }
 
-.train-set-piece--station.train-set-piece--entry {
-  clip-path: polygon(16% 100%, 24% 56%, 38% 12%, 100% 12%, 100% 100%);
+.train-station-transition--entry {
+  clip-path: polygon(0 100%, 16% 100%, 38% 0, 100% 0, 100% 100%);
 }
 
-.train-set-piece--station.train-set-piece--exit {
-  clip-path: polygon(0 12%, 62% 12%, 76% 56%, 84% 100%, 0 100%);
+.train-station-transition--exit {
+  clip-path: polygon(0 0, 62% 0, 84% 100%, 100% 100%, 0 100%);
 }
 
 .train-station-signal {

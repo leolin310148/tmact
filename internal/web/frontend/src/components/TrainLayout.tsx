@@ -1181,38 +1181,54 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             {stationSegment ? (
               <>
                 <span
-                  className="train-station-platform"
-                  data-station-asset="platform"
-                />
-                <span
-                  className="train-station-building"
-                  data-station-asset="building"
+                  className={[
+                    "train-station-transition",
+                    `train-station-transition--${stationSegment.role}`,
+                  ].join(" ")}
+                  data-station-transition-geometry={stationSegment.role}
+                  data-station-segment={stationSegment.segmentOffset}
                 >
                   <span
-                    className="train-station-window-row"
-                    data-station-asset="windows"
+                    className="train-station-platform"
+                    data-station-asset="platform"
                   />
-                  {stationSegment.segmentOffset === 2 ? (
-                    <span
-                      className="train-station-name-board"
-                      data-station-asset="sign"
-                    >
-                      TMACT
-                    </span>
-                  ) : null}
                 </span>
                 <span
-                  className="train-station-canopy"
-                  data-station-asset="canopy"
-                />
-                <span
-                  className="train-station-lamp train-station-lamp--leading"
-                  data-station-asset="lamp"
-                />
-                <span
-                  className="train-station-lamp train-station-lamp--trailing"
-                  data-station-asset="lamp"
-                />
+                  className="train-station-architecture"
+                  data-station-architecture="whole"
+                  data-station-role={stationSegment.role}
+                  data-station-segment={stationSegment.segmentOffset}
+                >
+                  <span
+                    className="train-station-building"
+                    data-station-asset="building"
+                  >
+                    <span
+                      className="train-station-window-row"
+                      data-station-asset="windows"
+                    />
+                    {stationSegment.segmentOffset === 2 ? (
+                      <span
+                        className="train-station-name-board"
+                        data-station-asset="sign"
+                      >
+                        TMACT
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="train-station-canopy"
+                    data-station-asset="canopy"
+                  />
+                  <span
+                    className="train-station-lamp train-station-lamp--leading"
+                    data-station-asset="lamp"
+                  />
+                  <span
+                    className="train-station-lamp train-station-lamp--trailing"
+                    data-station-asset="lamp"
+                  />
+                </span>
               </>
             ) : null}
           </span>

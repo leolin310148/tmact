@@ -853,6 +853,104 @@ describe("TrainLayout", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps all six station architectures whole while clipping only platform transitions", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const stationSegments = [
+      ...container.querySelectorAll<HTMLElement>(
+        '.train-set-piece[data-set-piece-type="station"]',
+      ),
+    ].sort(
+      (left, right) =>
+        Number(left.dataset.setPieceSegment) -
+        Number(right.dataset.setPieceSegment),
+    );
+    const architectures = stationSegments.map((segment) =>
+      segment.querySelector<HTMLElement>("[data-station-architecture]"),
+    );
+    const transitions = stationSegments.map((segment) =>
+      segment.querySelector<HTMLElement>(
+        "[data-station-transition-geometry]",
+      ),
+    );
+
+    expect(stationSegments).toHaveLength(6);
+    expect(
+      stationSegments.map((segment) => segment.dataset.setPieceRole),
+    ).toEqual(["entry", "body", "body", "body", "body", "exit"]);
+    expect(
+      architectures.map((architecture) => architecture?.dataset.stationRole),
+    ).toEqual(["entry", "body", "body", "body", "body", "exit"]);
+    expect(
+      transitions.map(
+        (transition) => transition?.dataset.stationTransitionGeometry,
+      ),
+    ).toEqual(["entry", "body", "body", "body", "body", "exit"]);
+
+    for (const [index, segment] of stationSegments.entries()) {
+      const architecture = architectures[index]!;
+      const transition = transitions[index]!;
+      const role = segment.dataset.setPieceRole;
+
+      expect(architecture).toHaveAttribute(
+        "data-station-segment",
+        `${index}`,
+      );
+      expect(architecture).toContainElement(
+        segment.querySelector("[data-station-asset='building']"),
+      );
+      expect(architecture).toContainElement(
+        segment.querySelector("[data-station-asset='canopy']"),
+      );
+      expect(
+        architecture.querySelectorAll("[data-station-asset='lamp']"),
+      ).toHaveLength(2);
+      expect(architecture).not.toContainElement(
+        segment.querySelector("[data-station-asset='platform']"),
+      );
+      expect(transition).toContainElement(
+        segment.querySelector("[data-station-asset='platform']"),
+      );
+      expect(getComputedStyle(segment).clipPath).toBe("none");
+      expect(getComputedStyle(segment).overflow).toBe("visible");
+      expect(getComputedStyle(architecture).clipPath).toBe("none");
+      expect(getComputedStyle(architecture).overflow).toBe("visible");
+      if (role === "body") {
+        expect(getComputedStyle(transition).clipPath).toBe("none");
+      } else {
+        expect(getComputedStyle(transition).clipPath).toContain("polygon(");
+      }
+    }
+
+    expect(
+      getComputedStyle(transitions[0]!).clipPath.replaceAll(" ", ""),
+    ).toContain("100%0,100%100%");
+    expect(
+      getComputedStyle(transitions[5]!).clipPath.replaceAll(" ", ""),
+    ).toContain("polygon(00,62%0");
+    expect(
+      architectures[2]!.querySelector("[data-station-asset='windows']"),
+    ).toBeInTheDocument();
+    expect(
+      architectures[2]!.querySelector("[data-station-asset='sign']"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelectorAll("[data-station-asset='signal']"),
+    ).toHaveLength(4);
+  });
+
   it("keeps station scenery pointer-inert below the train and caps compact station geometry", () => {
     expect(trainLayoutCss).toMatch(
       /\.train-layout-world\s*\{[\s\S]*?z-index:\s*0;[\s\S]*?pointer-events:\s*none;/,
@@ -862,6 +960,21 @@ describe("TrainLayout", () => {
     );
     expect(trainLayoutCss).toMatch(
       /\.train-set-piece--station\s*\{[\s\S]*?bottom:\s*17px;[\s\S]*?height:\s*112px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-set-piece--station\s*\{[^}]*clip-path:\s*none;[^}]*overflow:\s*visible;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-architecture\s*\{[^}]*overflow:\s*visible;[^}]*clip-path:\s*none;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-transition--entry\s*\{\s*clip-path:\s*polygon\(/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-transition--exit\s*\{\s*clip-path:\s*polygon\(/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-set-piece--station\.train-set-piece--(?:entry|exit)\s*\{[^}]*clip-path:/,
     );
     expect(trainLayoutCss).toMatch(
       /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*0;/,
