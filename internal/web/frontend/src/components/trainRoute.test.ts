@@ -304,6 +304,146 @@ describe("train route chunks", () => {
     }
   });
 
+  it("focuses both town-edge and coast-reveal variants across every reserved layer", () => {
+    const entries = new Map<
+      string,
+      NonNullable<ReturnType<typeof generateRouteChunk>["setPiece"]>
+    >();
+    for (let index = -4_800; index <= 4_800; index++) {
+      const segment = generateRouteChunk(
+        "transition-focus-catalogue",
+        index,
+      ).setPiece;
+      if (
+        !segment ||
+        segment.role !== "entry" ||
+        (segment.type !== "town-edge" && segment.type !== "coast-reveal")
+      ) {
+        continue;
+      }
+      entries.set(`${segment.type}:${segment.visualVariant}`, segment);
+    }
+    expect(new Set(entries.keys())).toEqual(
+      new Set([
+        "town-edge:0",
+        "town-edge:1",
+        "coast-reveal:0",
+        "coast-reveal:1",
+      ]),
+    );
+
+    for (const [key, entry] of entries) {
+      expect(entry.reservedLayers, key).toEqual(
+        entry.type === "town-edge"
+          ? ["midground", "near"]
+          : ["far", "midground", "near"],
+      );
+      for (const viewportWidth of [390, 1_280, 2_560]) {
+        const focus = trainSetPieceFocusFromSegment(entry, viewportWidth);
+        expect(focus.expectedVisibleSegmentIDs, key).toEqual(
+          Array.from(
+            { length: entry.span },
+            (_, offset) => `${entry.id}:${offset}`,
+          ),
+        );
+
+        for (const layerName of entry.reservedLayers) {
+          const layer = TRAIN_PARALLAX_LAYERS.find(
+            (candidate) => candidate.name === layerName,
+          )!;
+          const geometry = trainSetPieceScreenGeometry(
+            focus,
+            layer.speedRatio,
+          );
+          expect(
+            geometry.screenCenterPx,
+            `${key}/${layerName}/${viewportWidth}`,
+          ).toBeCloseTo(viewportWidth / 2, 9);
+          expect(
+            geometry.visibleWidthPx,
+            `${key}/${layerName}/${viewportWidth}`,
+          ).toBeGreaterThanOrEqual(Math.min(320, viewportWidth * 0.5));
+          expect(
+            trainJourneyPositionForProjectedSetPieceCenter(
+              focus,
+              layer.speedRatio,
+            ),
+            `${key}/${layerName}/${viewportWidth}`,
+          ).toBeCloseTo(focus.journeyPosition, 9);
+
+          const coordinates = Array.from(
+            { length: entry.span },
+            (_, offset) =>
+              trainSetPieceProjectedCoordinate(
+                focus,
+                entry.startIndex + offset,
+                layer.speedRatio,
+              ),
+          );
+          expect(
+            coordinates
+              .slice(1)
+              .map((coordinate, offset) => coordinate - coordinates[offset]!),
+            `${key}/${layerName}/${viewportWidth}`,
+          ).toEqual(
+            Array.from(
+              { length: entry.span - 1 },
+              () => TRAIN_ROUTE_CHUNK_WIDTH,
+            ),
+          );
+        }
+      }
+    }
+  });
+
+  it("keeps transition intervals disjoint from stations and traversals", () => {
+    const entries: NonNullable<
+      ReturnType<typeof generateRouteChunk>["setPiece"]
+    >[] = [];
+    for (let index = -3_600; index <= 3_600; index++) {
+      const segment = generateRouteChunk(
+        "transition-collision-catalogue",
+        index,
+      ).setPiece;
+      if (segment?.role === "entry") entries.push(segment);
+    }
+
+    const transitions = entries.filter(
+      (entry) =>
+        entry.type === "town-edge" || entry.type === "coast-reveal",
+    );
+    expect(transitions.length).toBeGreaterThan(100);
+    for (const transition of transitions) {
+      const occupied = Array.from(
+        { length: transition.span },
+        (_, offset) =>
+          generateRouteChunk(
+            "transition-collision-catalogue",
+            transition.startIndex + offset,
+          ).setPiece,
+      );
+      expect(
+        new Set(occupied.map((segment) => segment?.id)),
+        transition.id,
+      ).toEqual(new Set([transition.id]));
+
+      const overlaps = entries.filter(
+        (candidate) =>
+          candidate.id !== transition.id &&
+          candidate.startIndex <= transition.endIndex &&
+          candidate.endIndex >= transition.startIndex,
+      );
+      expect(overlaps, transition.id).toEqual([]);
+      for (const incompatible of ["station", "bridge", "tunnel"] as const) {
+        expect(
+          trainSetPiecesAreIncompatible(transition.type, incompatible),
+          `${transition.type}/${incompatible}`,
+        ).toBe(true);
+      }
+
+    }
+  });
+
   it("selects two stable visual compositions per major set piece without changing route contracts", () => {
     const majorTypes = [
       "bridge",

@@ -225,9 +225,6 @@ function collectSetPieceTraversal(seed: string) {
       role: "entry" | "body" | "exit";
       segmentOffset: number;
       span: number;
-      assetID: string;
-      scale: number;
-      collisionWidth: number;
     }>
   >();
 
@@ -242,8 +239,7 @@ function collectSetPieceTraversal(seed: string) {
         (placement) => placement.setPiece?.id === chunk.setPiece?.id,
       ),
     );
-    expect(placements, `${chunk.setPiece.id}/${chunk.index}`).toHaveLength(1);
-    const placement = placements[0]!;
+    expect(placements, `${chunk.setPiece.id}/${chunk.index}`).toHaveLength(0);
     const segments = groups.get(chunk.setPiece.id) ?? [];
     segments.push({
       chunkIndex: index,
@@ -251,9 +247,6 @@ function collectSetPieceTraversal(seed: string) {
       role: chunk.setPiece.role,
       segmentOffset: chunk.setPiece.segmentOffset,
       span: chunk.setPiece.span,
-      assetID: placement.asset.id,
-      scale: placement.scale,
-      collisionWidth: placement.collisionWidth,
     });
     groups.set(chunk.setPiece.id, segments);
   }
@@ -299,7 +292,7 @@ describe("distant terrain, coast, and bridge asset kit", () => {
       /\.train-bridge-supports\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?height:\s*17px;/,
     );
     expect(trainLayoutCss).toMatch(
-      /\.train-set-piece--coast-reveal\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--train-palette-water\)/,
+      /\.train-coast-reveal-water\s*\{[\s\S]*?background:\s*var\(--train-palette-water\);/,
     );
   });
 
@@ -371,7 +364,7 @@ describe("distant terrain, coast, and bridge asset kit", () => {
     );
   });
 
-  it("traverses coast spans continuously and deterministically", () => {
+  it("reserves coast spans continuously for DOM-owned transition geometry", () => {
     const first = collectSetPieceTraversal("terrain-kit-traversal");
     expect(collectSetPieceTraversal("terrain-kit-traversal")).toEqual(first);
     expect(new Set(first.map(({ segments }) => segments[0]!.type))).toEqual(
@@ -392,16 +385,6 @@ describe("distant terrain, coast, and bridge asset kit", () => {
           { length: segments.length },
           (_, offset) => segments[0]!.chunkIndex + offset,
         ),
-      );
-      expect(new Set(segments.map((segment) => segment.assetID))).toEqual(
-        new Set(["coast-shore"]),
-      );
-      expect(new Set(segments.map((segment) => segment.scale)).size).toBe(1);
-      expect(
-        new Set(segments.map((segment) => segment.collisionWidth)).size,
-      ).toBe(1);
-      expect(segments[0]!.collisionWidth).toBe(
-        257.59999999999997,
       );
     }
   });

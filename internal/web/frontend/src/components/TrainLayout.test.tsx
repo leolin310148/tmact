@@ -490,6 +490,37 @@ describe("TrainLayout", () => {
     );
   });
 
+  it("excludes incompatible projected stations from a readable coast entry during cruise", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=train-051-proof&train-route-position=56195&train-reduced-motion=1",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const coastID =
+      "tmact-train-route-v1:train-051-proof:set-piece:20:coast-reveal";
+    const stationID = "station:train-051-proof:9";
+
+    expect(
+      container.querySelectorAll(
+        `[data-set-piece-id="${coastID}"][data-set-piece-layer="far"]`,
+      ),
+    ).toHaveLength(4);
+    expect(
+      container.querySelector(`[data-set-piece-id="${stationID}"]`),
+    ).not.toBeInTheDocument();
+    expect(Number(world.dataset.setPieceCollisionExclusions)).toBeGreaterThan(
+      0,
+    );
+    expect(world.dataset.setPieceCollisionExcludedIds).toContain(stationID);
+  });
+
   it("persists at a restrained cadence and remounts at identical route geometry", () => {
     vi.useFakeTimers();
     const startedAt = new Date(2026, 0, 1, 12, 0).getTime();
@@ -2162,7 +2193,7 @@ describe("TrainLayout", () => {
     expect(terrainCss).not.toMatch(/opacity:\s*0(?:\D|$)|transform:|animation:/);
   });
 
-  it("builds both town-edge variants from recognizable opaque sprite settlements", () => {
+  it("builds both town-edge variants as opaque road-and-yard density gradients", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
@@ -2226,13 +2257,9 @@ describe("TrainLayout", () => {
     expect(townEdgeBaseRule).toBeDefined();
     expect(townEdgeBaseRule).toMatch(/opacity:\s*1;/);
     expect(townEdgeBaseRule).toMatch(/background:\s*none;/);
-    const townEdgeCss = trainLayoutCss.slice(
-      trainLayoutCss.indexOf(".train-set-piece--town-edge"),
-      trainLayoutCss.indexOf(".train-set-piece--station"),
-    );
-    expect(townEdgeCss).not.toMatch(
-      /(?:repeating-)?linear-gradient|repeat-x|clip-path/,
-    );
+    expect(trainLayoutCss).toContain(".train-town-edge-road");
+    expect(trainLayoutCss).toContain(".train-town-edge-yard");
+    expect(trainLayoutCss).toContain(".train-town-edge-foreground");
 
     for (const mode of ["day", "sunset", "night"] as const) {
       const world = screen.getByTestId(`town-edge-${mode}`);
@@ -2259,12 +2286,35 @@ describe("TrainLayout", () => {
               `${segment.dataset.setPieceStart}:${offset}`,
           ),
         );
+        expect(
+          variantSegments.map(
+            (segment) =>
+              segment.querySelector<HTMLElement>(
+                "[data-town-edge-transition]",
+              )?.dataset.townEdgeDensity,
+          ),
+        ).toEqual(["open-edge", "gathering", "settled-block"]);
+        expect(
+          variantSegments.map(
+            (segment) =>
+              segment.querySelectorAll("[data-town-edge-building]").length,
+          ),
+        ).toEqual([1, 3, 4]);
+        expect(
+          variantSegments.every(
+            (segment) =>
+              segment.querySelectorAll("[data-town-edge-geometry='road']")
+                .length === 1 &&
+              segment.querySelectorAll("[data-town-edge-geometry='yard']")
+                .length === 1,
+          ),
+        ).toBe(true);
         const buildings = variantSegments.flatMap((segment) => [
           ...segment.querySelectorAll<HTMLElement>(
             "[data-town-edge-building]",
           ),
         ]);
-        expect(buildings).toHaveLength(9);
+        expect(buildings).toHaveLength(8);
         expect(
           buildings.map((building) => building.dataset.townEdgeBuilding),
         ).toEqual(
@@ -2281,7 +2331,7 @@ describe("TrainLayout", () => {
               "[data-town-edge-slot]",
             ),
           ]).map((shell) => Number(shell.dataset.townEdgeSlot)),
-        ).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+        ).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
         expect(
           new Set(
             variantSegments.flatMap((segment) => [
@@ -2678,7 +2728,14 @@ describe("TrainLayout", () => {
       ...container.querySelectorAll<HTMLElement>("[data-set-piece-id]"),
     ].filter((element) => element.classList.contains("train-set-piece"));
     const townEdge = segments.filter(
-      (segment) => segment.dataset.setPieceType === "town-edge",
+      (segment) =>
+        segment.dataset.setPieceType === "town-edge" &&
+        segment.dataset.setPieceParticipation === "primary",
+    );
+    const supportingTownEdge = segments.filter(
+      (segment) =>
+        segment.dataset.setPieceType === "town-edge" &&
+        segment.dataset.setPieceParticipation === "supporting",
     );
 
     expect(townEdge.map((segment) => segment.dataset.setPieceRole)).toEqual([
@@ -2689,6 +2746,14 @@ describe("TrainLayout", () => {
     expect(
       new Set(townEdge.map((segment) => segment.dataset.setPieceId)),
     ).toHaveProperty("size", 1);
+    expect(
+      supportingTownEdge.map((segment) => segment.dataset.setPieceRole),
+    ).toEqual(["entry", "body", "exit"]);
+    expect(
+      new Set(
+        supportingTownEdge.map((segment) => segment.dataset.setPieceLayer),
+      ),
+    ).toEqual(new Set(["near"]));
     for (const segment of segments) {
       expect(segment).toHaveAttribute("data-set-piece-occlusion", "restrained");
       expect(segment.dataset.setPieceRole).toMatch(/^(entry|body|exit)$/);
@@ -2797,7 +2862,7 @@ describe("TrainLayout", () => {
     }
     expect(
       container.querySelectorAll(
-        '[data-town-edge-composition="recognizable-sprite-settlement"]',
+        '[data-town-edge-composition="density-gradient-settlement"]',
       ),
     ).toHaveLength(6);
     const variantRules = [
@@ -2807,6 +2872,187 @@ describe("TrainLayout", () => {
     ].map((match) => match[0]);
     expect(variantRules.length).toBeGreaterThanOrEqual(3);
     expect(variantRules.join("\n")).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
+  });
+
+  it("coordinates both transition variants across their reserved layers with broad readable coverage", () => {
+    const entries = new Map<
+      string,
+      NonNullable<ReturnType<typeof generateRouteChunk>["setPiece"]>
+    >();
+    for (let index = -4_800; index <= 4_800; index++) {
+      const segment = generateRouteChunk(
+        "transition-layout-catalogue",
+        index,
+      ).setPiece;
+      if (
+        !segment ||
+        segment.role !== "entry" ||
+        (segment.type !== "town-edge" && segment.type !== "coast-reveal")
+      ) {
+        continue;
+      }
+      entries.set(`${segment.type}:${segment.visualVariant}`, segment);
+    }
+    expect(new Set(entries.keys())).toEqual(
+      new Set([
+        "town-edge:0",
+        "town-edge:1",
+        "coast-reveal:0",
+        "coast-reveal:1",
+      ]),
+    );
+
+    const { container } = render(
+      <>
+        {[...entries.entries()].flatMap(([key, entry]) =>
+          entry.reservedLayers.flatMap((layerName) => {
+            const layer = TRAIN_PARALLAX_LAYERS.find(
+              (candidate) => candidate.name === layerName,
+            )!;
+            return Array.from({ length: entry.span }, (_, offset) => (
+              <TrainRouteChunk
+                chunk={generateRouteChunk(
+                  "transition-layout-catalogue",
+                  entry.startIndex + offset,
+                )}
+                layer={layer}
+                key={`${key}:${layerName}:${offset}`}
+              />
+            ));
+          }),
+        )}
+      </>,
+    );
+
+    for (const [key, entry] of entries) {
+      const [type, variant] = key.split(":");
+      const segments = [
+        ...container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-id="${entry.id}"][data-set-piece-variant="${variant}"]`,
+        ),
+      ];
+      expect(segments, key).toHaveLength(
+        entry.span * entry.reservedLayers.length,
+      );
+      for (const layer of entry.reservedLayers) {
+        const layerSegments = segments.filter(
+          (segment) => segment.dataset.setPieceLayer === layer,
+        );
+        expect(
+          layerSegments.map((segment) => segment.dataset.setPieceRole),
+          `${key}/${layer}`,
+        ).toEqual([
+          "entry",
+          ...Array.from({ length: entry.span - 2 }, () => "body"),
+          "exit",
+        ]);
+        expect(
+          layerSegments.map(
+            (segment) => segment.dataset.setPieceParticipation,
+          ),
+          `${key}/${layer}`,
+        ).toEqual(
+          Array.from(
+            { length: entry.span },
+            () => (layer === entry.renderLayer ? "primary" : "supporting"),
+          ),
+        );
+      }
+
+      if (type === "town-edge") {
+        const midground = segments.filter(
+          (segment) => segment.dataset.setPieceLayer === "midground",
+        );
+        expect(
+          midground.map(
+            (segment) =>
+              segment.querySelector<HTMLElement>(
+                "[data-town-edge-transition]",
+              )?.dataset.townEdgeDensity,
+          ),
+          key,
+        ).toEqual(["open-edge", "gathering", "settled-block"]);
+        expect(
+          midground.map(
+            (segment) =>
+              segment.querySelectorAll("[data-town-edge-building]").length,
+          ),
+          key,
+        ).toEqual([1, 3, 4]);
+        expect(
+          new Set(
+            midground.map(
+              (segment) =>
+                segment.querySelector<HTMLElement>(
+                  "[data-town-edge-transition]",
+                )?.dataset.townEdgeRoadGrammar,
+            ),
+          ),
+          key,
+        ).toEqual(
+          new Set([variant === "0" ? "market-road" : "garden-lane"]),
+        );
+        expect(
+          segments.filter(
+            (segment) => segment.dataset.setPieceLayer === "near",
+          ).every(
+            (segment) =>
+              segment.querySelector(
+                "[data-town-edge-geometry='foreground-clearing']",
+              ) !== null,
+          ),
+          key,
+        ).toBe(true);
+      } else {
+        const far = segments.filter(
+          (segment) => segment.dataset.setPieceLayer === "far",
+        );
+        expect(
+          far.map(
+            (segment) =>
+              Number(
+                segment.querySelector<HTMLElement>(
+                  "[data-coast-reveal-composition]",
+                )?.dataset.coastRevealWaterCoverage,
+              ),
+          ),
+          key,
+        ).toEqual(
+          variant === "0" ? [58, 100, 100, 62] : [64, 100, 100, 70],
+        );
+        expect(
+          far.every(
+            (segment) =>
+              segment.querySelector(
+                "[data-coast-reveal-geometry='broad-water']",
+              ) !== null,
+          ),
+          key,
+        ).toBe(true);
+        expect(
+          segments.filter(
+            (segment) => segment.dataset.setPieceLayer === "midground",
+          ).every(
+            (segment) =>
+              segment.querySelector(
+                "[data-coast-reveal-geometry='shoreline-frame']",
+              ) !== null,
+          ),
+          key,
+        ).toBe(true);
+        expect(
+          segments.filter(
+            (segment) => segment.dataset.setPieceLayer === "near",
+          ).every(
+            (segment) =>
+              segment.querySelector(
+                "[data-coast-reveal-geometry='foreground-opening']",
+              ) !== null,
+          ),
+          key,
+        ).toBe(true);
+      }
+    }
   });
 
   it("builds both bridge and tunnel variants as aligned traversal roles on participating layers", () => {

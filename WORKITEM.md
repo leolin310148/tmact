@@ -235,7 +235,7 @@ Treat these findings as regression targets:
   for both variants in day and night. Each image must visibly contain the named
   structure, not merely its route metadata.
 
-- [ ] **TRAIN-051 — Rebuild town-edge and coast-reveal as readable transitions.**
+- [x] **TRAIN-051 — Rebuild town-edge and coast-reveal as readable transitions.**
   Recompose both town-edge variants into a deliberate change from open land to
   coherent settlement density, with a visible edge, road/yard grammar, and
   compatible foreground clearings. Recompose both coast-reveal variants so

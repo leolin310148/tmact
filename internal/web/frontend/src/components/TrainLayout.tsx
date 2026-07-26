@@ -53,6 +53,7 @@ import {
   trainSetPieceProjectedCoordinate,
   trainSetPieceReservationIntersectsChunk,
   trainSetPieceScreenGeometry,
+  trainSetPiecesAreIncompatible,
   trainParallaxLayerPosition,
   type RouteChunk,
   type RouteChunkWindowSnapshot,
@@ -943,36 +944,34 @@ type TrainTownEdgeBuildingStyle = CSSProperties & {
 const TRAIN_TOWN_EDGE_VARIANT_PLANS = [
   [
     [
-      { assetID: "building-rowhouse", xPercent: 25, scale: 0.66, liftPx: 0, material: "brick" },
-      { assetID: "building-cottage", xPercent: 57, scale: 0.62, liftPx: 1, material: "plaster" },
-      { assetID: "building-apartments", xPercent: 87, scale: 0.6, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 76, scale: 0.64, liftPx: 1, material: "plaster" },
     ],
     [
-      { assetID: "building-rowhouse", xPercent: 13, scale: 0.68, liftPx: 0, material: "brick" },
-      { assetID: "landmark-town-church", xPercent: 49, scale: 0.6, liftPx: 0, material: "stone" },
-      { assetID: "building-cottage", xPercent: 85, scale: 0.64, liftPx: 1, material: "plaster" },
+      { assetID: "building-rowhouse", xPercent: 16, scale: 0.68, liftPx: 0, material: "brick" },
+      { assetID: "landmark-town-church", xPercent: 52, scale: 0.6, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 86, scale: 0.64, liftPx: 1, material: "plaster" },
     ],
     [
-      { assetID: "building-apartments", xPercent: 17, scale: 0.61, liftPx: 0, material: "stone" },
-      { assetID: "building-cottage", xPercent: 50, scale: 0.63, liftPx: 1, material: "plaster" },
-      { assetID: "building-rowhouse", xPercent: 79, scale: 0.67, liftPx: 0, material: "brick" },
+      { assetID: "building-rowhouse", xPercent: 9, scale: 0.67, liftPx: 0, material: "brick" },
+      { assetID: "building-apartments", xPercent: 35, scale: 0.61, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 62, scale: 0.63, liftPx: 1, material: "plaster" },
+      { assetID: "building-rowhouse", xPercent: 88, scale: 0.66, liftPx: 0, material: "brick" },
     ],
   ],
   [
     [
-      { assetID: "building-cottage", xPercent: 22, scale: 0.64, liftPx: 1, material: "plaster" },
-      { assetID: "building-apartments", xPercent: 55, scale: 0.59, liftPx: 0, material: "stone" },
-      { assetID: "building-rowhouse", xPercent: 86, scale: 0.69, liftPx: 0, material: "brick" },
+      { assetID: "building-rowhouse", xPercent: 72, scale: 0.67, liftPx: 0, material: "brick" },
     ],
     [
-      { assetID: "building-rowhouse", xPercent: 13, scale: 0.65, liftPx: 0, material: "brick" },
-      { assetID: "building-cottage", xPercent: 42, scale: 0.61, liftPx: 1, material: "plaster" },
-      { assetID: "landmark-town-church", xPercent: 76, scale: 0.61, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 14, scale: 0.63, liftPx: 1, material: "plaster" },
+      { assetID: "building-apartments", xPercent: 48, scale: 0.59, liftPx: 0, material: "stone" },
+      { assetID: "building-rowhouse", xPercent: 84, scale: 0.69, liftPx: 0, material: "brick" },
     ],
     [
-      { assetID: "building-cottage", xPercent: 18, scale: 0.63, liftPx: 1, material: "plaster" },
-      { assetID: "building-rowhouse", xPercent: 48, scale: 0.68, liftPx: 0, material: "brick" },
-      { assetID: "building-apartments", xPercent: 76, scale: 0.6, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 8, scale: 0.63, liftPx: 1, material: "plaster" },
+      { assetID: "building-rowhouse", xPercent: 33, scale: 0.68, liftPx: 0, material: "brick" },
+      { assetID: "landmark-town-church", xPercent: 60, scale: 0.61, liftPx: 0, material: "stone" },
+      { assetID: "building-apartments", xPercent: 87, scale: 0.6, liftPx: 0, material: "stone" },
     ],
   ],
 ] as const satisfies readonly (readonly (readonly TrainTownEdgeBuildingPlan[])[])[];
@@ -1019,72 +1018,193 @@ function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
 
 function TrainTownEdgeComposition({
   segment,
+  layer,
 }: {
   segment: NonNullable<RouteChunk["setPiece"]>;
+  layer: TrainParallaxLayerName;
 }) {
   const plan =
     TRAIN_TOWN_EDGE_VARIANT_PLANS[segment.visualVariant][segment.segmentOffset];
   if (!plan) return null;
+  const density = ["open-edge", "gathering", "settled-block"][
+    segment.segmentOffset
+  ];
 
   return (
     <span
-      className="train-town-edge-composition"
-      data-town-edge-composition="recognizable-sprite-settlement"
+      className={[
+        "train-town-edge-transition",
+        `train-town-edge-transition--${layer}`,
+      ].join(" ")}
+      data-town-edge-transition="open-land-to-settlement"
       data-town-edge-variant={segment.visualVariant}
       data-town-edge-role={segment.role}
       data-town-edge-segment={segment.segmentOffset}
+      data-town-edge-layer={layer}
+      data-town-edge-density={density}
+      data-town-edge-road-grammar={
+        segment.visualVariant === 0 ? "market-road" : "garden-lane"
+      }
+      data-town-edge-clearance="foreground-reserved"
+      aria-hidden="true"
     >
-      {plan.map((building, slot) => {
-        const asset = trainTownEdgeAsset(building.assetID);
-        const globalSlot = segment.segmentOffset * 3 + slot;
-        const style: TrainTownEdgeBuildingStyle = {
-          left: `${building.xPercent}%`,
-          bottom: `${building.liftPx}px`,
-          "--train-town-edge-building-scale": building.scale,
-        };
-        return (
+      {layer === "midground" ? (
+        <>
           <span
-            className="train-town-edge-building-shell"
-            data-town-edge-slot={globalSlot}
-            data-town-edge-continuity={`${segment.visualVariant}:${globalSlot}`}
-            data-town-edge-material={building.material}
-            style={style}
-            key={`${building.assetID}-${globalSlot}`}
+            className="train-town-edge-road"
+            data-town-edge-geometry="road"
+            data-town-edge-surface="opaque"
+          />
+          <span
+            className="train-town-edge-yard"
+            data-town-edge-geometry="yard"
+            data-town-edge-surface="opaque"
           >
-            <img
-              className="train-town-edge-building"
-              src={asset.src}
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-              width={asset.width}
-              height={asset.height}
-              data-town-edge-building={asset.id}
-              data-town-edge-solid="opaque"
-            />
-            {asset.emissive ? (
-              <img
-                className="train-emissive-overlay train-town-edge-building-emissive"
-                src={asset.emissive.src}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                width={asset.emissive.width}
-                height={asset.emissive.height}
-                data-emissive="town-edge-windows"
-                data-emissive-owner={asset.id}
-                data-town-edge-window-alignment={`${asset.width}x${asset.height}`}
-                onError={(event) => {
-                  event.currentTarget.hidden = true;
-                }}
-              />
-            ) : null}
+            <i data-town-edge-yard-detail="gate" />
+            <i data-town-edge-yard-detail="tree" />
           </span>
-        );
-      })}
+          <span
+            className="train-town-edge-composition"
+            data-town-edge-composition="density-gradient-settlement"
+          >
+            {plan.map((building, slot) => {
+              const asset = trainTownEdgeAsset(building.assetID);
+              const globalSlot =
+                TRAIN_TOWN_EDGE_VARIANT_PLANS[segment.visualVariant]
+                  .slice(0, segment.segmentOffset)
+                  .reduce((total, buildings) => total + buildings.length, 0) +
+                slot;
+              const style: TrainTownEdgeBuildingStyle = {
+                left: `${building.xPercent}%`,
+                bottom: `${building.liftPx}px`,
+                "--train-town-edge-building-scale": building.scale,
+              };
+              return (
+                <span
+                  className="train-town-edge-building-shell"
+                  data-town-edge-slot={globalSlot}
+                  data-town-edge-continuity={`${segment.visualVariant}:${globalSlot}`}
+                  data-town-edge-material={building.material}
+                  style={style}
+                  key={`${building.assetID}-${globalSlot}`}
+                >
+                  <img
+                    className="train-town-edge-building"
+                    src={asset.src}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    width={asset.width}
+                    height={asset.height}
+                    data-town-edge-building={asset.id}
+                    data-town-edge-solid="opaque"
+                  />
+                  {asset.emissive ? (
+                    <img
+                      className="train-emissive-overlay train-town-edge-building-emissive"
+                      src={asset.emissive.src}
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                      width={asset.emissive.width}
+                      height={asset.emissive.height}
+                      data-emissive="town-edge-windows"
+                      data-emissive-owner={asset.id}
+                      data-town-edge-window-alignment={`${asset.width}x${asset.height}`}
+                      onError={(event) => {
+                        event.currentTarget.hidden = true;
+                      }}
+                    />
+                  ) : null}
+                </span>
+              );
+            })}
+          </span>
+        </>
+      ) : (
+        <span
+          className="train-town-edge-foreground"
+          data-town-edge-geometry="foreground-clearing"
+          data-town-edge-surface="opaque"
+        >
+          <i data-town-edge-foreground-detail="verge" />
+          <i data-town-edge-foreground-detail="fence" />
+        </span>
+      )}
     </span>
   );
 }
+
+function TrainCoastRevealComposition({
+  segment,
+  layer,
+}: {
+  segment: NonNullable<RouteChunk["setPiece"]>;
+  layer: TrainParallaxLayerName;
+}) {
+  const waterCoverage = (
+    segment.visualVariant === 0 ? [58, 100, 100, 62] : [64, 100, 100, 70]
+  )[segment.segmentOffset]!;
+  return (
+    <span
+      className={[
+        "train-coast-reveal-composition",
+        `train-coast-reveal-composition--${layer}`,
+      ].join(" ")}
+      data-coast-reveal-composition={
+        segment.visualVariant === 0 ? "open-bay" : "harbour-mouth"
+      }
+      data-coast-reveal-layer={layer}
+      data-coast-reveal-role={segment.role}
+      data-coast-reveal-segment={segment.segmentOffset}
+      data-coast-reveal-water-coverage={waterCoverage}
+      data-coast-reveal-clearance="foreground-reserved"
+      aria-hidden="true"
+    >
+      {layer === "far" ? (
+        <>
+          <span
+            className="train-coast-reveal-water"
+            data-coast-reveal-geometry="broad-water"
+            data-water-owner={`${segment.id}:far`}
+            data-water-surface="opaque"
+          >
+            <i data-coast-water-depth="horizon" />
+            <i data-coast-water-depth="middle" />
+            <i data-coast-water-depth="near" />
+          </span>
+          <span
+            className="train-coast-reveal-horizon"
+            data-coast-reveal-geometry="water-horizon"
+          />
+        </>
+      ) : layer === "midground" ? (
+        <span
+          className="train-coast-reveal-shore"
+          data-coast-reveal-geometry="shoreline-frame"
+          data-coast-reveal-surface="opaque"
+        >
+          <i data-coast-reveal-shore-detail="rock-shelf" />
+          <i data-coast-reveal-shore-detail="beach" />
+        </span>
+      ) : (
+        <span
+          className="train-coast-reveal-foreground"
+          data-coast-reveal-geometry="foreground-opening"
+          data-coast-reveal-surface="opaque"
+        >
+          <i data-coast-reveal-foreground-detail="headland" />
+          <i data-coast-reveal-foreground-detail="coastal-grass" />
+        </span>
+      )}
+    </span>
+  );
+}
+
+const TRAIN_TRANSITION_TYPES = new Set<TrainSetPieceType>([
+  "coast-reveal",
+  "town-edge",
+]);
 
 const TRAIN_TRAVERSAL_TYPES = new Set<TrainSetPieceType>([
   "bridge",
@@ -1656,9 +1776,17 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
     chunk.setPiece && TRAIN_TRAVERSAL_TYPES.has(chunk.setPiece.type)
       ? chunk.setPiece
       : null;
+  const transitionSegment =
+    chunk.setPiece && TRAIN_TRANSITION_TYPES.has(chunk.setPiece.type)
+      ? chunk.setPiece
+      : null;
   const rendersSetPiece =
     chunk.setPiece?.renderLayer === layer.name ||
-    Boolean(traversalSegment?.reservedLayers.includes(layer.name));
+    Boolean(
+      (traversalSegment ?? transitionSegment)?.reservedLayers.includes(
+        layer.name,
+      ),
+    );
   const stationComposition = stationSegment
     ? TRAIN_STATION_SEGMENT_COMPOSITIONS[stationSegment.segmentOffset]
     : null;
@@ -1878,7 +2006,16 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               />
             ) : null}
             {chunk.setPiece.type === "town-edge" ? (
-              <TrainTownEdgeComposition segment={chunk.setPiece} />
+              <TrainTownEdgeComposition
+                segment={chunk.setPiece}
+                layer={layer.name}
+              />
+            ) : null}
+            {chunk.setPiece.type === "coast-reveal" ? (
+              <TrainCoastRevealComposition
+                segment={chunk.setPiece}
+                layer={layer.name}
+              />
             ) : null}
             {stationSegment ? (
               <>
@@ -2317,6 +2454,11 @@ interface TrainProjectedSetPieceSegment {
   focus: TrainSetPieceFocus;
 }
 
+type TrainProjectedSetPieceLayers = Record<
+  TrainParallaxLayerName,
+  readonly TrainProjectedSetPieceSegment[]
+>;
+
 function projectedSetPieceSegmentsForLayer(
   seed: string,
   layer: TrainParallaxLayer,
@@ -2383,6 +2525,91 @@ function projectedSetPieceSegmentsForLayer(
     }
   }
   return projected;
+}
+
+function projectedSetPieceGeometry(
+  focus: TrainSetPieceFocus,
+  routePosition: number,
+) {
+  const layer = TRAIN_PARALLAX_LAYERS.find(
+    (candidate) => candidate.name === focus.renderLayer,
+  )!;
+  return trainSetPieceScreenGeometry(
+    focus,
+    layer.speedRatio,
+    routePosition,
+  );
+}
+
+export function resolveTrainProjectedSetPieceCollisions(
+  projected: TrainProjectedSetPieceLayers,
+  routePosition: number,
+  viewportWidth: number,
+  stationState: string,
+): {
+  layers: TrainProjectedSetPieceLayers;
+  excludedIDs: readonly string[];
+} {
+  const focuses = new Map<string, TrainSetPieceFocus>();
+  for (const layer of TRAIN_PARALLAX_LAYERS) {
+    for (const segment of projected[layer.name]) {
+      focuses.set(segment.focus.id, segment.focus);
+    }
+  }
+  const geometry = new Map(
+    [...focuses.values()].map((focus) => [
+      focus.id,
+      projectedSetPieceGeometry(focus, routePosition),
+    ]),
+  );
+  const transitionThreshold = Math.min(320, viewportWidth * 0.5);
+  const transitions = [...focuses.values()]
+    .filter(
+      (focus) =>
+        TRAIN_TRANSITION_TYPES.has(focus.type) &&
+        geometry.get(focus.id)!.visibleWidthPx >= transitionThreshold,
+    )
+    .sort((left, right) => {
+      const widthDifference =
+        geometry.get(right.id)!.visibleWidthPx -
+        geometry.get(left.id)!.visibleWidthPx;
+      if (widthDifference !== 0) return widthDifference;
+      if (left.type === right.type) return left.startIndex - right.startIndex;
+      return left.type === "coast-reveal" ? -1 : 1;
+    });
+  const excludedIDs = new Set<string>();
+
+  for (const transition of transitions) {
+    if (excludedIDs.has(transition.id)) continue;
+    const transitionGeometry = geometry.get(transition.id)!;
+    for (const candidate of focuses.values()) {
+      if (
+        candidate.id === transition.id ||
+        excludedIDs.has(candidate.id) ||
+        !trainSetPiecesAreIncompatible(transition.type, candidate.type)
+      ) {
+        continue;
+      }
+      const candidateGeometry = geometry.get(candidate.id)!;
+      const overlaps =
+        transitionGeometry.visibleLeftPx < candidateGeometry.visibleRightPx &&
+        transitionGeometry.visibleRightPx > candidateGeometry.visibleLeftPx;
+      if (!overlaps) continue;
+      if (candidate.type === "station" && stationState !== "cruise") {
+        excludedIDs.add(transition.id);
+        break;
+      }
+      excludedIDs.add(candidate.id);
+    }
+  }
+
+  const layers = { ...projected };
+  for (const layer of TRAIN_PARALLAX_LAYERS) {
+    layers[layer.name] = projected[layer.name].filter(
+      (segment) => !excludedIDs.has(segment.focus.id),
+    );
+  }
+  return { layers, excludedIDs: [...excludedIDs].sort() };
 }
 
 function usePrefersReducedTrainMotion(): boolean {
@@ -2883,7 +3110,7 @@ function TrainWorld({
 
   const nearWindow = routeWindows.near;
   const projectionViewportWidth = nearWindow.viewportWidth;
-  const projectedSetPieces = Object.fromEntries(
+  const rawProjectedSetPieces = Object.fromEntries(
     TRAIN_PARALLAX_LAYERS.map((layer) => [
       layer.name,
       projectedSetPieceSegmentsForLayer(
@@ -2893,10 +3120,15 @@ function TrainWorld({
         projectionViewportWidth,
       ),
     ]),
-  ) as Record<
-    TrainParallaxLayerName,
-    readonly TrainProjectedSetPieceSegment[]
-  >;
+  ) as TrainProjectedSetPieceLayers;
+  const projectedCollisionResolution =
+    resolveTrainProjectedSetPieceCollisions(
+      rawProjectedSetPieces,
+      routePositionRef.current,
+      projectionViewportWidth,
+      stationJourneyRef.current.state,
+    );
+  const projectedSetPieces = projectedCollisionResolution.layers;
   const projectedSetPieceCount = TRAIN_PARALLAX_LAYERS.reduce(
     (total, layer) => total + projectedSetPieces[layer.name].length,
     0,
@@ -2928,6 +3160,12 @@ function TrainWorld({
       data-route-mounted-chunks={nearWindow.chunks.length}
       data-route-total-mounted-chunks={totalMountedRouteChunks(routeWindows)}
       data-projected-set-piece-segments={projectedSetPieceCount}
+      data-set-piece-collision-exclusions={
+        projectedCollisionResolution.excludedIDs.length
+      }
+      data-set-piece-collision-excluded-ids={
+        projectedCollisionResolution.excludedIDs.join(",")
+      }
       data-set-piece-focus-type={initialJourney.focusOverride?.type}
       data-set-piece-focus-id={initialJourney.focusOverride?.id}
       data-set-piece-focus-position={

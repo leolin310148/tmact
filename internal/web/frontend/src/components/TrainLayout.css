@@ -714,68 +714,317 @@ html[data-pane-switcher-layout="train"] .statusline {
   border-color: var(--train-palette-near-surface);
 }
 
-.train-set-piece--coast-reveal {
-  bottom: 17px;
-  height: 36px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--train-palette-haze), transparent 50%) 0 1px,
-      transparent 1px 5px
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--train-palette-water), white 10%),
-      var(--train-palette-water)
-    );
-}
-
-.train-set-piece--coast-reveal.train-set-piece--entry {
-  clip-path: polygon(28% 100%, 36% 32%, 50% 13%, 100% 0, 100% 100%);
-}
-
-.train-set-piece--coast-reveal.train-set-piece--exit {
-  clip-path: polygon(0 0, 58% 18%, 76% 45%, 84% 100%, 0 100%);
-}
-
-.train-set-piece--coast-reveal.train-set-piece--variant-1 {
-  height: 42px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 38px,
-      color-mix(in srgb, var(--train-palette-haze), transparent 54%) 38px 58px,
-      transparent 58px 96px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--train-palette-water), white 14%) 0 2px,
-      var(--train-palette-water) 2px 7px
-    );
-  background-position:
-    var(--train-set-piece-phase) 0,
-    0 0;
-}
-
-.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--entry {
-  clip-path: polygon(18% 100%, 31% 58%, 47% 30%, 66% 14%, 100% 8%, 100% 100%);
-}
-
-.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--exit {
-  clip-path: polygon(0 8%, 38% 16%, 61% 38%, 77% 68%, 90% 100%, 0 100%);
-}
-
+.train-set-piece--coast-reveal,
 .train-set-piece--town-edge {
-  bottom: 17px;
-  height: 112px;
+  bottom: 0;
+  height: 150px;
   opacity: 1;
   background: none;
   image-rendering: pixelated;
 }
 
-.train-town-edge-composition {
+.train-coast-reveal-composition,
+.train-town-edge-transition {
   position: absolute;
   inset: 0;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.train-coast-reveal-water,
+.train-coast-reveal-horizon,
+.train-coast-reveal-shore,
+.train-coast-reveal-foreground,
+.train-town-edge-road,
+.train-town-edge-yard,
+.train-town-edge-foreground {
+  position: absolute;
+  display: block;
+  opacity: 1;
+}
+
+.train-coast-reveal-water {
+  right: -1px;
+  bottom: 17px;
+  left: -1px;
+  height: 82px;
+  overflow: hidden;
+  background: var(--train-palette-water);
+}
+
+.train-coast-reveal-water i {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: block;
+  height: 3px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-water),
+    var(--train-palette-haze) 24%
+  );
+}
+
+.train-coast-reveal-water i[data-coast-water-depth="horizon"] {
+  top: 12px;
+  right: 8%;
+  left: 6%;
+  height: 2px;
+}
+
+.train-coast-reveal-water i[data-coast-water-depth="middle"] {
+  top: 37px;
+  right: 34%;
+  left: 13%;
+}
+
+.train-coast-reveal-water i[data-coast-water-depth="near"] {
+  top: 64px;
+  right: 9%;
+  left: 43%;
+  height: 4px;
+}
+
+.train-coast-reveal-horizon {
+  right: -1px;
+  bottom: 97px;
+  left: -1px;
+  height: 3px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-water),
+    var(--train-palette-haze) 36%
+  );
+}
+
+.train-set-piece--coast-reveal.train-set-piece--entry
+  .train-coast-reveal-water,
+.train-set-piece--coast-reveal.train-set-piece--entry
+  .train-coast-reveal-horizon {
+  clip-path: polygon(42% 100%, 49% 55%, 58% 24%, 72% 8%, 100% 0, 100% 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--exit
+  .train-coast-reveal-water,
+.train-set-piece--coast-reveal.train-set-piece--exit
+  .train-coast-reveal-horizon {
+  clip-path: polygon(0 0, 46% 8%, 62% 27%, 75% 58%, 82% 100%, 0 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--entry
+  .train-coast-reveal-water,
+.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--entry
+  .train-coast-reveal-horizon {
+  clip-path: polygon(36% 100%, 43% 67%, 51% 67%, 51% 38%, 63% 38%, 63% 17%, 78% 17%, 78% 6%, 100% 6%, 100% 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--exit
+  .train-coast-reveal-water,
+.train-set-piece--coast-reveal.train-set-piece--variant-1.train-set-piece--exit
+  .train-coast-reveal-horizon {
+  clip-path: polygon(0 6%, 31% 6%, 31% 18%, 48% 18%, 48% 39%, 63% 39%, 63% 68%, 72% 68%, 79% 100%, 0 100%);
+}
+
+.train-coast-reveal-shore {
+  right: -1px;
+  bottom: 17px;
+  left: -1px;
+  height: 67px;
+  background: var(--train-palette-mid-surface);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--entry
+  .train-coast-reveal-shore {
+  clip-path: polygon(0 28%, 22% 35%, 39% 51%, 50% 72%, 58% 100%, 0 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--body
+  .train-coast-reveal-shore {
+  bottom: 17px;
+  height: 8px;
+}
+
+.train-set-piece--coast-reveal.train-set-piece--exit
+  .train-coast-reveal-shore {
+  clip-path: polygon(45% 100%, 54% 72%, 66% 47%, 83% 32%, 100% 25%, 100% 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--variant-1
+  .train-coast-reveal-shore {
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-mountain-rock) 42%
+  );
+}
+
+.train-coast-reveal-shore i {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  background: var(--train-palette-near-surface);
+}
+
+.train-coast-reveal-shore i[data-coast-reveal-shore-detail="rock-shelf"] {
+  right: 18%;
+  width: 54px;
+  height: 9px;
+}
+
+.train-coast-reveal-shore i[data-coast-reveal-shore-detail="beach"] {
+  right: 38%;
+  width: 72px;
+  height: 5px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-emissive) 28%
+  );
+}
+
+.train-coast-reveal-foreground {
+  right: -1px;
+  bottom: 17px;
+  left: -1px;
+  height: 38px;
+  background: var(--train-palette-near-surface);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--entry
+  .train-coast-reveal-foreground {
+  clip-path: polygon(0 48%, 22% 52%, 39% 70%, 48% 100%, 0 100%);
+}
+
+.train-set-piece--coast-reveal.train-set-piece--body
+  .train-coast-reveal-foreground {
+  height: 5px;
+}
+
+.train-set-piece--coast-reveal.train-set-piece--exit
+  .train-coast-reveal-foreground {
+  clip-path: polygon(51% 100%, 61% 71%, 78% 52%, 100% 45%, 100% 100%);
+}
+
+.train-coast-reveal-foreground i {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  background: var(--train-palette-forest-soil);
+}
+
+.train-coast-reveal-foreground
+  i[data-coast-reveal-foreground-detail="headland"] {
+  right: 8%;
+  width: 58px;
+  height: 14px;
+}
+
+.train-coast-reveal-foreground
+  i[data-coast-reveal-foreground-detail="coastal-grass"] {
+  left: 13%;
+  width: 43px;
+  height: 8px;
+}
+
+.train-town-edge-road {
+  right: -1px;
+  bottom: 17px;
+  left: -1px;
+  height: 27px;
+  border-top: 4px solid color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 35%
+  );
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 18%
+  );
+}
+
+.train-town-edge-road::after {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(
+        in srgb,
+        var(--train-palette-mid-surface),
+        var(--train-palette-emissive) 25%
+      )
+      0 22px,
+    transparent 22px 40px
+  );
+  content: "";
+}
+
+.train-set-piece--town-edge.train-set-piece--entry .train-town-edge-road {
+  clip-path: polygon(36% 100%, 44% 23%, 54% 0, 100% 0, 100% 100%);
+}
+
+.train-set-piece--town-edge.train-set-piece--variant-1.train-set-piece--entry
+  .train-town-edge-road {
+  clip-path: polygon(29% 100%, 39% 30%, 51% 0, 100% 0, 100% 100%);
+}
+
+.train-town-edge-yard {
+  right: -1px;
+  bottom: 44px;
+  left: -1px;
+  height: 21px;
+  border-top: 3px solid var(--train-palette-near-surface);
+  background: color-mix(
+    in srgb,
+    var(--train-palette-forest-soil),
+    var(--train-palette-mid-surface) 33%
+  );
+}
+
+.train-set-piece--town-edge.train-set-piece--entry .train-town-edge-yard {
+  clip-path: polygon(53% 100%, 61% 35%, 72% 0, 100% 0, 100% 100%);
+}
+
+.train-set-piece--town-edge.train-set-piece--variant-1.train-set-piece--entry
+  .train-town-edge-yard {
+  clip-path: polygon(47% 100%, 58% 44%, 69% 0, 100% 0, 100% 100%);
+}
+
+.train-town-edge-yard i {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  background: var(--train-palette-near-surface);
+}
+
+.train-town-edge-yard i[data-town-edge-yard-detail="gate"] {
+  right: 21%;
+  width: 36px;
+  height: 12px;
+  border: 3px solid var(--train-palette-silhouette);
+  border-bottom: 0;
+  background: none;
+}
+
+.train-town-edge-yard i[data-town-edge-yard-detail="tree"] {
+  right: 7%;
+  width: 14px;
+  height: 20px;
+  border-radius: 45% 45% 18% 18%;
+  background: var(--train-palette-forest-soil);
+  box-shadow: 0 8px 0 -5px var(--train-palette-silhouette);
+}
+
+.train-town-edge-composition {
+  position: absolute;
+  right: 0;
+  bottom: 65px;
+  left: 0;
+  height: 85px;
   display: block;
   overflow: visible;
 }
@@ -822,6 +1071,66 @@ html[data-pane-switcher-layout="train"] .statusline {
     0 0 2px color-mix(in srgb, var(--train-palette-emissive), transparent 34%)
   );
   transition: opacity 450ms ease;
+}
+
+.train-town-edge-foreground {
+  right: -1px;
+  bottom: 17px;
+  left: -1px;
+  height: 16px;
+  border-top: 3px solid var(--train-palette-forest-soil);
+  background: var(--train-palette-near-surface);
+}
+
+.train-set-piece--town-edge.train-set-piece--entry
+  .train-town-edge-foreground {
+  clip-path: polygon(0 0, 52% 0, 63% 100%, 0 100%);
+}
+
+.train-set-piece--town-edge.train-set-piece--body
+  .train-town-edge-foreground {
+  clip-path: polygon(0 55%, 21% 0, 79% 0, 100% 55%, 100% 100%, 0 100%);
+}
+
+.train-set-piece--town-edge.train-set-piece--exit
+  .train-town-edge-foreground {
+  clip-path: polygon(38% 100%, 49% 0, 100% 0, 100% 100%);
+}
+
+.train-town-edge-foreground i {
+  position: absolute;
+  bottom: 3px;
+  display: block;
+  background: var(--train-palette-silhouette);
+}
+
+.train-town-edge-foreground i[data-town-edge-foreground-detail="verge"] {
+  left: 10%;
+  width: 72px;
+  height: 6px;
+  background: var(--train-palette-forest-soil);
+}
+
+.train-town-edge-foreground i[data-town-edge-foreground-detail="fence"] {
+  right: 9%;
+  width: 78px;
+  height: 4px;
+  box-shadow:
+    -1px -7px 0 -1px var(--train-palette-silhouette),
+    24px -7px 0 -1px var(--train-palette-silhouette),
+    49px -7px 0 -1px var(--train-palette-silhouette),
+    74px -7px 0 -1px var(--train-palette-silhouette);
+}
+
+.train-set-piece--town-edge.train-set-piece--variant-1
+  .train-town-edge-foreground
+  i[data-town-edge-foreground-detail="fence"] {
+  width: 54px;
+  box-shadow:
+    -1px -7px 0 -1px var(--train-palette-silhouette),
+    17px -7px 0 -1px var(--train-palette-silhouette),
+    35px -7px 0 -1px var(--train-palette-silhouette),
+    53px -7px 0 -1px var(--train-palette-silhouette);
 }
 
 .train-layout-world[data-time-of-day="sunset"]

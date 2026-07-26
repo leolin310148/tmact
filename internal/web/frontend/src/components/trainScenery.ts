@@ -2358,39 +2358,6 @@ export function trainCloudPlacementsForChunk(
   );
 }
 
-function setPiecePlacement(
-  setPiece: TrainSetPieceSegment,
-  layer: TrainParallaxLayerName,
-): TrainSceneryPlacement | null {
-  const assetID =
-    setPiece.type === "coast-reveal" && layer === "far"
-        ? "coast-shore"
-        : null;
-  if (!assetID) return null;
-  const resolvedAsset = assetForID(assetID);
-  const assetScale = resolvedAsset.safeScale[1];
-  const variantOffset =
-    setPiece.visualVariant === 0
-      ? 50
-      : setPiece.role === "entry"
-        ? 62
-        : setPiece.role === "exit"
-          ? 38
-          : 50;
-  return sceneryPlacement(
-    layer,
-    assetScale,
-    {
-      asset: resolvedAsset,
-      offsetPercent: variantOffset,
-      minimumSpacingPx: 0,
-      landmark: false,
-      setPiece,
-    },
-    1,
-  );
-}
-
 function nearTrackCandidateCount(
   routeSeed: string,
   chunkIndex: number,
@@ -3145,8 +3112,10 @@ function regionLayerPlan(
     const coastBeat = trainCoastSceneryBeatForChunk(localChunk);
     const setPiece = compositionPlan.setPieces[localOffset] ?? null;
     if (setPiece?.reservedLayers.includes(layer)) {
-      const placement = setPiecePlacement(setPiece, layer);
-      plan.push(placement ? [placement] : []);
+      // Major set pieces own their complete cross-layer geometry in the DOM.
+      // Keep every reserved scenery slot empty so legacy sprites cannot repeat
+      // across transition segments or collide with the projected composition.
+      plan.push([]);
       continue;
     }
     const composition = regionCompositionAtOffset(localOffset, compositionPlan);

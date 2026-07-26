@@ -165,10 +165,12 @@ describe("train scenery asset kit", () => {
     expect(selectedIDs).toEqual(
       new Set(
         TRAIN_SCENERY_ASSETS.filter(
-          (asset) => asset.id !== "bridge-truss",
+          (asset) =>
+            asset.id !== "bridge-truss" && asset.id !== "coast-shore",
         ).map((asset) => asset.id),
       ),
     );
+    expect(selectedIDs).not.toContain("coast-shore");
   });
 
   it("enforces regional asset pools, density bounds, and one landmark per region", () => {
@@ -304,17 +306,11 @@ describe("train scenery asset kit", () => {
     }
   });
 
-  it("keeps bridges DOM-owned and composes coast raster placements from the shared variant", () => {
-    const compositions = new Map<
-      string,
-      {
-        variant: number;
-        roles: string[];
-        scales: number[];
-        offsets: number[];
-      }
-    >();
-    const bridgeVariants = new Set<number>();
+  it("keeps bridge and coast transition geometry DOM-owned on reserved layers", () => {
+    const variants = new Map<string, Set<number>>([
+      ["bridge", new Set()],
+      ["coast-reveal", new Set()],
+    ]);
 
     for (let index = -3_600; index <= 3_600; index++) {
       const chunk = generateRouteChunk("set-piece-compositions", index);
@@ -329,45 +325,12 @@ describe("train scenery asset kit", () => {
         setPiece.renderLayer,
         chunk,
       );
-      if (setPiece.type === "bridge") {
-        expect(placements).toHaveLength(0);
-        bridgeVariants.add(setPiece.visualVariant);
-        continue;
-      }
-      expect(placements).toHaveLength(1);
-      const placement = placements[0]!;
-      const composition = compositions.get(setPiece.id) ?? {
-        variant: setPiece.visualVariant,
-        roles: [],
-        scales: [],
-        offsets: [],
-      };
-      expect(setPiece.visualVariant).toBe(composition.variant);
-      expect(placement.setPiece?.visualVariant).toBe(composition.variant);
-      composition.roles.push(setPiece.role);
-      composition.scales.push(placement.scale);
-      composition.offsets.push(placement.offsetPercent);
-      compositions.set(setPiece.id, composition);
+      expect(placements, `${setPiece.type}/${setPiece.role}`).toHaveLength(0);
+      variants.get(setPiece.type)!.add(setPiece.visualVariant);
     }
 
-    expect(bridgeVariants).toEqual(new Set([0, 1]));
-    const complete = [...compositions.values()].filter(
-      (composition) => composition.roles.at(0) === "entry" &&
-        composition.roles.at(-1) === "exit",
-    );
-    expect(new Set(complete.map((composition) => composition.variant))).toEqual(
-      new Set([0, 1]),
-    );
-    for (const composition of complete) {
-      expect(new Set(composition.scales)).toHaveProperty("size", 1);
-      expect(composition.offsets).toEqual(
-        composition.variant === 0
-          ? composition.roles.map(() => 50)
-          : composition.roles.map((role) =>
-              role === "entry" ? 62 : role === "exit" ? 38 : 50,
-            ),
-      );
-    }
+    expect(variants.get("bridge")).toEqual(new Set([0, 1]));
+    expect(variants.get("coast-reveal")).toEqual(new Set([0, 1]));
   });
 
   it("deweights recently used variants throughout every region", () => {
@@ -499,7 +462,7 @@ describe("train scenery asset kit", () => {
         }
       }
     }
-    expect(placementCount).toBeGreaterThan(4_000);
+    expect(placementCount).toBeGreaterThan(3_950);
     expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.scaleMultiplier).toBeGreaterThan(
       TRAIN_SCENERY_DEPTH_GRAMMAR.far.scaleMultiplier,
     );

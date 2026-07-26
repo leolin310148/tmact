@@ -801,6 +801,61 @@ scenery, terrain-asset, and layout suites passed all 140 tests; the complete
 frontend suite passed all 451 tests; the production TypeScript/Vite build and
 `make test` passed.
 
+TRAIN-051 town-edge and coast-reveal transition run 2026-07-27: used route
+seed `train-051-proof` and the dedicated `tmact-train-workitems` borz profile.
+Town-edge variant 1 used occurrence `1` (start chunk `18`) and variant 0 used
+occurrence `5` (start chunk `90`). Coast-reveal variant 0 used occurrence `0`
+(start chunk `180`) and variant 1 used occurrence `2` (start chunk `216`).
+Every scene confirmed HTTP 200, fetched the plain non-cache-busted
+`/src/components/TrainLayout.tsx` module, opened the port-5234 page in the
+exact profile tab, set the viewport after opening, hard reloaded, and asserted
+the exact `390×844`, `1280×800`, or `2560×900` inner dimensions.
+
+Town entry/exit positions used the focus centre minus/plus `581.818px`, which
+accounts for its `0.55` midground speed. Coast entry/exit used minus/plus
+`1920px`, accounting for the four-segment role offset at its `0.25` far-layer
+speed. Every entry, centre, and exit role landed exactly at x `195`, `640`, or
+`1280`. Centre union visibility was `390/964/964px` for town and
+`390/1280/1284px` for coast at compact/desktop/ultrawide; entry and exit
+retained `324px` in every viewport, above the meaningful-object threshold.
+
+Both town variants visibly progress from one open-edge building through three
+gathering buildings to four settled-block buildings. Variant 0 uses a
+market-road grammar and variant 1 a garden-lane grammar; both include opaque
+roads, yards, gates, trees, foreground verges and fences, with their eight
+sprite buildings grounded above the road instead of on the rail line. Both
+coast variants use a broad opaque far-water plane, three depth cues,
+midground shoreline framing and near foreground openings. Open-bay water
+coverage is `58/100/100/62%`; harbour-mouth coverage is
+`64/100/100/70%`. The obsolete per-segment `coast-shore` raster placement was
+removed after the first inspected sample exposed repeated white bars and
+cloned rocks.
+
+The first final compact contact inspection exposed a station body/exit
+colliding with coast entry despite logically disjoint route intervals.
+Deterministic render-stage collision arbitration now removes incompatible
+station/bridge/tunnel projections when a transition has meaningful visible
+coverage during cruise, while an active station keeps priority. All 72 final
+captures assert that no incompatible set-piece bounding box intersects the
+target transition. Coast entry required one exclusion in both variants;
+desktop/ultrawide coast v0 exit also required one. Route generation, region
+order, focus anchors, station timing, and bounded projection windows remain
+unchanged.
+
+The 72 retained captures are
+`/private/tmp/train-051-proof-20260727/{compact,desktop,ultrawide}-{town-edge,coast-reveal}-v{0,1}-{entry,centre,exit}-{day,night}.png`.
+The six inspected contact sheets are
+`/private/tmp/train-051-proof-20260727/contact-{compact,desktop,ultrawide}-{day,night}.png`.
+Every capture temporarily hid `.train-layout-inspection`,
+`.train-world-debug-grid`, and `.train-time-toggle`, then restored the live
+DOM. Inspection found both transitions immediately legible in day and night,
+with no station/traversal collision, metadata-only pass, legacy white shore
+bar, floating building, or hidden water reveal. `borz errors --json` was
+empty; console output contained only Vite connection and React development
+messages. The focused route/scenery/terrain/layout suites passed all 144
+tests, the complete frontend suite passed all 455 tests, the production
+TypeScript/Vite build passed, and `make test` passed.
+
 ## Notes Template
 
 ```text
