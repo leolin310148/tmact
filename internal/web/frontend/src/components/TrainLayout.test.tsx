@@ -2809,6 +2809,184 @@ describe("TrainLayout", () => {
     expect(variantRules.join("\n")).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });
 
+  it("builds both bridge and tunnel variants as aligned traversal roles on participating layers", () => {
+    const representatives = new Map<
+      string,
+      ReturnType<typeof generateRouteChunk>[]
+    >();
+
+    for (let index = -4_800; index <= 4_800; index++) {
+      const chunk = generateRouteChunk("traversal-layout-catalogue", index);
+      const segment = chunk.setPiece;
+      if (
+        !segment ||
+        segment.role !== "entry" ||
+        (segment.type !== "bridge" && segment.type !== "tunnel")
+      ) {
+        continue;
+      }
+      const key = `${segment.type}:${segment.visualVariant}`;
+      if (representatives.has(key)) continue;
+      representatives.set(
+        key,
+        Array.from({ length: segment.span }, (_, offset) =>
+          generateRouteChunk(
+            "traversal-layout-catalogue",
+            segment.startIndex + offset,
+          ),
+        ),
+      );
+    }
+
+    expect(new Set(representatives.keys())).toEqual(
+      new Set(["bridge:0", "bridge:1", "tunnel:0", "tunnel:1"]),
+    );
+
+    const participatingLayers = TRAIN_PARALLAX_LAYERS.filter(
+      ({ name }) => name === "midground" || name === "near",
+    );
+    const { container } = render(
+      <>
+        {[...representatives.entries()].flatMap(([key, chunks]) =>
+          participatingLayers.flatMap((layer) =>
+            chunks.map((chunk) => (
+              <TrainRouteChunk
+                chunk={chunk}
+                layer={layer}
+                key={`${key}:${layer.name}:${chunk.index}`}
+              />
+            )),
+          ),
+        )}
+      </>,
+    );
+
+    for (const [key, chunks] of representatives) {
+      const [type, variant] = key.split(":");
+      const expectedRoles = [
+        "entry",
+        ...Array.from({ length: chunks.length - 2 }, () => "body"),
+        "exit",
+      ];
+      const primary = [
+        ...container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-type="${type}"][data-set-piece-variant="${variant}"]` +
+            '[data-set-piece-layer="midground"]',
+        ),
+      ];
+      const supporting = [
+        ...container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-type="${type}"][data-set-piece-variant="${variant}"]` +
+            '[data-set-piece-layer="near"]',
+        ),
+      ];
+
+      expect(primary).toHaveLength(chunks.length);
+      expect(supporting).toHaveLength(chunks.length);
+      expect(primary.map((segment) => segment.dataset.setPieceRole)).toEqual(
+        expectedRoles,
+      );
+      expect(supporting.map((segment) => segment.dataset.setPieceRole)).toEqual(
+        expectedRoles,
+      );
+      expect(
+        primary.map((segment) =>
+          segment.style.getPropertyValue("--train-set-piece-phase"),
+        ),
+      ).toEqual(
+        supporting.map((segment) =>
+          segment.style.getPropertyValue("--train-set-piece-phase"),
+        ),
+      );
+      expect(
+        primary.every(
+          (segment) => segment.dataset.setPieceParticipation === "primary",
+        ),
+      ).toBe(true);
+      expect(
+        supporting.every(
+          (segment) => segment.dataset.setPieceParticipation === "supporting",
+        ),
+      ).toBe(true);
+
+      for (const segment of [...primary, ...supporting]) {
+        const composition = segment.querySelector<HTMLElement>(
+          `[data-traversal-composition="${type}"]`,
+        );
+        expect(composition).not.toBeNull();
+        expect(composition).toHaveAttribute(
+          "data-traversal-layer",
+          segment.dataset.setPieceLayer,
+        );
+        expect(composition).toHaveAttribute("data-traversal-track-contact", "17");
+      }
+
+      if (type === "bridge") {
+        expect(
+          primary.every((segment) =>
+            Boolean(segment.querySelector('[data-bridge-geometry="track-deck"]')),
+          ),
+        ).toBe(true);
+        expect(
+          primary.every((segment) =>
+            Boolean(
+              segment.querySelector(
+                '[data-bridge-geometry="supports-below-track"]',
+              ),
+            ),
+          ),
+        ).toBe(true);
+        expect(
+          primary.filter(
+            (segment) => segment.dataset.setPieceRole !== "body",
+          ).every((segment) =>
+            Boolean(
+              segment.querySelector(
+                `[data-bridge-geometry="${segment.dataset.setPieceRole}-approach"]`,
+              ),
+            ),
+          ),
+        ).toBe(true);
+      } else {
+        expect(
+          primary.every((segment) =>
+            Boolean(
+              segment.querySelector(
+                '[data-tunnel-geometry="enclosing-mountain"]',
+              ),
+            ),
+          ),
+        ).toBe(true);
+        expect(
+          primary.every((segment) =>
+            Boolean(
+              segment.querySelector('[data-tunnel-geometry="dark-opening"]'),
+            ),
+          ),
+        ).toBe(true);
+        expect(
+          primary.filter(
+            (segment) => segment.dataset.setPieceRole !== "body",
+          ).every((segment) =>
+            segment
+              .querySelector('[data-tunnel-portal-visible="portal"]')
+              ?.getAttribute("data-tunnel-geometry") === "portal-frame",
+          ),
+        ).toBe(true);
+      }
+    }
+
+    expect(trainLayoutCss).toContain(".train-bridge-crossing-void");
+    expect(trainLayoutCss).toContain(".train-bridge-supports");
+    expect(trainLayoutCss).toContain(".train-tunnel-mountain-mass");
+    expect(trainLayoutCss).toContain(".train-tunnel-opening");
+    expect(trainLayoutCss).toMatch(
+      /\.train-tunnel-opening\s*\{[\s\S]*?#02070d 78%/,
+    );
+    expect(trainLayoutCss).not.toContain(".train-set-piece--bridge::after");
+    expect(trainLayoutCss).not.toContain(".train-set-piece--tunnel::after");
+  });
+
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {
     const { container } = render(
       <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,

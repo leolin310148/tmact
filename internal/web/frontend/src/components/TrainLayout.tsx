@@ -1086,6 +1086,103 @@ function TrainTownEdgeComposition({
   );
 }
 
+const TRAIN_TRAVERSAL_TYPES = new Set<TrainSetPieceType>([
+  "bridge",
+  "tunnel",
+]);
+
+function TrainTraversalComposition({
+  segment,
+  layer,
+}: {
+  segment: NonNullable<RouteChunk["setPiece"]>;
+  layer: TrainParallaxLayerName;
+}) {
+  if (!TRAIN_TRAVERSAL_TYPES.has(segment.type)) return null;
+
+  return (
+    <span
+      className={[
+        "train-traversal-composition",
+        `train-traversal-composition--${segment.type}`,
+        `train-traversal-composition--${layer}`,
+      ].join(" ")}
+      data-traversal-composition={segment.type}
+      data-traversal-layer={layer}
+      data-traversal-role={segment.role}
+      data-traversal-variant={segment.visualVariant}
+      data-traversal-segment={segment.segmentOffset}
+      data-traversal-track-contact="17"
+      aria-hidden="true"
+    >
+      {segment.type === "bridge" ? (
+        <>
+          <span
+            className="train-bridge-crossing-void"
+            data-bridge-geometry="crossing-void"
+          />
+          <span
+            className="train-bridge-approach"
+            data-bridge-geometry={`${segment.role}-approach`}
+            data-bridge-ground-owner={layer}
+          />
+          <span
+            className="train-bridge-span"
+            data-bridge-geometry="supported-span"
+          >
+            <i className="train-bridge-upper-chord" />
+            <i className="train-bridge-lattice" />
+            <i className="train-bridge-deck-brace" />
+          </span>
+          <span
+            className="train-bridge-deck"
+            data-bridge-geometry="track-deck"
+            data-track-contact="17"
+          />
+          <span
+            className="train-bridge-supports"
+            data-bridge-geometry="supports-below-track"
+          >
+            <i />
+            <i />
+          </span>
+        </>
+      ) : (
+        <>
+          <span
+            className="train-tunnel-mountain-mass"
+            data-tunnel-geometry="enclosing-mountain"
+            data-tunnel-solid-surface="opaque"
+          />
+          <span
+            className="train-tunnel-cutting"
+            data-tunnel-geometry={`${segment.role}-cutting`}
+            data-tunnel-ground-owner={layer}
+          />
+          <span
+            className="train-tunnel-opening"
+            data-tunnel-geometry="dark-opening"
+            data-track-contact="17"
+          />
+          <span
+            className="train-tunnel-portal"
+            data-tunnel-geometry={
+              segment.role === "body" ? "passage-lining" : "portal-frame"
+            }
+            data-tunnel-portal-visible={
+              segment.role === "body" ? "passage" : "portal"
+            }
+          >
+            <i />
+            <i />
+            <i />
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
 type TrainSolidTerrainLayer = Exclude<TrainParallaxLayerName, "sky">;
 
 export interface TrainTerrainContourPoint {
@@ -1555,6 +1652,13 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       });
   const stationSegment =
     chunk.setPiece?.type === "station" ? chunk.setPiece : null;
+  const traversalSegment =
+    chunk.setPiece && TRAIN_TRAVERSAL_TYPES.has(chunk.setPiece.type)
+      ? chunk.setPiece
+      : null;
+  const rendersSetPiece =
+    chunk.setPiece?.renderLayer === layer.name ||
+    Boolean(traversalSegment?.reservedLayers.includes(layer.name));
   const stationComposition = stationSegment
     ? TRAIN_STATION_SEGMENT_COMPOSITIONS[stationSegment.segmentOffset]
     : null;
@@ -1721,7 +1825,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
           chunkIndex={chunk.index}
         />
       ) : null}
-      {chunk.setPiece?.renderLayer === layer.name ? (
+      {chunk.setPiece && rendersSetPiece ? (
         <>
           <span
             className={[
@@ -1729,6 +1833,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               `train-set-piece--${chunk.setPiece.type}`,
               `train-set-piece--${chunk.setPiece.role}`,
               `train-set-piece--variant-${chunk.setPiece.visualVariant}`,
+              `train-set-piece--layer-${layer.name}`,
             ].join(" ")}
             data-set-piece-id={chunk.setPiece.id}
             data-set-piece-type={chunk.setPiece.type}
@@ -1739,6 +1844,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-set-piece-start={chunk.setPiece.startIndex}
             data-set-piece-end={chunk.setPiece.endIndex}
             data-set-piece-occlusion="restrained"
+            data-set-piece-layer={layer.name}
+            data-set-piece-participation={
+              layer.name === chunk.setPiece.renderLayer
+                ? "primary"
+                : "supporting"
+            }
             data-town-edge-continuity={
               chunk.setPiece.type === "town-edge"
                 ? `${chunk.setPiece.startIndex}:${chunk.setPiece.segmentOffset}`
@@ -1760,6 +1871,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               stationSegment ? "behind-train" : undefined
             }
           >
+            {traversalSegment ? (
+              <TrainTraversalComposition
+                segment={traversalSegment}
+                layer={layer.name}
+              />
+            ) : null}
             {chunk.setPiece.type === "town-edge" ? (
               <TrainTownEdgeComposition segment={chunk.setPiece} />
             ) : null}

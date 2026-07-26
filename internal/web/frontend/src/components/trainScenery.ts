@@ -2363,9 +2363,7 @@ function setPiecePlacement(
   layer: TrainParallaxLayerName,
 ): TrainSceneryPlacement | null {
   const assetID =
-    setPiece.type === "bridge" && layer === "midground"
-      ? "bridge-truss"
-      : setPiece.type === "coast-reveal" && layer === "far"
+    setPiece.type === "coast-reveal" && layer === "far"
         ? "coast-shore"
         : null;
   if (!assetID) return null;

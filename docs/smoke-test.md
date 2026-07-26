@@ -753,6 +753,54 @@ scenery/layout suites passed all 115 tests, the complete frontend suite passed
 all 449 tests, the production TypeScript/Vite build passed, and `make test`
 passed.
 
+TRAIN-050 bridge-and-tunnel traversal run 2026-07-27: used route seed
+`train-050-proof`. Bridge variant 0 used occurrence `0`, bridge variant 1 used
+occurrence `2`, tunnel variant 0 used occurrence `1`, and tunnel variant 1 used
+occurrence `0`. Compact centres were respectively `36035`, `87555`, `41635`,
+and `7715`; desktop centres were `36480`, `88000`, `42080`, and `8160`;
+ultrawide centres were `37120`, `88640`, `42720`, and `8800`. Bridge
+entry/exit positions were the matching centre minus/plus `872.727`, while
+tunnel entry/exit positions used minus/plus `581.818`.
+
+Every requested scene confirmed HTTP 200, fetched the plain non-cache-busted
+`/src/components/TrainLayout.tsx` module and found the current
+`data-traversal-composition` source, opened an exact tab in the dedicated
+`tmact-train-workitems` profile, set the viewport after opening, performed a
+hard reload and a calibrated refresh, then asserted exact `390×844`,
+`1280×800`, or `2560×900` `window.innerWidth`/`window.innerHeight` values.
+The train inspection, debug grid, and time toggle were hidden only while
+capturing each scene. The temporary stylesheet was removed and checked before
+each exact proof tab was closed; all 29 earlier diagnostic proof tabs created
+by this run were also closed by exact id.
+
+The 72 retained captures are
+`/private/tmp/train-050-proof/{compact,desktop,ultrawide}-{bridge,tunnel}-v{0,1}-{entry,centre,exit}-{day,night}.png`.
+The six inspected contact sheets are
+`/private/tmp/train-050-proof/contact-{compact,desktop,ultrawide}-{day,night}.png`;
+within each sheet the rows are bridge v0, bridge v1, tunnel v0, and tunnel v1,
+with centre, entry, and exit across the columns. Inspection found two distinct
+continuous bridge grammars with visible approaches, track-contact decks,
+lattice spans, crossing voids, lower supports, and exits. It also found two
+distinct tunnel grammars with approach cuttings, round or stepped portals,
+near-black openings, enclosing opaque mountain mass, passage lining, and
+exits. A first visual pass exposed a day-palette white tunnel opening; the
+opening was changed to a silhouette-owned near-black surface and all tunnel
+captures were repeated before acceptance.
+
+Bridge visual unions measured `1286×90px` and `1286×101px`; tunnel unions
+measured `966×126px` and `966×138px`. Their centre captures landed exactly at
+x `195`, `640`, and `1280`. Compact entry/exit captures retained about `358px`
+of visible structure, desktop retained at least `803px`, and ultrawide showed
+the complete union. Every traversal rendered matching primary midground and
+supporting near-layer segment counts; centre-layer offsets were zero. The
+ultrawide world remained bounded at 65 total mounted chunks.
+
+`borz errors --json` was empty; console output contained only Vite connection,
+React development, and expected hot-update messages. The focused route,
+scenery, terrain-asset, and layout suites passed all 140 tests; the complete
+frontend suite passed all 451 tests; the production TypeScript/Vite build and
+`make test` passed.
+
 ## Notes Template
 
 ```text

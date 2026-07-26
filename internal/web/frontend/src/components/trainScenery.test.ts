@@ -163,7 +163,11 @@ describe("train scenery asset kit", () => {
 
     expect(firstPass.size).toBe(TRAIN_PARALLAX_LAYERS.length * 3601);
     expect(selectedIDs).toEqual(
-      new Set(TRAIN_SCENERY_ASSETS.map((asset) => asset.id)),
+      new Set(
+        TRAIN_SCENERY_ASSETS.filter(
+          (asset) => asset.id !== "bridge-truss",
+        ).map((asset) => asset.id),
+      ),
     );
   });
 
@@ -300,7 +304,7 @@ describe("train scenery asset kit", () => {
     }
   });
 
-  it("composes bridge and coast raster kit placements from the shared set-piece variant", () => {
+  it("keeps bridges DOM-owned and composes coast raster placements from the shared variant", () => {
     const compositions = new Map<
       string,
       {
@@ -310,6 +314,7 @@ describe("train scenery asset kit", () => {
         offsets: number[];
       }
     >();
+    const bridgeVariants = new Set<number>();
 
     for (let index = -3_600; index <= 3_600; index++) {
       const chunk = generateRouteChunk("set-piece-compositions", index);
@@ -324,6 +329,11 @@ describe("train scenery asset kit", () => {
         setPiece.renderLayer,
         chunk,
       );
+      if (setPiece.type === "bridge") {
+        expect(placements).toHaveLength(0);
+        bridgeVariants.add(setPiece.visualVariant);
+        continue;
+      }
       expect(placements).toHaveLength(1);
       const placement = placements[0]!;
       const composition = compositions.get(setPiece.id) ?? {
@@ -340,6 +350,7 @@ describe("train scenery asset kit", () => {
       compositions.set(setPiece.id, composition);
     }
 
+    expect(bridgeVariants).toEqual(new Set([0, 1]));
     const complete = [...compositions.values()].filter(
       (composition) => composition.roles.at(0) === "entry" &&
         composition.roles.at(-1) === "exit",

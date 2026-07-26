@@ -13,6 +13,7 @@ import {
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
   trainJourneyPositionForProjectedSetPieceCenter,
+  trainSetPieceFocusFromSegment,
   trainSetPieceFocusForOccurrence,
   trainSetPieceProjectedCoordinate,
   trainSetPieceReservationIntersectsChunk,
@@ -201,6 +202,106 @@ describe("train route chunks", () => {
           segments[0]?.type === "tunnel",
       ),
     ).toBe(true);
+  });
+
+  it("focuses and reserves both bridge and tunnel variants on the same cross-layer traversal", () => {
+    const entries = new Map<
+      string,
+      NonNullable<ReturnType<typeof generateRouteChunk>["setPiece"]>
+    >();
+
+    for (let index = -4_800; index <= 4_800; index++) {
+      const segment = generateRouteChunk(
+        "traversal-focus-catalogue",
+        index,
+      ).setPiece;
+      if (
+        !segment ||
+        segment.role !== "entry" ||
+        (segment.type !== "bridge" && segment.type !== "tunnel")
+      ) {
+        continue;
+      }
+      entries.set(
+        `${segment.type}:${segment.visualVariant}`,
+        segment,
+      );
+    }
+
+    expect(new Set(entries.keys())).toEqual(
+      new Set(["bridge:0", "bridge:1", "tunnel:0", "tunnel:1"]),
+    );
+
+    for (const [key, entry] of entries) {
+      expect(entry.renderLayer, key).toBe("midground");
+      expect(entry.reservedLayers, key).toEqual(["midground", "near"]);
+      expect(entry.span, key).toBe(
+        TRAIN_SET_PIECE_DEFINITIONS[entry.type].span,
+      );
+
+      const roles = Array.from({ length: entry.span }, (_, offset) =>
+        generateRouteChunk(
+          "traversal-focus-catalogue",
+          entry.startIndex + offset,
+        ).setPiece,
+      );
+      expect(roles.map((segment) => segment?.role), key).toEqual([
+        "entry",
+        ...Array.from({ length: entry.span - 2 }, () => "body"),
+        "exit",
+      ]);
+      expect(
+        new Set(roles.map((segment) => segment?.visualVariant)),
+        key,
+      ).toEqual(new Set([entry.visualVariant]));
+
+      for (const viewportWidth of [390, 1_280, 2_560]) {
+        const focus = trainSetPieceFocusFromSegment(entry, viewportWidth);
+        for (const speedRatio of [0.55, 1]) {
+          const geometry = trainSetPieceScreenGeometry(focus, speedRatio);
+          expect(geometry.screenCenterPx, `${key}/${viewportWidth}`).toBeCloseTo(
+            viewportWidth / 2,
+            9,
+          );
+          expect(geometry.visibleWidthPx, `${key}/${viewportWidth}`).toBeGreaterThanOrEqual(
+            Math.min(320, viewportWidth * 0.5),
+          );
+
+          const projectedEntry = trainSetPieceProjectedCoordinate(
+            focus,
+            entry.startIndex,
+            speedRatio,
+          );
+          const projectedExit = trainSetPieceProjectedCoordinate(
+            focus,
+            entry.endIndex,
+            speedRatio,
+          );
+          const reservedIndices = Array.from(
+            {
+              length:
+                Math.ceil(
+                  (projectedExit - projectedEntry) /
+                    TRAIN_ROUTE_CHUNK_WIDTH,
+                ) + 3,
+            },
+            (_, offset) =>
+              Math.floor(projectedEntry / TRAIN_ROUTE_CHUNK_WIDTH) +
+              offset -
+              1,
+          ).filter((chunkIndex) =>
+            trainSetPieceReservationIntersectsChunk(
+              focus,
+              speedRatio,
+              chunkIndex,
+            ),
+          );
+          expect(reservedIndices.length, `${key}/${speedRatio}`).toBeGreaterThanOrEqual(
+            entry.span,
+          );
+        }
+      }
+    }
   });
 
   it("selects two stable visual compositions per major set piece without changing route contracts", () => {

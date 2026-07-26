@@ -221,7 +221,7 @@ function collectSetPieceTraversal(seed: string) {
     string,
     Array<{
       chunkIndex: number;
-      type: "bridge" | "coast-reveal";
+      type: "coast-reveal";
       role: "entry" | "body" | "exit";
       segmentOffset: number;
       span: number;
@@ -233,10 +233,7 @@ function collectSetPieceTraversal(seed: string) {
 
   for (let index = -1_200; index <= 1_200; index++) {
     const chunk = generateRouteChunk(seed, index);
-    if (
-      chunk.setPiece?.type !== "bridge" &&
-      chunk.setPiece?.type !== "coast-reveal"
-    ) {
+    if (chunk.setPiece?.type !== "coast-reveal") {
       continue;
     }
 
@@ -296,7 +293,10 @@ describe("distant terrain, coast, and bridge asset kit", () => {
       /\.train-set-piece\s*\{[\s\S]*?right:\s*-1px;[\s\S]*?left:\s*-1px;[\s\S]*?opacity:\s*1;/,
     );
     expect(trainLayoutCss).toMatch(
-      /\.train-set-piece--bridge\s*\{[\s\S]*?border-bottom:\s*5px solid var\(--train-palette-mid-surface\);/,
+      /\.train-bridge-deck\s*\{[\s\S]*?bottom:\s*14px;[\s\S]*?background:\s*var\(--train-palette-mid-surface\);/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-bridge-supports\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?height:\s*17px;/,
     );
     expect(trainLayoutCss).toMatch(
       /\.train-set-piece--coast-reveal\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--train-palette-water\)/,
@@ -371,11 +371,11 @@ describe("distant terrain, coast, and bridge asset kit", () => {
     );
   });
 
-  it("traverses bridge and coast spans continuously and deterministically", () => {
+  it("traverses coast spans continuously and deterministically", () => {
     const first = collectSetPieceTraversal("terrain-kit-traversal");
     expect(collectSetPieceTraversal("terrain-kit-traversal")).toEqual(first);
     expect(new Set(first.map(({ segments }) => segments[0]!.type))).toEqual(
-      new Set(["bridge", "coast-reveal"]),
+      new Set(["coast-reveal"]),
     );
 
     for (const { segments } of first) {
@@ -394,16 +394,14 @@ describe("distant terrain, coast, and bridge asset kit", () => {
         ),
       );
       expect(new Set(segments.map((segment) => segment.assetID))).toEqual(
-        new Set([
-          segments[0]!.type === "bridge" ? "bridge-truss" : "coast-shore",
-        ]),
+        new Set(["coast-shore"]),
       );
       expect(new Set(segments.map((segment) => segment.scale)).size).toBe(1);
       expect(
         new Set(segments.map((segment) => segment.collisionWidth)).size,
       ).toBe(1);
       expect(segments[0]!.collisionWidth).toBe(
-        segments[0]!.type === "bridge" ? 224 : 257.59999999999997,
+        257.59999999999997,
       );
     }
   });

@@ -218,7 +218,7 @@ Treat these findings as regression targets:
   and ultrawide day/sunset/night sequences that show a coast arrival, ordinary
   coast travel, and coast departure with visibly continuous water.
 
-- [ ] **TRAIN-050 — Rebuild bridge and tunnel as unmistakable traversals.**
+- [x] **TRAIN-050 — Rebuild bridge and tunnel as unmistakable traversals.**
   Recompose both bridge variants so approach, supported span, structure below
   the track, and exit form one visible crossing rather than a detached truss.
   Recompose both tunnel variants so approach cutting, portal, dark opening,
