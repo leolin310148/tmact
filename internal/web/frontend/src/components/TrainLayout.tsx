@@ -2656,6 +2656,7 @@ export function resolveTrainProjectedSetPieceCollisions(
   routePosition: number,
   viewportWidth: number,
   stationState: string,
+  prioritizedFocusID: string | null = null,
 ): {
   layers: TrainProjectedSetPieceLayers;
   excludedIDs: readonly string[];
@@ -2705,6 +2706,14 @@ export function resolveTrainProjectedSetPieceCollisions(
         transitionGeometry.visibleLeftPx < candidateGeometry.visibleRightPx &&
         transitionGeometry.visibleRightPx > candidateGeometry.visibleLeftPx;
       if (!overlaps) continue;
+      if (candidate.id === prioritizedFocusID) {
+        excludedIDs.add(transition.id);
+        break;
+      }
+      if (transition.id === prioritizedFocusID) {
+        excludedIDs.add(candidate.id);
+        continue;
+      }
       if (candidate.type === "station" && stationState !== "cruise") {
         excludedIDs.add(transition.id);
         break;
@@ -3237,6 +3246,7 @@ function TrainWorld({
       routePositionRef.current,
       projectionViewportWidth,
       stationJourneyRef.current.state,
+      initialJourney.focusOverride?.id ?? null,
     );
   const projectedSetPieces = projectedCollisionResolution.layers;
   const projectedSetPieceCount = TRAIN_PARALLAX_LAYERS.reduce(

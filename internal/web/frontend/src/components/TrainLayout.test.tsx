@@ -26,6 +26,7 @@ import {
   trainWorldCruiseSpeed,
   trainWorldReducedMotionForced,
   trainWorldRoutePosition,
+  trainWorldRouteSeed,
   trainWorldSetPieceFocus,
   trainWorldTrackTransform,
   TrainLayout,
@@ -489,6 +490,51 @@ describe("TrainLayout", () => {
     expect(container.querySelectorAll(".train-parallax-chunk")).toHaveLength(
       Number(world.dataset.routeTotalMountedChunks),
     );
+  });
+
+  it("keeps an explicitly focused traversal or station visible during ultrawide collision arbitration", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(2_560);
+    installAnimationFrame();
+    mockVisibility();
+
+    for (const proof of [
+      {
+        search:
+          "/?train-route-seed=train-053-aurora&train-set-piece-focus=bridge" +
+          "&train-set-piece-occurrence=0&train-reduced-motion=1",
+        type: "bridge",
+      },
+      {
+        search:
+          "/?train-route-seed=train-053-summit&train-set-piece-focus=station" +
+          "&train-set-piece-occurrence=0&train-reduced-motion=1",
+        type: "station",
+      },
+    ] as const) {
+      window.history.replaceState(null, "", proof.search);
+      const focus = trainWorldSetPieceFocus(
+        window.location.search,
+        trainWorldRouteSeed(window.location.search),
+        2_560,
+      )!;
+      const rendered = render(
+        <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+      );
+      const world =
+        rendered.container.querySelector<HTMLElement>(".train-layout-world")!;
+      const focusedSegments = rendered.container.querySelectorAll(
+        `[data-set-piece-id="${focus.id}"]`,
+      );
+
+      expect(world).toHaveAttribute("data-set-piece-focus-type", proof.type);
+      expect(focusedSegments.length, proof.type).toBeGreaterThanOrEqual(
+        focus.span,
+      );
+      expect(world.dataset.setPieceCollisionExcludedIds, proof.type).not.toContain(
+        focus.id,
+      );
+      rendered.unmount();
+    }
   });
 
   it("excludes incompatible projected stations from a readable coast entry during cruise", () => {

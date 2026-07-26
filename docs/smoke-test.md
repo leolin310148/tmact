@@ -901,6 +901,75 @@ focused sky/star/scenery/layout suites passed all 131 tests, the complete
 frontend suite passed all 458 tests, the production TypeScript/Vite build
 passed, and `make test` passed.
 
+TRAIN-053 final visual convergence run 2026-07-27: audited seeds
+`train-053-aurora`, `train-053-cascade`, `train-053-harbour`,
+`train-053-orchard`, and `train-053-summit` with the dedicated
+`tmact-train-workitems` borz profile. Each compact (`390×844`), desktop
+(`1280×800`), and ultrawide (`2560×900`) run independently confirmed HTTP
+200, fetched the plain non-cache-busted `/src/components/TrainLayout.tsx`
+module and matched the current collision-priority source, opened the proof
+page, set the viewport, hard reloaded, and asserted actual `innerWidth` and
+`innerHeight`. Every capture hid `.train-layout-inspection`,
+`.train-world-debug-grid`, and `.train-time-toggle`; the proof style was
+removed afterward, restoring inspection to `flex` and the time toggle to
+`grid`.
+
+The set-piece matrix used aurora bridge occurrences `0/2` (variants `1/0`),
+cascade tunnel occurrences `0/1` (variants `1/0`), harbour town-edge
+occurrences `0/1` (variants `0/1`), orchard coast-reveal occurrences `0/2`
+(variants `1/0`), and summit station occurrence `0`. Compact focus positions
+were respectively `7555/36035`, `162915/173475`, `355/6115`,
+`127235/144515`, and `3715`; desktop positions were `8000/36480`,
+`163360/173920`, `800/6560`, `127680/144960`, and `4160`; ultrawide
+positions were `8640/37120`, `164000/174560`, `1440/7200`,
+`128320/145600`, and `4800`. All nine compositions were captured in day,
+sunset, and night at all three viewports. Compact visible unions were `390px`
+centred at `195px`; desktop minimum union width was `964px` centred at
+`640px`; ultrawide minimum union width was `964px` centred at `1280px`.
+
+The audit caught one real integration regression before acceptance: at
+ultrawide width, collision arbitration let a nearby transition remove the
+explicitly focused aurora bridge and summit station while focus metadata
+still claimed success. Explicit diagnostic focus now has arbitration
+priority, so the bridge and station remain visible while the incompatible
+coast-reveal or town-edge is excluded. Their repaired ultrawide unions are
+`1284px` and `1924px`, both centred at `1280px`. Focused layout coverage
+locks both cases.
+
+Ordinary samples centred forest chunk `21`, mountain `77`, town `3`, coast
+`400`, and industrial `129`. Their compact route positions were
+`6754/24674/994/128034/41314`, desktop positions were
+`7199/25119/1439/128479/41759`, and ultrawide positions were
+`7839/25759/2079/129119/42399`. Boundary samples used chunks
+`18/72/90/36/36` (mountain→forest, forest→mountain, coast→mountain,
+industrial→forest, mountain→forest), with compact positions
+`5794/23074/28834/11554/11554`, desktop
+`6239/23519/29279/11999/11999`, and ultrawide
+`6879/24159/29919/12639/12639`. DOM inspection confirmed the intended
+ordinary region under the viewport centre and both named regions visible at
+every boundary. These captures used compact day, desktop sunset, and
+ultrawide night. Mounted route chunks stayed bounded at `30–34` compact,
+`43–44` desktop, and `62–64` ultrawide.
+
+The summit station lifecycle was also retained at desktop day: approach
+`3278.944px`, decelerate `3457.266px`, platform/dwell/depart `3680px`, and
+returned cruise `4067.197px`; every phase wait reported `passed: true`.
+The 117 source captures remain in `/private/tmp/train-053-final/`. The
+labelled, bottom-scene contact sheet is committed as
+[`train-053-final-contact-sheet.png`](train-053-final-contact-sheet.png).
+Visual inspection found crisp distinct regions and readable set pieces in all
+palettes, with no repeated wallpaper, horizontal slab, monolithic station
+wall, floating or pasted asset, opaque-window regression, collision, seam,
+gap, clipped station, or metadata-only named composition. `borz errors
+--json` was empty; console output contained only Vite connection and React
+development messages. The new five-seed statistical suite covers bounded
+route windows, determinism, regional/variant coverage, repetition distance,
+set-piece visibility, depth order, binary solid alpha and emissive ownership,
+palette contrast, and reduced-motion geometry; the focused convergence and
+layout run passed all 92 tests. The complete frontend suite passed all 465
+tests, the production TypeScript/Vite build passed, and repository-root
+`make test` passed.
+
 ## Notes Template
 
 ```text

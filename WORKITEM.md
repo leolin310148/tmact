@@ -267,7 +267,7 @@ Treat these findings as regression targets:
   regions and every major set piece. Confirm all solid objects remain opaque
   and regional geometry remains readable in every palette.
 
-- [ ] **TRAIN-053 — Run multi-seed visual convergence and lock final regressions.**
+- [x] **TRAIN-053 — Run multi-seed visual convergence and lock final regressions.**
   Perform a final train-free audit of at least five deterministic seeds across
   compact, desktop, and ultrawide viewports, covering ordinary chunks,
   boundaries, every station phase, and both variants of bridge, tunnel,
