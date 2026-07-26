@@ -1599,6 +1599,8 @@ describe("train scenery asset kit", () => {
     for (const plan of first) {
       const rule = TRAIN_REGION_NIGHT_LIFE[plan.region];
       expect(plan.kind).toBe(rule.kind);
+      expect(plan.paletteToken).toBe(plan.region);
+      expect(plan.paletteToken).toBe(rule.paletteToken);
       expect(
         rule.owners.some((owner) => owner.assetId === plan.ownerAssetId),
       ).toBe(true);
@@ -1759,6 +1761,15 @@ describe("train scenery asset kit", () => {
         ),
     );
     const grouped = samples.filter((placement) => placement.cloudGroup);
+    const driftDistances = samples.map(
+      (placement) => placement.cloudDriftDistancePx!,
+    );
+    const driftDurations = samples.map(
+      (placement) => placement.cloudDriftDurationMs!,
+    );
+    const driftPhases = samples.map(
+      (placement) => placement.cloudDriftPhaseMs!,
+    );
 
     expect(Math.min(...altitudes)).toBeGreaterThanOrEqual(
       TRAIN_CLOUD_MIN_ALTITUDE_PERCENT,
@@ -1782,6 +1793,19 @@ describe("train scenery asset kit", () => {
     expect(
       new Set(grouped.map((placement) => placement.cloudGroup)).size,
     ).toBeGreaterThan(30);
+    expect(Math.min(...driftDistances)).toBeGreaterThanOrEqual(4);
+    expect(Math.max(...driftDistances)).toBeLessThanOrEqual(11);
+    expect(Math.max(...driftDistances) - Math.min(...driftDistances)).toBeGreaterThan(
+      6,
+    );
+    expect(Math.min(...driftDurations)).toBeGreaterThanOrEqual(18_000);
+    expect(Math.max(...driftDurations)).toBeLessThanOrEqual(40_000);
+    expect(new Set(driftDurations).size).toBeGreaterThan(100);
+    expect(Math.min(...driftPhases)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...driftPhases)).toBeLessThanOrEqual(18_000);
+    expect(new Set(samples.map((placement) => placement.cloudDriftDirection))).toEqual(
+      new Set([-1, 1]),
+    );
   });
 
   it("keeps clouds collision-free and variant-cooled across chunks and regions", () => {

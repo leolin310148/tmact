@@ -1,6 +1,6 @@
 import { trainRouteRandomUnit } from "./trainRoute";
 
-export const TRAIN_DAY_SKY_CATALOGUE_VERSION = "day-sky-v1";
+export const TRAIN_DAY_SKY_CATALOGUE_VERSION = "day-sky-v2";
 export const TRAIN_DAY_SKY_MAX_WISPS = 4;
 
 export type TrainDaySkyWeather = "clear" | "fair" | "breezy" | "showery";
@@ -10,6 +10,7 @@ export interface TrainDaySkyAnchor {
   kind: "sun" | "wisp";
   xPercent: number;
   yPercent: number;
+  sunsetYPercent: number;
   widthPx: number;
   heightPx: number;
   opacity: number;
@@ -67,7 +68,7 @@ export function generateTrainDaySkyCatalogue(
 ): TrainDaySkyCatalogue {
   const width = boundedViewportWidth(viewportWidth);
   const key = `${routeSeed}:${width}`;
-  const weather = weatherForKey(key);
+  const weather = weatherForKey(routeSeed);
   const negativeSpaceWidth = 22 + random(key, "open-width") * 10;
   const negativeSpaceStartPercent =
     34 + random(key, "open-start") * (36 - negativeSpaceWidth);
@@ -84,6 +85,7 @@ export function generateTrainDaySkyCatalogue(
     kind: "sun",
     xPercent: sunX,
     yPercent: 10 + random(key, "sun-y") * 12,
+    sunsetYPercent: 58 + random(key, "sunset-sun-y") * 10,
     widthPx: sunSize,
     heightPx: sunSize,
     opacity: 0.88 + random(key, "sun-opacity") * 0.1,
@@ -124,6 +126,8 @@ export function generateTrainDaySkyCatalogue(
       kind: "wisp",
       xPercent,
       yPercent: 7 + random(key, `wisp-${ordinal}-y`) * 24,
+      sunsetYPercent:
+        11 + random(key, `wisp-${ordinal}-sunset-y`) * 30,
       widthPx: wispWidth,
       heightPx: 7 + random(key, `wisp-${ordinal}-height`) * 7,
       opacity: 0.42 + random(key, `wisp-${ordinal}-opacity`) * 0.24,
@@ -141,4 +145,3 @@ export function generateTrainDaySkyCatalogue(
     elementCount: 1 + wisps.length,
   };
 }
-

@@ -856,6 +856,51 @@ messages. The focused route/scenery/terrain/layout suites passed all 144
 tests, the complete frontend suite passed all 455 tests, the production
 TypeScript/Vite build passed, and `make test` passed.
 
+TRAIN-052 sky, atmosphere, and regional time-of-day run 2026-07-27: used
+route seed `train-052-proof`, reduced-motion proof mode, and the dedicated
+`tmact-train-workitems` borz profile. Ordinary region samples used chunk 33
+for forest, 22 for mountain, 3 for town, 130 for coast, and 15 for
+industrial. Compact route positions were respectively `10525`, `7005`, `925`,
+`41565`, and `4765`; desktop positions were `10080`, `6560`, `480`, `41120`,
+and `4320`; ultrawide positions were `11680`, `8160`, `2080`, `42720`, and
+`5920`. Station, bridge, tunnel, town-edge, and coast-reveal used focus
+occurrence `0`.
+
+Each requested viewport independently confirmed HTTP 200, fetched the plain
+non-cache-busted `/src/components/TrainLayout.tsx` module and found the
+current horizon/palette source, reopened the exact proof tab, set the viewport
+after navigation, performed a hard reload, and asserted `390×844`,
+`1280×800`, or `2560×900` actual inner dimensions. Every capture temporarily
+hid `.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle`; the proof style was removed afterward, with inspection
+restored to `flex` and the time toggle to `grid`.
+
+The 90 retained captures are
+`/private/tmp/train-052-proof/{compact,desktop,ultrawide}-{forest,mountain,town,coast,industrial,station,bridge,tunnel,town-edge,coast-reveal}-{day,sunset,night}.png`.
+The three inspected contact sheets are
+`/private/tmp/train-052-proof/contact-{compact,desktop,ultrawide}.png`; each
+row is one region or set-piece type and the columns are day, sunset, and
+night. Day reads as clear blue with unlit fixtures, sunset keeps cooler depth
+under a seed-owned low localized horizon glow instead of a blanket sepia
+wash, and night preserves blue-black layer separation, sparse non-lattice
+stars, varied celestial placement, and restrained owner-attached regional
+lights. Forest, mountain, town, coast, and industrial night pools remain
+visually distinct; coast reflection stays inside water ownership.
+
+All five set-piece unions were centred inside the viewport's central half.
+Their minimum visible union widths were `390px` compact and `964px` at both
+desktop and ultrawide, above the `min(320px, 50% viewport width)` requirement.
+Ordinary region samples also placed a meaningful region chunk in the central
+half; the smallest measured region coverage was `801px` desktop and `964px`
+ultrawide. Ultrawide stayed bounded at 64 mounted route chunks. Visual
+inspection found readable solid geometry in every palette, with no blanket
+recolour, daylight emissive pool, detached reflection, hidden named
+composition, or alpha regression. `borz errors --json` was empty; console
+output contained only Vite connection and React development messages. The
+focused sky/star/scenery/layout suites passed all 131 tests, the complete
+frontend suite passed all 458 tests, the production TypeScript/Vite build
+passed, and `make test` passed.
+
 ## Notes Template
 
 ```text

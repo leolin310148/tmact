@@ -330,7 +330,7 @@ describe("distant terrain, coast, and bridge asset kit", () => {
     );
   });
 
-  it("keeps solid palette grading ordered without alpha-based night treatment", () => {
+  it("keeps solid palette grading ordered without blanket time-of-day filters", () => {
     expect(TRAIN_SCENERY_TIME_GRADES.day.brightness).toBeGreaterThan(
       TRAIN_SCENERY_TIME_GRADES.sunset.brightness,
     );
@@ -344,8 +344,14 @@ describe("distant terrain, coast, and bridge asset kit", () => {
       TRAIN_SCENERY_TIME_GRADES.night.saturation,
     );
     expect(TRAIN_SCENERY_TIME_GRADES.day.warmth).toBe(0);
-    expect(TRAIN_SCENERY_TIME_GRADES.sunset.warmth).toBeGreaterThan(0);
+    expect(TRAIN_SCENERY_TIME_GRADES.sunset.warmth).toBe(0);
     expect(TRAIN_SCENERY_TIME_GRADES.night.warmth).toBe(0);
+    expect(TRAIN_TIME_PALETTES.sunset.horizonLight).toMatch(
+      /^rgba\(255, 174, 101, 0\.58\)$/,
+    );
+    expect(TRAIN_TIME_PALETTES.sunset.skyTop).not.toBe(
+      TRAIN_TIME_PALETTES.sunset.skyBottom,
+    );
 
     for (const token of ["silhouette", "farSurface", "midSurface", "water"] as const) {
       expect(hexLuminance(TRAIN_TIME_PALETTES.day[token]), token).toBeGreaterThan(

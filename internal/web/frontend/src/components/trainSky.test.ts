@@ -37,9 +37,13 @@ describe("day and sunset sky catalogue", () => {
     for (const catalogue of catalogues) {
       expect(catalogue.sun.yPercent).toBeGreaterThanOrEqual(10);
       expect(catalogue.sun.yPercent).toBeLessThanOrEqual(22);
+      expect(catalogue.sun.sunsetYPercent).toBeGreaterThanOrEqual(58);
+      expect(catalogue.sun.sunsetYPercent).toBeLessThanOrEqual(68);
       for (const wisp of catalogue.wisps) {
         expect(wisp.yPercent).toBeGreaterThanOrEqual(7);
         expect(wisp.yPercent).toBeLessThanOrEqual(31);
+        expect(wisp.sunsetYPercent).toBeGreaterThanOrEqual(11);
+        expect(wisp.sunsetYPercent).toBeLessThanOrEqual(41);
       }
     }
   });
@@ -87,5 +91,25 @@ describe("day and sunset sky catalogue", () => {
     expect(ultrawide.wisps.length).toBeLessThanOrEqual(
       TRAIN_DAY_SKY_MAX_WISPS,
     );
+  });
+
+  it("keeps the localized sunset horizon deterministic but distinct from day altitude", () => {
+    const catalogues = Array.from({ length: 40 }, (_, index) =>
+      generateTrainDaySkyCatalogue(`sunset-horizon-${index}`, 1280),
+    );
+
+    expect(
+      new Set(
+        catalogues.map((catalogue) =>
+          catalogue.sun.sunsetYPercent.toFixed(2),
+        ),
+      ).size,
+    ).toBeGreaterThan(30);
+    expect(
+      catalogues.every(
+        (catalogue) =>
+          catalogue.sun.sunsetYPercent - catalogue.sun.yPercent >= 36,
+      ),
+    ).toBe(true);
   });
 });

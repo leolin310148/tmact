@@ -1767,20 +1767,24 @@ interface TrainNightLifeOwnerRule {
 
 export interface TrainRegionNightLifeRule {
   kind: TrainNightLifeKind;
+  paletteToken: TrainRegionName;
   owners: readonly TrainNightLifeOwnerRule[];
 }
 
 export const TRAIN_REGION_NIGHT_LIFE = {
   forest: {
     kind: "forest-fireflies",
+    paletteToken: "forest",
     owners: [{ assetId: "landmark-forest-clearing", probability: 0.78 }],
   },
   mountain: {
     kind: "mountain-lookout-glow",
+    paletteToken: "mountain",
     owners: [{ assetId: "landmark-mountain-lookout", probability: 0.76 }],
   },
   town: {
     kind: "town-settlement-glow",
+    paletteToken: "town",
     owners: [
       { assetId: "landmark-town-church", probability: 0.74 },
       { assetId: "building-rowhouse", probability: 0.34 },
@@ -1790,10 +1794,12 @@ export const TRAIN_REGION_NIGHT_LIFE = {
   },
   coast: {
     kind: "coast-lighthouse-beacon",
+    paletteToken: "coast",
     owners: [{ assetId: "landmark-coast-lighthouse", probability: 0.82 }],
   },
   industrial: {
     kind: "industrial-beacons",
+    paletteToken: "industrial",
     owners: [
       { assetId: "landmark-industrial-gantry", probability: 0.62 },
       { assetId: "building-workshop", probability: 0.2 },
@@ -1822,6 +1828,10 @@ export interface TrainSceneryPlacement {
   altitudePercent?: number;
   cloudPattern?: TrainCloudPattern;
   cloudGroup?: string;
+  cloudDriftDistancePx?: number;
+  cloudDriftDirection?: -1 | 1;
+  cloudDriftDurationMs?: number;
+  cloudDriftPhaseMs?: number;
   routePositionPx?: number;
   regionalRole?:
     | TrainForestMountainSceneryRole
@@ -1879,6 +1889,7 @@ export interface TrainNightLifePoint {
 export interface TrainNightLifePlan {
   kind: TrainNightLifeKind;
   region: TrainRegionName;
+  paletteToken: TrainRegionName;
   ownerAssetId: string;
   intensity: number;
   variant: number;
@@ -1921,6 +1932,7 @@ export function trainNightLifeForPlacement(
   return {
     kind: regionRule.kind,
     region: chunk.region,
+    paletteToken: regionRule.paletteToken,
     ownerAssetId: placement.asset.id,
     intensity:
       TRAIN_NIGHT_LIFE_MIN_INTENSITY +
@@ -2003,6 +2015,10 @@ interface TrainCloudCandidate {
   altitudePercent: number;
   scaleUnit: number;
   group: string;
+  driftDistancePx: number;
+  driftDirection: -1 | 1;
+  driftDurationMs: number;
+  driftPhaseMs: number;
 }
 
 function cloudRuleForRegion(
@@ -2165,6 +2181,16 @@ function cloudCandidate(
         (TRAIN_CLOUD_MAX_ALTITUDE_PERCENT - TRAIN_CLOUD_MIN_ALTITUDE_PERCENT),
     scaleUnit: trainRouteRandomUnit(`${key}:scale`),
     group,
+    driftDistancePx:
+      4 + trainRouteRandomUnit(`${key}:drift-distance`) * 7,
+    driftDirection:
+      trainRouteRandomUnit(`${key}:drift-direction`) < 0.5 ? -1 : 1,
+    driftDurationMs: Math.round(
+      18_000 + trainRouteRandomUnit(`${key}:drift-duration`) * 22_000,
+    ),
+    driftPhaseMs: Math.round(
+      trainRouteRandomUnit(`${key}:drift-phase`) * 18_000,
+    ),
   };
 }
 
@@ -2339,6 +2365,10 @@ function cloudPlacementsForRegion(
       altitudePercent: candidate.altitudePercent,
       cloudPattern: pattern,
       cloudGroup: candidate.group,
+      cloudDriftDistancePx: candidate.driftDistancePx,
+      cloudDriftDirection: candidate.driftDirection,
+      cloudDriftDurationMs: candidate.driftDurationMs,
+      cloudDriftPhaseMs: candidate.driftPhaseMs,
       routePositionPx: candidate.routePositionPx,
     });
   });

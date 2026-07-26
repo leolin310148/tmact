@@ -251,7 +251,7 @@ Treat these findings as regression targets:
   compact, desktop, and ultrawide sequences for both variants in day and night;
   inspect that the intended transition is centred and immediately legible.
 
-- [ ] **TRAIN-052 — Rebalance sky, atmosphere, and regional time-of-day life.**
+- [x] **TRAIN-052 — Rebalance sky, atmosphere, and regional time-of-day life.**
   After geometry and regional art are stable, replace blanket recolouring with
   palette-owned lighting. Day needs a convincingly blue sky, clear depth, and
   naturally unlit fixtures. Sunset needs localized warm horizon light and

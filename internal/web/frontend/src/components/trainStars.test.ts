@@ -186,4 +186,38 @@ describe("deterministic train night-sky catalogue", () => {
       ),
     ).toBe(true);
   });
+
+  it("keeps multi-seed stars sparse, naturally grouped, and vertically distributed", () => {
+    const catalogues = Array.from({ length: 64 }, (_, index) =>
+      generateTrainNightSkyCatalogue(`distribution-${index}`, 1_280),
+    );
+    const stars = catalogues.flatMap((catalogue) => catalogue.stars);
+    const altitudeSpan =
+      TRAIN_STAR_SKY_BOTTOM_PERCENT - TRAIN_STAR_SKY_TOP_PERCENT;
+    const altitudeBands = [0, 0, 0, 0];
+
+    for (const star of stars) {
+      const band = Math.min(
+        3,
+        Math.floor(
+          ((star.yPercent - TRAIN_STAR_SKY_TOP_PERCENT) / altitudeSpan) * 4,
+        ),
+      );
+      altitudeBands[band]!++;
+    }
+
+    const brightRate =
+      stars.filter((star) => star.intensity === "bright").length / stars.length;
+    expect(brightRate).toBeGreaterThan(0.1);
+    expect(brightRate).toBeLessThan(0.26);
+    expect(Math.min(...altitudeBands)).toBeGreaterThan(stars.length * 0.18);
+    for (const catalogue of catalogues) {
+      const groupSizes = new Map<string, number>();
+      for (const star of catalogue.stars) {
+        if (star.group === null) continue;
+        groupSizes.set(star.group, (groupSizes.get(star.group) ?? 0) + 1);
+      }
+      expect(Math.max(...groupSizes.values())).toBeLessThanOrEqual(3);
+    }
+  });
 });

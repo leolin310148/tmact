@@ -185,15 +185,25 @@ const CARRIAGE_WHEELS: readonly TrainWheelSpec[] = [
   { centerX: 83.43, centerY: 93.47, diameter: 11.49 },
 ];
 
-interface TrainTimePalette {
+export interface TrainTimePalette {
   skyTop: string;
   skyBottom: string;
   haze: string;
+  horizonLight: string;
+  cloudLight: string;
+  cloudShadow: string;
   silhouette: string;
   farSurface: string;
   midSurface: string;
   nearSurface: string;
   water: string;
+  forestSoil: string;
+  mountainRock: string;
+  forestLife: string;
+  mountainLife: string;
+  townLife: string;
+  coastLife: string;
+  industrialLife: string;
   foregroundContrast: string;
   controlSurface: string;
   emissive: string;
@@ -207,40 +217,70 @@ interface TrainSceneryTimeGrade {
 
 export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> = {
   day: {
-    skyTop: "#54a8d8",
-    skyBottom: "#b9e4ef",
-    haze: "rgba(194, 229, 239, 0.44)",
+    skyTop: "#439fd2",
+    skyBottom: "#c5edf4",
+    haze: "rgba(194, 229, 239, 0.38)",
+    horizonLight: "rgba(255, 238, 183, 0)",
+    cloudLight: "#f6fbff",
+    cloudShadow: "#78a7c0",
     silhouette: "#53767b",
     farSurface: "#426e64",
     midSurface: "#315c51",
     nearSurface: "#183f3b",
     water: "#4c9db5",
+    forestSoil: "#4d704d",
+    mountainRock: "#777887",
+    forestLife: "#dff79b",
+    mountainLife: "#ffd08a",
+    townLife: "#ffd59a",
+    coastLife: "#e8f4ff",
+    industrialLife: "#ff7868",
     foregroundContrast: "#10243a",
     controlSurface: "#f4fbff",
     emissive: "#fff2ad",
   },
   sunset: {
-    skyTop: "#7b527a",
-    skyBottom: "#e49a69",
-    haze: "rgba(255, 190, 129, 0.42)",
-    silhouette: "#59455d",
-    farSurface: "#58465b",
-    midSurface: "#463b50",
-    nearSurface: "#2b3042",
-    water: "#9a6173",
+    skyTop: "#465b82",
+    skyBottom: "#efa16f",
+    haze: "rgba(230, 174, 139, 0.32)",
+    horizonLight: "rgba(255, 174, 101, 0.58)",
+    cloudLight: "#ffd9a8",
+    cloudShadow: "#7b6680",
+    silhouette: "#51536b",
+    farSurface: "#5f6071",
+    midSurface: "#484d5f",
+    nearSurface: "#293343",
+    water: "#8a6f80",
+    forestSoil: "#4d5d48",
+    mountainRock: "#706c79",
+    forestLife: "#dff29a",
+    mountainLife: "#ffc77c",
+    townLife: "#ffd28b",
+    coastLife: "#ffe4ac",
+    industrialLife: "#ff745f",
     foregroundContrast: "#fff6df",
-    controlSurface: "#4b263f",
+    controlSurface: "#30364d",
     emissive: "#ffd889",
   },
   night: {
-    skyTop: "#09172b",
-    skyBottom: "#102740",
-    haze: "rgba(68, 101, 135, 0.25)",
-    silhouette: "#142d47",
-    farSurface: "#153752",
-    midSurface: "#123149",
-    nearSurface: "#0c2639",
-    water: "#174b68",
+    skyTop: "#071326",
+    skyBottom: "#142d49",
+    haze: "rgba(74, 109, 145, 0.22)",
+    horizonLight: "rgba(66, 94, 134, 0.12)",
+    cloudLight: "#66809f",
+    cloudShadow: "#1b304b",
+    silhouette: "#162f49",
+    farSurface: "#193c57",
+    midSurface: "#14344b",
+    nearSurface: "#0b2638",
+    water: "#164d69",
+    forestSoil: "#284337",
+    mountainRock: "#484e62",
+    forestLife: "#d8f58c",
+    mountainLife: "#ffc979",
+    townLife: "#ffd49a",
+    coastLife: "#e7f3ff",
+    industrialLife: "#ff715f",
     foregroundContrast: "#eaf6ff",
     controlSurface: "#07111f",
     emissive: "#ffe596",
@@ -253,7 +293,7 @@ export const TRAIN_SCENERY_TIME_GRADES: Readonly<
   Record<SceneMode, TrainSceneryTimeGrade>
 > = {
   day: { saturation: 1, brightness: 1.06, warmth: 0 },
-  sunset: { saturation: 0.94, brightness: 0.94, warmth: 0.12 },
+  sunset: { saturation: 0.98, brightness: 0.96, warmth: 0 },
   night: { saturation: 0.8, brightness: 0.78, warmth: 0 },
 };
 
@@ -280,6 +320,17 @@ export function trainPaletteContrastRatio(mode: SceneMode): number {
   const background = colorLuminance(palette.controlSurface);
   return (Math.max(foreground, background) + 0.05) /
     (Math.min(foreground, background) + 0.05);
+}
+
+export function trainPaletteLuminanceOrder(mode: SceneMode) {
+  const palette = TRAIN_TIME_PALETTES[mode];
+  return {
+    skyTop: colorLuminance(palette.skyTop),
+    skyBottom: colorLuminance(palette.skyBottom),
+    farSurface: colorLuminance(palette.farSurface),
+    midSurface: colorLuminance(palette.midSurface),
+    nearSurface: colorLuminance(palette.nearSurface),
+  };
 }
 
 export function trainWorldDebugEnabled(search: string): boolean {
@@ -640,6 +691,10 @@ type TrainWorldLayerStyle = CSSProperties & {
 type TrainSceneryAssetStyle = CSSProperties & {
   "--train-scenery-scale": number;
   "--train-scenery-ground-height"?: string;
+  "--train-cloud-drift-start"?: string;
+  "--train-cloud-drift-end"?: string;
+  "--train-cloud-drift-duration"?: string;
+  "--train-cloud-drift-delay"?: string;
 };
 
 type TrainNightLifeStyle = CSSProperties & {
@@ -662,11 +717,21 @@ type TrainPaletteStyle = CSSProperties & {
   "--train-palette-sky-top": string;
   "--train-palette-sky-bottom": string;
   "--train-palette-haze": string;
+  "--train-palette-horizon-light": string;
+  "--train-palette-cloud-light": string;
+  "--train-palette-cloud-shadow": string;
   "--train-palette-silhouette": string;
   "--train-palette-far-surface": string;
   "--train-palette-mid-surface": string;
   "--train-palette-near-surface": string;
   "--train-palette-water": string;
+  "--train-palette-forest-soil": string;
+  "--train-palette-mountain-rock": string;
+  "--train-palette-life-forest": string;
+  "--train-palette-life-mountain": string;
+  "--train-palette-life-town": string;
+  "--train-palette-life-coast": string;
+  "--train-palette-life-industrial": string;
   "--train-palette-foreground-contrast": string;
   "--train-palette-control-surface": string;
   "--train-palette-emissive": string;
@@ -807,6 +872,7 @@ function TrainNightLife({
       data-emissive-ground-inset={placement.groundInsetPx.toFixed(3)}
       data-emissive-scale={placement.scale.toFixed(3)}
       data-night-life-region={plan.region}
+      data-night-life-palette={plan.paletteToken}
       data-night-life-kind={plan.kind}
       data-night-life-variant={plan.variant}
       data-night-life-intensity={plan.intensity.toFixed(3)}
@@ -921,6 +987,8 @@ type TrainDaySkyAnchorStyle = CSSProperties & {
   "--train-sky-anchor-width": string;
   "--train-sky-anchor-height": string;
   "--train-sky-anchor-x": string;
+  "--train-sky-anchor-day-y": string;
+  "--train-sky-anchor-sunset-y": string;
 };
 
 type TrainTownEdgeAssetID =
@@ -994,11 +1062,21 @@ function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
     "--train-palette-sky-top": palette.skyTop,
     "--train-palette-sky-bottom": palette.skyBottom,
     "--train-palette-haze": palette.haze,
+    "--train-palette-horizon-light": palette.horizonLight,
+    "--train-palette-cloud-light": palette.cloudLight,
+    "--train-palette-cloud-shadow": palette.cloudShadow,
     "--train-palette-silhouette": palette.silhouette,
     "--train-palette-far-surface": palette.farSurface,
     "--train-palette-mid-surface": palette.midSurface,
     "--train-palette-near-surface": palette.nearSurface,
     "--train-palette-water": palette.water,
+    "--train-palette-forest-soil": palette.forestSoil,
+    "--train-palette-mountain-rock": palette.mountainRock,
+    "--train-palette-life-forest": palette.forestLife,
+    "--train-palette-life-mountain": palette.mountainLife,
+    "--train-palette-life-town": palette.townLife,
+    "--train-palette-life-coast": palette.coastLife,
+    "--train-palette-life-industrial": palette.industrialLife,
     "--train-palette-foreground-contrast": palette.foregroundContrast,
     "--train-palette-control-surface": palette.controlSurface,
     "--train-palette-emissive": palette.emissive,
@@ -1110,6 +1188,7 @@ function TrainTownEdgeComposition({
                       height={asset.emissive.height}
                       data-emissive="town-edge-windows"
                       data-emissive-owner={asset.id}
+                      data-emissive-region="town"
                       data-town-edge-window-alignment={`${asset.width}x${asset.height}`}
                       onError={(event) => {
                         event.currentTarget.hidden = true;
@@ -1597,6 +1676,7 @@ function TrainBuiltEnvironmentFixtures({
                 className="train-emissive-overlay train-built-environment-fixture-emissive"
                 data-emissive="regional-fixture"
                 data-emissive-owner={owner}
+                data-emissive-region={beat.region}
                 data-emissive-schedule="sunset-night"
               />
             ) : null}
@@ -2270,6 +2350,29 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             sceneryGroundHeight === undefined
               ? undefined
               : `${sceneryGroundHeight}px`,
+          "--train-cloud-drift-start":
+            placement.cloudDriftDistancePx === undefined
+              ? undefined
+              : `${(
+                  placement.cloudDriftDistancePx *
+                  (placement.cloudDriftDirection ?? 1) *
+                  -1
+                ).toFixed(3)}px`,
+          "--train-cloud-drift-end":
+            placement.cloudDriftDistancePx === undefined
+              ? undefined
+              : `${(
+                  placement.cloudDriftDistancePx *
+                  (placement.cloudDriftDirection ?? 1)
+                ).toFixed(3)}px`,
+          "--train-cloud-drift-duration":
+            placement.cloudDriftDurationMs === undefined
+              ? undefined
+              : `${placement.cloudDriftDurationMs}ms`,
+          "--train-cloud-drift-delay":
+            placement.cloudDriftPhaseMs === undefined
+              ? undefined
+              : `${-placement.cloudDriftPhaseMs}ms`,
         };
         const sprites = [
           <img
@@ -2334,6 +2437,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-cloud-route-position={
               placement.routePositionPx?.toFixed(3) ?? undefined
             }
+            data-cloud-drift-distance={
+              placement.cloudDriftDistancePx?.toFixed(3) ?? undefined
+            }
+            data-cloud-drift-direction={placement.cloudDriftDirection}
+            data-cloud-drift-duration={placement.cloudDriftDurationMs}
+            data-cloud-drift-phase={placement.cloudDriftPhaseMs}
             style={sceneryStyle}
             key={`base-${asset.id}-${ordinal}`}
           />,
@@ -2354,6 +2463,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               data-emissive-kind={asset.emissive.kind}
               data-emissive-owner={asset.id}
               data-emissive-owner-instance={sceneryInstanceId}
+              data-emissive-region={chunk.region}
               data-emissive-plane="owner-attached"
               data-emissive-enabled={nightLife ? "true" : "false"}
               data-emissive-occupancy={nightLife?.occupancy ?? "none"}
@@ -3254,11 +3364,13 @@ function TrainWorld({
               );
               const style: TrainDaySkyAnchorStyle = {
                 left: "0px",
-                top: `${anchor.yPercent}%`,
                 "--train-sky-anchor-opacity": anchor.opacity,
                 "--train-sky-anchor-width": `${anchor.widthPx.toFixed(3)}px`,
                 "--train-sky-anchor-height": `${anchor.heightPx.toFixed(3)}px`,
                 "--train-sky-anchor-x": `${position.toFixed(3)}px`,
+                "--train-sky-anchor-day-y": `${anchor.yPercent.toFixed(3)}%`,
+                "--train-sky-anchor-sunset-y":
+                  `${anchor.sunsetYPercent.toFixed(3)}%`,
               };
               return (
                 <i
@@ -3266,6 +3378,8 @@ function TrainWorld({
                   data-day-sky-anchor={anchor.kind}
                   data-day-sky-anchor-id={anchor.id}
                   data-sky-seed-x={anchor.xPercent.toFixed(3)}
+                  data-sky-day-y={anchor.yPercent.toFixed(3)}
+                  data-sky-sunset-y={anchor.sunsetYPercent.toFixed(3)}
                   data-sky-speed-ratio={speedRatio}
                   data-sky-position={`${position.toFixed(3)}px`}
                   data-sky-motion-distance={`${(

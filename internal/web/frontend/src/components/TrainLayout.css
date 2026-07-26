@@ -25,16 +25,24 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-layout-world {
   --train-route-position: 0px;
-  --train-palette-sky-top: #09172b;
-  --train-palette-sky-bottom: #102740;
-  --train-palette-haze: rgba(68, 101, 135, 0.25);
-  --train-palette-silhouette: #142d47;
-  --train-palette-far-surface: #153752;
-  --train-palette-mid-surface: #123149;
-  --train-palette-near-surface: #0c2639;
-  --train-palette-water: #174b68;
-  --train-palette-forest-soil: #315944;
-  --train-palette-mountain-rock: #706b7b;
+  --train-palette-sky-top: #071326;
+  --train-palette-sky-bottom: #142d49;
+  --train-palette-haze: rgba(74, 109, 145, 0.22);
+  --train-palette-horizon-light: rgba(66, 94, 134, 0.12);
+  --train-palette-cloud-light: #66809f;
+  --train-palette-cloud-shadow: #1b304b;
+  --train-palette-silhouette: #162f49;
+  --train-palette-far-surface: #193c57;
+  --train-palette-mid-surface: #14344b;
+  --train-palette-near-surface: #0b2638;
+  --train-palette-water: #164d69;
+  --train-palette-forest-soil: #284337;
+  --train-palette-mountain-rock: #484e62;
+  --train-palette-life-forest: #d8f58c;
+  --train-palette-life-mountain: #ffc979;
+  --train-palette-life-town: #ffd49a;
+  --train-palette-life-coast: #e7f3ff;
+  --train-palette-life-industrial: #ff715f;
   --train-palette-foreground-contrast: #eaf6ff;
   --train-palette-control-surface: #07111f;
   --train-palette-emissive: #ffe596;
@@ -148,10 +156,15 @@ html[data-pane-switcher-layout="train"] .statusline {
   height: var(--train-sky-anchor-height);
   pointer-events: none;
   opacity: var(--train-sky-anchor-opacity);
+  top: var(--train-sky-anchor-day-y);
   transform:
     translate3d(var(--train-sky-anchor-x), 0, 0)
     translate(-50%, -50%);
   will-change: transform;
+}
+
+.train-layout-world[data-time-of-day="sunset"] .train-day-sky-anchor {
+  top: var(--train-sky-anchor-sunset-y);
 }
 
 .train-day-sky-anchor--sun {
@@ -162,12 +175,37 @@ html[data-pane-switcher-layout="train"] .statusline {
     0 0 14px 5px rgba(255, 240, 164, 0.28);
 }
 
+.train-day-sky-anchor--sun::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: clamp(280px, 62vw, 920px);
+  height: clamp(150px, 48vh, 430px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    ellipse at center,
+    var(--train-palette-horizon-light) 0,
+    color-mix(in srgb, var(--train-palette-horizon-light), transparent 42%) 28%,
+    transparent 72%
+  );
+  transition: opacity 450ms ease;
+}
+
 .train-layout-world[data-time-of-day="sunset"]
   .train-day-sky-anchor--sun {
   background: #ffd18a;
   box-shadow:
     0 0 0 2px rgba(255, 221, 164, 0.34),
     0 0 15px 6px rgba(255, 159, 105, 0.25);
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-day-sky-anchor--sun::after {
+  opacity: 1;
 }
 
 .train-day-sky-anchor--wisp {
@@ -2013,6 +2051,35 @@ html[data-pane-switcher-layout="train"] .statusline {
   transition: filter 450ms ease, opacity 450ms ease;
 }
 
+.train-scenery-asset--cloud {
+  animation: train-cloud-drift
+    var(--train-cloud-drift-duration, 28000ms)
+    steps(12, end)
+    var(--train-cloud-drift-delay, 0ms)
+    infinite
+    alternate;
+}
+
+@keyframes train-cloud-drift {
+  from {
+    translate: var(--train-cloud-drift-start, -5px) 0;
+  }
+
+  to {
+    translate: var(--train-cloud-drift-end, 5px) 0;
+  }
+}
+
+.train-layout-world[data-motion-state="suspended"]
+  .train-scenery-asset--cloud {
+  animation-play-state: paused;
+}
+
+.train-layout-world[data-motion="reduced"] .train-scenery-asset--cloud {
+  animation: none;
+  translate: 0 0;
+}
+
 .train-scenery-asset[data-scenery-anchor="center"] {
   transform: translate(-50%, -50%) scale(var(--train-scenery-scale));
 }
@@ -2029,7 +2096,12 @@ html[data-pane-switcher-layout="train"] .statusline {
   user-select: none;
   -webkit-user-drag: none;
   filter: drop-shadow(
-    0 0 3px color-mix(in srgb, var(--train-palette-emissive), transparent 24%)
+    0 0 3px
+      color-mix(
+        in srgb,
+        var(--train-region-emissive, var(--train-palette-emissive)),
+        transparent 24%
+      )
   );
 }
 
@@ -2071,7 +2143,8 @@ html[data-pane-switcher-layout="train"] .statusline {
     saturate(0.28)
     brightness(3.1)
     contrast(0.78)
-    drop-shadow(0 2px 0 rgba(73, 119, 148, 0.34));
+    drop-shadow(0 -1px 0 var(--train-palette-cloud-light))
+    drop-shadow(0 2px 0 var(--train-palette-cloud-shadow));
 }
 
 .train-layout-world[data-time-of-day="sunset"]
@@ -2082,8 +2155,8 @@ html[data-pane-switcher-layout="train"] .statusline {
     saturate(0.92)
     brightness(1.14)
     contrast(1.02)
-    drop-shadow(0 -1px 0 rgba(255, 224, 174, 0.88))
-    drop-shadow(0 2px 0 rgba(111, 61, 91, 0.68));
+    drop-shadow(0 -1px 0 var(--train-palette-cloud-light))
+    drop-shadow(0 2px 0 var(--train-palette-cloud-shadow));
 }
 
 .train-layout-world[data-time-of-day="night"]
@@ -2094,7 +2167,7 @@ html[data-pane-switcher-layout="train"] .statusline {
     saturate(0.62)
     brightness(0.72)
     contrast(0.88)
-    drop-shadow(0 1px 0 rgba(68, 101, 135, 0.32));
+    drop-shadow(0 1px 0 var(--train-palette-cloud-shadow));
 }
 
 .train-terrain-base {
@@ -3433,11 +3506,28 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-layout-world[data-time-of-day="sunset"] .train-emissive-overlay {
-  opacity: 0.38;
+  opacity: 0;
 }
 
 .train-layout-world[data-time-of-day="night"] .train-emissive-overlay {
   opacity: 0.88;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-scenery-emissive-mask[data-emissive-region="town"] {
+  opacity: 0.18;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-scenery-emissive-mask[data-emissive-region="industrial"],
+.train-layout-world[data-time-of-day="sunset"]
+  .train-built-environment-fixture-emissive[data-emissive-region="industrial"] {
+  opacity: 0.14;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-built-environment-fixture-emissive[data-emissive-region="town"] {
+  opacity: 0.16;
 }
 
 .train-emissive-overlay[data-emissive-enabled="false"] {
@@ -3460,7 +3550,19 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-layout-world[data-time-of-day="sunset"] .train-night-life {
-  opacity: calc(var(--train-night-life-intensity) * 0.12);
+  opacity: 0;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-night-life[data-night-life-region="mountain"] {
+  opacity: calc(var(--train-night-life-intensity) * 0.08);
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-night-life[data-night-life-region="town"],
+.train-layout-world[data-time-of-day="sunset"]
+  .train-night-life[data-night-life-region="industrial"] {
+  opacity: calc(var(--train-night-life-intensity) * 0.18);
 }
 
 .train-layout-world[data-time-of-day="night"] .train-night-life {
@@ -3472,8 +3574,9 @@ html[data-pane-switcher-layout="train"] .statusline {
   width: 2px;
   height: 2px;
   border-radius: 50%;
-  background: #dfff8c;
-  box-shadow: 0 0 4px #dfff8c;
+  background: var(--train-region-emissive, var(--train-palette-emissive));
+  box-shadow: 0 0 4px
+    var(--train-region-emissive, var(--train-palette-emissive));
   animation: train-night-firefly 2.8s steps(4, end) infinite alternate;
 }
 
@@ -3484,10 +3587,40 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-night-life__industrial-beacon {
   position: absolute;
   display: block;
-  background: var(--train-palette-emissive);
+  background: var(--train-region-emissive, var(--train-palette-emissive));
   box-shadow:
-    0 0 3px var(--train-palette-emissive),
-    0 0 7px color-mix(in srgb, var(--train-palette-emissive), transparent 46%);
+    0 0 3px var(--train-region-emissive, var(--train-palette-emissive)),
+    0 0 7px
+      color-mix(
+        in srgb,
+        var(--train-region-emissive, var(--train-palette-emissive)),
+        transparent 46%
+      );
+}
+
+.train-night-life[data-night-life-region="forest"],
+[data-emissive-region="forest"] {
+  --train-region-emissive: var(--train-palette-life-forest);
+}
+
+.train-night-life[data-night-life-region="mountain"],
+[data-emissive-region="mountain"] {
+  --train-region-emissive: var(--train-palette-life-mountain);
+}
+
+.train-night-life[data-night-life-region="town"],
+[data-emissive-region="town"] {
+  --train-region-emissive: var(--train-palette-life-town);
+}
+
+.train-night-life[data-night-life-region="coast"],
+[data-emissive-region="coast"] {
+  --train-region-emissive: var(--train-palette-life-coast);
+}
+
+.train-night-life[data-night-life-region="industrial"],
+[data-emissive-region="industrial"] {
+  --train-region-emissive: var(--train-palette-life-industrial);
 }
 
 .train-night-life__lookout-window {
@@ -3498,7 +3631,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   background:
     repeating-linear-gradient(
       90deg,
-      var(--train-palette-emissive) 0 6px,
+      var(--train-region-emissive, var(--train-palette-emissive)) 0 6px,
       transparent 6px 10px
     );
 }
@@ -3544,7 +3677,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   clip-path: polygon(0 36%, 100% 0, 100% 100%, 0 64%);
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--train-palette-emissive), transparent 38%),
+    color-mix(
+      in srgb,
+      var(--train-region-emissive, var(--train-palette-emissive)),
+      transparent 38%
+    ),
     transparent
   );
   animation: train-lighthouse-sweep 8s ease-in-out infinite alternate;
@@ -3578,7 +3715,12 @@ html[data-pane-switcher-layout="train"] .statusline {
   transform: translateX(-50%);
   background: repeating-linear-gradient(
     0deg,
-    color-mix(in srgb, var(--train-palette-emissive), transparent 48%) 0 2px,
+    color-mix(
+        in srgb,
+        var(--train-region-emissive, var(--train-palette-emissive)),
+        transparent 48%
+      )
+      0 2px,
     transparent 2px 6px
   );
   filter: blur(0.25px);
@@ -3590,8 +3732,9 @@ html[data-pane-switcher-layout="train"] .statusline {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #ff765f;
-  box-shadow: 0 0 6px #ff765f;
+  background: var(--train-region-emissive, var(--train-palette-emissive));
+  box-shadow: 0 0 6px
+    var(--train-region-emissive, var(--train-palette-emissive));
   animation: train-industrial-beacon 2.4s steps(2, end) infinite;
 }
 

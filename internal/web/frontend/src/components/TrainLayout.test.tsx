@@ -20,6 +20,7 @@ import {
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
+  trainPaletteLuminanceOrder,
   trainTerrainContourForChunk,
   trainTerrainHeightAtPercent,
   trainWorldCruiseSpeed,
@@ -2693,7 +2694,11 @@ describe("TrainLayout", () => {
     );
     rendered.rerender(renderBuiltEnvironment("sunset"));
     expect(
-      overlays.every((overlay) => getComputedStyle(overlay).opacity === "0.38"),
+      overlays.every(
+        (overlay) =>
+          getComputedStyle(overlay).opacity ===
+          (overlay.dataset.emissiveRegion === "town" ? "0.16" : "0.14"),
+      ),
     ).toBe(true);
     rendered.rerender(renderBuiltEnvironment("night"));
     expect(
@@ -3821,7 +3826,7 @@ describe("TrainLayout", () => {
       )!;
     expect(getComputedStyle(mask).opacity).toBe("0");
     rendered.rerender(routeChunk("sunset"));
-    expect(getComputedStyle(mask).opacity).toBe("0.38");
+    expect(getComputedStyle(mask).opacity).toBe("0.14");
     rendered.rerender(routeChunk("night"));
     expect(getComputedStyle(mask).opacity).toBe("0.88");
 
@@ -4254,11 +4259,11 @@ describe("TrainLayout", () => {
         .dataset.layerPosition,
     ).toBe(cloudPhase);
     for (const [anchorID, phase] of phases) {
-      const anchor = container.querySelector<HTMLElement>(
-        `[data-day-sky-anchor-id="${anchorID}"]`,
-      );
-      expect(anchor).not.toBeNull();
-      expect(anchor).toHaveAttribute("data-sky-motion-distance", phase);
+      const anchor = [
+        ...container.querySelectorAll<HTMLElement>("[data-day-sky-anchor]"),
+      ].find((candidate) => candidate.dataset.daySkyAnchorId === anchorID);
+      expect(anchor).toBeDefined();
+      expect(anchor!).toHaveAttribute("data-sky-motion-distance", phase);
     }
   });
 
@@ -4274,9 +4279,11 @@ describe("TrainLayout", () => {
     expect(dayRule).toContain("saturate(0.28)");
     expect(dayRule).toContain("brightness(3.1)");
     expect(dayRule).toContain("contrast(0.78)");
+    expect(dayRule).toContain("var(--train-palette-cloud-light)");
+    expect(dayRule).toContain("var(--train-palette-cloud-shadow)");
     expect(sunsetRule).toContain("opacity: 0.88");
-    expect(sunsetRule).toContain("rgba(255, 224, 174, 0.88)");
-    expect(sunsetRule).toContain("rgba(111, 61, 91, 0.68)");
+    expect(sunsetRule).toContain("var(--train-palette-cloud-light)");
+    expect(sunsetRule).toContain("var(--train-palette-cloud-shadow)");
     expect(sunsetRule).not.toContain("sepia");
     expect(trainLayoutCss).toMatch(
       /\.train-layout-world\[data-time-of-day="night"\] \.train-day-sky\s*\{\s*opacity:\s*0;/,
@@ -4359,12 +4366,7 @@ describe("TrainLayout", () => {
     expect(trainPaletteContrastRatio("night")).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("retunes only the day atmosphere to a stronger natural blue", () => {
-    const previousDaySky = {
-      skyTop: "#78b9d5",
-      skyBottom: "#d9ead3",
-      haze: "rgba(231, 244, 221, 0.48)",
-    };
+  it("uses palette-owned sky, material, and regional-life tokens without a blanket sunset wash", () => {
     const rgbChannels = (hex: string) =>
       hex
         .slice(1)
@@ -4379,57 +4381,67 @@ describe("TrainLayout", () => {
       return Math.max(...channels) - Math.min(...channels);
     };
 
-    expect(TRAIN_TIME_PALETTES.day).toEqual({
-      skyTop: "#54a8d8",
-      skyBottom: "#b9e4ef",
-      haze: "rgba(194, 229, 239, 0.44)",
-      silhouette: "#53767b",
-      farSurface: "#426e64",
-      midSurface: "#315c51",
-      nearSurface: "#183f3b",
-      water: "#4c9db5",
-      foregroundContrast: "#10243a",
-      controlSurface: "#f4fbff",
-      emissive: "#fff2ad",
-    });
-    expect(blueBias(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(
-      blueBias(previousDaySky.skyTop),
+    expect(blueBias(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(100);
+    expect(blueBias(TRAIN_TIME_PALETTES.day.skyBottom)).toBeGreaterThan(35);
+    expect(chroma(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(120);
+    expect(TRAIN_TIME_PALETTES.sunset.skyTop).toBe("#465b82");
+    expect(TRAIN_TIME_PALETTES.sunset.skyBottom).toBe("#efa16f");
+    expect(TRAIN_TIME_PALETTES.sunset.horizonLight).toContain("rgba");
+    expect(TRAIN_SCENERY_TIME_GRADES.sunset.warmth).toBe(0);
+
+    const solidTokenNames = [
+      "skyTop",
+      "skyBottom",
+      "cloudLight",
+      "cloudShadow",
+      "silhouette",
+      "farSurface",
+      "midSurface",
+      "nearSurface",
+      "water",
+      "forestSoil",
+      "mountainRock",
+      "forestLife",
+      "mountainLife",
+      "townLife",
+      "coastLife",
+      "industrialLife",
+      "foregroundContrast",
+      "controlSurface",
+      "emissive",
+    ] as const;
+    for (const mode of ["day", "sunset", "night"] as const) {
+      const palette = TRAIN_TIME_PALETTES[mode];
+      expect(Object.keys(palette)).toEqual(Object.keys(TRAIN_TIME_PALETTES.day));
+      for (const token of solidTokenNames) {
+        expect(palette[token], `${mode}:${token}`).toMatch(/^#[\da-f]{6}$/i);
+      }
+      expect(palette.haze, `${mode}:haze`).toMatch(/^rgba\(/);
+      expect(palette.horizonLight, `${mode}:horizon`).toMatch(/^rgba\(/);
+    }
+
+    expect(trainLayoutCss).toMatch(
+      /\.train-day-sky-anchor--sun::after\s*\{[\s\S]*?radial-gradient\([\s\S]*?--train-palette-horizon-light/,
     );
-    expect(blueBias(TRAIN_TIME_PALETTES.day.skyBottom)).toBeGreaterThan(
-      blueBias(previousDaySky.skyBottom),
+    expect(trainLayoutCss).toMatch(
+      /\[data-time-of-day="sunset"\]\s*\.train-emissive-overlay\s*\{\s*opacity:\s*0;/,
     );
-    expect(chroma(TRAIN_TIME_PALETTES.day.skyTop)).toBeGreaterThan(
-      chroma(previousDaySky.skyTop),
+    expect(trainLayoutCss).toMatch(
+      /data-emissive-region="town"[\s\S]*?opacity:\s*0\.18;/,
     );
-    expect(chroma(TRAIN_TIME_PALETTES.day.skyBottom)).toBeGreaterThan(
-      chroma(previousDaySky.skyBottom),
-    );
-    expect(TRAIN_TIME_PALETTES.sunset).toEqual({
-      skyTop: "#7b527a",
-      skyBottom: "#e49a69",
-      haze: "rgba(255, 190, 129, 0.42)",
-      silhouette: "#59455d",
-      farSurface: "#58465b",
-      midSurface: "#463b50",
-      nearSurface: "#2b3042",
-      water: "#9a6173",
-      foregroundContrast: "#fff6df",
-      controlSurface: "#4b263f",
-      emissive: "#ffd889",
-    });
-    expect(TRAIN_TIME_PALETTES.night).toEqual({
-      skyTop: "#09172b",
-      skyBottom: "#102740",
-      haze: "rgba(68, 101, 135, 0.25)",
-      silhouette: "#142d47",
-      farSurface: "#153752",
-      midSurface: "#123149",
-      nearSurface: "#0c2639",
-      water: "#174b68",
-      foregroundContrast: "#eaf6ff",
-      controlSurface: "#07111f",
-      emissive: "#ffe596",
-    });
+  });
+
+  it("keeps palette luminance ordered so geometry remains readable at every time", () => {
+    for (const mode of ["day", "sunset", "night"] as const) {
+      const order = trainPaletteLuminanceOrder(mode);
+      expect(order.skyBottom, `${mode}:sky`).toBeGreaterThan(order.skyTop);
+      expect(order.farSurface, `${mode}:far-mid`).toBeGreaterThan(
+        order.midSurface,
+      );
+      expect(order.midSurface, `${mode}:mid-near`).toBeGreaterThan(
+        order.nearSurface,
+      );
+    }
   });
 
   it("keeps world position independent from horizontal train inspection", () => {
