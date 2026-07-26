@@ -3,7 +3,7 @@
 Completed TRAIN-001–026 are archived in
 [docs/archive/train-layout-workitems-001-026.md](docs/archive/train-layout-workitems-001-026.md).
 
-This active queue contains fourteen dependency-ordered, independently verifiable
+This active queue contains fifteen dependency-ordered, independently verifiable
 work items that rebuild scenery compositing and daylight art before expanding
 regional day/night richness. The fixed train, route engine, station behavior,
 and safety properties established by the archived queue remain the baseline.
@@ -304,3 +304,42 @@ and safety properties established by the archived queue remain the baseline.
   proving `0 < sun < wisp < cloud < far < near`; repeat the reduced-motion and
   station-dwell checks. Restore the live DOM, run the frontend suite, build,
   `make test`, and `rtk git diff --check`, then document the smoke evidence.
+
+- [ ] **TRAIN-040 — Remove the stacked rectangular terrain bands exposed behind the train.**
+  Correct the post-TRAIN-039 defect confirmed by hiding the complete fixed
+  train: the recognizable town-edge sprites now sit in front of a broad
+  blue/green horizontal bar spanning the viewport. Computed-style inspection
+  identifies the owners as the full-chunk rectangular backgrounds on
+  `.train-parallax-chunk--ultra-far`, `--far`, `--midground`, and `--near`;
+  their four opaque fills stack from the track upward and read as unexplained
+  color blocks rather than terrain. Remove those flat full-width slabs and
+  rebuild the layer bases as coherent terrain with visibly shaped,
+  region-appropriate contours, materials, and restrained depth separation.
+  Buildings, vegetation, landmarks, and props must remain visibly grounded,
+  but no train carriage may be required to conceal a rectangular fill.
+
+  Preserve opaque solid terrain, seamless chunk coverage, deterministic
+  region/variant output, the existing parallax ratios, sprite anchors, track
+  geometry, station/set-piece continuity, bounded DOM, and all day/sunset/night
+  palette behavior. Do not solve the defect by making the bars translucent,
+  matching them to the sky, globally hiding a layer, adding blur/haze over
+  them, or trading one constant-height strip for another. Natural land may
+  continue beneath the track, but every exposed upper edge must have deliberate
+  contour or material structure and adjacent chunks must join without vertical
+  walls, sky leaks, or floating scenery.
+
+  Add focused tests that reject the four former plain rectangular gradient
+  fills, exercise every region and chunk visual variant, prove contour/seam
+  continuity and grounded sprite anchors, and retain solid opacity, bounded
+  nodes, palette isolation, reduced motion, and parallax behavior. For browser
+  acceptance, use `borz` on the shared port 5234 with the exact
+  HTTP/module-freshness/open/viewport/hard-reload procedure. At deterministic
+  positions covering all five regions plus town-edge, station, coast, bridge,
+  and tunnel, temporarily hide `.train-layout-inspection`,
+  `.train-world-debug-grid`, and `.train-time-toggle` only in the live DOM.
+  Capture day and night pure-scenery screenshots at compact, desktop, and
+  ultrawide widths and visually reject any broad uniform horizontal block.
+  Inspect computed backgrounds and bounding boxes to identify the actual owner
+  of every remaining large solid area instead of accepting opacity-only tests.
+  Restore the DOM, run the frontend suite, build, `make test`, and
+  `rtk git diff --check`, then document the retained screenshot evidence.
