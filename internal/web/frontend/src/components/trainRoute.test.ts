@@ -19,6 +19,7 @@ import {
   trainParallaxLayerTransform,
   type TrainRegionProfile,
 } from "./trainRoute";
+import { TRAIN_SKY_CLOUD_SPEED_RATIO } from "./trainMotion";
 
 describe("train route chunks", () => {
   it("generates stable chunks from a versioned seed and integer index", () => {
@@ -353,7 +354,7 @@ describe("train route chunks", () => {
 
   it("defines five ordered parallax layers with restrained speed ratios", () => {
     expect(TRAIN_PARALLAX_LAYERS).toEqual([
-      { name: "sky", speedRatio: 0 },
+      { name: "sky", speedRatio: TRAIN_SKY_CLOUD_SPEED_RATIO },
       { name: "ultra-far", speedRatio: 0.1 },
       { name: "far", speedRatio: 0.25 },
       { name: "midground", speedRatio: 0.55 },

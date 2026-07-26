@@ -2,6 +2,7 @@ import {
   TRAIN_STATION_SPAN_CHUNKS,
   trainStationEventForChunk,
 } from "./trainStation";
+import { TRAIN_SKY_CLOUD_SPEED_RATIO } from "./trainMotion";
 
 export const TRAIN_ROUTE_SEED_VERSION = "tmact-train-route-v1";
 export const DEFAULT_TRAIN_ROUTE_SEED = "infinite-journey";
@@ -12,7 +13,7 @@ export const TRAIN_REGION_CHUNK_LENGTH = 9;
 const TRAIN_REGION_MACRO_LENGTH = 32;
 
 export const TRAIN_PARALLAX_LAYERS = [
-  { name: "sky", speedRatio: 0 },
+  { name: "sky", speedRatio: TRAIN_SKY_CLOUD_SPEED_RATIO },
   { name: "ultra-far", speedRatio: 0.1 },
   { name: "far", speedRatio: 0.25 },
   { name: "midground", speedRatio: 0.55 },

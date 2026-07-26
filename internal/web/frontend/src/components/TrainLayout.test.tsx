@@ -19,6 +19,7 @@ import {
   TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
   trainWorldCruiseSpeed,
+  trainWorldReducedMotionForced,
   trainWorldRoutePosition,
   trainWorldTrackTransform,
   TrainLayout,
@@ -26,6 +27,9 @@ import {
 } from "./TrainLayout";
 import {
   trainWheelRotationDegrees,
+  TRAIN_SKY_CLOUD_SPEED_RATIO,
+  TRAIN_SKY_SUN_SPEED_RATIO,
+  TRAIN_SKY_WISP_SPEED_RATIO,
   TRAIN_WORLD_MAX_FRAME_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
@@ -408,6 +412,12 @@ describe("TrainLayout", () => {
     expect(trainWorldRoutePosition("?train-route-position=nope")).toBe(0);
   });
 
+  it("offers a development-only reduced-motion browser diagnostic", () => {
+    expect(trainWorldReducedMotionForced("?train-reduced-motion=1")).toBe(true);
+    expect(trainWorldReducedMotionForced("?train-reduced-motion=0")).toBe(false);
+    expect(trainWorldReducedMotionForced("")).toBe(false);
+  });
+
   it("persists at a restrained cadence and remounts at identical route geometry", () => {
     vi.useFakeTimers();
     const startedAt = new Date(2026, 0, 1, 12, 0).getTime();
@@ -440,6 +450,18 @@ describe("TrainLayout", () => {
     expect(world).toHaveAttribute("data-journey-persistence", "saved");
     const savedPosition = world.dataset.routePosition;
     const savedGeometry = routeGeometryFingerprint(first.container);
+    const savedSkyAnchors = [
+      ...first.container.querySelectorAll<HTMLElement>(
+        "[data-day-sky-anchor]",
+      ),
+    ].map((anchor) => [
+      anchor.dataset.daySkyAnchorId,
+      anchor.dataset.skyPosition,
+      anchor.dataset.skyMotionDistance,
+    ]);
+    const savedCloudPosition =
+      first.container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition;
 
     first.unmount();
     vi.setSystemTime(startedAt + 86_400_000);
@@ -456,6 +478,21 @@ describe("TrainLayout", () => {
       savedPosition,
     );
     expect(routeGeometryFingerprint(second.container)).toEqual(savedGeometry);
+    expect(
+      [
+        ...second.container.querySelectorAll<HTMLElement>(
+          "[data-day-sky-anchor]",
+        ),
+      ].map((anchor) => [
+        anchor.dataset.daySkyAnchorId,
+        anchor.dataset.skyPosition,
+        anchor.dataset.skyMotionDistance,
+      ]),
+    ).toEqual(savedSkyAnchors);
+    expect(
+      second.container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition,
+    ).toBe(savedCloudPosition);
     animation.run(86_400_000);
     expect(restored).toHaveAttribute("data-route-position", savedPosition);
     animation.run(86_400_100);
@@ -864,6 +901,12 @@ describe("TrainLayout", () => {
     const dwellPosition = world.dataset.routePosition;
     const dwellTrackPosition = track.dataset.trackPosition;
     const dwellWheelRotation = layout.dataset.wheelRotation;
+    const dwellSkyPositions = [
+      ...container.querySelectorAll<HTMLElement>("[data-day-sky-anchor]"),
+    ].map((anchor) => anchor.dataset.skyPosition);
+    const dwellCloudPosition =
+      container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition;
     expect(dwellTrackPosition).toBe(dwellPosition);
     expect(dwellWheelRotation).toBe(
       `${trainWheelRotationDegrees(
@@ -876,6 +919,15 @@ describe("TrainLayout", () => {
     expect(world.dataset.routePosition).toBe(dwellPosition);
     expect(track.dataset.trackPosition).toBe(dwellTrackPosition);
     expect(layout.dataset.wheelRotation).toBe(dwellWheelRotation);
+    expect(
+      [...container.querySelectorAll<HTMLElement>("[data-day-sky-anchor]")].map(
+        (anchor) => anchor.dataset.skyPosition,
+      ),
+    ).toEqual(dwellSkyPositions);
+    expect(
+      container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition,
+    ).toBe(dwellCloudPosition);
 
     for (
       let frame = 0;
@@ -977,6 +1029,78 @@ describe("TrainLayout", () => {
     expect(container.querySelector(".train-layout-consist")).toBe(consist);
   });
 
+  it("moves sun, wisps, routed clouds, far, and near scenery in strict depth order", () => {
+    window.history.replaceState(null, "", "/?train-cruise-speed=96");
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const sun = container.querySelector<HTMLElement>(
+      '[data-day-sky-anchor="sun"]',
+    )!;
+    const wisp = container.querySelector<HTMLElement>(
+      '[data-day-sky-anchor="wisp"]',
+    )!;
+    const layerPosition = (name: string) =>
+      Number.parseFloat(
+        container.querySelector<HTMLElement>(
+          `[data-world-layer="${name}"]`,
+        )!.dataset.layerPosition!,
+      );
+    const initial = {
+      sun: Number.parseFloat(sun.dataset.skyPosition!),
+      wisp: Number.parseFloat(wisp.dataset.skyPosition!),
+      cloud: layerPosition("sky"),
+      far: layerPosition("far"),
+      near: layerPosition("near"),
+    };
+
+    animation.run(0);
+    for (let frame = 1; frame <= 40; frame++) {
+      animation.run(frame * 250);
+    }
+
+    const displacement = {
+      sun: Math.abs(Number.parseFloat(sun.dataset.skyPosition!) - initial.sun),
+      wisp: Math.abs(
+        Number.parseFloat(wisp.dataset.skyPosition!) - initial.wisp,
+      ),
+      cloud: Math.abs(layerPosition("sky") - initial.cloud),
+      far: Math.abs(layerPosition("far") - initial.far),
+      near: Math.abs(layerPosition("near") - initial.near),
+    };
+    expect(world).toHaveAttribute("data-route-position", "960.000px");
+    expect(displacement.sun).toBeCloseTo(
+      960 * TRAIN_SKY_SUN_SPEED_RATIO,
+      3,
+    );
+    expect(displacement.wisp).toBeCloseTo(
+      960 * TRAIN_SKY_WISP_SPEED_RATIO,
+      3,
+    );
+    expect(displacement.cloud).toBeCloseTo(
+      960 * TRAIN_SKY_CLOUD_SPEED_RATIO,
+      3,
+    );
+    expect(
+      [
+        displacement.sun,
+        displacement.wisp,
+        displacement.cloud,
+        displacement.far,
+        displacement.near,
+      ].every((distance, index, distances) =>
+        index === 0 ? distance > 0 : distance > distances[index - 1]!,
+      ),
+    ).toBe(true);
+    expect(world).toHaveAttribute("data-route-total-mounted-chunks");
+    expect(container.querySelectorAll("[data-day-sky-anchor]").length).toBe(
+      Number(world.dataset.daySkyCount),
+    );
+  });
+
   it("clamps a throttled frame instead of leaping forward", () => {
     const animation = installAnimationFrame();
     mockVisibility();
@@ -1031,6 +1155,8 @@ describe("TrainLayout", () => {
     expect(animation.pending()).toBe(0);
     expect(container.querySelector(".train-star")).not.toBeInTheDocument();
     expect(container.querySelector("[data-night-sky-catalogue]"))
+      .not.toBeInTheDocument();
+    expect(container.querySelector("[data-day-sky-anchor]"))
       .not.toBeInTheDocument();
     expect(removeListener).toHaveBeenCalledWith(
       "visibilitychange",
@@ -1222,7 +1348,7 @@ describe("TrainLayout", () => {
       "near",
     ]);
     expect(layers.map((layer) => layer.dataset.speedRatio)).toEqual([
-      "0",
+      String(TRAIN_SKY_CLOUD_SPEED_RATIO),
       "0.1",
       "0.25",
       "0.55",
@@ -1344,118 +1470,170 @@ describe("TrainLayout", () => {
     expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
   });
 
-  it("builds the town-edge from opaque detailed solids with a varied roof and gap rhythm", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 0, 1, 12, 0));
-    window.history.replaceState(
-      null,
-      "",
-      "/?train-route-seed=train-032a-2&train-route-position=1800&train-cruise-speed=0.001",
-    );
+  it("builds both town-edge variants from recognizable opaque sprite settlements", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
     document.head.append(styles);
+
+    const representatives = new Map<
+      number,
+      ReturnType<typeof generateRouteChunk>[]
+    >();
+    for (let index = -3_600; index <= 3_600; index++) {
+      const chunk = generateRouteChunk("train-039-town-edge", index);
+      const setPiece = chunk.setPiece;
+      if (
+        setPiece?.type !== "town-edge" ||
+        setPiece.role !== "entry" ||
+        representatives.has(setPiece.visualVariant)
+      ) {
+        continue;
+      }
+      representatives.set(
+        setPiece.visualVariant,
+        Array.from({ length: setPiece.span }, (_, offset) =>
+          generateRouteChunk(
+            "train-039-town-edge",
+            setPiece.startIndex + offset,
+          ),
+        ),
+      );
+    }
+    expect(new Set(representatives.keys())).toEqual(new Set([0, 1]));
+
     const { container } = render(
-      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+      <>
+        {(["day", "sunset", "night"] as const).map((mode) => (
+          <div
+            className="train-layout-world"
+            data-time-of-day={mode}
+            data-testid={`town-edge-${mode}`}
+            key={mode}
+          >
+            {[...representatives.entries()].flatMap(([variant, chunks]) =>
+              chunks.map((chunk) => (
+                <TrainRouteChunk
+                  chunk={chunk}
+                  layer={
+                    TRAIN_PARALLAX_LAYERS.find(
+                      (layer) => layer.name === "midground",
+                    )!
+                  }
+                  key={`${variant}:${chunk.index}`}
+                />
+              )),
+            )}
+          </div>
+        ))}
+      </>,
     );
-    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
-    const townEdge = [
-      ...container.querySelectorAll<HTMLElement>(
-        ".train-set-piece--town-edge",
-      ),
-    ];
-    const detailedBuildings = [
-      ...container.querySelectorAll<HTMLElement>(
-        ".train-scenery-asset[data-scenery-asset^='building-']",
-      ),
-    ];
-    const initialGeometry = routeGeometryFingerprint(container);
-    const timeToggle = screen.getByRole("button", {
-      name: "Cycle train lighting (day / sunset / night)",
-    });
     const townEdgeBaseRule = trainLayoutCss.match(
       /\.train-set-piece--town-edge\s*\{([\s\S]*?)\n\}/,
     )?.[1];
-    const townEdgeDetailRule = trainLayoutCss.match(
-      /\.train-set-piece--town-edge::before\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
-    const townEdgeVariantRule = trainLayoutCss.match(
-      /\.train-set-piece--town-edge\.train-set-piece--variant-1\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
-    const townEdgeVariantDetailRule = trainLayoutCss.match(
-      /\.train-set-piece--town-edge\.train-set-piece--variant-1::before\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
-
-    expect(townEdge.map((segment) => segment.dataset.setPieceRole)).toEqual([
-      "entry",
-      "body",
-      "exit",
-    ]);
-    expect(detailedBuildings.length).toBeGreaterThan(0);
     expect(townEdgeBaseRule).toBeDefined();
-    expect(townEdgeDetailRule).toBeDefined();
-    expect(townEdgeVariantRule).toBeDefined();
-    expect(townEdgeVariantDetailRule).toBeDefined();
-    const solidPaletteTokens = [
-      ...townEdgeBaseRule!.matchAll(
-        /--train-town-edge-(?:wall-a|wall-b|roof|detail):\s*color-mix\(([\s\S]*?)\);/g,
-      ),
-    ];
-    expect(solidPaletteTokens).toHaveLength(4);
-    for (const token of solidPaletteTokens) {
-      expect(token[1]).not.toMatch(
-        /transparent|rgba?\(|var\(--train-palette-haze\)/i,
-      );
-    }
     expect(townEdgeBaseRule).toMatch(/opacity:\s*1;/);
-    expect(townEdgeBaseRule!.match(/repeat-x/g)).toHaveLength(7);
-    expect(townEdgeVariantRule!.match(/repeat-x/g)).toHaveLength(6);
-    expect(townEdgeDetailRule!.match(/repeat-x/g)).toHaveLength(6);
-    expect(townEdgeVariantDetailRule!.match(/repeat-x/g)).toHaveLength(5);
-    expect(townEdgeBaseRule).toMatch(
-      /wall-a\) 0 34px,\s*transparent 34px 192px/,
+    expect(townEdgeBaseRule).toMatch(/background:\s*none;/);
+    const townEdgeCss = trainLayoutCss.slice(
+      trainLayoutCss.indexOf(".train-set-piece--town-edge"),
+      trainLayoutCss.indexOf(".train-set-piece--station"),
     );
-    expect(townEdgeBaseRule).toMatch(
-      /transparent 34px 47px,[\s\S]*?transparent 74px 88px,[\s\S]*?transparent 133px 148px/,
-    );
-    expect(townEdgeVariantRule).toMatch(
-      /transparent 27px 39px,[\s\S]*?transparent 82px 96px,[\s\S]*?transparent 128px 142px/,
-    );
-    expect(townEdgeDetailRule!.match(/--train-town-edge-detail/g)!.length).toBe(
-      12,
-    );
-    expect(
-      townEdgeVariantDetailRule!.match(/--train-town-edge-detail/g)!.length,
-    ).toBe(11);
-    expect(trainLayoutCss).toMatch(
-      /\.train-set-piece--town-edge\.train-set-piece--entry\s*\{[\s\S]*?clip-path:\s*polygon\([\s\S]*?12% 88%[\s\S]*?36% 0/,
-    );
-    expect(trainLayoutCss).toMatch(
-      /\.train-set-piece--town-edge\.train-set-piece--exit\s*\{[\s\S]*?clip-path:\s*polygon\([\s\S]*?64% 48%[\s\S]*?88% 88%/,
-    );
-    expect(trainLayoutCss).not.toMatch(
-      /data-time-of-day="(?:day|sunset|night)"[\s\S]{0,160}\.train-set-piece--town-edge[\s\S]{0,120}opacity:/,
+    expect(townEdgeCss).not.toMatch(
+      /(?:repeating-)?linear-gradient|repeat-x|clip-path/,
     );
 
     for (const mode of ["day", "sunset", "night"] as const) {
-      expect(world).toHaveAttribute("data-time-of-day", mode);
-      expect(
-        townEdge.map((segment) =>
-          Number.parseFloat(getComputedStyle(segment).opacity),
+      const world = screen.getByTestId(`town-edge-${mode}`);
+      const segments = [
+        ...world.querySelectorAll<HTMLElement>(
+          ".train-set-piece--town-edge",
         ),
-      ).toEqual([1, 1, 1]);
-      for (const segment of townEdge) {
+      ];
+      expect(segments).toHaveLength(6);
+      for (const variant of [0, 1]) {
+        const variantSegments = segments.filter(
+          (segment) => segment.dataset.setPieceVariant === String(variant),
+        );
+        expect(
+          variantSegments.map((segment) => segment.dataset.setPieceRole),
+        ).toEqual(["entry", "body", "exit"]);
+        expect(
+          variantSegments.map(
+            (segment) => segment.dataset.townEdgeContinuity,
+          ),
+        ).toEqual(
+          variantSegments.map(
+            (segment, offset) =>
+              `${segment.dataset.setPieceStart}:${offset}`,
+          ),
+        );
+        const buildings = variantSegments.flatMap((segment) => [
+          ...segment.querySelectorAll<HTMLElement>(
+            "[data-town-edge-building]",
+          ),
+        ]);
+        expect(buildings).toHaveLength(9);
+        expect(
+          buildings.map((building) => building.dataset.townEdgeBuilding),
+        ).toEqual(
+          expect.arrayContaining([
+            "building-rowhouse",
+            "building-apartments",
+            "building-cottage",
+            "landmark-town-church",
+          ]),
+        );
+        expect(
+          variantSegments.flatMap((segment) => [
+            ...segment.querySelectorAll<HTMLElement>(
+              "[data-town-edge-slot]",
+            ),
+          ]).map((shell) => Number(shell.dataset.townEdgeSlot)),
+        ).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+        expect(
+          new Set(
+            variantSegments.flatMap((segment) => [
+              ...segment.querySelectorAll<HTMLElement>(
+                "[data-town-edge-material]",
+              ),
+            ]).map((shell) => shell.dataset.townEdgeMaterial),
+          ),
+        ).toEqual(new Set(["brick", "stone", "plaster"]));
+      }
+      for (const segment of segments) {
+        expect(getComputedStyle(segment).opacity).toBe("1");
         expect(getComputedStyle(segment).pointerEvents).toBe("none");
       }
-      for (const building of detailedBuildings) {
-        const chunk = building.closest<HTMLElement>(".train-parallax-chunk")!;
+      for (const building of world.querySelectorAll<HTMLElement>(
+        "[data-town-edge-building]",
+      )) {
         expect(getComputedStyle(building).opacity).toBe("1");
-        expect(getComputedStyle(chunk).opacity).toBe("1");
+        expect(building.tagName).toBe("IMG");
+        expect(Number(building.getAttribute("width"))).toBeGreaterThan(0);
+        expect(Number(building.getAttribute("height"))).toBeGreaterThan(0);
       }
-      expect(routeGeometryFingerprint(container)).toEqual(initialGeometry);
-      if (mode !== "night") fireEvent.click(timeToggle);
+      for (const mask of world.querySelectorAll<HTMLElement>(
+        "[data-emissive='town-edge-windows']",
+      )) {
+        expect(mask.dataset.emissiveOwner).toMatch(/^building-/);
+        expect(mask.dataset.townEdgeWindowAlignment).toBe(
+          `${mask.getAttribute("width")}x${mask.getAttribute("height")}`,
+        );
+        expect(getComputedStyle(mask).opacity).toBe(
+          mode === "day" ? "0" : mode === "sunset" ? "0.28" : "0.68",
+        );
+      }
     }
+    const sequences = [0, 1].map((variant) =>
+      [
+        ...screen
+          .getByTestId("town-edge-day")
+          .querySelectorAll<HTMLElement>(
+            `[data-set-piece-variant="${variant}"] [data-town-edge-building]`,
+          ),
+      ].map((building) => building.dataset.townEdgeBuilding),
+    );
+    expect(sequences[0]).not.toEqual(sequences[1]);
   });
 
   it("owns atmospheric alpha in two fixed veils between solid depth layers", () => {
@@ -1603,7 +1781,7 @@ describe("TrainLayout", () => {
     }
   });
 
-  it("renders two continuous palette-token compositions for every major set piece", () => {
+  it("renders two continuous deterministic compositions for every major set piece", () => {
     const majorTypes = [
       "bridge",
       "tunnel",
@@ -1690,17 +1868,22 @@ describe("TrainLayout", () => {
       ).toHaveProperty("size", 1);
     }
 
-    for (const type of majorTypes) {
+    for (const type of ["bridge", "tunnel", "coast-reveal"] as const) {
       expect(trainLayoutCss).toContain(
         `.train-set-piece--${type}.train-set-piece--variant-1`,
       );
     }
+    expect(
+      container.querySelectorAll(
+        '[data-town-edge-composition="recognizable-sprite-settlement"]',
+      ),
+    ).toHaveLength(6);
     const variantRules = [
       ...trainLayoutCss.matchAll(
-        /\.train-set-piece--(?:bridge|tunnel|coast-reveal|town-edge)\.train-set-piece--variant-1[\s\S]*?\n\}/g,
+        /\.train-set-piece--(?:bridge|tunnel|coast-reveal)\.train-set-piece--variant-1[\s\S]*?\n\}/g,
       ),
     ].map((match) => match[0]);
-    expect(variantRules.length).toBeGreaterThanOrEqual(4);
+    expect(variantRules.length).toBeGreaterThanOrEqual(3);
     expect(variantRules.join("\n")).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });
 
@@ -2143,6 +2326,7 @@ describe("TrainLayout", () => {
       "airglow",
       "celestial-accent",
       "building-windows",
+      "town-edge-windows",
       ...Object.values(TRAIN_REGION_NIGHT_LIFE).map((rule) => rule.kind),
       "lighthouse-water-reflection",
     ];
@@ -2164,8 +2348,12 @@ describe("TrainLayout", () => {
       "[data-emissive]",
     )) {
       if (overlay.tagName === "IMG") {
-        expect(overlay).toHaveClass("train-scenery-emissive-mask");
-        expect(overlay).toHaveAttribute("data-emissive", "building-windows");
+        if (overlay.dataset.emissive === "town-edge-windows") {
+          expect(overlay).toHaveClass("train-town-edge-building-emissive");
+        } else {
+          expect(overlay).toHaveClass("train-scenery-emissive-mask");
+          expect(overlay).toHaveAttribute("data-emissive", "building-windows");
+        }
         expect(overlay).toHaveAttribute("data-emissive-owner");
       } else if (!ownerlessSkyKinds.has(overlay.dataset.emissive!)) {
         expect(overlay).toHaveAttribute("data-emissive-owner");
@@ -2479,6 +2667,62 @@ describe("TrainLayout", () => {
     }
   });
 
+  it("keeps sky motion phase stable across palette changes and resize", () => {
+    window.history.replaceState(null, "", "/?train-cruise-speed=96");
+    const animation = installAnimationFrame();
+    mockVisibility();
+    const width = vi
+      .spyOn(window, "innerWidth", "get")
+      .mockReturnValue(1_024);
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    animation.run(0);
+    animation.run(250);
+    const phases = new Map(
+      [...container.querySelectorAll<HTMLElement>("[data-day-sky-anchor]")].map(
+        (anchor) => [
+          anchor.dataset.daySkyAnchorId!,
+          anchor.dataset.skyMotionDistance!,
+        ] as const,
+      ),
+    );
+    const cloudPhase =
+      container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition;
+    const routePosition = world.dataset.routePosition;
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cycle train lighting (day / sunset / night)",
+      }),
+    );
+    expect(world.dataset.routePosition).toBe(routePosition);
+    for (const anchor of container.querySelectorAll<HTMLElement>(
+      "[data-day-sky-anchor]",
+    )) {
+      expect(anchor.dataset.skyMotionDistance).toBe(
+        phases.get(anchor.dataset.daySkyAnchorId!),
+      );
+    }
+
+    width.mockReturnValue(1_280);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(world.dataset.routePosition).toBe(routePosition);
+    expect(
+      container.querySelector<HTMLElement>('[data-world-layer="sky"]')!
+        .dataset.layerPosition,
+    ).toBe(cloudPhase);
+    for (const [anchorID, phase] of phases) {
+      const anchor = container.querySelector<HTMLElement>(
+        `[data-day-sky-anchor-id="${anchorID}"]`,
+      );
+      expect(anchor).not.toBeNull();
+      expect(anchor).toHaveAttribute("data-sky-motion-distance", phase);
+    }
+  });
+
   it("uses crisp palette-owned cloud grading without a blanket sunset sepia", () => {
     const dayRule = trainLayoutCss.match(
       /\.train-layout-world\[data-time-of-day="day"\]\s+\.train-parallax-chunk--sky\s+\.train-scenery-asset--cloud\s*\{([^}]*)\}/,
@@ -2543,12 +2787,28 @@ describe("TrainLayout", () => {
       "[data-day-sky-catalogue]",
     )!;
     const anchors = [...catalogue.querySelectorAll("[data-day-sky-anchor]")];
+    const positions = anchors.map(
+      (anchor) => (anchor as HTMLElement).dataset.skyPosition,
+    );
+    const cloudLayer = container.querySelector<HTMLElement>(
+      '[data-world-layer="sky"]',
+    )!;
 
     expect(catalogue).toHaveAttribute("data-motion", "reduced");
     act(() => vi.advanceTimersByTime(TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS * 2));
     expect([...catalogue.querySelectorAll("[data-day-sky-anchor]")]).toEqual(
       anchors,
     );
+    expect(
+      anchors.map((anchor) => (anchor as HTMLElement).dataset.skyPosition),
+    ).toEqual(positions);
+    expect(cloudLayer).toHaveAttribute("data-layer-position", "0.000px");
+    expect(
+      anchors.every(
+        (anchor) =>
+          (anchor as HTMLElement).dataset.skyMotionDistance === "0.000px",
+      ),
+    ).toBe(true);
     expect(trainLayoutCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.train-day-sky-anchor\s*\{[\s\S]*?animation:\s*none;/,
     );

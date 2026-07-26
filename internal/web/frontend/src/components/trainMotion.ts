@@ -5,6 +5,44 @@ export const TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS = 100;
 export const TRAIN_WHEEL_DIAMETER_PX = 18;
 export const TRAIN_WHEEL_CIRCUMFERENCE_PX =
   Math.PI * TRAIN_WHEEL_DIAMETER_PX;
+export const TRAIN_SKY_SUN_SPEED_RATIO = 0.004;
+export const TRAIN_SKY_WISP_SPEED_RATIO = 0.02;
+export const TRAIN_SKY_CLOUD_SPEED_RATIO = 0.06;
+export const TRAIN_SKY_WRAP_OVERSCAN_PX = 192;
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+export function trainSkyAnchorPositionPx(
+  routePosition: number,
+  speedRatio: number,
+  viewportWidth: number,
+  initialXPercent: number,
+  reducedMotion = false,
+): number {
+  const safeWidth =
+    Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1;
+  const safeXPercent = Number.isFinite(initialXPercent)
+    ? Math.min(100, Math.max(0, initialXPercent))
+    : 0;
+  const initialPosition = (safeWidth * safeXPercent) / 100;
+  if (reducedMotion) return initialPosition;
+
+  const safeRoutePosition =
+    Number.isFinite(routePosition) && routePosition > 0 ? routePosition : 0;
+  const safeSpeedRatio =
+    Number.isFinite(speedRatio) && speedRatio > 0 ? speedRatio : 0;
+  const period = safeWidth + TRAIN_SKY_WRAP_OVERSCAN_PX * 2;
+  return (
+    positiveModulo(
+      initialPosition +
+        safeRoutePosition * safeSpeedRatio +
+        TRAIN_SKY_WRAP_OVERSCAN_PX,
+      period,
+    ) - TRAIN_SKY_WRAP_OVERSCAN_PX
+  );
+}
 
 export function clampTrainWorldElapsedMs(
   elapsedMs: number,

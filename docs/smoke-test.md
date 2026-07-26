@@ -352,6 +352,31 @@ advanced only `0.001px` over the next second at the requested 0.001 px/s.
 Manual palette state was not restored. `borz errors --json` reported no page
 errors, and no private pane names, output, or payloads were recorded.
 
+TRAIN-039 town-edge and sky-motion run 2026-07-26: repeated the HTTP 200,
+plain `/src/components/TrainLayout.tsx` freshness, open, viewport, refresh, and
+exact `window.innerWidth`/`window.innerHeight` protocol at 390×844, 1280×800,
+and 2560×900 with the dedicated `tmact-train-workitems` borz profile. The fixed
+`.train-layout-inspection` and diagnostics overlay were hidden only in the live
+DOM and restored after every check. Both deterministic town-edge variants
+rendered the continuous entry/body/exit sequence from nine opaque rowhouse,
+apartment, cottage, and church sprites with material and roof variation,
+aligned night-window masks, intentional gaps, and computed set-piece
+`background-image: none`. Day and night checks had no visible near-station
+overlap or anonymous rectangular settlement band. The twelve screenshots are
+`/private/tmp/train-039-town-edge-v{0,1}-{compact,desktop,ultrawide}-{day,night}.png`.
+
+At 96 px/s, a 10.521-second desktop sample measured route/near displacement
+of 1009.536px, sun 4.038px, wisp 20.190px, routed cloud 60.572px, and far
+terrain 252.384px, proving `0 < sun < wisp < cloud < far < near`; the layer
+ratios resolved to 0.004, 0.02, 0.06, 0.25, and 1 while the route window stayed
+bounded at 45 chunks. The DEV-only reduced-motion diagnostic held a restored
+4096px route plus every sun, wisp, and cloud position unchanged for 2.5
+seconds, with all anchor motion distances at zero. A triggered station run
+entered dwell after 9.831 seconds at 3680px and held route, sun, wisp, cloud,
+far, and near positions unchanged for the next second. `borz errors --json`
+reported no page errors; the live DOM was restored and no private pane names,
+output, or payloads were recorded.
+
 ## Notes Template
 
 ```text

@@ -53,9 +53,12 @@ import {
   type TrainParallaxLayerName,
 } from "./trainRoute";
 import {
+  TRAIN_SCENERY_BUILDINGS,
+  TRAIN_SCENERY_LANDMARKS,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
   type TrainNightLifePlan,
+  type TrainSceneryAsset,
   type TrainSceneryPlacement,
 } from "./trainScenery";
 import {
@@ -74,7 +77,10 @@ import {
   type SceneMode,
 } from "./sceneTime";
 import {
+  trainSkyAnchorPositionPx,
   trainWheelRotationDegrees,
+  TRAIN_SKY_SUN_SPEED_RATIO,
+  TRAIN_SKY_WISP_SPEED_RATIO,
   TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND,
   TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS,
   TRAIN_WORLD_REDUCED_STEP_INTERVAL_MS,
@@ -126,6 +132,7 @@ const TRAIN_WORLD_DEBUG_PARAM = "train-world-debug";
 const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_WORLD_POSITION_PARAM = "train-route-position";
+const TRAIN_WORLD_REDUCED_MOTION_PARAM = "train-reduced-motion";
 const TRAIN_WORLD_MAX_DEVELOPMENT_POSITION = 1_000_000;
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
@@ -300,6 +307,13 @@ export function trainWorldRoutePosition(search: string): number {
   );
   if (!Number.isFinite(requested) || requested < 0) return 0;
   return Math.min(TRAIN_WORLD_MAX_DEVELOPMENT_POSITION, requested);
+}
+
+export function trainWorldReducedMotionForced(search: string): boolean {
+  return (
+    import.meta.env.DEV &&
+    new URLSearchParams(search).get(TRAIN_WORLD_REDUCED_MOTION_PARAM) === "1"
+  );
 }
 
 export function trainWorldTrackTransform(routePosition: number): number {
@@ -735,7 +749,74 @@ type TrainDaySkyAnchorStyle = CSSProperties & {
   "--train-sky-anchor-opacity": number;
   "--train-sky-anchor-width": string;
   "--train-sky-anchor-height": string;
+  "--train-sky-anchor-x": string;
 };
+
+type TrainTownEdgeAssetID =
+  | "building-rowhouse"
+  | "building-apartments"
+  | "building-cottage"
+  | "landmark-town-church";
+
+interface TrainTownEdgeBuildingPlan {
+  assetID: TrainTownEdgeAssetID;
+  xPercent: number;
+  scale: number;
+  liftPx: number;
+  material: "brick" | "stone" | "plaster";
+}
+
+type TrainTownEdgeBuildingStyle = CSSProperties & {
+  "--train-town-edge-building-scale": number;
+};
+
+const TRAIN_TOWN_EDGE_VARIANT_PLANS = [
+  [
+    [
+      { assetID: "building-rowhouse", xPercent: 25, scale: 0.66, liftPx: 0, material: "brick" },
+      { assetID: "building-cottage", xPercent: 57, scale: 0.62, liftPx: 1, material: "plaster" },
+      { assetID: "building-apartments", xPercent: 87, scale: 0.6, liftPx: 0, material: "stone" },
+    ],
+    [
+      { assetID: "building-rowhouse", xPercent: 13, scale: 0.68, liftPx: 0, material: "brick" },
+      { assetID: "landmark-town-church", xPercent: 49, scale: 0.6, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 85, scale: 0.64, liftPx: 1, material: "plaster" },
+    ],
+    [
+      { assetID: "building-apartments", xPercent: 17, scale: 0.61, liftPx: 0, material: "stone" },
+      { assetID: "building-cottage", xPercent: 50, scale: 0.63, liftPx: 1, material: "plaster" },
+      { assetID: "building-rowhouse", xPercent: 79, scale: 0.67, liftPx: 0, material: "brick" },
+    ],
+  ],
+  [
+    [
+      { assetID: "building-cottage", xPercent: 22, scale: 0.64, liftPx: 1, material: "plaster" },
+      { assetID: "building-apartments", xPercent: 55, scale: 0.59, liftPx: 0, material: "stone" },
+      { assetID: "building-rowhouse", xPercent: 86, scale: 0.69, liftPx: 0, material: "brick" },
+    ],
+    [
+      { assetID: "building-rowhouse", xPercent: 13, scale: 0.65, liftPx: 0, material: "brick" },
+      { assetID: "building-cottage", xPercent: 42, scale: 0.61, liftPx: 1, material: "plaster" },
+      { assetID: "landmark-town-church", xPercent: 76, scale: 0.61, liftPx: 0, material: "stone" },
+    ],
+    [
+      { assetID: "building-cottage", xPercent: 18, scale: 0.63, liftPx: 1, material: "plaster" },
+      { assetID: "building-rowhouse", xPercent: 48, scale: 0.68, liftPx: 0, material: "brick" },
+      { assetID: "building-apartments", xPercent: 76, scale: 0.6, liftPx: 0, material: "stone" },
+    ],
+  ],
+] as const satisfies readonly (readonly (readonly TrainTownEdgeBuildingPlan[])[])[];
+
+const TRAIN_TOWN_EDGE_ASSETS: readonly TrainSceneryAsset[] = [
+  ...TRAIN_SCENERY_BUILDINGS,
+  ...TRAIN_SCENERY_LANDMARKS,
+];
+
+function trainTownEdgeAsset(assetID: TrainTownEdgeAssetID): TrainSceneryAsset {
+  const asset = TRAIN_TOWN_EDGE_ASSETS.find((candidate) => candidate.id === assetID);
+  if (!asset) throw new Error(`Missing town-edge asset: ${assetID}`);
+  return asset;
+}
 
 function trainPaletteStyle(mode: SceneMode): TrainPaletteStyle {
   const palette = TRAIN_TIME_PALETTES[mode];
@@ -764,6 +845,75 @@ function trainAtmosphereStyle(mode: SceneMode): TrainAtmosphereStyle {
     "--train-atmosphere-sky-top": palette.skyTop,
     "--train-atmosphere-sky-bottom": palette.skyBottom,
   };
+}
+
+function TrainTownEdgeComposition({
+  segment,
+}: {
+  segment: NonNullable<RouteChunk["setPiece"]>;
+}) {
+  const plan =
+    TRAIN_TOWN_EDGE_VARIANT_PLANS[segment.visualVariant][segment.segmentOffset];
+  if (!plan) return null;
+
+  return (
+    <span
+      className="train-town-edge-composition"
+      data-town-edge-composition="recognizable-sprite-settlement"
+      data-town-edge-variant={segment.visualVariant}
+      data-town-edge-role={segment.role}
+      data-town-edge-segment={segment.segmentOffset}
+    >
+      {plan.map((building, slot) => {
+        const asset = trainTownEdgeAsset(building.assetID);
+        const globalSlot = segment.segmentOffset * 3 + slot;
+        const style: TrainTownEdgeBuildingStyle = {
+          left: `${building.xPercent}%`,
+          bottom: `${building.liftPx}px`,
+          "--train-town-edge-building-scale": building.scale,
+        };
+        return (
+          <span
+            className="train-town-edge-building-shell"
+            data-town-edge-slot={globalSlot}
+            data-town-edge-continuity={`${segment.visualVariant}:${globalSlot}`}
+            data-town-edge-material={building.material}
+            style={style}
+            key={`${building.assetID}-${globalSlot}`}
+          >
+            <img
+              className="train-town-edge-building"
+              src={asset.src}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              width={asset.width}
+              height={asset.height}
+              data-town-edge-building={asset.id}
+              data-town-edge-solid="opaque"
+            />
+            {asset.emissive ? (
+              <img
+                className="train-emissive-overlay train-town-edge-building-emissive"
+                src={asset.emissive.src}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                width={asset.emissive.width}
+                height={asset.emissive.height}
+                data-emissive="town-edge-windows"
+                data-emissive-owner={asset.id}
+                data-town-edge-window-alignment={`${asset.width}x${asset.height}`}
+                onError={(event) => {
+                  event.currentTarget.hidden = true;
+                }}
+              />
+            ) : null}
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 export const TrainRouteChunk = memo(function TrainRouteChunk({
@@ -832,6 +982,11 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-set-piece-start={chunk.setPiece.startIndex}
             data-set-piece-end={chunk.setPiece.endIndex}
             data-set-piece-occlusion="restrained"
+            data-town-edge-continuity={
+              chunk.setPiece.type === "town-edge"
+                ? `${chunk.setPiece.startIndex}:${chunk.setPiece.segmentOffset}`
+                : undefined
+            }
             style={
               {
                 "--train-set-piece-phase": `${
@@ -848,6 +1003,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               stationSegment ? "behind-train" : undefined
             }
           >
+            {chunk.setPiece.type === "town-edge" ? (
+              <TrainTownEdgeComposition segment={chunk.setPiece} />
+            ) : null}
             {stationSegment ? (
               <>
                 <span
@@ -1058,19 +1216,22 @@ function totalMountedRouteChunks(routeWindows: TrainRouteWindows): number {
 }
 
 function usePrefersReducedTrainMotion(): boolean {
+  const forced = trainWorldReducedMotionForced(window.location.search);
   const [reducedMotion, setReducedMotion] = useState(
     () =>
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      forced ||
+      (typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches),
   );
 
   useEffect(() => {
+    if (forced) return;
     if (typeof window.matchMedia !== "function") return;
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReducedMotion(query.matches);
     query.addEventListener?.("change", update);
     return () => query.removeEventListener?.("change", update);
-  }, []);
+  }, [forced]);
 
   return reducedMotion;
 }
@@ -1305,6 +1466,31 @@ function TrainWorld({
           generateTrainDaySkyCatalogue(seed, nightSkyViewportWidth),
         );
       }
+      for (const anchor of world.querySelectorAll<HTMLElement>(
+        "[data-day-sky-anchor]",
+      )) {
+        const initialXPercent = Number.parseFloat(
+          anchor.dataset.skySeedX ?? "",
+        );
+        const speedRatio = Number.parseFloat(
+          anchor.dataset.skySpeedRatio ?? "",
+        );
+        const position = trainSkyAnchorPositionPx(
+          routePosition,
+          speedRatio,
+          width,
+          initialXPercent,
+          reducedMotion,
+        );
+        const motionDistance = reducedMotion ? 0 : routePosition * speedRatio;
+        anchor.style.setProperty(
+          "--train-sky-anchor-x",
+          `${position.toFixed(3)}px`,
+        );
+        anchor.dataset.skyPosition = `${position.toFixed(3)}px`;
+        anchor.dataset.skyMotionDistance =
+          `${motionDistance.toFixed(3)}px`;
+      }
       let windowsChanged = false;
       const nextWindows = { ...routeWindowsRef.current };
 
@@ -1312,6 +1498,7 @@ function TrainWorld({
         const layerPosition = trainParallaxLayerPosition(
           routePosition,
           layer.speedRatio,
+          reducedMotion && layer.name === "sky",
         );
         const layerElement = world.querySelector<HTMLElement>(
           `[data-world-layer="${layer.name}"]`,
@@ -1563,6 +1750,7 @@ function TrainWorld({
       data-day-sky-count={daySkyCatalogue.elementCount}
       data-day-sky-weather={daySkyCatalogue.weather}
       data-day-sky-viewport-width={daySkyCatalogue.viewportWidth}
+      data-sky-motion="route-derived"
       data-time-of-day={timeOfDay}
       data-time-source={timeSource}
       data-palette-transition={paletteTransition}
@@ -1608,18 +1796,38 @@ function TrainWorld({
         >
           {[daySkyCatalogue.sun, ...daySkyCatalogue.wisps].map(
             (anchor: TrainDaySkyAnchor) => {
+              const speedRatio =
+                anchor.kind === "sun"
+                  ? TRAIN_SKY_SUN_SPEED_RATIO
+                  : TRAIN_SKY_WISP_SPEED_RATIO;
+              const position = trainSkyAnchorPositionPx(
+                routePositionRef.current,
+                speedRatio,
+                daySkyCatalogue.viewportWidth,
+                anchor.xPercent,
+                reducedMotion,
+              );
               const style: TrainDaySkyAnchorStyle = {
-                left: `${anchor.xPercent}%`,
+                left: "0px",
                 top: `${anchor.yPercent}%`,
                 "--train-sky-anchor-opacity": anchor.opacity,
                 "--train-sky-anchor-width": `${anchor.widthPx.toFixed(3)}px`,
                 "--train-sky-anchor-height": `${anchor.heightPx.toFixed(3)}px`,
+                "--train-sky-anchor-x": `${position.toFixed(3)}px`,
               };
               return (
                 <i
                   className={`train-day-sky-anchor train-day-sky-anchor--${anchor.kind}`}
                   data-day-sky-anchor={anchor.kind}
                   data-day-sky-anchor-id={anchor.id}
+                  data-sky-seed-x={anchor.xPercent.toFixed(3)}
+                  data-sky-speed-ratio={speedRatio}
+                  data-sky-position={`${position.toFixed(3)}px`}
+                  data-sky-motion-distance={`${(
+                    reducedMotion
+                      ? 0
+                      : routePositionRef.current * speedRatio
+                  ).toFixed(3)}px`}
                   style={style}
                   key={anchor.id}
                 />
@@ -1752,9 +1960,14 @@ function TrainWorld({
       {TRAIN_PARALLAX_LAYERS.map((layer, layerIndex) => {
         const layerWindow = routeWindows[layer.name];
         const depth = TRAIN_SCENERY_DEPTH_PROFILES[layer.name];
+        const initialLayerPosition = trainParallaxLayerPosition(
+          routePositionRef.current,
+          layer.speedRatio,
+          reducedMotion && layer.name === "sky",
+        );
         const style: TrainWorldLayerStyle = {
           "--train-layer-order": layerIndex,
-          "--train-layer-position": "0.000px",
+          "--train-layer-position": `${initialLayerPosition.toFixed(3)}px`,
           "--train-layer-speed": layer.speedRatio,
           "--train-depth-saturation": depth.saturation,
           "--train-depth-brightness": depth.brightness,
@@ -1765,7 +1978,7 @@ function TrainWorld({
             className={`train-world-layer train-world-layer--${layer.name}`}
             data-world-layer={layer.name}
             data-layer-order={layerIndex}
-            data-layer-position="0.000px"
+            data-layer-position={`${initialLayerPosition.toFixed(3)}px`}
             data-speed-ratio={layer.speedRatio}
             data-depth-saturation={depth.saturation}
             data-depth-brightness={depth.brightness}

@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   advanceTrainWorldRoutePosition,
   clampTrainWorldElapsedMs,
+  trainSkyAnchorPositionPx,
   trainWheelRotationDegrees,
+  TRAIN_SKY_CLOUD_SPEED_RATIO,
+  TRAIN_SKY_SUN_SPEED_RATIO,
+  TRAIN_SKY_WISP_SPEED_RATIO,
+  TRAIN_SKY_WRAP_OVERSCAN_PX,
   TRAIN_WHEEL_CIRCUMFERENCE_PX,
   TRAIN_WHEEL_DIAMETER_PX,
   TRAIN_WORLD_DEFAULT_SPEED_PX_PER_SECOND,
@@ -36,6 +41,80 @@ describe("train world motion", () => {
     expect(
       advanceTrainWorldRoutePosition(0, TRAIN_WORLD_REDUCED_STEP_ELAPSED_MS),
     ).toBeLessThan(3);
+  });
+
+  it("orders bounded sky motion behind far and near scenery", () => {
+    expect(TRAIN_SKY_SUN_SPEED_RATIO).toBeGreaterThan(0);
+    expect(TRAIN_SKY_WISP_SPEED_RATIO).toBeGreaterThan(
+      TRAIN_SKY_SUN_SPEED_RATIO,
+    );
+    expect(TRAIN_SKY_CLOUD_SPEED_RATIO).toBeGreaterThan(
+      TRAIN_SKY_WISP_SPEED_RATIO,
+    );
+    expect(TRAIN_SKY_CLOUD_SPEED_RATIO).toBeLessThan(0.1);
+
+    const routePosition = 960;
+    const initial = trainSkyAnchorPositionPx(0, 0, 1_280, 50);
+    const sun = trainSkyAnchorPositionPx(
+      routePosition,
+      TRAIN_SKY_SUN_SPEED_RATIO,
+      1_280,
+      50,
+    );
+    const wisp = trainSkyAnchorPositionPx(
+      routePosition,
+      TRAIN_SKY_WISP_SPEED_RATIO,
+      1_280,
+      50,
+    );
+    expect(sun - initial).toBeCloseTo(3.84);
+    expect(wisp - initial).toBeCloseTo(19.2);
+  });
+
+  it("wraps sky anchors deterministically and freezes them for reduced motion", () => {
+    const viewportWidth = 800;
+    const initialXPercent = 70;
+    const period = viewportWidth + TRAIN_SKY_WRAP_OVERSCAN_PX * 2;
+    const onePeriodRoute = period / TRAIN_SKY_WISP_SPEED_RATIO;
+    const initial = trainSkyAnchorPositionPx(
+      0,
+      TRAIN_SKY_WISP_SPEED_RATIO,
+      viewportWidth,
+      initialXPercent,
+    );
+
+    expect(
+      trainSkyAnchorPositionPx(
+        onePeriodRoute,
+        TRAIN_SKY_WISP_SPEED_RATIO,
+        viewportWidth,
+        initialXPercent,
+      ),
+    ).toBeCloseTo(initial);
+    expect(
+      trainSkyAnchorPositionPx(
+        onePeriodRoute,
+        TRAIN_SKY_WISP_SPEED_RATIO,
+        viewportWidth,
+        initialXPercent,
+      ),
+    ).toBe(
+      trainSkyAnchorPositionPx(
+        onePeriodRoute,
+        TRAIN_SKY_WISP_SPEED_RATIO,
+        viewportWidth,
+        initialXPercent,
+      ),
+    );
+    expect(
+      trainSkyAnchorPositionPx(
+        onePeriodRoute,
+        TRAIN_SKY_WISP_SPEED_RATIO,
+        viewportWidth,
+        initialXPercent,
+        true,
+      ),
+    ).toBeCloseTo((viewportWidth * initialXPercent) / 100);
   });
 
   it("derives one bounded counter-clockwise wheel angle from route distance", () => {

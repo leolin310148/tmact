@@ -265,7 +265,7 @@ and safety properties established by the archived queue remain the baseline.
   a sustained `borz` smoke traversal following TRAIN-015's exact viewport and
   module-freshness procedure.
 
-- [ ] **TRAIN-039 — Replace the town-edge color bars and give the sky independent motion.**
+- [x] **TRAIN-039 — Replace the town-edge color bars and give the sky independent motion.**
   Correct the two visual defects confirmed after TRAIN-038 by inspecting the
   scene with the fixed train hidden. First, remove the procedural town-edge
   composition that still reads as a repeating band of unexplained green/blue
