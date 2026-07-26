@@ -188,7 +188,7 @@ Treat these findings as regression targets:
   sequences covering ordinary forest, forest→mountain, mountain, and
   mountain→forest travel.
 
-- [ ] **TRAIN-048 — Recompose ordinary town and industrial scenery.**
+- [x] **TRAIN-048 — Recompose ordinary town and industrial scenery.**
   Make town read as coherent settlement blocks with streets, yards, fences,
   trees, civic/commercial accents, and varied but compatible building scales.
   Make industrial routes read through sheds, tanks, stacks, cranes, utility

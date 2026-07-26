@@ -671,6 +671,50 @@ The focused scenery/layout suites passed all 105 tests, the complete frontend
 suite passed all 439 tests, the production build passed, and `make test`
 passed.
 
+TRAIN-048 town-and-industrial composition run 2026-07-27: used route seed
+`train-048-proof` with town at `1809.091`, `2618.182`, and `3781.818`;
+town-to-industrial at `5009.091`, `5818.182`, and `6981.818`; industrial at
+`8790.909`, `9600`, and `10763.636`; and industrial-to-town at `10245.455`,
+`11054.545`, and `12218.182` for compact, desktop, and ultrawide respectively.
+The dedicated `tmact-train-workitems` borz profile used exact 390×844,
+1280×800, and 2560×900 viewports.
+
+Every viewport confirmed HTTP 200, fetched the plain non-cache-busted
+`/src/components/TrainLayout.tsx` module and found the current
+`townhouse-block` and `industrial-shed` fixture source, opened the port-5234
+page, set the viewport, issued a hard reload, and asserted exact
+`window.innerWidth` and `window.innerHeight`. The train, debug controls, and
+projected set-piece segments were temporarily hidden so each ordinary sequence
+showed the regional grammar unobstructed.
+
+The 36 retained full captures are
+`/private/tmp/train-048-proof/{compact,desktop,ultrawide}-{town,town-to-industrial,industrial,industrial-to-town}-{day,sunset,night}.png`.
+The nine inspected contact sheets are
+`/private/tmp/train-048-proof/contact-{compact,desktop,ultrawide}-{day,sunset,night}.png`;
+their order is town, town-to-industrial, industrial, then
+industrial-to-town. Town scenes formed opaque settlement blocks from
+townhouses, storefront awnings, streets, yards, fences, trees, civic clocks,
+and yard gates. Industrial scenes used sheds, tanks, furnace and vent stacks,
+cranes, utility poles and lines, service pipes, service roads, and deliberate
+open-yard beats. Both transition directions changed composition gradually
+without mirrored wallpaper, isolated track-line props, floating anchors, or
+repeated identical façades.
+
+The ultrawide midground route window remained bounded at 13 chunks. Visible
+town fixtures covered fence, street-tree, townhouse-block, yard-gate,
+civic-clock, and shop-awning; industrial fixtures covered industrial-shed,
+utility-pole, service-pipe, gantry-crane, furnace-stack, vent-stack, and
+storage-tank. Solid surfaces stayed opaque. Attached windows, lamps, signals,
+and furnace lights were absent by day, localized at sunset, and strongest at
+night while retaining matching owner geometry.
+
+The temporary stylesheet was removed afterward. The train inspection and time
+toggle restored to `flex` and `grid`, all 24 projected segments restored
+visible, and no temporary marker remained. `borz errors --json` was empty.
+The focused scenery/layout/asset suites passed all 118 tests, the complete
+frontend suite passed all 444 tests, the production build passed, and
+`make test` passed.
+
 ## Notes Template
 
 ```text

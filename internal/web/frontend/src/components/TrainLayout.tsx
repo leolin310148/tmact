@@ -68,9 +68,12 @@ import {
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
+  trainTownIndustrialSceneryBeatForChunk,
   type TrainNightLifePlan,
   type TrainSceneryAsset,
   type TrainSceneryPlacement,
+  type TrainTownIndustrialFixtureKind,
+  type TrainTownIndustrialSceneryBeat,
 } from "./trainScenery";
 import {
   generateTrainNightSkyCatalogue,
@@ -640,6 +643,11 @@ type TrainNightLifeStyle = CSSProperties & {
   "--train-night-life-intensity": number;
   "--train-scenery-scale": number;
   "--train-scenery-ground-height"?: string;
+};
+
+type TrainBuiltEnvironmentFixtureStyle = CSSProperties & {
+  "--train-built-fixture-scale": number;
+  "--train-built-fixture-ground-height": string;
 };
 
 type TrainPaletteStyle = CSSProperties & {
@@ -1289,6 +1297,82 @@ export function trainTerrainHeightAtPercent(
   return contour.points.at(-1)!.heightPx;
 }
 
+const TRAIN_BUILT_ENVIRONMENT_FIXTURE_POSITIONS = [
+  [20, 72],
+  [28, 78],
+  [18, 64],
+] as const;
+
+const TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES =
+  new Set<TrainTownIndustrialFixtureKind>([
+    "civic-clock",
+    "vent-stack",
+    "furnace-stack",
+    "gantry-crane",
+  ]);
+
+function TrainBuiltEnvironmentFixtures({
+  beat,
+  contour,
+  chunkIndex,
+}: {
+  beat: TrainTownIndustrialSceneryBeat;
+  contour: TrainTerrainContour;
+  chunkIndex: number;
+}) {
+  const positions =
+    TRAIN_BUILT_ENVIRONMENT_FIXTURE_POSITIONS[beat.templateVariant] ??
+    TRAIN_BUILT_ENVIRONMENT_FIXTURE_POSITIONS[0];
+  return (
+    <span
+      className={[
+        "train-built-environment-fixtures",
+        `train-built-environment-fixtures--${beat.region}`,
+      ].join(" ")}
+      data-built-environment={beat.region}
+      data-built-composition-family={beat.compositionFamily}
+      data-built-scale-family={beat.scaleFamily}
+      data-built-density={beat.densityClass}
+      aria-hidden="true"
+    >
+      {beat.fixtures.map((fixture, fixtureIndex) => {
+        const xPercent = positions[fixtureIndex] ?? 50;
+        const groundHeight = trainTerrainHeightAtPercent(contour, xPercent);
+        const owner = `${beat.region}:${chunkIndex}:${fixtureIndex}:${fixture}`;
+        const style: TrainBuiltEnvironmentFixtureStyle = {
+          left: `${xPercent}%`,
+          "--train-built-fixture-scale":
+            0.86 + ((beat.templateVariant + fixtureIndex) % 3) * 0.08,
+          "--train-built-fixture-ground-height": `${groundHeight}px`,
+        };
+        return (
+          <span
+            className={[
+              "train-built-environment-fixture",
+              `train-built-environment-fixture--${fixture}`,
+            ].join(" ")}
+            data-built-fixture={fixture}
+            data-built-fixture-owner={owner}
+            data-built-fixture-surface="opaque"
+            data-built-fixture-ground-height={groundHeight.toFixed(3)}
+            style={style}
+            key={owner}
+          >
+            {TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES.has(fixture) ? (
+              <span
+                className="train-emissive-overlay train-built-environment-fixture-emissive"
+                data-emissive="regional-fixture"
+                data-emissive-owner={owner}
+                data-emissive-schedule="sunset-night"
+              />
+            ) : null}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk: sourceChunk,
   layer,
@@ -1349,6 +1433,23 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
     : undefined;
   const regionalSceneryBeat =
     trainForestMountainSceneryBeatForChunk(chunk);
+  const builtEnvironmentBeat =
+    trainTownIndustrialSceneryBeatForChunk(chunk);
+  const regionalRole =
+    regionalSceneryBeat?.role ?? builtEnvironmentBeat?.role;
+  const regionalFamily =
+    regionalSceneryBeat?.silhouetteFamily ??
+    builtEnvironmentBeat?.compositionFamily;
+  const regionalTemplateVariant =
+    regionalSceneryBeat?.templateVariant ??
+    builtEnvironmentBeat?.templateVariant;
+  const regionalDensity =
+    regionalSceneryBeat?.densityClass ?? builtEnvironmentBeat?.densityClass;
+  const regionalTransition =
+    regionalSceneryBeat?.transition ?? builtEnvironmentBeat?.transition;
+  const regionalTransitionNeighbor =
+    regionalSceneryBeat?.transitionNeighbor ??
+    builtEnvironmentBeat?.transitionNeighbor;
 
   return (
     <div
@@ -1367,14 +1468,17 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-route-region={chunk.region}
       data-route-region-index={chunk.regionIndex}
       data-route-region-offset={chunk.regionChunkOffset}
-      data-regional-scenery-role={regionalSceneryBeat?.role}
-      data-regional-silhouette={regionalSceneryBeat?.silhouetteFamily}
-      data-regional-rhythm-variant={regionalSceneryBeat?.templateVariant}
-      data-regional-density={regionalSceneryBeat?.densityClass}
-      data-regional-transition={regionalSceneryBeat?.transition}
+      data-regional-scenery-role={regionalRole}
+      data-regional-silhouette={regionalFamily}
+      data-regional-rhythm-variant={regionalTemplateVariant}
+      data-regional-density={regionalDensity}
+      data-regional-transition={regionalTransition}
       data-regional-transition-neighbor={
-        regionalSceneryBeat?.transitionNeighbor ?? undefined
+        regionalTransitionNeighbor ?? undefined
       }
+      data-built-environment-ground={builtEnvironmentBeat?.groundKind}
+      data-built-environment-family={builtEnvironmentBeat?.compositionFamily}
+      data-built-environment-scale={builtEnvironmentBeat?.scaleFamily}
       data-regional-human-landmark={
         regionalSceneryBeat?.humanScaleLandmarkEligible
           ? "eligible"
@@ -1429,6 +1533,28 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             .join(",")}
           aria-hidden="true"
           style={terrainStyle}
+        >
+          {builtEnvironmentBeat && layer.name === "midground" && !projection ? (
+            <span
+              className={[
+                "train-built-environment-ground",
+                `train-built-environment-ground--${builtEnvironmentBeat.groundKind}`,
+              ].join(" ")}
+              data-built-ground={builtEnvironmentBeat.groundKind}
+              data-built-ground-owner={`${chunk.index}:midground`}
+              data-built-ground-surface="opaque"
+            />
+          ) : null}
+        </span>
+      ) : null}
+      {builtEnvironmentBeat &&
+      terrainContour &&
+      layer.name === "midground" &&
+      !projection ? (
+        <TrainBuiltEnvironmentFixtures
+          beat={builtEnvironmentBeat}
+          contour={terrainContour}
+          chunkIndex={chunk.index}
         />
       ) : null}
       {chunk.setPiece?.renderLayer === layer.name ? (
@@ -1756,6 +1882,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-silhouette={placement.silhouetteFamily}
             data-scenery-rhythm-variant={placement.regionalTemplateVariant}
             data-scenery-transition={placement.regionalTransition}
+            data-scenery-scale-family={placement.regionalScaleFamily}
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-set-piece-variant={

@@ -683,6 +683,7 @@ export const TRAIN_NEAR_TRACK_PROP_POOLS = {
   ],
   industrial: [
     "prop-telegraph-pole",
+    "prop-warning-sign",
     "prop-crossing-marker",
     "prop-lamp-post",
     "prop-signal-cabinet",
@@ -735,6 +736,8 @@ export const TRAIN_REGION_OPEN_VIEW_TARGET = 2;
 export type TrainForestMountainRegion = "forest" | "mountain";
 export const TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX =
   TRAIN_ROUTE_CHUNK_WIDTH * 0.8;
+export const TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX =
+  TRAIN_ROUTE_CHUNK_WIDTH * 0.68;
 
 export type TrainForestMountainSceneryRole =
   | "forest-transition-grove"
@@ -920,6 +923,346 @@ export function trainForestMountainSceneryBeatForChunk(
   };
 }
 
+export type TrainTownIndustrialRegion = "town" | "industrial";
+
+export type TrainTownIndustrialSceneryRole =
+  | "town-transition-lane"
+  | "town-residential-block"
+  | "town-commercial-main-street"
+  | "town-yard-cluster"
+  | "town-civic-square"
+  | "town-tree-lined-street"
+  | "town-open-lot"
+  | "town-landmark-approach"
+  | "town-landmark"
+  | "industrial-transition-road"
+  | "industrial-shed-district"
+  | "industrial-tank-yard"
+  | "industrial-stack-line"
+  | "industrial-crane-yard"
+  | "industrial-utility-corridor"
+  | "industrial-service-gap"
+  | "industrial-landmark-approach"
+  | "industrial-landmark";
+
+export type TrainTownIndustrialCompositionFamily =
+  | "settlement-edge"
+  | "residential-block"
+  | "commercial-street"
+  | "fenced-yard"
+  | "civic-square"
+  | "tree-lined-street"
+  | "open-lot"
+  | "industrial-edge"
+  | "shed-district"
+  | "tank-farm"
+  | "stack-works"
+  | "crane-yard"
+  | "utility-corridor"
+  | "service-gap";
+
+export type TrainTownIndustrialScaleFamily =
+  | "small"
+  | "medium"
+  | "tall"
+  | "mixed";
+
+export type TrainTownIndustrialGroundKind =
+  | "lane"
+  | "residential-street"
+  | "main-street"
+  | "yard"
+  | "civic-square"
+  | "tree-lined-street"
+  | "open-lot"
+  | "service-road"
+  | "shed-yard"
+  | "tank-pad"
+  | "stack-yard"
+  | "crane-pad"
+  | "utility-corridor"
+  | "service-gap";
+
+export type TrainTownIndustrialFixtureKind =
+  | "fence"
+  | "street-tree"
+  | "townhouse-block"
+  | "shop-awning"
+  | "civic-clock"
+  | "yard-gate"
+  | "utility-pole"
+  | "industrial-shed"
+  | "vent-stack"
+  | "storage-tank"
+  | "furnace-stack"
+  | "gantry-crane"
+  | "service-pipe";
+
+export interface TrainTownIndustrialSceneryBeat {
+  region: TrainTownIndustrialRegion;
+  role: TrainTownIndustrialSceneryRole;
+  compositionFamily: TrainTownIndustrialCompositionFamily;
+  scaleFamily: TrainTownIndustrialScaleFamily;
+  groundKind: TrainTownIndustrialGroundKind;
+  fixtures: readonly TrainTownIndustrialFixtureKind[];
+  templateVariant: number;
+  densityClass: "dense" | "medium" | "sparse" | "gap";
+  transition: "entry" | "interior" | "exit";
+  transitionNeighbor: TrainRegionName | null;
+}
+
+interface TrainTownIndustrialRoleGrammar {
+  compositionFamily: TrainTownIndustrialCompositionFamily;
+  scaleFamily: TrainTownIndustrialScaleFamily;
+  groundKind: TrainTownIndustrialGroundKind;
+  fixtures: readonly TrainTownIndustrialFixtureKind[];
+  densityClass: TrainTownIndustrialSceneryBeat["densityClass"];
+}
+
+const TRAIN_TOWN_INTERIOR_RHYTHMS = [
+  [
+    "town-residential-block",
+    "town-tree-lined-street",
+    "town-commercial-main-street",
+    "town-yard-cluster",
+    "town-civic-square",
+    "town-open-lot",
+    "town-landmark-approach",
+  ],
+  [
+    "town-yard-cluster",
+    "town-residential-block",
+    "town-commercial-main-street",
+    "town-tree-lined-street",
+    "town-open-lot",
+    "town-civic-square",
+    "town-landmark-approach",
+  ],
+  [
+    "town-tree-lined-street",
+    "town-yard-cluster",
+    "town-residential-block",
+    "town-civic-square",
+    "town-commercial-main-street",
+    "town-open-lot",
+    "town-landmark-approach",
+  ],
+] as const satisfies readonly (readonly TrainTownIndustrialSceneryRole[])[];
+
+const TRAIN_INDUSTRIAL_INTERIOR_RHYTHMS = [
+  [
+    "industrial-shed-district",
+    "industrial-utility-corridor",
+    "industrial-tank-yard",
+    "industrial-service-gap",
+    "industrial-stack-line",
+    "industrial-crane-yard",
+    "industrial-landmark-approach",
+  ],
+  [
+    "industrial-tank-yard",
+    "industrial-shed-district",
+    "industrial-service-gap",
+    "industrial-utility-corridor",
+    "industrial-crane-yard",
+    "industrial-stack-line",
+    "industrial-landmark-approach",
+  ],
+  [
+    "industrial-utility-corridor",
+    "industrial-stack-line",
+    "industrial-shed-district",
+    "industrial-service-gap",
+    "industrial-tank-yard",
+    "industrial-crane-yard",
+    "industrial-landmark-approach",
+  ],
+] as const satisfies readonly (readonly TrainTownIndustrialSceneryRole[])[];
+
+const TRAIN_TOWN_INDUSTRIAL_ROLE_GRAMMAR = {
+  "town-transition-lane": {
+    compositionFamily: "settlement-edge",
+    scaleFamily: "small",
+    groundKind: "lane",
+    fixtures: ["fence", "street-tree"],
+    densityClass: "sparse",
+  },
+  "town-residential-block": {
+    compositionFamily: "residential-block",
+    scaleFamily: "mixed",
+    groundKind: "residential-street",
+    fixtures: ["townhouse-block", "street-tree"],
+    densityClass: "dense",
+  },
+  "town-commercial-main-street": {
+    compositionFamily: "commercial-street",
+    scaleFamily: "medium",
+    groundKind: "main-street",
+    fixtures: ["shop-awning", "civic-clock"],
+    densityClass: "dense",
+  },
+  "town-yard-cluster": {
+    compositionFamily: "fenced-yard",
+    scaleFamily: "small",
+    groundKind: "yard",
+    fixtures: ["yard-gate", "townhouse-block"],
+    densityClass: "medium",
+  },
+  "town-civic-square": {
+    compositionFamily: "civic-square",
+    scaleFamily: "tall",
+    groundKind: "civic-square",
+    fixtures: ["civic-clock", "street-tree"],
+    densityClass: "sparse",
+  },
+  "town-tree-lined-street": {
+    compositionFamily: "tree-lined-street",
+    scaleFamily: "mixed",
+    groundKind: "tree-lined-street",
+    fixtures: ["street-tree", "townhouse-block"],
+    densityClass: "medium",
+  },
+  "town-open-lot": {
+    compositionFamily: "open-lot",
+    scaleFamily: "small",
+    groundKind: "open-lot",
+    fixtures: ["fence"],
+    densityClass: "gap",
+  },
+  "town-landmark-approach": {
+    compositionFamily: "settlement-edge",
+    scaleFamily: "medium",
+    groundKind: "lane",
+    fixtures: ["townhouse-block", "civic-clock"],
+    densityClass: "sparse",
+  },
+  "town-landmark": {
+    compositionFamily: "civic-square",
+    scaleFamily: "tall",
+    groundKind: "civic-square",
+    fixtures: ["civic-clock", "street-tree"],
+    densityClass: "sparse",
+  },
+  "industrial-transition-road": {
+    compositionFamily: "industrial-edge",
+    scaleFamily: "small",
+    groundKind: "service-road",
+    fixtures: ["industrial-shed", "utility-pole"],
+    densityClass: "sparse",
+  },
+  "industrial-shed-district": {
+    compositionFamily: "shed-district",
+    scaleFamily: "medium",
+    groundKind: "shed-yard",
+    fixtures: ["industrial-shed", "vent-stack"],
+    densityClass: "dense",
+  },
+  "industrial-tank-yard": {
+    compositionFamily: "tank-farm",
+    scaleFamily: "mixed",
+    groundKind: "tank-pad",
+    fixtures: ["storage-tank", "storage-tank"],
+    densityClass: "medium",
+  },
+  "industrial-stack-line": {
+    compositionFamily: "stack-works",
+    scaleFamily: "tall",
+    groundKind: "stack-yard",
+    fixtures: ["furnace-stack", "vent-stack"],
+    densityClass: "dense",
+  },
+  "industrial-crane-yard": {
+    compositionFamily: "crane-yard",
+    scaleFamily: "tall",
+    groundKind: "crane-pad",
+    fixtures: ["gantry-crane", "service-pipe"],
+    densityClass: "medium",
+  },
+  "industrial-utility-corridor": {
+    compositionFamily: "utility-corridor",
+    scaleFamily: "small",
+    groundKind: "utility-corridor",
+    fixtures: ["utility-pole", "service-pipe"],
+    densityClass: "medium",
+  },
+  "industrial-service-gap": {
+    compositionFamily: "service-gap",
+    scaleFamily: "small",
+    groundKind: "service-gap",
+    fixtures: ["utility-pole"],
+    densityClass: "gap",
+  },
+  "industrial-landmark-approach": {
+    compositionFamily: "industrial-edge",
+    scaleFamily: "medium",
+    groundKind: "service-road",
+    fixtures: ["storage-tank", "utility-pole"],
+    densityClass: "sparse",
+  },
+  "industrial-landmark": {
+    compositionFamily: "crane-yard",
+    scaleFamily: "tall",
+    groundKind: "crane-pad",
+    fixtures: ["gantry-crane", "utility-pole"],
+    densityClass: "sparse",
+  },
+} as const satisfies Record<
+  TrainTownIndustrialSceneryRole,
+  TrainTownIndustrialRoleGrammar
+>;
+
+export function trainTownIndustrialSceneryBeatForChunk(
+  chunk: RouteChunk,
+): TrainTownIndustrialSceneryBeat | null {
+  if (chunk.region !== "town" && chunk.region !== "industrial") return null;
+  const templateVariant = Math.floor(
+    trainRouteRandomUnit(
+      `${chunk.seedVersion}:${chunk.routeSeed}:built-rhythm:${chunk.regionIndex}`,
+    ) * 3,
+  );
+  const transition =
+    chunk.regionChunkOffset === 0
+      ? "entry"
+      : chunk.regionChunkOffset === TRAIN_REGION_CHUNK_LENGTH - 1
+        ? "exit"
+        : "interior";
+  const transitionNeighbor =
+    transition === "entry"
+      ? trainRegionAtIndex(
+          chunk.routeSeed,
+          chunk.regionIndex - 1,
+          chunk.seedVersion,
+        )
+      : transition === "exit"
+        ? trainRegionAtIndex(
+            chunk.routeSeed,
+            chunk.regionIndex + 1,
+            chunk.seedVersion,
+          )
+        : null;
+  const role =
+    transition !== "interior"
+      ? chunk.region === "town"
+        ? "town-transition-lane"
+        : "industrial-transition-road"
+      : chunk.region === "town"
+        ? TRAIN_TOWN_INTERIOR_RHYTHMS[templateVariant]![
+            chunk.regionChunkOffset - 1
+          ]!
+        : TRAIN_INDUSTRIAL_INTERIOR_RHYTHMS[templateVariant]![
+            chunk.regionChunkOffset - 1
+          ]!;
+  const grammar = TRAIN_TOWN_INDUSTRIAL_ROLE_GRAMMAR[role];
+  return {
+    region: chunk.region,
+    role,
+    ...grammar,
+    templateVariant,
+    transition,
+    transitionNeighbor,
+  };
+}
+
 const CLOUD_IDS = TRAIN_SCENERY_CLOUDS.map((asset) => asset.id);
 export const TRAIN_CLOUD_MIN_ALTITUDE_PERCENT = 10;
 export const TRAIN_CLOUD_MAX_ALTITUDE_PERCENT = 42;
@@ -1070,7 +1413,7 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         density: 1.7,
         maxPerChunk: 2,
         minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        cooldownChunks: 3,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.town,
@@ -1175,7 +1518,7 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         density: 1.52,
         maxPerChunk: 2,
         minimumSpacingPx: 144,
-        cooldownChunks: 2,
+        cooldownChunks: 3,
       },
       near: {
         assetIds: TRAIN_NEAR_TRACK_PROP_POOLS.industrial,
@@ -1268,10 +1611,17 @@ export interface TrainSceneryPlacement {
   cloudPattern?: TrainCloudPattern;
   cloudGroup?: string;
   routePositionPx?: number;
-  regionalRole?: TrainForestMountainSceneryRole;
-  silhouetteFamily?: TrainForestMountainSilhouetteFamily;
+  regionalRole?:
+    | TrainForestMountainSceneryRole
+    | TrainTownIndustrialSceneryRole;
+  silhouetteFamily?:
+    | TrainForestMountainSilhouetteFamily
+    | TrainTownIndustrialCompositionFamily;
+  regionalScaleFamily?: TrainTownIndustrialScaleFamily;
   regionalTemplateVariant?: number;
-  regionalTransition?: TrainForestMountainSceneryBeat["transition"];
+  regionalTransition?:
+    | TrainForestMountainSceneryBeat["transition"]
+    | TrainTownIndustrialSceneryBeat["transition"];
 }
 
 type TrainSceneryPlacementDefinition = Omit<
@@ -1846,10 +2196,15 @@ function nearTrackCandidateCount(
     rule.maxPerChunk,
     trainRouteRandomUnit(`${chunkKey}:density`),
   );
-  return forestMountainCountForLayer(
+  const forestMountainCount = forestMountainCountForLayer(
     trainForestMountainSceneryBeatForChunk(chunk),
     "near",
     defaultCount,
+  );
+  return townIndustrialCountForLayer(
+    trainTownIndustrialSceneryBeatForChunk(chunk),
+    "near",
+    forestMountainCount,
   );
 }
 
@@ -2201,6 +2556,242 @@ function forestMountainPlacementMetadata(
   };
 }
 
+function townIndustrialCountForLayer(
+  beat: TrainTownIndustrialSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: number,
+): number {
+  if (!beat || layer === "sky") return fallback;
+  if (layer === "ultra-far" || layer === "far") return fallback;
+  const counts: Partial<Record<TrainParallaxLayerName, number>> =
+    beat.role === "town-transition-lane"
+      ? { "ultra-far": 1, far: 1, midground: 1, near: 1 }
+      : beat.role === "town-residential-block"
+        ? { "ultra-far": 0, far: 1, midground: 2, near: 1 }
+        : beat.role === "town-commercial-main-street"
+          ? { "ultra-far": 0, far: 0, midground: 2, near: 1 }
+          : beat.role === "town-yard-cluster"
+            ? { "ultra-far": 0, far: 1, midground: 2, near: 1 }
+            : beat.role === "town-civic-square"
+              ? { "ultra-far": 1, far: 0, midground: 1, near: 0 }
+              : beat.role === "town-tree-lined-street"
+                ? { "ultra-far": 0, far: 1, midground: 2, near: 1 }
+                : beat.role === "town-open-lot"
+                  ? { "ultra-far": 1, far: 0, midground: 0, near: 1 }
+                  : beat.role === "town-landmark-approach"
+                    ? { "ultra-far": 0, far: 1, midground: 1, near: 1 }
+                    : beat.role === "industrial-transition-road"
+                      ? { "ultra-far": 1, far: 1, midground: 1, near: 1 }
+                      : beat.role === "industrial-shed-district"
+                        ? {
+                            "ultra-far": 0,
+                            far: 1,
+                            midground: 2,
+                            near: 1,
+                          }
+                        : beat.role === "industrial-tank-yard"
+                          ? {
+                              "ultra-far": 0,
+                              far: 1,
+                              midground: 2,
+                              near: 0,
+                            }
+                          : beat.role === "industrial-stack-line"
+                            ? {
+                                "ultra-far": 1,
+                                far: 0,
+                                midground: 2,
+                                near: 1,
+                              }
+                            : beat.role === "industrial-crane-yard"
+                              ? {
+                                  "ultra-far": 0,
+                                  far: 1,
+                                  midground: 1,
+                                  near: 0,
+                                }
+                              : beat.role ===
+                                  "industrial-utility-corridor"
+                                ? {
+                                    "ultra-far": 0,
+                                    far: 0,
+                                    midground: 1,
+                                    near: 1,
+                                  }
+                                : beat.role === "industrial-service-gap"
+                                  ? {
+                                      "ultra-far": 1,
+                                      far: 0,
+                                      midground: 0,
+                                      near: 1,
+                                    }
+                                  : beat.role ===
+                                      "industrial-landmark-approach"
+                                    ? {
+                                        "ultra-far": 0,
+                                        far: 1,
+                                        midground: 1,
+                                        near: 1,
+                                      }
+                                    : {};
+  return counts[layer] ?? fallback;
+}
+
+function townIndustrialAssetPool(
+  beat: TrainTownIndustrialSceneryBeat | null,
+  layer: TrainParallaxLayerName,
+  fallback: readonly string[],
+): readonly string[] {
+  if (!beat) return fallback;
+  if (layer === "midground") {
+    switch (beat.role) {
+      case "town-transition-lane":
+        return ["building-cottage", "vegetation-hedgerow"];
+      case "town-residential-block":
+        return [
+          "building-rowhouse",
+          "building-apartments",
+          "building-cottage",
+        ];
+      case "town-commercial-main-street":
+        return ["building-rowhouse", "building-apartments"];
+      case "town-yard-cluster":
+        return [
+          "building-cottage",
+          "vegetation-hedgerow",
+          "vegetation-deciduous",
+        ];
+      case "town-civic-square":
+        return ["building-apartments", "building-rowhouse"];
+      case "town-tree-lined-street":
+        return [
+          "vegetation-deciduous",
+          "building-rowhouse",
+          "vegetation-hedgerow",
+        ];
+      case "town-landmark-approach":
+        return [
+          "building-rowhouse",
+          "building-cottage",
+          "vegetation-deciduous",
+        ];
+      case "industrial-transition-road":
+        return ["building-workshop", "building-warehouse"];
+      case "industrial-shed-district":
+        return ["building-workshop", "building-warehouse"];
+      case "industrial-tank-yard":
+        return ["building-water-tower", "building-workshop"];
+      case "industrial-stack-line":
+        return ["building-warehouse", "building-workshop"];
+      case "industrial-crane-yard":
+        return ["building-warehouse", "building-water-tower"];
+      case "industrial-utility-corridor":
+        return ["building-workshop", "building-water-tower"];
+      case "industrial-landmark-approach":
+        return ["building-warehouse", "building-water-tower"];
+      default:
+        return fallback;
+    }
+  }
+  if (layer === "near") {
+    if (beat.region === "industrial") return fallback;
+    switch (beat.role) {
+      case "town-transition-lane":
+        return ["prop-fence", "prop-telegraph-pole"];
+      case "town-residential-block":
+        return ["prop-fence", "prop-lamp-post", "prop-crossing-marker"];
+      case "town-commercial-main-street":
+        return ["prop-lamp-post", "prop-signal-cabinet"];
+      case "town-yard-cluster":
+        return ["prop-fence", "prop-telegraph-pole"];
+      case "town-tree-lined-street":
+        return ["prop-fence", "prop-lamp-post"];
+      case "town-open-lot":
+        return ["prop-fence", "prop-telegraph-pole"];
+      case "town-landmark-approach":
+        return ["prop-lamp-post", "prop-signal-cabinet"];
+      case "industrial-transition-road":
+        return [
+          "prop-telegraph-pole",
+          "prop-crossing-marker",
+          "prop-lamp-post",
+        ];
+      case "industrial-shed-district":
+        return [
+          "prop-signal-cabinet",
+          "prop-maintenance-equipment",
+          "prop-telegraph-pole",
+          "prop-crossing-marker",
+          "prop-lamp-post",
+        ];
+      case "industrial-stack-line":
+        return [
+          "prop-warning-sign",
+          "prop-signal-cabinet",
+          "prop-telegraph-pole",
+          "prop-crossing-marker",
+          "prop-lamp-post",
+        ];
+      case "industrial-utility-corridor":
+        return [
+          "prop-telegraph-pole",
+          "prop-signal-cabinet",
+          "prop-crossing-marker",
+          "prop-lamp-post",
+          "prop-maintenance-equipment",
+        ];
+      case "industrial-service-gap":
+        return ["prop-maintenance-equipment", "prop-crossing-marker"];
+      case "industrial-landmark-approach":
+        return ["prop-signal-cabinet", "prop-maintenance-equipment"];
+      default:
+        return fallback;
+    }
+  }
+  return fallback;
+}
+
+function townIndustrialAssetScale(
+  asset: TrainSceneryAsset,
+  variant: number,
+  beat: TrainTownIndustrialSceneryBeat,
+): number {
+  const normalizedVariant = positiveModulo(variant, 5) / 4;
+  const [minimum, maximum] = asset.safeScale;
+  const scaleUnit =
+    beat.scaleFamily === "small"
+      ? normalizedVariant * 0.35
+      : beat.scaleFamily === "medium"
+        ? 0.28 + normalizedVariant * 0.42
+        : beat.scaleFamily === "tall"
+          ? 0.62 + normalizedVariant * 0.38
+          : 0.12 + normalizedVariant * 0.76;
+  return minimum + (maximum - minimum) * scaleUnit;
+}
+
+function townIndustrialPlacementMetadata(
+  beat: TrainTownIndustrialSceneryBeat | null,
+  roleOverride?: TrainTownIndustrialSceneryRole,
+): Pick<
+  TrainSceneryPlacement,
+  | "regionalRole"
+  | "silhouetteFamily"
+  | "regionalScaleFamily"
+  | "regionalTemplateVariant"
+  | "regionalTransition"
+> {
+  if (!beat) return {};
+  const role = roleOverride ?? beat.role;
+  const grammar = TRAIN_TOWN_INDUSTRIAL_ROLE_GRAMMAR[role];
+  return {
+    regionalRole: role,
+    silhouetteFamily: grammar.compositionFamily,
+    regionalScaleFamily: grammar.scaleFamily,
+    regionalTemplateVariant: beat.templateVariant,
+    regionalTransition: beat.transition,
+  };
+}
+
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
@@ -2245,15 +2836,17 @@ function regionLayerPlan(
     localOffset++
   ) {
     const chunkKey = `${regionKey}:chunk:${localOffset}`;
-    const regionalBeat = trainForestMountainSceneryBeatForChunk(
+    const localChunk =
       localOffset === chunk.regionChunkOffset
         ? chunk
         : generateRouteChunk(
             chunk.routeSeed,
             chunk.regionIndex * TRAIN_REGION_CHUNK_LENGTH + localOffset,
             chunk.seedVersion,
-          ),
-    );
+          );
+    const regionalBeat = trainForestMountainSceneryBeatForChunk(localChunk);
+    const builtEnvironmentBeat =
+      trainTownIndustrialSceneryBeatForChunk(localChunk);
     const setPiece = compositionPlan.setPieces[localOffset] ?? null;
     if (setPiece?.reservedLayers.includes(layer)) {
       const placement = setPiecePlacement(setPiece, layer);
@@ -2281,10 +2874,13 @@ function regionLayerPlan(
       const landmarkVariant = Math.floor(
         trainRouteRandomUnit(`${chunkKey}:variant:0`) * 5,
       );
-      const landmarkScale = trainSceneryAssetScale(
-        landmarkAsset,
-        landmarkVariant,
-      );
+      const landmarkScale = builtEnvironmentBeat
+        ? townIndustrialAssetScale(
+            landmarkAsset,
+            landmarkVariant,
+            builtEnvironmentBeat,
+          )
+        : trainSceneryAssetScale(landmarkAsset, landmarkVariant);
       plan.push([
         sceneryPlacement(layer, landmarkScale, {
           asset: landmarkAsset,
@@ -2300,6 +2896,14 @@ function regionLayerPlan(
                 ? "mountain-landmark"
                 : undefined,
           ),
+          ...townIndustrialPlacementMetadata(
+            builtEnvironmentBeat,
+            chunk.region === "town"
+              ? "town-landmark"
+              : chunk.region === "industrial"
+                ? "industrial-landmark"
+                : undefined,
+          ),
         }),
       ]);
       continue;
@@ -2313,12 +2917,17 @@ function regionLayerPlan(
       rule.maxPerChunk,
       trainRouteRandomUnit(`${chunkKey}:density`),
     );
+    const forestMountainCount = forestMountainCountForLayer(
+      regionalBeat,
+      layer,
+      defaultCandidateCount,
+    );
     const candidateCount = Math.min(
       rule.maxPerChunk,
-      forestMountainCountForLayer(
-        regionalBeat,
+      townIndustrialCountForLayer(
+        builtEnvironmentBeat,
         layer,
-        defaultCandidateCount,
+        forestMountainCount,
       ),
     );
     const absoluteChunkIndex =
@@ -2335,14 +2944,19 @@ function regionLayerPlan(
     const offsets = placementOffsets(
       count,
       trainRouteRandomUnit(`${chunkKey}:offset`),
-      regionalBeat
+      regionalBeat || builtEnvironmentBeat
         ? trainRouteRandomUnit(`${chunkKey}:offset-secondary`)
         : undefined,
     );
-    const assetPool = forestMountainAssetPool(
+    const forestMountainPool = forestMountainAssetPool(
       regionalBeat,
       layer,
       rule.assetIds,
+    );
+    const assetPool = townIndustrialAssetPool(
+      builtEnvironmentBeat,
+      layer,
+      forestMountainPool,
     );
     const placements = offsets.map((offsetPercent, ordinal) => {
       const asset = chooseAsset(
@@ -2353,7 +2967,9 @@ function regionLayerPlan(
       const variant = Math.floor(
         trainRouteRandomUnit(`${chunkKey}:variant:${ordinal}`) * 5,
       );
-      const assetScale = trainSceneryAssetScale(asset, variant);
+      const assetScale = builtEnvironmentBeat
+        ? townIndustrialAssetScale(asset, variant, builtEnvironmentBeat)
+        : trainSceneryAssetScale(asset, variant);
       recentIDs.push(asset.id);
       recentIDs.splice(0, Math.max(0, recentIDs.length - rule.cooldownChunks));
       return sceneryPlacement(layer, assetScale, {
@@ -2363,6 +2979,7 @@ function regionLayerPlan(
         landmark: false,
         setPiece: null,
         ...forestMountainPlacementMetadata(regionalBeat),
+        ...townIndustrialPlacementMetadata(builtEnvironmentBeat),
       });
     });
     plan.push(placements);

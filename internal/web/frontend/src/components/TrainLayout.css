@@ -1691,6 +1691,559 @@ html[data-pane-switcher-layout="train"] .statusline {
     );
 }
 
+.train-built-environment-ground {
+  position: absolute;
+  right: 2%;
+  bottom: 0;
+  left: 2%;
+  display: block;
+  height: 32px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 1;
+  background-color: color-mix(
+    in srgb,
+    var(--train-terrain-surface),
+    var(--train-palette-near-surface) 22%
+  );
+  image-rendering: pixelated;
+}
+
+.train-built-environment-ground--lane,
+.train-built-environment-ground--residential-street,
+.train-built-environment-ground--tree-lined-street {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 28px,
+      var(--train-terrain-detail) 28px 34px,
+      transparent 34px 62px
+    )
+    0 6px / auto 4px no-repeat,
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-foreground-contrast) 12%
+        )
+        0 8px,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-near-surface) 32%
+        )
+        8px 22px,
+      var(--train-terrain-surface) 22px 100%
+    );
+}
+
+.train-built-environment-ground--main-street,
+.train-built-environment-ground--civic-square {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-terrain-detail) 0 3px,
+      transparent 3px 19px
+    )
+    0 4px / auto 3px no-repeat,
+    repeating-linear-gradient(
+      90deg,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-foreground-contrast) 18%
+        )
+        0 18px,
+      var(--train-terrain-surface) 18px 22px
+    );
+}
+
+.train-built-environment-ground--yard,
+.train-built-environment-ground--open-lot {
+  right: 8%;
+  left: 7%;
+  background:
+    repeating-linear-gradient(
+      142deg,
+      transparent 0 11px,
+      var(--train-terrain-detail) 11px 15px,
+      transparent 15px 27px
+    ),
+    color-mix(
+      in srgb,
+      var(--train-terrain-surface),
+      var(--train-palette-forest-soil) 24%
+    );
+  clip-path: polygon(0 18%, 41% 7%, 100% 21%, 96% 100%, 4% 100%);
+}
+
+.train-built-environment-ground--service-road,
+.train-built-environment-ground--utility-corridor,
+.train-built-environment-ground--service-gap {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 22px,
+      var(--train-terrain-detail) 22px 27px,
+      transparent 27px 49px
+    )
+    0 9px / auto 4px no-repeat,
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-foreground-contrast) 9%
+        )
+        0 7px,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-near-surface) 38%
+        )
+        7px 24px,
+      var(--train-terrain-surface) 24px 100%
+    );
+}
+
+.train-built-environment-ground--shed-yard,
+.train-built-environment-ground--tank-pad,
+.train-built-environment-ground--stack-yard,
+.train-built-environment-ground--crane-pad {
+  right: 5%;
+  left: 5%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-terrain-detail) 0 3px,
+      transparent 3px 21px
+    )
+    0 6px / auto 3px no-repeat,
+    repeating-linear-gradient(
+      137deg,
+      color-mix(
+          in srgb,
+          var(--train-terrain-surface),
+          var(--train-palette-foreground-contrast) 12%
+        )
+        0 13px,
+      var(--train-terrain-surface) 13px 26px
+    );
+  clip-path: polygon(0 14%, 27% 5%, 58% 11%, 100% 3%, 100% 100%, 0 100%);
+}
+
+.train-built-environment-fixtures {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.train-built-environment-fixture {
+  position: absolute;
+  bottom: var(--train-built-fixture-ground-height);
+  display: block;
+  box-sizing: border-box;
+  transform:
+    translateX(-50%)
+    scale(var(--train-built-fixture-scale));
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  opacity: 1;
+  image-rendering: pixelated;
+}
+
+.train-built-environment-fixture::before,
+.train-built-environment-fixture::after {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  content: "";
+  opacity: 1;
+}
+
+.train-built-environment-fixture--fence,
+.train-built-environment-fixture--yard-gate {
+  width: 72px;
+  height: 27px;
+  border-bottom: 4px solid color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    #8b6846 48%
+  );
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(
+          in srgb,
+          var(--train-palette-near-surface),
+          #9b744a 52%
+        )
+        0 4px,
+      transparent 4px 22px
+    );
+}
+
+.train-built-environment-fixture--fence::before,
+.train-built-environment-fixture--yard-gate::before {
+  right: 0;
+  bottom: 10px;
+  left: 0;
+  height: 4px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    #9b744a 52%
+  );
+}
+
+.train-built-environment-fixture--yard-gate::after {
+  bottom: 0;
+  left: 27px;
+  width: 18px;
+  height: 24px;
+  border: 4px solid color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    #b28452 56%
+  );
+  background: var(--train-palette-mid-surface);
+}
+
+.train-built-environment-fixture--street-tree {
+  width: 9px;
+  height: 31px;
+  background: #5a432d;
+}
+
+.train-built-environment-fixture--street-tree::before {
+  bottom: 20px;
+  left: -16px;
+  width: 41px;
+  height: 43px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-forest-soil),
+    #3f724d 42%
+  );
+  clip-path: polygon(
+    45% 0,
+    67% 12%,
+    82% 31%,
+    100% 53%,
+    82% 76%,
+    59% 69%,
+    48% 100%,
+    33% 72%,
+    8% 79%,
+    0 49%,
+    19% 29%
+  );
+}
+
+.train-built-environment-fixture--townhouse-block {
+  width: 82px;
+  height: 61px;
+  border: 4px solid var(--train-palette-near-surface);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 11px,
+      var(--train-palette-near-surface) 11px 15px,
+      transparent 15px 27px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      #a9755b 0 18px,
+      #8e6655 18px 34px
+    );
+}
+
+.train-built-environment-fixture--townhouse-block::before {
+  top: -15px;
+  right: -6px;
+  left: -6px;
+  height: 15px;
+  background: repeating-linear-gradient(
+    90deg,
+    #69434a 0 25px,
+    #815047 25px 50px
+  );
+  clip-path: polygon(0 100%, 9% 18%, 34% 18%, 42% 0, 61% 0, 68% 24%, 93% 24%, 100% 100%);
+}
+
+.train-built-environment-fixture--townhouse-block::after {
+  right: 9px;
+  bottom: 0;
+  width: 17px;
+  height: 28px;
+  border: 3px solid var(--train-palette-near-surface);
+  background: #5f4b43;
+}
+
+.train-built-environment-fixture--shop-awning {
+  width: 70px;
+  height: 58px;
+  border: 4px solid var(--train-palette-near-surface);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #527486 0 13px,
+      var(--train-palette-near-surface) 13px 17px
+    )
+    6px 23px / 54px 18px no-repeat,
+    #9a6c58;
+}
+
+.train-built-environment-fixture--shop-awning::before,
+.train-built-environment-fixture--shop-awning::after {
+  right: -4px;
+  left: -4px;
+}
+
+.train-built-environment-fixture--shop-awning::before {
+  top: -13px;
+  height: 13px;
+  background: #704550;
+  clip-path: polygon(0 100%, 12% 0, 88% 0, 100% 100%);
+}
+
+.train-built-environment-fixture--shop-awning::after {
+  top: 17px;
+  height: 16px;
+  border-bottom: 4px solid var(--train-palette-near-surface);
+  background: repeating-linear-gradient(
+    90deg,
+    #8c4550 0 11px,
+    #e0c184 11px 22px
+  );
+  clip-path: polygon(0 0, 100% 0, 94% 78%, 6% 78%);
+}
+
+.train-built-environment-fixture--civic-clock {
+  width: 20px;
+  height: 58px;
+  border: 4px solid var(--train-palette-near-surface);
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    #8a6748 48%
+  );
+}
+
+.train-built-environment-fixture--civic-clock::before {
+  top: 6px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--train-palette-near-surface);
+  background: #d6c79a;
+}
+
+.train-built-environment-fixture--civic-clock::after {
+  top: -13px;
+  left: -5px;
+  width: 22px;
+  height: 13px;
+  background: #6f4350;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.train-built-environment-fixture--utility-pole {
+  width: 7px;
+  height: 70px;
+  background: #4f3f32;
+}
+
+.train-built-environment-fixture--utility-pole::before {
+  top: 7px;
+  left: -17px;
+  width: 41px;
+  height: 6px;
+  background: #4f3f32;
+}
+
+.train-built-environment-fixture--utility-pole::after {
+  top: 3px;
+  left: -13px;
+  width: 33px;
+  height: 4px;
+  border-right: 4px solid #65717a;
+  border-left: 4px solid #65717a;
+}
+
+.train-built-environment-fixture--industrial-shed {
+  width: 96px;
+  height: 47px;
+  border: 4px solid var(--train-palette-near-surface);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #65767b 0 9px,
+      #56666c 9px 14px
+    );
+}
+
+.train-built-environment-fixture--industrial-shed::before {
+  top: -10px;
+  right: -7px;
+  left: -7px;
+  height: 11px;
+  background: #4b5559;
+  clip-path: polygon(0 100%, 8% 0, 92% 0, 100% 100%);
+}
+
+.train-built-environment-fixture--industrial-shed::after {
+  right: 9px;
+  bottom: 0;
+  width: 26px;
+  height: 31px;
+  border: 4px solid var(--train-palette-near-surface);
+  border-bottom: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    #3f4a4e 0 5px,
+    #6e7b7f 5px 10px
+  );
+}
+
+.train-built-environment-fixture--vent-stack,
+.train-built-environment-fixture--furnace-stack {
+  width: 17px;
+  height: 57px;
+  border: 4px solid var(--train-palette-near-surface);
+  background: repeating-linear-gradient(
+    to bottom,
+    #8b6956 0 10px,
+    #604f49 10px 18px
+  );
+}
+
+.train-built-environment-fixture--furnace-stack {
+  width: 21px;
+  height: 82px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #754b42 0 12px,
+    #4c4142 12px 22px
+  );
+}
+
+.train-built-environment-fixture--vent-stack::before,
+.train-built-environment-fixture--furnace-stack::before {
+  top: -5px;
+  left: -5px;
+  width: calc(100% + 10px);
+  height: 7px;
+  background: var(--train-palette-near-surface);
+}
+
+.train-built-environment-fixture--storage-tank {
+  width: 57px;
+  height: 41px;
+  border: 4px solid var(--train-palette-near-surface);
+  background: repeating-linear-gradient(
+    to bottom,
+    #7b8890 0 9px,
+    #586770 9px 16px
+  );
+  clip-path: polygon(9% 13%, 22% 0, 78% 0, 91% 13%, 100% 100%, 0 100%);
+}
+
+.train-built-environment-fixture--storage-tank::before {
+  right: -4px;
+  bottom: 9px;
+  left: -4px;
+  height: 5px;
+  background: var(--train-palette-near-surface);
+}
+
+.train-built-environment-fixture--gantry-crane {
+  width: 88px;
+  height: 66px;
+  border-top: 8px solid #8b5d3d;
+  border-right: 9px solid #6a4b39;
+  border-left: 9px solid #6a4b39;
+}
+
+.train-built-environment-fixture--gantry-crane::before {
+  top: 7px;
+  left: 26px;
+  width: 5px;
+  height: 37px;
+  background: var(--train-palette-near-surface);
+}
+
+.train-built-environment-fixture--gantry-crane::after {
+  top: 38px;
+  left: 20px;
+  width: 17px;
+  height: 11px;
+  border: 4px solid var(--train-palette-near-surface);
+  background: #b7783f;
+}
+
+.train-built-environment-fixture--service-pipe {
+  width: 76px;
+  height: 35px;
+  border-top: 7px solid #6f7e80;
+  border-right: 7px solid #516064;
+  border-left: 7px solid #516064;
+}
+
+.train-built-environment-fixture--service-pipe::before,
+.train-built-environment-fixture--service-pipe::after {
+  top: -11px;
+  width: 11px;
+  height: 11px;
+  border: 3px solid var(--train-palette-near-surface);
+  background: #8f704c;
+}
+
+.train-built-environment-fixture--service-pipe::before {
+  left: 13px;
+}
+
+.train-built-environment-fixture--service-pipe::after {
+  right: 13px;
+}
+
+.train-built-environment-fixture-emissive {
+  top: 4px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--train-palette-emissive);
+  box-shadow: 0 0 5px var(--train-palette-emissive);
+}
+
+.train-built-environment-fixture--civic-clock
+  .train-built-environment-fixture-emissive {
+  top: 10px;
+  width: 8px;
+  height: 8px;
+}
+
+.train-built-environment-fixture--gantry-crane
+  .train-built-environment-fixture-emissive {
+  top: -7px;
+  left: 88%;
+  width: 5px;
+  height: 5px;
+}
+
+.train-built-environment-fixture--furnace-stack
+  .train-built-environment-fixture-emissive {
+  top: 48px;
+  width: 7px;
+  height: 9px;
+  background: #ff9b55;
+}
+
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-canopy-cluster"]
   .train-terrain-base::after,
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-undergrowth"]

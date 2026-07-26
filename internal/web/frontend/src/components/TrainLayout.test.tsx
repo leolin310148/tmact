@@ -59,6 +59,7 @@ import {
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
+  trainTownIndustrialSceneryBeatForChunk,
 } from "./trainScenery";
 
 const trainLayoutCss = readFileSync(
@@ -2125,10 +2126,21 @@ describe("TrainLayout", () => {
       expect(rule).toMatch(/background:\s*none;/);
       expect(rule).not.toMatch(/gradient\(/);
     }
-    const terrainCss = trainLayoutCss.slice(
-      trainLayoutCss.indexOf(".train-terrain-base"),
-      trainLayoutCss.indexOf(".train-depth-veil"),
+    const builtEnvironmentStart = trainLayoutCss.indexOf(
+      ".train-built-environment-ground",
     );
+    const regionalTerrainStart = trainLayoutCss.indexOf(
+      '.train-parallax-chunk--midground[data-regional-scenery-role="forest-canopy-cluster"]',
+    );
+    const terrainCss =
+      trainLayoutCss.slice(
+        trainLayoutCss.indexOf(".train-terrain-base"),
+        builtEnvironmentStart,
+      ) +
+      trainLayoutCss.slice(
+        regionalTerrainStart,
+        trainLayoutCss.indexOf(".train-depth-veil"),
+      );
     expect(terrainCss).toMatch(/clip-path:\s*polygon\(/);
     expect(terrainCss).toMatch(/100%\s+100%,\s*0\s+100%/);
     expect(terrainCss).toMatch(
@@ -2503,6 +2515,156 @@ describe("TrainLayout", () => {
     );
     expect(trainLayoutCss).toContain(
       '[data-regional-scenery-role="mountain-rock-field"]',
+    );
+  });
+
+  it("renders grounded town blocks and industrial fixtures with owner-attached light", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const requestedRoles = [
+      "town-residential-block",
+      "town-commercial-main-street",
+      "town-civic-square",
+      "industrial-shed-district",
+      "industrial-tank-yard",
+      "industrial-stack-line",
+      "industrial-crane-yard",
+      "industrial-service-gap",
+    ] as const;
+    const chunks = requestedRoles.map((requestedRole) => {
+      for (let index = -3_000; index <= 3_000; index++) {
+        const chunk = generateRouteChunk("train-048-render-contract", index);
+        if (
+          trainTownIndustrialSceneryBeatForChunk(chunk)?.role ===
+          requestedRole
+        ) {
+          return chunk;
+        }
+      }
+      throw new Error(`missing built-environment role: ${requestedRole}`);
+    });
+    const midground = TRAIN_PARALLAX_LAYERS.find(
+      (layer) => layer.name === "midground",
+    )!;
+    const renderBuiltEnvironment = (
+      timeOfDay: "day" | "sunset" | "night",
+    ) => (
+      <div className="train-layout-world" data-time-of-day={timeOfDay}>
+        {chunks.map((chunk) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            layer={midground}
+            includeSetPieces={false}
+            key={chunk.index}
+          />
+        ))}
+      </div>
+    );
+    const rendered = render(renderBuiltEnvironment("day"));
+    const renderedChunks = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        "[data-built-environment-family]",
+      ),
+    ];
+
+    expect(renderedChunks).toHaveLength(requestedRoles.length);
+    expect(
+      renderedChunks.map((chunk) => chunk.dataset.regionalSceneryRole),
+    ).toEqual(requestedRoles);
+    for (const chunk of renderedChunks) {
+      expect(chunk.dataset.builtEnvironmentGround).toBeTruthy();
+      expect(chunk.dataset.builtEnvironmentFamily).toBeTruthy();
+      expect(chunk.dataset.builtEnvironmentScale).toMatch(
+        /^(small|medium|tall|mixed)$/,
+      );
+      expect(
+        chunk.querySelectorAll("[data-built-ground-surface='opaque']"),
+      ).toHaveLength(1);
+      const fixtures = [
+        ...chunk.querySelectorAll<HTMLElement>(
+          "[data-built-fixture-surface='opaque']",
+        ),
+      ];
+      expect(fixtures.length).toBeGreaterThan(0);
+      expect(fixtures.length).toBeLessThanOrEqual(2);
+      for (const fixture of fixtures) {
+        expect(Number(fixture.dataset.builtFixtureGroundHeight)).toBeGreaterThan(
+          0,
+        );
+        const overlay = fixture.querySelector<HTMLElement>(
+          "[data-emissive='regional-fixture']",
+        );
+        if (overlay) {
+          expect(overlay.dataset.emissiveOwner).toBe(
+            fixture.dataset.builtFixtureOwner,
+          );
+          expect(overlay).toHaveAttribute(
+            "data-emissive-schedule",
+            "sunset-night",
+          );
+        }
+      }
+    }
+
+    const fixtureKinds = new Set(
+      [
+        ...rendered.container.querySelectorAll<HTMLElement>(
+          "[data-built-fixture]",
+        ),
+      ].map((fixture) => fixture.dataset.builtFixture),
+    );
+    expect(fixtureKinds).toEqual(
+      new Set([
+        "street-tree",
+        "townhouse-block",
+        "shop-awning",
+        "civic-clock",
+        "industrial-shed",
+        "vent-stack",
+        "service-pipe",
+        "storage-tank",
+        "furnace-stack",
+        "gantry-crane",
+        "utility-pole",
+      ]),
+    );
+    const overlays = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        "[data-emissive='regional-fixture']",
+      ),
+    ];
+    expect(overlays.length).toBeGreaterThan(3);
+    expect(overlays.every((overlay) => getComputedStyle(overlay).opacity === "0")).toBe(
+      true,
+    );
+    rendered.rerender(renderBuiltEnvironment("sunset"));
+    expect(
+      overlays.every((overlay) => getComputedStyle(overlay).opacity === "0.38"),
+    ).toBe(true);
+    rendered.rerender(renderBuiltEnvironment("night"));
+    expect(
+      overlays.every((overlay) => getComputedStyle(overlay).opacity === "0.88"),
+    ).toBe(true);
+
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-ground--residential-street",
+    );
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-ground--service-road",
+    );
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-fixture--storage-tank",
+    );
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-fixture--townhouse-block",
+    );
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-fixture--industrial-shed",
+    );
+    expect(trainLayoutCss).toContain(
+      ".train-built-environment-fixture--gantry-crane",
     );
   });
 
@@ -2985,8 +3147,8 @@ describe("TrainLayout", () => {
     const layer = TRAIN_PARALLAX_LAYERS.find(
       (candidate) => candidate.name === "midground",
     )!;
-    const chunk = Array.from({ length: 180 }, (_, index) =>
-      generateRouteChunk("town-mask-render", index),
+    const chunk = Array.from({ length: 2401 }, (_, offset) =>
+      generateRouteChunk("town-mask-render", offset - 1200),
     ).find(
       (candidate) =>
         candidate.region === "industrial" &&
@@ -3101,6 +3263,7 @@ describe("TrainLayout", () => {
       "celestial-accent",
       "building-windows",
       "town-edge-windows",
+      "regional-fixture",
       ...Object.values(TRAIN_REGION_NIGHT_LIFE).map((rule) => rule.kind),
       "lighthouse-water-reflection",
     ];

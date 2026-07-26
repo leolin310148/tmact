@@ -31,6 +31,7 @@ import {
   TRAIN_SCENERY_PROPS,
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
+  TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX,
   trainCloudPlacementsForChunk,
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
@@ -38,6 +39,7 @@ import {
   trainSceneryPlacementsForChunk,
   trainSceneryAssetScale,
   trainSceneryScale,
+  trainTownIndustrialSceneryBeatForChunk,
   type TrainRegionSceneryProfile,
 } from "./trainScenery";
 
@@ -656,7 +658,12 @@ describe("train scenery asset kit", () => {
             { includeSetPieces: false },
           ).filter((placement) => !placement.landmark);
           const counts = countsByRole.get(beat.role) ?? [];
-          counts.push(midground.length);
+          if (
+            trainRegionCompositionForChunk(chunk) === "dense" ||
+            beat.densityClass === "gap"
+          ) {
+            counts.push(midground.length);
+          }
           countsByRole.set(beat.role, counts);
           const ids = idsByRole.get(beat.role) ?? new Set<string>();
           midground.forEach((placement) => {
@@ -805,6 +812,295 @@ describe("train scenery asset kit", () => {
         statistics[region].landmarks / statistics[region].regions;
       expect(rate, region).toBeGreaterThan(0.35);
       expect(rate, region).toBeLessThan(0.65);
+    }
+  });
+
+  it("builds distinct town blocks and industrial districts across deterministic rhythms", () => {
+    const roles = {
+      town: new Set<string>(),
+      industrial: new Set<string>(),
+    };
+    const families = {
+      town: new Set<string>(),
+      industrial: new Set<string>(),
+    };
+    const grounds = {
+      town: new Set<string>(),
+      industrial: new Set<string>(),
+    };
+    const fixtures = {
+      town: new Set<string>(),
+      industrial: new Set<string>(),
+    };
+    const variants = {
+      town: new Set<number>(),
+      industrial: new Set<number>(),
+    };
+
+    for (const seed of [
+      "built-rhythm-market",
+      "built-rhythm-foundry",
+      "built-rhythm-civic",
+      "built-rhythm-freight",
+    ]) {
+      for (let regionIndex = -90; regionIndex <= 90; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        if (region !== "town" && region !== "industrial") continue;
+        const beats = chunks.map((chunk) =>
+          trainTownIndustrialSceneryBeatForChunk(chunk),
+        );
+        expect(beats.every(Boolean)).toBe(true);
+        expect(beats[0]).toMatchObject({
+          region,
+          transition: "entry",
+          role:
+            region === "town"
+              ? "town-transition-lane"
+              : "industrial-transition-road",
+        });
+        expect(beats.at(-1)).toMatchObject({
+          region,
+          transition: "exit",
+          role:
+            region === "town"
+              ? "town-transition-lane"
+              : "industrial-transition-road",
+        });
+        expect(
+          beats
+            .slice(1, -1)
+            .every((beat) => beat!.transition === "interior"),
+        ).toBe(true);
+        for (const beat of beats) {
+          roles[region].add(beat!.role);
+          families[region].add(beat!.compositionFamily);
+          grounds[region].add(beat!.groundKind);
+          beat!.fixtures.forEach((fixture) => fixtures[region].add(fixture));
+          variants[region].add(beat!.templateVariant);
+        }
+      }
+    }
+
+    expect(roles.town).toEqual(
+      new Set([
+        "town-transition-lane",
+        "town-residential-block",
+        "town-commercial-main-street",
+        "town-yard-cluster",
+        "town-civic-square",
+        "town-tree-lined-street",
+        "town-open-lot",
+        "town-landmark-approach",
+      ]),
+    );
+    expect(roles.industrial).toEqual(
+      new Set([
+        "industrial-transition-road",
+        "industrial-shed-district",
+        "industrial-tank-yard",
+        "industrial-stack-line",
+        "industrial-crane-yard",
+        "industrial-utility-corridor",
+        "industrial-service-gap",
+        "industrial-landmark-approach",
+      ]),
+    );
+    expect(families.town.size).toBeGreaterThanOrEqual(7);
+    expect(families.industrial.size).toBeGreaterThanOrEqual(7);
+    expect(grounds.town.size).toBeGreaterThanOrEqual(7);
+    expect(grounds.industrial.size).toBeGreaterThanOrEqual(7);
+    expect(fixtures.town).toEqual(
+      new Set([
+        "fence",
+        "street-tree",
+        "townhouse-block",
+        "shop-awning",
+        "civic-clock",
+        "yard-gate",
+      ]),
+    );
+    expect(fixtures.industrial).toEqual(
+      new Set([
+        "utility-pole",
+        "industrial-shed",
+        "vent-stack",
+        "service-pipe",
+        "storage-tank",
+        "furnace-stack",
+        "gantry-crane",
+      ]),
+    );
+    expect(variants.town).toEqual(new Set([0, 1, 2]));
+    expect(variants.industrial).toEqual(new Set([0, 1, 2]));
+  });
+
+  it("turns built-environment roles into coherent pools, scale families, and negative space", () => {
+    const countsByRole = new Map<string, number[]>();
+    const idsByRole = new Map<string, Set<string>>();
+
+    for (const seed of [
+      "built-pools-residential",
+      "built-pools-steel",
+      "built-pools-service",
+    ]) {
+      for (let regionIndex = -90; regionIndex <= 90; regionIndex++) {
+        for (const chunk of regionChunks(seed, regionIndex)) {
+          if (chunk.region !== "town" && chunk.region !== "industrial") {
+            continue;
+          }
+          const beat = trainTownIndustrialSceneryBeatForChunk(chunk)!;
+          const midground = trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+            { includeSetPieces: false },
+          ).filter((placement) => !placement.landmark);
+          const counts = countsByRole.get(beat.role) ?? [];
+          counts.push(midground.length);
+          countsByRole.set(beat.role, counts);
+          const ids = idsByRole.get(beat.role) ?? new Set<string>();
+          for (const placement of midground) {
+            ids.add(placement.asset.id);
+            expect(placement.regionalRole).toBe(beat.role);
+            expect(placement.silhouetteFamily).toBe(
+              beat.compositionFamily,
+            );
+            expect(placement.regionalScaleFamily).toBe(beat.scaleFamily);
+            expect(placement.regionalTemplateVariant).toBe(
+              beat.templateVariant,
+            );
+            const [minimum, maximum] = placement.asset.safeScale;
+            const scaleUnit =
+              (placement.assetScale - minimum) / (maximum - minimum);
+            const expectedRange =
+              beat.scaleFamily === "small"
+                ? [0, 0.35]
+                : beat.scaleFamily === "medium"
+                  ? [0.28, 0.7]
+                  : beat.scaleFamily === "tall"
+                    ? [0.62, 1]
+                    : [0.12, 0.88];
+            expect(scaleUnit).toBeGreaterThanOrEqual(expectedRange[0]! - 1e-9);
+            expect(scaleUnit).toBeLessThanOrEqual(expectedRange[1]! + 1e-9);
+          }
+          idsByRole.set(beat.role, ids);
+        }
+      }
+    }
+
+    const average = (role: string) => {
+      const values = countsByRole.get(role)!;
+      return values.reduce((total, value) => total + value, 0) / values.length;
+    };
+    expect(average("town-residential-block")).toBeGreaterThan(1.1);
+    expect(average("town-commercial-main-street")).toBeGreaterThan(1);
+    expect(average("town-open-lot")).toBe(0);
+    expect(average("industrial-shed-district")).toBeGreaterThan(1.1);
+    expect(average("industrial-stack-line")).toBeGreaterThan(1);
+    expect(average("industrial-service-gap")).toBe(0);
+    expect(idsByRole.get("town-commercial-main-street")).toEqual(
+      new Set(["building-rowhouse", "building-apartments"]),
+    );
+    expect(idsByRole.get("industrial-tank-yard")).toEqual(
+      new Set(["building-water-tower", "building-workshop"]),
+    );
+    expect(idsByRole.get("industrial-crane-yard")).toEqual(
+      new Set(["building-warehouse", "building-water-tower"]),
+    );
+  });
+
+  it("spaces repeated town and industrial facades while preserving both transition directions", () => {
+    let townToIndustrial = 0;
+    let industrialToTown = 0;
+    const repeatedDistances: number[] = [];
+
+    for (const seed of [
+      "built-transition-market",
+      "built-transition-freight",
+      "built-transition-works",
+    ]) {
+      for (let regionIndex = -180; regionIndex < 180; regionIndex++) {
+        const leftChunks = regionChunks(seed, regionIndex);
+        const rightChunks = regionChunks(seed, regionIndex + 1);
+        const leftRegion = leftChunks[0]!.region;
+        const rightRegion = rightChunks[0]!.region;
+        if (
+          (leftRegion === "town" && rightRegion === "industrial") ||
+          (leftRegion === "industrial" && rightRegion === "town")
+        ) {
+          const exit = trainTownIndustrialSceneryBeatForChunk(
+            leftChunks.at(-1)!,
+          )!;
+          const entry = trainTownIndustrialSceneryBeatForChunk(
+            rightChunks[0]!,
+          )!;
+          expect(exit.transition).toBe("exit");
+          expect(exit.transitionNeighbor).toBe(rightRegion);
+          expect(entry.transition).toBe("entry");
+          expect(entry.transitionNeighbor).toBe(leftRegion);
+          if (leftRegion === "town") townToIndustrial++;
+          else industrialToTown++;
+        }
+
+        if (leftRegion !== "town" && leftRegion !== "industrial") continue;
+        const lastCenterByID = new Map<string, number>();
+        for (const chunk of leftChunks) {
+          for (const placement of trainSceneryPlacementsForChunk(
+            "midground",
+            chunk,
+            { includeSetPieces: false },
+          ).filter((candidate) => !candidate.landmark)) {
+            const center =
+              chunk.index * TRAIN_ROUTE_CHUNK_WIDTH +
+              (placement.offsetPercent / 100) * TRAIN_ROUTE_CHUNK_WIDTH;
+            const previous = lastCenterByID.get(placement.asset.id);
+            if (previous !== undefined) repeatedDistances.push(center - previous);
+            lastCenterByID.set(placement.asset.id, center);
+          }
+        }
+      }
+    }
+
+    expect(townToIndustrial).toBeGreaterThan(20);
+    expect(industrialToTown).toBeGreaterThan(20);
+    expect(repeatedDistances.length).toBeGreaterThan(100);
+    expect(Math.min(...repeatedDistances)).toBeGreaterThanOrEqual(
+      TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX,
+    );
+  });
+
+  it("keeps built surfaces opaque and lights attached to compatible owners", () => {
+    const townIDs = new Set(
+      TRAIN_REGION_SCENERY_PROFILES.town.layers.midground.assetIds,
+    );
+    const industrialIDs = new Set(
+      TRAIN_REGION_SCENERY_PROFILES.industrial.layers.midground.assetIds,
+    );
+    const buildingIDs = new Set(
+      TRAIN_SCENERY_BUILDINGS.map((asset) => asset.id),
+    );
+
+    expect(
+      [...townIDs].filter((assetID) => buildingIDs.has(assetID)),
+    ).toEqual([
+      "building-rowhouse",
+      "building-apartments",
+      "building-cottage",
+    ]);
+    expect([...industrialIDs]).toEqual([
+      "building-workshop",
+      "building-warehouse",
+      "building-water-tower",
+    ]);
+    for (const asset of TRAIN_SCENERY_BUILDINGS) {
+      expect(asset.anchor).toBe("bottom-center");
+      expect(asset.dayNightTreatment).toBe("emissive-windows");
+      expect(asset.emissive).toMatchObject({
+        kind: "windows",
+        width: asset.width,
+        height: asset.height,
+      });
+      expect(asset.groundInsetPx).toBeLessThanOrEqual(3);
     }
   });
 
@@ -1045,10 +1341,12 @@ describe("train scenery asset kit", () => {
       const nightLifeChunkRate = sample.activeNightLife / sample.chunks;
 
       expect(sample.regions, region).toBeGreaterThan(150);
+      const observedExpectedIDs = [...expectedIDs].filter((assetID) =>
+        sample.assetIDs.has(assetID),
+      );
       expect(
-        [...expectedIDs].filter((assetID) => sample.assetIDs.has(assetID))
-          .length / expectedIDs.size,
-        region,
+        observedExpectedIDs.length / expectedIDs.size,
+        `${region}: found=${observedExpectedIDs.join(",")} expected=${[...expectedIDs].join(",")}`,
       ).toBeGreaterThan(0.74);
       expect(landmarkRate, region).toBeGreaterThan(0.16);
       expect(landmarkRate, region).toBeLessThan(0.55);
