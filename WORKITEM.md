@@ -3,7 +3,7 @@
 Completed TRAIN-001–026 are archived in
 [docs/archive/train-layout-workitems-001-026.md](docs/archive/train-layout-workitems-001-026.md).
 
-This active queue contains fifteen dependency-ordered, independently verifiable
+This active queue contains sixteen dependency-ordered, independently verifiable
 work items that rebuild scenery compositing and daylight art before expanding
 regional day/night richness. The fixed train, route engine, station behavior,
 and safety properties established by the archived queue remain the baseline.
@@ -343,3 +343,39 @@ and safety properties established by the archived queue remain the baseline.
   of every remaining large solid area instead of accepting opacity-only tests.
   Restore the DOM, run the frontend suite, build, `make test`, and
   `rtk git diff --check`, then document the retained screenshot evidence.
+
+- [ ] **TRAIN-041 — Keep station architecture whole across entry and exit transitions.**
+  Fix the night-visible station defect confirmed with the fixed train hidden:
+  `.train-set-piece--station.train-set-piece--entry` and `--exit` currently
+  apply diagonal `clip-path` polygons to the complete station segment, so the
+  station building, canopy, lamps, name board, illuminated windows, and
+  platform are visibly sliced at the approach and departure ends. The defect
+  is easiest to see at the deterministic first-station stop around route
+  position 3680, where the lit entrance façade ends on an unexplained diagonal.
+
+  Separate the sloped ground/platform transition from the persistent station
+  architecture. Entry and exit may retain a deliberate ramp or terrain contour,
+  but any transition mask must own only that transition geometry; it must not
+  clip the station building, roof/canopy, lamps, signs, signals, emissive
+  overlays, or other above-platform structure. Keep the six station segments
+  visually continuous with clean chunk joins, intentional architectural ends,
+  and no duplicated walls, floating columns, triangular sky holes, abrupt
+  roof cuts, or track gaps. Preserve station timing and state behavior,
+  deterministic route output, train/track geometry, parallax direction,
+  palette transitions, fixed-train readability, pointer inertness, reduced
+  motion, and bounded DOM.
+
+  Add focused tests that reject clipping on the architecture-owning station
+  wrapper, prove any entry/exit clipping is confined to transition geometry,
+  cover all six segment roles and joins, and retain platform, signal, palette,
+  emissive, station-state, and DOM-bound contracts. For browser acceptance, use
+  `borz` on the shared port 5234 with the exact HTTP/module-freshness/open/
+  viewport/hard-reload procedure. Force the seeded first station around route
+  positions 3680 and 4480 so both entry and exit are visible; check day,
+  sunset, and especially night at compact, desktop, and ultrawide widths.
+  Temporarily hide `.train-layout-inspection`, `.train-world-debug-grid`, and
+  `.train-time-toggle` only in the live DOM, capture the complete pure-scenery
+  station, and inspect computed `clip-path` plus bounding boxes for the station
+  building, canopy, platform, lamps, and signals. Restore the DOM, run the
+  frontend suite, build, `make test`, and `rtk git diff --check`, then document
+  the retained screenshot evidence.
