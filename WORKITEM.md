@@ -3,7 +3,7 @@
 Completed TRAIN-001–026 are archived in
 [docs/archive/train-layout-workitems-001-026.md](docs/archive/train-layout-workitems-001-026.md).
 
-This active queue contains thirteen dependency-ordered, independently verifiable
+This active queue contains fourteen dependency-ordered, independently verifiable
 work items that rebuild scenery compositing and daylight art before expanding
 regional day/night richness. The fixed train, route engine, station behavior,
 and safety properties established by the archived queue remain the baseline.
@@ -265,3 +265,42 @@ and safety properties established by the archived queue remain the baseline.
   a sustained `borz` smoke traversal following TRAIN-015's exact viewport and
   module-freshness procedure.
 
+- [ ] **TRAIN-039 — Replace the town-edge color bars and give the sky independent motion.**
+  Correct the two visual defects confirmed after TRAIN-038 by inspecting the
+  scene with the fixed train hidden. First, remove the procedural town-edge
+  composition that still reads as a repeating band of unexplained green/blue
+  rectangles even though its pixels are technically opaque. Rebuild both
+  deterministic variants from the existing detailed building/landmark sprite
+  vocabulary or an equivalently recognizable code-native composition with
+  roofs, façades, windows, material changes, and intentional open gaps. It must
+  read as a distant settlement rather than placeholder bars, remain opaque,
+  retain coherent entry/body/exit continuity and the existing three-chunk
+  span, preserve palette ownership and bounded DOM, and never depend on the
+  train covering it. Do not solve this by hiding the set piece, returning to
+  translucent silhouettes, or replacing one undifferentiated rectangle rhythm
+  with another.
+
+  Second, decouple the daytime sun, generated wisps, and routed cloud sprites
+  from the fixed camera/train. Give them deterministic depth-appropriate
+  horizontal motion: the sun should be nearly stationary but measurably drift
+  over a sustained high-speed diagnostic run, wisps should move faster than
+  the sun, routed clouds should move faster than wisps, and all must remain
+  substantially slower than near scenery. Motion must remain continuous across
+  wrapping/chunk recycling, must not regenerate or jump on palette changes,
+  resize, station dwell, or ordinary refresh restore, and must stop under
+  reduced motion or hidden-tab suspension. Preserve seeded sky layout,
+  negative space, day/sunset grading, train readability, and bounded nodes.
+
+  Add focused tests for recognizable non-bar town-edge composition, both
+  variant continuities, solid opacity, independent bounded sky speed ratios,
+  ordering of measured displacement, deterministic wrapping, palette/resize
+  stability, reduced motion, station dwell, and cleanup. With `borz` on the
+  shared port 5234, follow the HTTP/module-freshness/open/viewport/hard-reload
+  procedure, temporarily hide `.train-layout-inspection` and the diagnostics
+  overlay only in the live DOM, and capture both town-edge variants in day and
+  night at compact, desktop, and ultrawide widths. Reject any remaining
+  anonymous rectangular skyline band. Then at 96 px/s measure route, sun,
+  wisp, routed-cloud, far, and near displacement over at least 10 seconds,
+  proving `0 < sun < wisp < cloud < far < near`; repeat the reduced-motion and
+  station-dwell checks. Restore the live DOM, run the frontend suite, build,
+  `make test`, and `rtk git diff --check`, then document the smoke evidence.
