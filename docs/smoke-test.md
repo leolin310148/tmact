@@ -501,6 +501,46 @@ was empty; the console contained only Vite connection and React development
 messages. Focused route/scenery/layout tests, all 432 frontend tests,
 production build, and `make test` passed.
 
+TRAIN-044 station-campus run 2026-07-26: used route seed
+`train-044-proof` and the dedicated `tmact-train-workitems` borz profile at
+390×844, 1280×800, and 2560×900. Every viewport repeated HTTP 200, fetched the
+plain non-cache-busted `/src/components/TrainLayout.tsx` module and found the
+current campus source, opened the port-5234 page, applied the viewport, issued
+a hard reload, and asserted the exact `window.innerWidth` and
+`window.innerHeight`.
+
+The first station was inspected at entry, centre, and exit. The centred route
+positions were respectively `2915/3715/4515px` on compact,
+`3360/4160/4960px` on desktop, and `4000/4800/5600px` on ultrawide. Each
+capture hid the train through `.train-layout-inspection` together with
+`.train-world-debug-grid` and `.train-time-toggle`; a second capture isolated
+the near layer. The temporary styles were removed afterward and the three
+elements restored to `flex`, `block`, and `grid`.
+
+Visual inspection found one continuous six-segment platform campus with
+visible entry and exit ramps, three deliberately small opaque buildings
+(gatehouse, station house, and service shed), six differently sized canopy
+bays, five framed openings that expose the actual parallax world, and
+role-owned benches, wayfinding, timetable, planter, baggage cart, and parcel
+stack. Compact entry/centre/exit images retained architectural ends. Desktop
+and ultrawide images read as one varied campus rather than repeated tiles; the
+isolated near layer confirmed that openings were genuine gaps and that no
+façade or canopy formed a viewport-spanning solid wall. All building widths
+were at most `207.38px`; canopy widths ranged from `230.06px` to `278.66px`.
+
+Computed styles confirmed three opaque buildings, six opaque canopies, six
+opaque platforms, nine supports, seven lamps, two signals, and eight service
+elements, with the station remaining pointer-inert. Stable palette captures
+and a separate normal-transition terminal-state check found all 11 emissive
+overlays at opacity `0` with no filter in day, only five station-owned sunset
+fixtures at opacity `0.24`, and all owned fixtures at opacity `0.48–0.66` at
+night. The 54 retained screenshots are
+`/tmp/tmact-train-044-proof/{compact,desktop,ultrawide}-{entry,center,exit}-{day,sunset,night}-{full,near}.png`;
+the six inspected contact sheets are
+`/tmp/tmact-train-044-proof/contact-{compact,desktop,ultrawide}-{full,near}.png`.
+`borz errors --json` was empty and the console contained only Vite connection
+and React development messages.
+
 ## Notes Template
 
 ```text

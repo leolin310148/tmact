@@ -120,7 +120,7 @@ Treat these findings as regression targets:
   desktop, and ultrawide day screenshots of all five set-piece types and
   inspect the images before marking the item complete.
 
-- [ ] **TRAIN-044 — Replace the monolithic station wall with a readable station campus.**
+- [x] **TRAIN-044 — Replace the monolithic station wall with a readable station campus.**
   Recompose the six near-layer station segments into a continuous but
   articulated station: deliberate entry and exit platforms, a smaller station
   house, canopy bays and supports, doors and windows, baggage/service elements,

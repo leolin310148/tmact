@@ -681,56 +681,80 @@ type TrainDepthVeilPaletteStyle = CSSProperties & {
 const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
   {
     bay: "entrance",
+    structure: "gatehouse",
+    hasBuilding: true,
+    opening: "entry-vista",
     door: "single",
     hasWindows: false,
     windowLight: null,
     lampSlots: ["trailing"],
     supportSlots: ["trailing"],
+    serviceElements: ["wayfinding"],
     signalAspect: "approach",
   },
   {
     bay: "west-waiting",
+    structure: "waiting-bay",
+    hasBuilding: false,
+    opening: "waiting-vista",
     door: null,
-    hasWindows: true,
-    windowLight: "night",
-    lampSlots: [],
-    supportSlots: ["leading"],
+    hasWindows: false,
+    windowLight: null,
+    lampSlots: ["leading"],
+    supportSlots: ["leading", "trailing"],
+    serviceElements: ["bench"],
     signalAspect: null,
   },
   {
     bay: "ticket-hall",
+    structure: "station-house",
+    hasBuilding: true,
+    opening: null,
     door: "double",
     hasWindows: true,
     windowLight: "sunset-night",
-    lampSlots: ["leading"],
+    lampSlots: ["leading", "trailing"],
     supportSlots: ["leading", "trailing"],
+    serviceElements: ["timetable"],
     signalAspect: null,
   },
   {
-    bay: "platform-view",
+    bay: "garden-platform",
+    structure: "garden-bay",
+    hasBuilding: false,
+    opening: "garden-vista",
     door: null,
     hasWindows: false,
     windowLight: null,
-    lampSlots: [],
-    supportSlots: ["center"],
+    lampSlots: ["center"],
+    supportSlots: ["leading", "trailing"],
+    serviceElements: ["bench", "planter"],
     signalAspect: null,
   },
   {
-    bay: "freight-office",
+    bay: "service-yard",
+    structure: "service-shed",
+    hasBuilding: true,
+    opening: "service-vista",
     door: "freight",
     hasWindows: true,
     windowLight: "night",
     lampSlots: ["trailing"],
-    supportSlots: ["trailing"],
+    supportSlots: ["leading"],
+    serviceElements: ["baggage-cart", "parcel-stack"],
     signalAspect: null,
   },
   {
     bay: "departure",
-    door: "single",
-    hasWindows: true,
+    structure: "exit-platform",
+    hasBuilding: false,
+    opening: "exit-vista",
+    door: null,
+    hasWindows: false,
     windowLight: null,
     lampSlots: ["leading"],
     supportSlots: ["leading"],
+    serviceElements: ["wayfinding"],
     signalAspect: "proceed",
   },
 ] as const;
@@ -1313,7 +1337,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             }
             data-station-assets={
               stationSegment
-                ? "platform,building,canopy,fixtures"
+                ? "platform,campus,canopy,fixtures,service"
                 : undefined
             }
             data-station-vertical-zone={
@@ -1336,6 +1360,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   <span
                     className="train-station-platform"
                     data-station-asset="platform"
+                    data-station-solid-surface="opaque"
                   />
                 </span>
                 <span
@@ -1344,67 +1369,114 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   data-station-role={stationSegment.role}
                   data-station-segment={stationSegment.segmentOffset}
                   data-station-bay={stationComposition?.bay}
+                  data-station-structure={stationComposition?.structure}
+                  data-station-opening={stationComposition?.opening ?? "none"}
                 >
-                  <span
-                    className="train-station-building"
-                    data-station-asset="building"
-                    data-station-surface="opaque"
-                  >
-                    {stationComposition?.hasWindows ? (
-                      <span
-                        className="train-station-window-row"
-                        data-station-asset="windows"
-                        data-station-fixture="window-bank"
-                      >
-                        {stationComposition.windowLight ? (
-                          <span
-                            className={[
-                              "train-emissive-overlay",
-                              "train-station-emissive",
-                              "train-station-window-emissive",
-                            ].join(" ")}
-                            data-emissive="station-windows"
-                            data-emissive-owner={`station-segment-${stationSegment.segmentOffset}`}
-                            data-station-light-schedule={
-                              stationComposition.windowLight
-                            }
-                          />
-                        ) : null}
-                      </span>
-                    ) : null}
-                    {stationComposition?.door ? (
-                      <span
-                        className={[
-                          "train-station-door",
-                          `train-station-door--${stationComposition.door}`,
-                        ].join(" ")}
-                        data-station-asset="door"
-                        data-station-door={stationComposition.door}
-                      />
-                    ) : null}
-                    {stationComposition?.bay === "platform-view" ? (
-                      <span
-                        className="train-station-open-bay"
-                        data-station-framed-opening="platform-view"
-                      >
+                  {stationComposition?.hasBuilding ? (
+                    <span
+                      className={[
+                        "train-station-building",
+                        `train-station-building--${stationComposition.structure}`,
+                      ].join(" ")}
+                      data-station-asset="building"
+                      data-station-building-kind={stationComposition.structure}
+                      data-station-surface="opaque"
+                      data-station-solid-surface="opaque"
+                    >
+                      {stationComposition.hasWindows ? (
                         <span
-                          className="train-station-open-bay-view"
-                          data-station-view-owner="station-composition"
+                          className="train-station-window-row"
+                          data-station-asset="windows"
+                          data-station-fixture="window-bank"
+                        >
+                          {stationComposition.windowLight ? (
+                            <span
+                              className={[
+                                "train-emissive-overlay",
+                                "train-station-emissive",
+                                "train-station-window-emissive",
+                              ].join(" ")}
+                              data-emissive="station-windows"
+                              data-emissive-owner={`station-segment-${stationSegment.segmentOffset}`}
+                              data-station-light-schedule={
+                                stationComposition.windowLight
+                              }
+                            />
+                          ) : null}
+                        </span>
+                      ) : null}
+                      {stationComposition.door ? (
+                        <span
+                          className={[
+                            "train-station-door",
+                            `train-station-door--${stationComposition.door}`,
+                          ].join(" ")}
+                          data-station-asset="door"
+                          data-station-door={stationComposition.door}
                         />
-                      </span>
-                    ) : null}
-                    {stationSegment.segmentOffset === 2 ? (
+                      ) : null}
+                      {stationSegment.segmentOffset === 2 ? (
+                        <span
+                          className="train-station-name-board"
+                          data-station-asset="sign"
+                        >
+                          TMACT
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
+                  {stationComposition?.opening ? (
+                    <span
+                      className={[
+                        "train-station-open-air-bay",
+                        `train-station-open-air-bay--${stationComposition.opening}`,
+                      ].join(" ")}
+                      data-station-framed-opening={stationComposition.opening}
+                      data-station-opening-owner="world-parallax"
+                    >
                       <span
-                        className="train-station-name-board"
-                        data-station-asset="sign"
-                      >
-                        TMACT
-                      </span>
-                    ) : null}
-                  </span>
+                        className="train-station-open-air-view"
+                        data-station-view-owner="world-parallax"
+                      />
+                    </span>
+                  ) : null}
+                  {stationComposition?.serviceElements.map((element, index) => (
+                    <span
+                      className={[
+                        "train-station-service-element",
+                        `train-station-service-element--${element}`,
+                      ].join(" ")}
+                      data-station-asset="service"
+                      data-station-service-element={element}
+                      data-station-service-slot={index}
+                      key={`${element}-${index}`}
+                    >
+                      {element === "bench" ? (
+                        <>
+                          <span className="train-station-bench-seat" />
+                          <span className="train-station-bench-leg" />
+                        </>
+                      ) : null}
+                      {element === "baggage-cart" ? (
+                        <>
+                          <span className="train-station-cart-deck" />
+                          <span className="train-station-cart-wheel train-station-cart-wheel--leading" />
+                          <span className="train-station-cart-wheel train-station-cart-wheel--trailing" />
+                        </>
+                      ) : null}
+                      {element === "parcel-stack" ? (
+                        <>
+                          <span className="train-station-parcel train-station-parcel--lower" />
+                          <span className="train-station-parcel train-station-parcel--upper" />
+                        </>
+                      ) : null}
+                    </span>
+                  ))}
                   <span
                     className="train-station-canopy"
                     data-station-asset="canopy"
+                    data-station-surface="opaque"
+                    data-station-solid-surface="opaque"
                   >
                     {stationComposition?.supportSlots.map((slot) => (
                       <span
@@ -1414,6 +1486,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                         ].join(" ")}
                         data-station-asset="canopy-support"
                         data-station-fixture-slot={slot}
+                        data-station-solid-surface="opaque"
                         key={slot}
                       />
                     ))}
@@ -1436,6 +1509,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                       <span
                         className="train-station-lamp-fixture"
                         data-station-fixture="lamp-head"
+                        data-station-solid-surface="opaque"
                       />
                       <span
                         className={[
@@ -1467,6 +1541,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               <span
                 className="train-station-signal-head"
                 data-station-fixture="signal-head"
+                data-station-solid-surface="opaque"
               />
               <span
                 className={[

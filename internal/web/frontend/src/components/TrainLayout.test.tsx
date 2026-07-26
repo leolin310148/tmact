@@ -850,7 +850,7 @@ describe("TrainLayout", () => {
     expect(remountedWorld).toHaveAttribute("data-route-apply-count", "1");
   });
 
-  it("renders a legible station composition behind the train without changing its span", () => {
+  it("renders an articulated station campus behind the train without changing its span", () => {
     window.history.replaceState(
       null,
       "",
@@ -885,7 +885,7 @@ describe("TrainLayout", () => {
       stationSegments.every(
         (segment) =>
           segment.dataset.stationAssets ===
-            "platform,building,canopy,fixtures" &&
+            "platform,campus,canopy,fixtures,service" &&
           segment.dataset.stationVerticalZone === "behind-train",
       ),
     ).toBe(true);
@@ -894,16 +894,16 @@ describe("TrainLayout", () => {
     ).toHaveLength(6);
     expect(
       container.querySelectorAll("[data-station-asset='building']"),
-    ).toHaveLength(6);
+    ).toHaveLength(3);
     expect(
       container.querySelectorAll("[data-station-asset='canopy']"),
     ).toHaveLength(6);
     expect(
       container.querySelectorAll("[data-station-asset='canopy-support']"),
-    ).toHaveLength(7);
+    ).toHaveLength(9);
     expect(
       container.querySelectorAll("[data-station-asset='lamp']"),
-    ).toHaveLength(4);
+    ).toHaveLength(7);
     expect(
       container.querySelectorAll("[data-station-asset='signal']"),
     ).toHaveLength(2);
@@ -920,10 +920,33 @@ describe("TrainLayout", () => {
       "entrance",
       "west-waiting",
       "ticket-hall",
-      "platform-view",
-      "freight-office",
+      "garden-platform",
+      "service-yard",
       "departure",
     ]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-architecture]",
+      )].map((architecture) => architecture.dataset.stationStructure),
+    ).toEqual([
+      "gatehouse",
+      "waiting-bay",
+      "station-house",
+      "garden-bay",
+      "service-shed",
+      "exit-platform",
+    ]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-asset='building']",
+      )].map((building) => building.dataset.stationBuildingKind),
+    ).toEqual(["gatehouse", "station-house", "service-shed"]);
+    expect(
+      container.querySelectorAll("[data-station-framed-opening]"),
+    ).toHaveLength(5);
+    expect(
+      container.querySelectorAll("[data-station-asset='service']"),
+    ).toHaveLength(8);
     expect(
       container.querySelectorAll("[data-station-ambient-detail='steam']"),
     ).toHaveLength(1);
@@ -932,7 +955,7 @@ describe("TrainLayout", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps all six station architectures whole while clipping only platform transitions", () => {
+  it("keeps all six campus roles whole while clipping only platform transitions", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
@@ -987,15 +1010,21 @@ describe("TrainLayout", () => {
         "data-station-segment",
         `${index}`,
       );
-      expect(architecture).toContainElement(
-        segment.querySelector("[data-station-asset='building']"),
-      );
+      if ([0, 2, 4].includes(index)) {
+        expect(architecture).toContainElement(
+          segment.querySelector("[data-station-asset='building']"),
+        );
+      } else {
+        expect(
+          segment.querySelector("[data-station-asset='building']"),
+        ).not.toBeInTheDocument();
+      }
       expect(architecture).toContainElement(
         segment.querySelector("[data-station-asset='canopy']"),
       );
       expect(
         architecture.querySelectorAll("[data-station-asset='lamp']"),
-      ).toHaveLength([1, 0, 1, 0, 1, 1][index]!);
+      ).toHaveLength([1, 1, 2, 1, 1, 1][index]!);
       expect(architecture).not.toContainElement(
         segment.querySelector("[data-station-asset='platform']"),
       );
@@ -1028,9 +1057,14 @@ describe("TrainLayout", () => {
     expect(
       container.querySelectorAll("[data-station-asset='signal']"),
     ).toHaveLength(2);
+    expect(
+      architectures[3]!.querySelector(
+        "[data-station-framed-opening='garden-vista']",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("joins six role-owned station bays without accidental reveal gaps", () => {
+  it("joins six role-owned campus bays through one platform with intentional world openings", () => {
     window.history.replaceState(
       null,
       "",
@@ -1061,8 +1095,8 @@ describe("TrainLayout", () => {
       "entrance",
       "west-waiting",
       "ticket-hall",
-      "platform-view",
-      "freight-office",
+      "garden-platform",
+      "service-yard",
       "departure",
     ]);
     expect(
@@ -1070,14 +1104,14 @@ describe("TrainLayout", () => {
         (segment) =>
           segment.querySelectorAll("[data-station-asset='lamp']").length,
       ),
-    ).toEqual([1, 0, 1, 0, 1, 1]);
+    ).toEqual([1, 1, 2, 1, 1, 1]);
     expect(
       stationSegments.map(
         (segment) =>
           segment.querySelectorAll("[data-station-asset='canopy-support']")
             .length,
       ),
-    ).toEqual([1, 1, 2, 1, 1, 1]);
+    ).toEqual([1, 2, 2, 2, 1, 1]);
     expect(
       [...container.querySelectorAll<HTMLElement>(
         "[data-station-asset='signal']",
@@ -1090,28 +1124,43 @@ describe("TrainLayout", () => {
       ["5", "proceed"],
     ]);
 
-    const framedOpening = stationSegments[3]!.querySelector(
-      "[data-station-framed-opening='platform-view']",
-    );
-    expect(framedOpening).toContainElement(
-      framedOpening?.querySelector(
-        "[data-station-view-owner='station-composition']",
-      ) ?? null,
-    );
+    const framedOpenings = [
+      ...container.querySelectorAll<HTMLElement>(
+        "[data-station-framed-opening]",
+      ),
+    ];
     expect(
-      stationSegments.every(
-        (segment) =>
-          segment.querySelector("[data-station-surface='opaque']") !== null,
+      framedOpenings.map((opening) => opening.dataset.stationFramedOpening),
+    ).toEqual([
+      "entry-vista",
+      "waiting-vista",
+      "garden-vista",
+      "service-vista",
+      "exit-vista",
+    ]);
+    expect(
+      framedOpenings.every(
+        (opening) =>
+          opening.dataset.stationOpeningOwner === "world-parallax" &&
+          opening.querySelector(
+            "[data-station-view-owner='world-parallax']",
+          ) !== null,
       ),
     ).toBe(true);
+    expect(
+      stationSegments.map(
+        (segment) =>
+          segment.querySelectorAll("[data-station-asset='platform']").length,
+      ),
+    ).toEqual([1, 1, 1, 1, 1, 1]);
     expect(trainLayoutCss).toMatch(
-      /\.train-station-building\s*\{[^}]*right:\s*-2px;[^}]*left:\s*-2px;/,
+      /\.train-station-building--station-house\s*\{[^}]*right:\s*18%;[^}]*left:\s*18%;/,
     );
     expect(trainLayoutCss).not.toMatch(
-      /\.train-station-building\s*\{[^}]*(?:right|left):\s*7%;/,
+      /\.train-station-building\s*\{[^}]*(?:right|left):\s*-2px;/,
     );
     expect(trainLayoutCss).toMatch(
-      /\.train-station-open-bay-view\s*\{[^}]*background:\s*linear-gradient\(/,
+      /\.train-station-open-air-view\s*\{[^}]*background:\s*transparent;/,
     );
   });
 
@@ -1133,7 +1182,7 @@ describe("TrainLayout", () => {
     const world = container.querySelector<HTMLElement>(".train-layout-world")!;
     const buildings = [
       ...container.querySelectorAll<HTMLElement>(
-        "[data-station-surface='opaque']",
+        "[data-station-asset='building']",
       ),
     ];
     const stationEmissives = [
@@ -1149,10 +1198,10 @@ describe("TrainLayout", () => {
       (emissive) => emissive.dataset.stationLightSchedule === "night",
     );
 
-    expect(buildings).toHaveLength(6);
-    expect(stationEmissives).toHaveLength(9);
-    expect(sunsetOwned).toHaveLength(4);
-    expect(nightOnly).toHaveLength(5);
+    expect(buildings).toHaveLength(3);
+    expect(stationEmissives).toHaveLength(11);
+    expect(sunsetOwned).toHaveLength(5);
+    expect(nightOnly).toHaveLength(6);
     expect(trainLayoutCss).toMatch(
       /\.train-station-building\s*\{[^}]*background-color:\s*var\(--train-station-wall\);[^}]*opacity:\s*1;[^}]*filter:\s*none;/,
     );
@@ -1161,6 +1210,9 @@ describe("TrainLayout", () => {
       "";
     expect(stationBuildingRule).not.toContain("--train-palette-haze");
     expect(stationBuildingRule).not.toContain("transparent");
+    expect(
+      container.querySelectorAll("[data-station-solid-surface='opaque']"),
+    ).toHaveLength(33);
 
     for (const mode of ["day", "sunset", "night"] as const) {
       world.dataset.timeOfDay = mode;
@@ -1205,7 +1257,7 @@ describe("TrainLayout", () => {
     }
   });
 
-  it("keeps station scenery pointer-inert below the train and caps compact station geometry", () => {
+  it("keeps station scenery pointer-inert below the train and preserves compact campus ends", () => {
     expect(trainLayoutCss).toMatch(
       /\.train-layout-world\s*\{[\s\S]*?z-index:\s*0;[\s\S]*?pointer-events:\s*none;/,
     );
@@ -1231,7 +1283,10 @@ describe("TrainLayout", () => {
       /\.train-set-piece--station\.train-set-piece--(?:entry|exit)\s*\{[^}]*clip-path:/,
     );
     expect(trainLayoutCss).toMatch(
-      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[\s\S]*?right:\s*-1px;[\s\S]*?left:\s*-1px;/,
+      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-building--station-house\s*\{[\s\S]*?right:\s*20%;[\s\S]*?left:\s*20%;/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[^}]*(?:right|left):\s*-1px;/,
     );
   });
 

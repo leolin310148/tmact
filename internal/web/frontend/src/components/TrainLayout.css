@@ -658,11 +658,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-building {
   position: absolute;
-  right: -2px;
   bottom: 20px;
-  left: -2px;
+  z-index: 1;
   box-sizing: border-box;
-  height: 78px;
+  height: 62px;
   border: 3px solid var(--train-station-trim);
   border-bottom: 0;
   background-color: var(--train-station-wall);
@@ -679,19 +678,37 @@ html[data-pane-switcher-layout="train"] .statusline {
         31px 34px,
       var(--train-station-wall) 34px 100%
     );
-  background-size: 64px 100%;
+  background-size: 52px 100%;
   opacity: 1;
   filter: none;
+}
+
+.train-station-building--gatehouse {
+  right: 5%;
+  left: 57%;
+  height: 58px;
+}
+
+.train-station-building--station-house {
+  right: 18%;
+  left: 18%;
+  height: 72px;
+}
+
+.train-station-building--service-shed {
+  right: 34%;
+  left: 8%;
+  height: 56px;
 }
 
 .train-station-building::before {
   content: "";
   position: absolute;
-  top: -12px;
+  top: -13px;
   right: -3px;
   left: -3px;
   box-sizing: border-box;
-  height: 12px;
+  height: 13px;
   border-bottom: 4px solid
     color-mix(
       in srgb,
@@ -703,17 +720,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--station[data-set-piece-segment="0"]
   .train-station-building::before {
-  clip-path: polygon(0 100%, 7% 0, 100% 0, 100% 100%);
-}
-
-.train-set-piece--station[data-set-piece-segment="5"]
-  .train-station-building::before {
-  clip-path: polygon(0 0, 93% 0, 100% 100%, 0 100%);
+  clip-path: polygon(0 100%, 12% 0, 100% 0, 100% 100%);
 }
 
 .train-set-piece--station[data-set-piece-segment="0"]
-  .train-station-building,
-.train-set-piece--station[data-set-piece-segment="5"]
   .train-station-building {
   --train-station-wall: color-mix(
     in srgb,
@@ -745,13 +755,6 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--station[data-set-piece-segment="2"]
-  .train-station-building,
-.train-set-piece--station[data-set-piece-segment="3"]
-  .train-station-building {
-  height: 84px;
-}
-
-.train-set-piece--station[data-set-piece-segment="2"]
   .train-station-building::after {
   content: "";
   position: absolute;
@@ -779,7 +782,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-window-row {
   position: absolute;
-  top: 20px;
+  top: 17px;
   right: 10%;
   left: 10%;
   box-sizing: border-box;
@@ -797,10 +800,10 @@ html[data-pane-switcher-layout="train"] .statusline {
   box-shadow: none;
 }
 
-.train-set-piece--station[data-set-piece-segment="5"]
-  .train-station-window-row {
-  right: 28%;
-  left: 10%;
+.train-station-building--service-shed .train-station-window-row {
+  right: 48%;
+  left: 8%;
+  height: 17px;
 }
 
 .train-station-window-emissive {
@@ -856,9 +859,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-station-door--freight {
-  left: 58%;
+  left: 70%;
   width: 54px;
-  height: 46px;
+  height: 43px;
   background:
     repeating-linear-gradient(
       90deg,
@@ -867,59 +870,65 @@ html[data-pane-switcher-layout="train"] .statusline {
     );
 }
 
-.train-station-open-bay {
+.train-station-open-air-bay {
   position: absolute;
+  z-index: 0;
   bottom: 0;
-  left: 50%;
   box-sizing: border-box;
-  width: 112px;
-  height: 51px;
-  overflow: hidden;
-  border: 5px solid var(--train-station-trim);
-  border-bottom: 0;
-  background: var(--train-station-trim);
-  transform: translateX(-50%);
+  height: 78px;
+  border-right: 4px solid var(--train-station-trim);
+  border-left: 4px solid var(--train-station-trim);
+  background: transparent;
+  box-shadow:
+    inset 3px 0 var(--train-station-wall-accent),
+    inset -3px 0 var(--train-station-wall-accent);
 }
 
-.train-station-open-bay-view {
+.train-station-open-air-bay--entry-vista {
+  right: 55%;
+  left: 7%;
+}
+
+.train-station-open-air-bay--waiting-vista {
+  right: 8%;
+  left: 8%;
+}
+
+.train-station-open-air-bay--garden-vista {
+  right: 7%;
+  left: 7%;
+}
+
+.train-station-open-air-bay--service-vista {
+  right: 5%;
+  left: 70%;
+}
+
+.train-station-open-air-bay--exit-vista {
+  right: 8%;
+  left: 12%;
+}
+
+.train-station-open-air-view {
   position: absolute;
-  inset: 0;
+  inset: 0 7px;
   display: block;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(
-          in srgb,
-          var(--train-palette-far-surface),
-          var(--train-palette-control-surface) 18%
-        )
-        0 48%,
-      var(--train-station-wall-accent) 48% 56%,
-      color-mix(
-          in srgb,
-          var(--train-palette-mid-surface),
-          black 9%
-        )
-        56% 100%
-    );
+  border-top: 3px solid var(--train-station-trim);
+  background: transparent;
 }
 
-.train-station-open-bay-view::before,
-.train-station-open-bay-view::after {
+.train-station-open-air-view::before {
   content: "";
   position: absolute;
-  top: 0;
+  right: 0;
   bottom: 0;
-  width: 5px;
-  background: var(--train-station-trim);
-}
-
-.train-station-open-bay-view::before {
-  left: 31%;
-}
-
-.train-station-open-bay-view::after {
-  right: 31%;
+  left: 0;
+  height: 4px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    var(--train-station-wall-accent) 42%
+  );
 }
 
 .train-station-name-board {
@@ -943,11 +952,189 @@ html[data-pane-switcher-layout="train"] .statusline {
   transform: translateX(-50%);
 }
 
+.train-station-service-element {
+  position: absolute;
+  z-index: 3;
+  bottom: 20px;
+  display: block;
+  box-sizing: border-box;
+  opacity: 1;
+  filter: none;
+}
+
+.train-station-service-element--wayfinding {
+  left: 18%;
+  width: 5px;
+  height: 43px;
+  background: var(--train-station-trim);
+}
+
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-service-element--wayfinding {
+  right: 18%;
+  left: auto;
+}
+
+.train-station-service-element--wayfinding::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -14px;
+  box-sizing: border-box;
+  width: 33px;
+  height: 15px;
+  border: 3px solid var(--train-station-trim);
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 41%,
+      var(--train-palette-foreground-contrast) 42% 58%,
+      transparent 59%
+    ),
+    var(--train-station-wall);
+}
+
+.train-station-service-element--bench {
+  left: 29%;
+  width: 72px;
+  height: 24px;
+}
+
+.train-set-piece--station[data-set-piece-segment="3"]
+  .train-station-service-element--bench {
+  left: 19%;
+}
+
+.train-station-bench-seat {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  left: 0;
+  height: 11px;
+  border: 3px solid var(--train-station-trim);
+  background: var(--train-station-wall-accent);
+}
+
+.train-station-bench-leg {
+  position: absolute;
+  right: 9px;
+  bottom: 0;
+  left: 9px;
+  height: 10px;
+  border-right: 5px solid var(--train-station-trim);
+  border-left: 5px solid var(--train-station-trim);
+}
+
+.train-station-service-element--timetable {
+  right: 10%;
+  width: 30px;
+  height: 48px;
+  border: 4px solid var(--train-station-trim);
+  background:
+    repeating-linear-gradient(
+      180deg,
+      var(--train-station-glass) 0 3px,
+      var(--train-station-wall-accent) 3px 5px
+    );
+}
+
+.train-station-service-element--planter {
+  right: 19%;
+  width: 38px;
+  height: 18px;
+  border: 3px solid var(--train-station-trim);
+  background: var(--train-station-wall-accent);
+}
+
+.train-station-service-element--planter::before {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 12px;
+  left: 4px;
+  height: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 24%,
+      #466b4c 25% 55%,
+      transparent 56%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 0 24%,
+      #527957 25% 55%,
+      transparent 56%
+    );
+}
+
+.train-station-service-element--baggage-cart {
+  right: 8%;
+  width: 72px;
+  height: 28px;
+}
+
+.train-station-cart-deck {
+  position: absolute;
+  right: 0;
+  bottom: 8px;
+  left: 0;
+  height: 13px;
+  border: 3px solid var(--train-station-trim);
+  background: var(--train-station-wall-accent);
+}
+
+.train-station-cart-wheel {
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border: 3px solid var(--train-station-trim);
+  border-radius: 50%;
+  background: var(--train-palette-near-surface);
+}
+
+.train-station-cart-wheel--leading {
+  left: 10px;
+}
+
+.train-station-cart-wheel--trailing {
+  right: 10px;
+}
+
+.train-station-service-element--parcel-stack {
+  right: 34%;
+  width: 45px;
+  height: 36px;
+}
+
+.train-station-parcel {
+  position: absolute;
+  box-sizing: border-box;
+  border: 3px solid var(--train-station-trim);
+  background: #9b6a45;
+}
+
+.train-station-parcel--lower {
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  height: 22px;
+}
+
+.train-station-parcel--upper {
+  bottom: 17px;
+  left: 0;
+  width: 26px;
+  height: 19px;
+  background: #af7a50;
+}
+
 .train-station-canopy {
   position: absolute;
-  right: -1px;
-  bottom: 92px;
-  left: -1px;
+  right: 8%;
+  bottom: 91px;
+  left: 8%;
   box-sizing: border-box;
   height: 8px;
   border-top: 3px solid
@@ -971,14 +1158,41 @@ html[data-pane-switcher-layout="train"] .statusline {
   filter: none;
 }
 
-.train-set-piece--station[data-set-piece-segment="0"]
+.train-station-architecture[data-station-bay="entrance"]
   .train-station-canopy {
+  right: 4%;
+  left: 23%;
+}
+
+.train-station-architecture[data-station-bay="west-waiting"]
+  .train-station-canopy {
+  right: 8%;
+  left: 8%;
+}
+
+.train-station-architecture[data-station-bay="ticket-hall"]
+  .train-station-canopy {
+  right: 12%;
+  bottom: 98px;
+  left: 12%;
+}
+
+.train-station-architecture[data-station-bay="garden-platform"]
+  .train-station-canopy {
+  right: 7%;
   left: 7%;
 }
 
-.train-set-piece--station[data-set-piece-segment="5"]
+.train-station-architecture[data-station-bay="service-yard"]
   .train-station-canopy {
-  right: 7%;
+  right: 24%;
+  left: 5%;
+}
+
+.train-station-architecture[data-station-bay="departure"]
+  .train-station-canopy {
+  right: 22%;
+  left: 5%;
 }
 
 .train-station-canopy-support {
@@ -1037,6 +1251,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-lamp--trailing {
   right: 25%;
+}
+
+.train-station-lamp--center {
+  left: calc(50% - 2px);
 }
 
 .train-station-emissive.train-emissive-overlay {
@@ -2444,7 +2662,11 @@ html[data-pane-switcher-layout="train"] .statusline {
   }
 
   .train-station-canopy {
-    right: -1px;
-    left: -1px;
+    height: 7px;
+  }
+
+  .train-station-building--station-house {
+    right: 20%;
+    left: 20%;
   }
 }
