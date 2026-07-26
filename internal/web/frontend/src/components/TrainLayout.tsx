@@ -626,6 +626,8 @@ type TrainTerrainBaseStyle = CSSProperties & {
   "--train-terrain-point-3": string;
   "--train-terrain-point-4": string;
   "--train-terrain-point-5": string;
+  "--train-terrain-point-6": string;
+  "--train-terrain-point-7": string;
 };
 
 type TrainSetPieceStyle = CSSProperties & {
@@ -1072,45 +1074,121 @@ export interface TrainTerrainContour {
   layer: TrainSolidTerrainLayer;
   region: RouteChunk["region"];
   variant: number;
+  material: TrainTerrainMaterial;
+  transitionMaterial: TrainTerrainMaterial | null;
   points: readonly TrainTerrainContourPoint[];
   seamLeftHeightPx: number;
   seamRightHeightPx: number;
 }
 
-const TRAIN_TERRAIN_CONTOUR_X = [0, 18, 42, 68, 86, 100] as const;
+export type TrainTerrainMaterial =
+  | "forest-soil"
+  | "mountain-rock"
+  | "town-ground"
+  | "coast-shore"
+  | "industrial-fill";
 
-const TRAIN_TERRAIN_REGION_RELIEF = {
-  forest: [5, 2, 7, 3],
-  mountain: [12, 20, 9, 15],
-  town: [3, 5, 2, 4],
-  coast: [-2, -6, -1, -4],
-  industrial: [2, 4, 1, 3],
+export const TRAIN_TERRAIN_REGION_MATERIALS = {
+  forest: "forest-soil",
+  mountain: "mountain-rock",
+  town: "town-ground",
+  coast: "coast-shore",
+  industrial: "industrial-fill",
+} as const satisfies Record<RouteChunk["region"], TrainTerrainMaterial>;
+
+export const TRAIN_TERRAIN_LAYER_ENVELOPES = {
+  "ultra-far": {
+    baseHeightPx: 108,
+    minimumHeightPx: 76,
+    maximumHeightPx: 164,
+    minimumVariationPx: 14,
+    routeNoiseScale: 0.62,
+    reliefScale: 1,
+  },
+  far: {
+    baseHeightPx: 82,
+    minimumHeightPx: 56,
+    maximumHeightPx: 132,
+    minimumVariationPx: 12,
+    routeNoiseScale: 0.5,
+    reliefScale: 0.82,
+  },
+  midground: {
+    baseHeightPx: 51,
+    minimumHeightPx: 36,
+    maximumHeightPx: 102,
+    minimumVariationPx: 8,
+    routeNoiseScale: 0.34,
+    reliefScale: 0.62,
+  },
+  near: {
+    baseHeightPx: 22,
+    minimumHeightPx: 19,
+    maximumHeightPx: 36,
+    minimumVariationPx: 3,
+    routeNoiseScale: 0.06,
+    reliefScale: 0.22,
+  },
 } as const satisfies Record<
-  RouteChunk["region"],
-  readonly [number, number, number, number]
+  TrainSolidTerrainLayer,
+  {
+    baseHeightPx: number;
+    minimumHeightPx: number;
+    maximumHeightPx: number;
+    minimumVariationPx: number;
+    routeNoiseScale: number;
+    reliefScale: number;
+  }
 >;
 
-const TRAIN_TERRAIN_LAYER_RELIEF_SCALE = {
-  "ultra-far": 1.2,
-  far: 0.9,
-  midground: 0.58,
-  near: 0.32,
-} as const satisfies Record<TrainSolidTerrainLayer, number>;
+const TRAIN_TERRAIN_CONTOUR_X = [0, 11, 26, 43, 61, 77, 91, 100] as const;
+
+const TRAIN_TERRAIN_REGION_HEIGHT_OFFSETS = {
+  forest: { "ultra-far": 5, far: 6, midground: 6, near: 2 },
+  mountain: { "ultra-far": 24, far: 21, midground: 17, near: 3 },
+  town: { "ultra-far": -5, far: -3, midground: 1, near: 2 },
+  coast: { "ultra-far": -17, far: -14, midground: -9, near: 0 },
+  industrial: { "ultra-far": 0, far: 3, midground: 5, near: 3 },
+} as const satisfies Record<
+  RouteChunk["region"],
+  Record<TrainSolidTerrainLayer, number>
+>;
+
+const TRAIN_TERRAIN_REGION_RELIEF = {
+  forest: [17, 6, 22, 10, 19, 8],
+  mountain: [31, 16, 44, 23, 37, 12],
+  town: [9, 3, 14, 6, 11, 4],
+  coast: [-5, 8, -9, 4, -2, 10],
+  industrial: [13, 5, 18, 8, 15, 3],
+} as const satisfies Record<
+  RouteChunk["region"],
+  readonly [number, number, number, number, number, number]
+>;
+
+function clampTrainTerrainHeight(
+  heightPx: number,
+  layer: TrainSolidTerrainLayer,
+): number {
+  const envelope = TRAIN_TERRAIN_LAYER_ENVELOPES[layer];
+  return Math.max(
+    envelope.minimumHeightPx,
+    Math.min(envelope.maximumHeightPx, heightPx),
+  );
+}
 
 function trainTerrainAnchorHeight(
   chunk: RouteChunk,
   layer: TrainSolidTerrainLayer,
 ): number {
-  switch (layer) {
-    case "ultra-far":
-      return chunk.terrainHeight;
-    case "far":
-      return chunk.terrainHeight - 1;
-    case "midground":
-      return chunk.terrainHeight - 12;
-    case "near":
-      return 16 + ((chunk.variant + chunk.regionIndex) % 3);
-  }
+  const envelope = TRAIN_TERRAIN_LAYER_ENVELOPES[layer];
+  const regionOffset = TRAIN_TERRAIN_REGION_HEIGHT_OFFSETS[chunk.region][layer];
+  const routeNoise = (chunk.terrainHeight - 46) * envelope.routeNoiseScale;
+  const nearStability =
+    layer === "near" ? ((chunk.variant + chunk.regionIndex) % 3) - 1 : 0;
+  return clampTrainTerrainHeight(
+    Math.round(envelope.baseHeightPx + regionOffset + routeNoise + nearStability),
+    layer,
+  );
 }
 
 export function trainTerrainContourForChunk(
@@ -1130,7 +1208,7 @@ export function trainTerrainContourForChunk(
   const rightHeight = trainTerrainAnchorHeight(rightChunk, layer);
   const anchorHeight = trainTerrainAnchorHeight(chunk, layer);
   const relief = TRAIN_TERRAIN_REGION_RELIEF[chunk.region];
-  const reliefScale = TRAIN_TERRAIN_LAYER_RELIEF_SCALE[layer];
+  const reliefScale = TRAIN_TERRAIN_LAYER_ENVELOPES[layer].reliefScale;
   const ridgeUnit = (chunk.ridgeHeight - 48) / 32;
   const points = TRAIN_TERRAIN_CONTOUR_X.map((xPercent, pointIndex) => {
     if (pointIndex === 0) {
@@ -1142,24 +1220,51 @@ export function trainTerrainContourForChunk(
     const progress = xPercent / 100;
     const seamLine = leftHeight + (rightHeight - leftHeight) * progress;
     const anchorBias =
-      (anchorHeight - seamLine) * Math.sin(Math.PI * progress) * 0.62;
+      (anchorHeight - seamLine) * Math.sin(Math.PI * progress) * 0.7;
     const reliefIndex = (pointIndex - 1 + chunk.variant) % relief.length;
     const shapedRelief =
-      (relief[reliefIndex]! + ridgeUnit * (pointIndex % 2 === 0 ? 2 : 1)) *
+      (relief[reliefIndex]! +
+        ridgeUnit * (pointIndex % 2 === 0 ? 3.2 : -1.4)) *
       reliefScale;
     return {
       xPercent,
-      heightPx: Math.max(
-        8,
+      heightPx: clampTrainTerrainHeight(
         Math.round((seamLine + anchorBias + shapedRelief) * 1000) / 1000,
+        layer,
       ),
     };
   });
+  const envelope = TRAIN_TERRAIN_LAYER_ENVELOPES[layer];
+  const contourMinimum = Math.min(...points.map((point) => point.heightPx));
+  const contourMaximum = Math.max(...points.map((point) => point.heightPx));
+  if (contourMaximum - contourMinimum < envelope.minimumVariationPx) {
+    const peakIndex = Math.max(
+      1,
+      points.findIndex(
+        (point, pointIndex) =>
+          pointIndex > 0 &&
+          pointIndex < points.length - 1 &&
+          point.heightPx > contourMinimum,
+      ),
+    );
+    points[peakIndex] = {
+      ...points[peakIndex]!,
+      heightPx: Math.min(
+        envelope.maximumHeightPx,
+        contourMinimum + envelope.minimumVariationPx,
+      ),
+    };
+  }
 
   return {
     layer,
     region: chunk.region,
     variant: chunk.variant,
+    material: TRAIN_TERRAIN_REGION_MATERIALS[chunk.region],
+    transitionMaterial:
+      rightChunk.region === chunk.region
+        ? null
+        : TRAIN_TERRAIN_REGION_MATERIALS[rightChunk.region],
     points,
     seamLeftHeightPx: leftHeight,
     seamRightHeightPx: rightHeight,
@@ -1240,6 +1345,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
         "--train-terrain-point-3": `${terrainContour.points[3]!.heightPx}px`,
         "--train-terrain-point-4": `${terrainContour.points[4]!.heightPx}px`,
         "--train-terrain-point-5": `${terrainContour.points[5]!.heightPx}px`,
+        "--train-terrain-point-6": `${terrainContour.points[6]!.heightPx}px`,
+        "--train-terrain-point-7": `${terrainContour.points[7]!.heightPx}px`,
       }
     : undefined;
 
@@ -1295,7 +1402,11 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
           data-terrain-region={terrainContour.region}
           data-terrain-variant={terrainContour.variant}
           data-terrain-layer={terrainContour.layer}
-          data-terrain-material={`${terrainContour.region}-material`}
+          data-terrain-material={terrainContour.material}
+          data-terrain-transition-material={
+            terrainContour.transitionMaterial ?? undefined
+          }
+          data-terrain-envelope={`${TRAIN_TERRAIN_LAYER_ENVELOPES[terrainContour.layer].minimumHeightPx}:${TRAIN_TERRAIN_LAYER_ENVELOPES[terrainContour.layer].maximumHeightPx}`}
           data-terrain-seam-left={terrainContour.seamLeftHeightPx}
           data-terrain-seam-right={terrainContour.seamRightHeightPx}
           data-terrain-contour={terrainContour.points

@@ -1547,11 +1547,13 @@ html[data-pane-switcher-layout="train"] .statusline {
   background-position-x: var(--train-terrain-material-phase);
   clip-path: polygon(
     0 calc(100% - var(--train-terrain-point-0)),
-    18% calc(100% - var(--train-terrain-point-1)),
-    42% calc(100% - var(--train-terrain-point-2)),
-    68% calc(100% - var(--train-terrain-point-3)),
-    86% calc(100% - var(--train-terrain-point-4)),
-    100% calc(100% - var(--train-terrain-point-5)),
+    11% calc(100% - var(--train-terrain-point-1)),
+    26% calc(100% - var(--train-terrain-point-2)),
+    43% calc(100% - var(--train-terrain-point-3)),
+    61% calc(100% - var(--train-terrain-point-4)),
+    77% calc(100% - var(--train-terrain-point-5)),
+    91% calc(100% - var(--train-terrain-point-6)),
+    100% calc(100% - var(--train-terrain-point-7)),
     100% 100%,
     0 100%
   );
@@ -1560,83 +1562,120 @@ html[data-pane-switcher-layout="train"] .statusline {
   transition: background-color 450ms ease;
 }
 
-.train-terrain-base[data-terrain-region="forest"] {
+.train-terrain-base[data-terrain-material="forest-soil"] {
   background-image:
     repeating-linear-gradient(
-      132deg,
-      transparent 0 11px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 32%) 11px 13px,
-      transparent 13px 29px
+      157deg,
+      transparent 0 13px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 28%) 13px 16px,
+      transparent 16px 31px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 29px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 47%) 29px 34px,
+      transparent 34px 59px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 20%) 0 4px,
+      transparent 4px 100%
+    );
+  background-size:
+    auto,
+    auto,
+    100% 100%;
+}
+
+.train-terrain-base[data-terrain-material="mountain-rock"] {
+  background-image:
+    repeating-linear-gradient(
+      123deg,
+      transparent 0 14px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 14%) 14px 19px,
+      transparent 19px 36px
+    ),
+    repeating-linear-gradient(
+      57deg,
+      transparent 0 25px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 38%) 25px 29px,
+      transparent 29px 51px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 17px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 17px 20px,
+      transparent 20px 39px
+    );
+}
+
+.train-terrain-base[data-terrain-material="town-ground"] {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 9px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 38%) 9px 12px,
+      transparent 12px 23px
     ),
     repeating-linear-gradient(
       90deg,
       transparent 0 37px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 48%) 37px 41px,
-      transparent 41px 67px
-    );
-}
-
-.train-terrain-base[data-terrain-region="mountain"] {
-  background-image:
-    repeating-linear-gradient(
-      118deg,
-      transparent 0 17px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 18%) 17px 20px,
-      transparent 20px 38px
-    ),
-    repeating-linear-gradient(
-      62deg,
-      transparent 0 29px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 44%) 29px 31px,
-      transparent 31px 53px
-    );
-}
-
-.train-terrain-base[data-terrain-region="town"] {
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 7px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 46%) 7px 9px,
-      transparent 9px 19px
+      color-mix(in srgb, var(--train-terrain-detail), transparent 45%) 37px 41px,
+      transparent 41px 71px
     ),
     repeating-linear-gradient(
       90deg,
-      transparent 0 47px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 56%) 47px 50px,
-      transparent 50px 83px
+      transparent 0 15px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 62%) 15px 17px,
+      transparent 17px 32px
     );
 }
 
-.train-terrain-base[data-terrain-region="coast"] {
+.train-terrain-base[data-terrain-material="coast-shore"] {
   background-image:
     repeating-linear-gradient(
-      176deg,
+      178deg,
+      transparent 0 7px,
+      color-mix(in srgb, var(--train-palette-water), transparent 18%) 7px 11px,
+      transparent 11px 22px
+    ),
+    repeating-linear-gradient(
+      91deg,
+      transparent 0 25px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 48%) 25px 29px,
+      transparent 29px 53px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--train-palette-water), var(--train-terrain-surface) 38%)
+        0 8px,
+      transparent 8px 100%
+    );
+  background-size:
+    auto,
+    auto,
+    100% 100%;
+}
+
+.train-terrain-base[data-terrain-material="industrial-fill"] {
+  background-image:
+    repeating-linear-gradient(
+      143deg,
       transparent 0 8px,
-      color-mix(in srgb, var(--train-palette-water), transparent 38%) 8px 11px,
-      transparent 11px 24px
+      color-mix(in srgb, var(--train-terrain-detail), transparent 20%) 8px 13px,
+      transparent 13px 25px
     ),
     repeating-linear-gradient(
-      94deg,
-      transparent 0 31px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 31px 34px,
-      transparent 34px 61px
-    );
-}
-
-.train-terrain-base[data-terrain-region="industrial"] {
-  background-image:
-    repeating-linear-gradient(
-      147deg,
-      transparent 0 9px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 28%) 9px 12px,
-      transparent 12px 23px
+      37deg,
+      transparent 0 17px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 42%) 17px 21px,
+      transparent 21px 39px
     ),
     repeating-linear-gradient(
-      33deg,
-      transparent 0 19px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 52%) 19px 21px,
-      transparent 21px 37px
+      90deg,
+      transparent 0 43px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 43px 47px,
+      transparent 47px 79px
     );
 }
 
@@ -1662,7 +1701,11 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-parallax-chunk--ultra-far .train-terrain-base {
-  --train-terrain-surface: var(--train-palette-silhouette);
+  --train-terrain-surface: color-mix(
+    in srgb,
+    var(--train-palette-silhouette),
+    var(--train-palette-far-surface) 18%
+  );
   --train-terrain-detail: var(--train-palette-far-surface);
 }
 
@@ -1679,7 +1722,11 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-parallax-chunk--far .train-terrain-base {
-  --train-terrain-surface: var(--train-palette-far-surface);
+  --train-terrain-surface: color-mix(
+    in srgb,
+    var(--train-palette-far-surface),
+    var(--train-palette-mid-surface) 16%
+  );
   --train-terrain-detail: var(--train-palette-silhouette);
 }
 
@@ -1696,7 +1743,11 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-parallax-chunk--midground .train-terrain-base {
-  --train-terrain-surface: var(--train-palette-mid-surface);
+  --train-terrain-surface: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-near-surface) 14%
+  );
   --train-terrain-detail: var(--train-palette-silhouette);
 }
 

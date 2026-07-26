@@ -139,7 +139,7 @@ Treat these findings as regression targets:
   desktop, and ultrawide sizes; inspect both the full composition and isolated
   near layer.
 
-- [ ] **TRAIN-045 — Rebuild terrain silhouettes and remove horizontal colour slabs.**
+- [x] **TRAIN-045 — Rebuild terrain silhouettes and remove horizontal colour slabs.**
   Redesign ultra-far, far, midground, and near terrain bases so each layer has
   a legible irregular silhouette, intentional overlaps, and region-owned
   materials instead of stacked full-width bands. Increase meaningful contour

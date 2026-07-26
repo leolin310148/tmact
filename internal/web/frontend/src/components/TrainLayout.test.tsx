@@ -14,6 +14,8 @@ import {
   TRAIN_MIN_SEAT_TARGET_PX,
   TRAIN_SCENERY_DEPTH_PROFILES,
   TRAIN_SCENERY_TIME_GRADES,
+  TRAIN_TERRAIN_LAYER_ENVELOPES,
+  TRAIN_TERRAIN_REGION_MATERIALS,
   TRAIN_TIME_PALETTES,
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
@@ -1894,75 +1896,100 @@ describe("TrainLayout", () => {
     expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
   });
 
-  it("composes opaque shaped terrain for every region and variant with exact seams", () => {
+  it("keeps multi-seed terrain envelopes irregular, deterministic, and seamless across region boundaries", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
     document.head.append(styles);
-    const seed = "train-040-shaped-terrain";
+    const seeds = [
+      "train-045-terrain-alpha",
+      "train-045-terrain-bravo",
+      "train-045-terrain-charlie",
+    ];
     const representatives = new Map<
       string,
       ReturnType<typeof generateRouteChunk>
     >();
-    for (
-      let index = -5_000;
-      index <= 5_000 && representatives.size < 25;
-      index++
-    ) {
-      const chunk = generateRouteChunk(seed, index);
-      representatives.set(`${chunk.region}:${chunk.variant}`, chunk);
-    }
-    expect(representatives.size).toBe(25);
-    expect(
-      new Set([...representatives.values()].map((chunk) => chunk.region)),
-    ).toEqual(
-      new Set(["forest", "mountain", "town", "coast", "industrial"]),
-    );
-    expect(
-      new Set([...representatives.values()].map((chunk) => chunk.variant)),
-    ).toEqual(new Set([0, 1, 2, 3, 4]));
-
     const solidLayers = [
       "ultra-far",
       "far",
       "midground",
       "near",
     ] as const;
-    for (const chunk of representatives.values()) {
-      for (const layerName of solidLayers) {
-        const contour = trainTerrainContourForChunk(chunk, layerName);
-        expect(trainTerrainContourForChunk(chunk, layerName)).toEqual(contour);
-        expect(contour.points.map((point) => point.xPercent)).toEqual([
-          0, 18, 42, 68, 86, 100,
-        ]);
-        expect(contour.points[0]!.heightPx).toBe(contour.seamLeftHeightPx);
-        expect(contour.points.at(-1)!.heightPx).toBe(
-          contour.seamRightHeightPx,
-        );
-        expect(
-          new Set(contour.points.map((point) => point.heightPx)).size,
-        ).toBeGreaterThan(1);
-
+    const regions = new Set<string>();
+    let boundaryCount = 0;
+    for (const seed of seeds) {
+      for (let index = -360; index <= 360; index++) {
+        const chunk = generateRouteChunk(seed, index);
+        representatives.set(`${chunk.region}:${chunk.variant}`, chunk);
+        regions.add(chunk.region);
         const rightNeighbour = generateRouteChunk(
           seed,
           chunk.index - 1,
           chunk.seedVersion,
-        );
-        expect(contour.seamRightHeightPx).toBe(
-          trainTerrainContourForChunk(rightNeighbour, layerName)
-            .seamLeftHeightPx,
         );
         const leftNeighbour = generateRouteChunk(
           seed,
           chunk.index + 1,
           chunk.seedVersion,
         );
-        expect(contour.seamLeftHeightPx).toBe(
-          trainTerrainContourForChunk(leftNeighbour, layerName)
-            .seamRightHeightPx,
-        );
+        if (rightNeighbour.region !== chunk.region) boundaryCount++;
+
+        for (const layerName of solidLayers) {
+          const contour = trainTerrainContourForChunk(chunk, layerName);
+          const envelope = TRAIN_TERRAIN_LAYER_ENVELOPES[layerName];
+          expect(trainTerrainContourForChunk(chunk, layerName)).toEqual(
+            contour,
+          );
+          expect(contour.points.map((point) => point.xPercent)).toEqual([
+            0, 11, 26, 43, 61, 77, 91, 100,
+          ]);
+          expect(contour.material).toBe(
+            TRAIN_TERRAIN_REGION_MATERIALS[chunk.region],
+          );
+          expect(contour.transitionMaterial).toBe(
+            rightNeighbour.region === chunk.region
+              ? null
+              : TRAIN_TERRAIN_REGION_MATERIALS[rightNeighbour.region],
+          );
+          expect(contour.points[0]!.heightPx).toBe(contour.seamLeftHeightPx);
+          expect(contour.points.at(-1)!.heightPx).toBe(
+            contour.seamRightHeightPx,
+          );
+          const heights = contour.points.map((point) => point.heightPx);
+          expect(Math.min(...heights), `${seed}/${index}/${layerName}`).toBeGreaterThanOrEqual(
+            envelope.minimumHeightPx,
+          );
+          expect(Math.max(...heights), `${seed}/${index}/${layerName}`).toBeLessThanOrEqual(
+            envelope.maximumHeightPx,
+          );
+          expect(
+            Math.round(
+              (Math.max(...heights) - Math.min(...heights)) * 1000,
+            ) / 1000,
+            `${seed}/${index}/${layerName}`,
+          ).toBeGreaterThanOrEqual(envelope.minimumVariationPx);
+          for (const percent of [0, 7, 19, 34, 52, 69, 85, 96, 100]) {
+            const height = trainTerrainHeightAtPercent(contour, percent);
+            expect(height).toBeGreaterThanOrEqual(envelope.minimumHeightPx);
+            expect(height).toBeLessThanOrEqual(envelope.maximumHeightPx);
+          }
+          expect(contour.seamRightHeightPx).toBe(
+            trainTerrainContourForChunk(rightNeighbour, layerName)
+              .seamLeftHeightPx,
+          );
+          expect(contour.seamLeftHeightPx).toBe(
+            trainTerrainContourForChunk(leftNeighbour, layerName)
+              .seamRightHeightPx,
+          );
+        }
       }
     }
+    expect(boundaryCount).toBeGreaterThan(100);
+    expect(regions).toEqual(
+      new Set(["forest", "mountain", "town", "coast", "industrial"]),
+    );
+    expect(representatives.size).toBe(25);
 
     const { container } = render(
       <>
@@ -1992,13 +2019,27 @@ describe("TrainLayout", () => {
     for (const terrain of terrainBases) {
       expect(terrain).toHaveAttribute("data-terrain-owner", "chunk-contour");
       expect(terrain.dataset.terrainMaterial).toBe(
-        `${terrain.dataset.terrainRegion}-material`,
+        TRAIN_TERRAIN_REGION_MATERIALS[
+          terrain.dataset
+            .terrainRegion as keyof typeof TRAIN_TERRAIN_REGION_MATERIALS
+        ],
       );
-      expect(terrain.dataset.terrainContour?.split(",")).toHaveLength(6);
+      expect(terrain.dataset.terrainContour?.split(",")).toHaveLength(8);
+      const envelope =
+        TRAIN_TERRAIN_LAYER_ENVELOPES[
+          terrain.dataset
+            .terrainLayer as keyof typeof TRAIN_TERRAIN_LAYER_ENVELOPES
+        ];
+      expect(terrain.dataset.terrainEnvelope).toBe(
+        `${envelope.minimumHeightPx}:${envelope.maximumHeightPx}`,
+      );
       expect(getComputedStyle(terrain).opacity).toBe("1");
       expect(getComputedStyle(terrain).pointerEvents).toBe("none");
       expect(getComputedStyle(terrain).clipPath).toContain("polygon(");
       expect(getComputedStyle(terrain).backgroundImage).not.toBe("none");
+      expect(getComputedStyle(terrain).backgroundColor).not.toBe(
+        "transparent",
+      );
     }
 
     const groundedSprites = [
@@ -2011,10 +2052,9 @@ describe("TrainLayout", () => {
       const chunkElement = sprite.closest<HTMLElement>(
         ".train-parallax-chunk",
       )!;
-      const chunk = generateRouteChunk(
-        seed,
-        Number(chunkElement.dataset.routeChunkIndex),
-      );
+      const chunk = representatives.get(
+        `${chunkElement.dataset.routeRegion}:${chunkElement.dataset.routeChunkVariant}`,
+      )!;
       const layerName =
         chunkElement.dataset.parallaxLayer as (typeof solidLayers)[number];
       const expectedGround = trainTerrainHeightAtPercent(
@@ -2044,18 +2084,13 @@ describe("TrainLayout", () => {
       trainLayoutCss.indexOf(".train-depth-veil"),
     );
     expect(terrainCss).toMatch(/clip-path:\s*polygon\(/);
+    expect(terrainCss).toMatch(/100%\s+100%,\s*0\s+100%/);
     expect(terrainCss).toMatch(
       /background-color:\s*var\(--train-terrain-surface\);/,
     );
-    for (const region of [
-      "forest",
-      "mountain",
-      "town",
-      "coast",
-      "industrial",
-    ]) {
+    for (const material of Object.values(TRAIN_TERRAIN_REGION_MATERIALS)) {
       expect(terrainCss).toContain(
-        `.train-terrain-base[data-terrain-region="${region}"]`,
+        `.train-terrain-base[data-terrain-material="${material}"]`,
       );
     }
     for (const variant of [1, 2, 3, 4]) {

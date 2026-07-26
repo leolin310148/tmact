@@ -541,6 +541,45 @@ the six inspected contact sheets are
 `borz errors --json` was empty and the console contained only Vite connection
 and React development messages.
 
+TRAIN-045 terrain-silhouette run 2026-07-26: used route seed
+`train-045-proof` and ordinary, set-piece-free central chunks for town `4`,
+mountain `57`, coast `94`, industrial `129`, and forest `257`. The dedicated
+`tmact-train-workitems` borz profile was validated at 390×844 and 1280×800.
+For each viewport, the run confirmed HTTP 200, fetched the plain
+non-cache-busted `/src/components/TrainLayout.tsx` module and found the current
+terrain envelope/material source, opened the port-5234 page, applied the
+viewport, reloaded, and asserted the exact `window.innerWidth` and
+`window.innerHeight`.
+
+Day acceptance isolated ultra-far, far, midground, and near for all five
+regions at both viewport sizes. Each parallax position was calculated from
+the owning layer's `0.1`, `0.25`, `0.55`, or `1` speed ratio; the target chunk
+was visibly centred at x `195px` compact or `640px` desktop with a `322px`
+bounding width. The retained 40 isolated screenshots are
+`/private/tmp/train-045-proof/{compact,desktop}-{forest,mountain,town,coast,industrial}-day-{ultra-far,far,midground,near}.png`.
+Ten compact and ten desktop full composites cover every region in sunset and
+night at
+`/private/tmp/train-045-proof/{compact,desktop}-{forest,mountain,town,coast,industrial}-{sunset,night}-composite.png`.
+
+The four inspected contact sheets are
+`/private/tmp/train-045-proof/contact-{compact,desktop}-day-layers.png` and
+`/private/tmp/train-045-proof/contact-{compact,desktop}-composites.png`.
+Inspection found continuous irregular silhouettes, exact joins without sky
+holes or chunk seams, a stable filled near track bed, and distinct forest
+soil, mountain rock, town ground, coast shore, and industrial fill patterns.
+Mountain relief was deliberately tallest, coast formed a low varied shore
+profile, and the four depth planes overlapped as terrain rather than reading
+as stacked near-horizontal colour strips. Existing scenery sprites were left
+for their dedicated later work items.
+
+Every capture hid `.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle`, then restored them. The final displays were `flex`,
+`block`, and `grid`, with zero temporary hidden markers. `borz errors --json`
+was empty; the console contained only Vite connection and React development
+messages. The focused layout suite passed 78 tests, the complete frontend
+suite passed all 432 tests, the production build passed, and `make test`
+passed.
+
 ## Notes Template
 
 ```text
