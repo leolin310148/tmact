@@ -40,6 +40,7 @@ import {
 import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
 import {
   DEFAULT_TRAIN_ROUTE_SEED,
+  generateRouteChunk,
   RouteChunkWindow,
   routeChunkWindowRange,
   TRAIN_PARALLAX_LAYERS,
@@ -570,6 +571,15 @@ type TrainRouteChunkStyle = CSSProperties & {
   "--train-chunk-feature-offset": string;
 };
 
+type TrainTerrainBaseStyle = CSSProperties & {
+  "--train-terrain-point-0": string;
+  "--train-terrain-point-1": string;
+  "--train-terrain-point-2": string;
+  "--train-terrain-point-3": string;
+  "--train-terrain-point-4": string;
+  "--train-terrain-point-5": string;
+};
+
 type TrainSetPieceStyle = CSSProperties & {
   "--train-set-piece-phase": string;
 };
@@ -585,11 +595,13 @@ type TrainWorldLayerStyle = CSSProperties & {
 
 type TrainSceneryAssetStyle = CSSProperties & {
   "--train-scenery-scale": number;
+  "--train-scenery-ground-height"?: string;
 };
 
 type TrainNightLifeStyle = CSSProperties & {
   "--train-night-life-intensity": number;
   "--train-scenery-scale": number;
+  "--train-scenery-ground-height"?: string;
 };
 
 type TrainPaletteStyle = CSSProperties & {
@@ -621,9 +633,11 @@ type TrainDepthVeilPaletteStyle = CSSProperties & {
 function TrainNightLife({
   plan,
   placement,
+  groundHeight,
 }: {
   plan: TrainNightLifePlan;
   placement: TrainSceneryPlacement;
+  groundHeight?: number;
 }) {
   const { asset } = placement;
   const style: TrainNightLifeStyle = {
@@ -632,6 +646,8 @@ function TrainNightLife({
     height: `${asset.height}px`,
     "--train-night-life-intensity": plan.intensity,
     "--train-scenery-scale": placement.scale,
+    "--train-scenery-ground-height":
+      groundHeight === undefined ? undefined : `${groundHeight}px`,
   };
 
   return (
@@ -916,6 +932,131 @@ function TrainTownEdgeComposition({
   );
 }
 
+type TrainSolidTerrainLayer = Exclude<TrainParallaxLayerName, "sky">;
+
+export interface TrainTerrainContourPoint {
+  xPercent: number;
+  heightPx: number;
+}
+
+export interface TrainTerrainContour {
+  layer: TrainSolidTerrainLayer;
+  region: RouteChunk["region"];
+  variant: number;
+  points: readonly TrainTerrainContourPoint[];
+  seamLeftHeightPx: number;
+  seamRightHeightPx: number;
+}
+
+const TRAIN_TERRAIN_CONTOUR_X = [0, 18, 42, 68, 86, 100] as const;
+
+const TRAIN_TERRAIN_REGION_RELIEF = {
+  forest: [5, 2, 7, 3],
+  mountain: [12, 20, 9, 15],
+  town: [3, 5, 2, 4],
+  coast: [-2, -6, -1, -4],
+  industrial: [2, 4, 1, 3],
+} as const satisfies Record<
+  RouteChunk["region"],
+  readonly [number, number, number, number]
+>;
+
+const TRAIN_TERRAIN_LAYER_RELIEF_SCALE = {
+  "ultra-far": 1.2,
+  far: 0.9,
+  midground: 0.58,
+  near: 0.32,
+} as const satisfies Record<TrainSolidTerrainLayer, number>;
+
+function trainTerrainAnchorHeight(
+  chunk: RouteChunk,
+  layer: TrainSolidTerrainLayer,
+): number {
+  switch (layer) {
+    case "ultra-far":
+      return chunk.terrainHeight;
+    case "far":
+      return chunk.terrainHeight - 1;
+    case "midground":
+      return chunk.terrainHeight - 12;
+    case "near":
+      return 16 + ((chunk.variant + chunk.regionIndex) % 3);
+  }
+}
+
+export function trainTerrainContourForChunk(
+  chunk: RouteChunk,
+  layer: TrainSolidTerrainLayer,
+): TrainTerrainContour {
+  // Route indices increase toward the left because the locomotive faces left.
+  // Consequently the physical right neighbour is index - 1. Sharing that
+  // neighbour's anchor as this contour's right endpoint gives both chunks the
+  // exact same seam height without storing cross-chunk mutable state.
+  const rightChunk = generateRouteChunk(
+    chunk.routeSeed,
+    chunk.index - 1,
+    chunk.seedVersion,
+  );
+  const leftHeight = trainTerrainAnchorHeight(chunk, layer);
+  const rightHeight = trainTerrainAnchorHeight(rightChunk, layer);
+  const anchorHeight = trainTerrainAnchorHeight(chunk, layer);
+  const relief = TRAIN_TERRAIN_REGION_RELIEF[chunk.region];
+  const reliefScale = TRAIN_TERRAIN_LAYER_RELIEF_SCALE[layer];
+  const ridgeUnit = (chunk.ridgeHeight - 48) / 32;
+  const points = TRAIN_TERRAIN_CONTOUR_X.map((xPercent, pointIndex) => {
+    if (pointIndex === 0) {
+      return { xPercent, heightPx: leftHeight };
+    }
+    if (pointIndex === TRAIN_TERRAIN_CONTOUR_X.length - 1) {
+      return { xPercent, heightPx: rightHeight };
+    }
+    const progress = xPercent / 100;
+    const seamLine = leftHeight + (rightHeight - leftHeight) * progress;
+    const anchorBias =
+      (anchorHeight - seamLine) * Math.sin(Math.PI * progress) * 0.62;
+    const reliefIndex = (pointIndex - 1 + chunk.variant) % relief.length;
+    const shapedRelief =
+      (relief[reliefIndex]! + ridgeUnit * (pointIndex % 2 === 0 ? 2 : 1)) *
+      reliefScale;
+    return {
+      xPercent,
+      heightPx: Math.max(
+        8,
+        Math.round((seamLine + anchorBias + shapedRelief) * 1000) / 1000,
+      ),
+    };
+  });
+
+  return {
+    layer,
+    region: chunk.region,
+    variant: chunk.variant,
+    points,
+    seamLeftHeightPx: leftHeight,
+    seamRightHeightPx: rightHeight,
+  };
+}
+
+export function trainTerrainHeightAtPercent(
+  contour: TrainTerrainContour,
+  requestedPercent: number,
+): number {
+  const percent = Math.max(0, Math.min(100, requestedPercent));
+  for (let pointIndex = 1; pointIndex < contour.points.length; pointIndex++) {
+    const right = contour.points[pointIndex]!;
+    if (percent > right.xPercent) continue;
+    const left = contour.points[pointIndex - 1]!;
+    const progress =
+      (percent - left.xPercent) / (right.xPercent - left.xPercent);
+    return (
+      Math.round(
+        (left.heightPx + (right.heightPx - left.heightPx) * progress) * 1000,
+      ) / 1000
+    );
+  }
+  return contour.points.at(-1)!.heightPx;
+}
+
 export const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk,
   layer,
@@ -936,6 +1077,20 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
   const sceneryPlacements = trainSceneryPlacementsForChunk(layer.name, chunk);
   const stationSegment =
     chunk.setPiece?.type === "station" ? chunk.setPiece : null;
+  const terrainContour =
+    layer.name === "sky"
+      ? null
+      : trainTerrainContourForChunk(chunk, layer.name);
+  const terrainStyle: TrainTerrainBaseStyle | undefined = terrainContour
+    ? {
+        "--train-terrain-point-0": `${terrainContour.points[0]!.heightPx}px`,
+        "--train-terrain-point-1": `${terrainContour.points[1]!.heightPx}px`,
+        "--train-terrain-point-2": `${terrainContour.points[2]!.heightPx}px`,
+        "--train-terrain-point-3": `${terrainContour.points[3]!.heightPx}px`,
+        "--train-terrain-point-4": `${terrainContour.points[4]!.heightPx}px`,
+        "--train-terrain-point-5": `${terrainContour.points[5]!.heightPx}px`,
+      }
+    : undefined;
 
   return (
     <div
@@ -964,6 +1119,23 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
     >
+      {terrainContour && terrainStyle ? (
+        <span
+          className="train-terrain-base"
+          data-terrain-owner="chunk-contour"
+          data-terrain-region={terrainContour.region}
+          data-terrain-variant={terrainContour.variant}
+          data-terrain-layer={terrainContour.layer}
+          data-terrain-material={`${terrainContour.region}-material`}
+          data-terrain-seam-left={terrainContour.seamLeftHeightPx}
+          data-terrain-seam-right={terrainContour.seamRightHeightPx}
+          data-terrain-contour={terrainContour.points
+            .map((point) => `${point.xPercent}:${point.heightPx}`)
+            .join(",")}
+          aria-hidden="true"
+          style={terrainStyle}
+        />
+      ) : null}
       {chunk.setPiece?.renderLayer === layer.name ? (
         <>
           <span
@@ -1067,6 +1239,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
+        const sceneryGroundHeight = terrainContour
+          ? trainTerrainHeightAtPercent(
+              terrainContour,
+              placement.offsetPercent,
+            )
+          : undefined;
         const nightLife = trainNightLifeForPlacement(
           chunk,
           placement,
@@ -1079,6 +1257,10 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               ? undefined
               : `${placement.altitudePercent}%`,
           "--train-scenery-scale": placement.scale,
+          "--train-scenery-ground-height":
+            sceneryGroundHeight === undefined
+              ? undefined
+              : `${sceneryGroundHeight}px`,
         };
         const sprites = [
           <img
@@ -1108,6 +1290,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             }
             data-scenery-collision-width={placement.collisionWidth.toFixed(3)}
             data-scenery-minimum-spacing={placement.minimumSpacingPx}
+            data-scenery-ground-height={
+              sceneryGroundHeight?.toFixed(3) ?? undefined
+            }
             data-cloud-altitude={
               placement.altitudePercent?.toFixed(3) ?? undefined
             }
@@ -1160,6 +1345,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             <TrainNightLife
               plan={nightLife}
               placement={placement}
+              groundHeight={sceneryGroundHeight}
               key={`night-life-${asset.id}-${ordinal}`}
             />,
           );

@@ -377,6 +377,32 @@ far, and near positions unchanged for the next second. `borz errors --json`
 reported no page errors; the live DOM was restored and no private pane names,
 output, or payloads were recorded.
 
+TRAIN-040 shaped-terrain run 2026-07-26: repeated the HTTP 200, plain
+`/src/components/TrainLayout.tsx` source/source-map freshness, open, viewport,
+hard-reload, and exact `window.innerWidth`/`window.innerHeight` protocol at
+390×844, 1280×800, and 2560×900 with the dedicated
+`tmact-train-workitems` borz profile. Deterministic positions for town-edge,
+coast/station, mountain/bridge, industrial, coast-reveal, tunnel, and forest
+covered all five regions and every requested set piece. A temporary live-DOM
+stylesheet hid `.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle` for each capture and was explicitly removed afterward;
+the restored displays were `flex`, `block`, and `grid`.
+
+Day and night computed-style checks found zero visible non-sky chunks retaining
+a background image or solid background color. Every visible large-area owner
+was instead an opaque, textured `.train-terrain-base` with a polygon contour
+and an explicit region material. The compact, desktop, and ultrawide contact
+sheets showed continuous shaped upper edges without a broad uniform block,
+vertical chunk walls, sky leaks, or floating scenery. The 42 retained source
+screenshots are
+`/private/tmp/train-040-{town-edge,coast-station,mountain-bridge,industrial,coast-reveal,tunnel,forest}-{compact,desktop,ultrawide}-{day,night}.png`;
+the inspection-only contact sheets are
+`/private/tmp/train-040-{compact,desktop,ultrawide}-contact.png`.
+The final ultrawide sample retained 64 bounded parallax chunks, 52 non-sky
+chunks, exactly 52 terrain owners, and 38 scenery sprites. `borz errors --json`
+reported no page errors, and no private pane names, output, or payloads were
+recorded.
+
 ## Notes Template
 
 ```text

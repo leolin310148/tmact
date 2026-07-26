@@ -278,6 +278,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   position: absolute;
   inset-block: 0;
   overflow: visible;
+  background: none;
 }
 
 .train-set-piece {
@@ -1016,50 +1017,184 @@ html[data-pane-switcher-layout="train"] .statusline {
     drop-shadow(0 1px 0 rgba(68, 101, 135, 0.32));
 }
 
+.train-terrain-base {
+  --train-terrain-surface: var(--train-palette-mid-surface);
+  --train-terrain-detail: var(--train-palette-silhouette);
+  --train-terrain-material-phase: 0px;
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  opacity: 1;
+  background-color: var(--train-terrain-surface);
+  background-position-x: var(--train-terrain-material-phase);
+  clip-path: polygon(
+    0 calc(100% - var(--train-terrain-point-0)),
+    18% calc(100% - var(--train-terrain-point-1)),
+    42% calc(100% - var(--train-terrain-point-2)),
+    68% calc(100% - var(--train-terrain-point-3)),
+    86% calc(100% - var(--train-terrain-point-4)),
+    100% calc(100% - var(--train-terrain-point-5)),
+    100% 100%,
+    0 100%
+  );
+  image-rendering: pixelated;
+  pointer-events: none;
+  transition: background-color 450ms ease;
+}
+
+.train-terrain-base[data-terrain-region="forest"] {
+  background-image:
+    repeating-linear-gradient(
+      132deg,
+      transparent 0 11px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 32%) 11px 13px,
+      transparent 13px 29px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 37px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 48%) 37px 41px,
+      transparent 41px 67px
+    );
+}
+
+.train-terrain-base[data-terrain-region="mountain"] {
+  background-image:
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 17px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 18%) 17px 20px,
+      transparent 20px 38px
+    ),
+    repeating-linear-gradient(
+      62deg,
+      transparent 0 29px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 44%) 29px 31px,
+      transparent 31px 53px
+    );
+}
+
+.train-terrain-base[data-terrain-region="town"] {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 7px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 46%) 7px 9px,
+      transparent 9px 19px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 47px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 56%) 47px 50px,
+      transparent 50px 83px
+    );
+}
+
+.train-terrain-base[data-terrain-region="coast"] {
+  background-image:
+    repeating-linear-gradient(
+      176deg,
+      transparent 0 8px,
+      color-mix(in srgb, var(--train-palette-water), transparent 38%) 8px 11px,
+      transparent 11px 24px
+    ),
+    repeating-linear-gradient(
+      94deg,
+      transparent 0 31px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 31px 34px,
+      transparent 34px 61px
+    );
+}
+
+.train-terrain-base[data-terrain-region="industrial"] {
+  background-image:
+    repeating-linear-gradient(
+      147deg,
+      transparent 0 9px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 28%) 9px 12px,
+      transparent 12px 23px
+    ),
+    repeating-linear-gradient(
+      33deg,
+      transparent 0 19px,
+      color-mix(in srgb, var(--train-terrain-detail), transparent 52%) 19px 21px,
+      transparent 21px 37px
+    );
+}
+
+.train-parallax-chunk--variant-1 .train-terrain-base {
+  --train-terrain-material-phase: -17px;
+}
+
+.train-parallax-chunk--variant-2 .train-terrain-base {
+  --train-terrain-material-phase: -39px;
+}
+
+.train-parallax-chunk--variant-3 .train-terrain-base {
+  --train-terrain-material-phase: -61px;
+}
+
+.train-parallax-chunk--variant-4 .train-terrain-base {
+  --train-terrain-material-phase: -83px;
+}
+
 .train-parallax-chunk--ultra-far {
   opacity: 1;
-  background: linear-gradient(
-    to top,
-    var(--train-palette-silhouette)
-      0 calc(var(--train-chunk-terrain-height) - 7px),
-    transparent calc(var(--train-chunk-terrain-height) + 1px)
-  );
+  background: none;
+}
+
+.train-parallax-chunk--ultra-far .train-terrain-base {
+  --train-terrain-surface: var(--train-palette-silhouette);
+  --train-terrain-detail: var(--train-palette-far-surface);
 }
 
 .train-parallax-chunk--ultra-far .train-scenery-asset {
-  bottom: var(--train-chunk-terrain-height);
+  bottom: var(
+    --train-scenery-ground-height,
+    var(--train-chunk-terrain-height)
+  );
 }
 
 .train-parallax-chunk--far {
   opacity: 1;
-  background: linear-gradient(
-    to top,
-    var(--train-palette-far-surface)
-      0 calc(var(--train-chunk-terrain-height) - 2px),
-    transparent var(--train-chunk-terrain-height)
-  );
+  background: none;
+}
+
+.train-parallax-chunk--far .train-terrain-base {
+  --train-terrain-surface: var(--train-palette-far-surface);
+  --train-terrain-detail: var(--train-palette-silhouette);
 }
 
 .train-parallax-chunk--far .train-scenery-asset {
-  bottom: calc(var(--train-chunk-terrain-height) - 1px);
+  bottom: var(
+    --train-scenery-ground-height,
+    calc(var(--train-chunk-terrain-height) - 1px)
+  );
 }
 
 .train-parallax-chunk--midground {
   opacity: 1;
-  background: linear-gradient(
-    to top,
-    var(--train-palette-mid-surface)
-      0 calc(var(--train-chunk-terrain-height) - 12px),
-    transparent calc(var(--train-chunk-terrain-height) - 11px)
-  );
+  background: none;
+}
+
+.train-parallax-chunk--midground .train-terrain-base {
+  --train-terrain-surface: var(--train-palette-mid-surface);
+  --train-terrain-detail: var(--train-palette-silhouette);
 }
 
 .train-parallax-chunk--midground .train-scenery-asset {
-  bottom: calc(var(--train-chunk-terrain-height) - 12px);
+  bottom: var(
+    --train-scenery-ground-height,
+    calc(var(--train-chunk-terrain-height) - 12px)
+  );
 }
 
 .train-parallax-chunk--midground .train-scenery-emissive-mask {
-  bottom: calc(var(--train-chunk-terrain-height) - 12px);
+  bottom: var(
+    --train-scenery-ground-height,
+    calc(var(--train-chunk-terrain-height) - 12px)
+  );
 }
 
 .train-parallax-chunk--midground .train-scenery-asset--bridge {
@@ -1068,15 +1203,16 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-parallax-chunk--near {
   opacity: 1;
-  background: linear-gradient(
-    to top,
-    var(--train-palette-near-surface) 0 18px,
-    transparent 19px
-  );
+  background: none;
+}
+
+.train-parallax-chunk--near .train-terrain-base {
+  --train-terrain-surface: var(--train-palette-near-surface);
+  --train-terrain-detail: var(--train-palette-mid-surface);
 }
 
 .train-parallax-chunk--near .train-scenery-asset {
-  bottom: 17px;
+  bottom: var(--train-scenery-ground-height, 17px);
 }
 
 .train-parallax-chunk--variant-3 .train-scenery-asset {
@@ -1153,7 +1289,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-night-life {
   position: absolute;
-  bottom: calc(var(--train-chunk-terrain-height) - 12px);
+  bottom: var(
+    --train-scenery-ground-height,
+    calc(var(--train-chunk-terrain-height) - 12px)
+  );
   display: block;
   overflow: visible;
   transform: translateX(-50%) scale(var(--train-scenery-scale));

@@ -305,7 +305,7 @@ and safety properties established by the archived queue remain the baseline.
   station-dwell checks. Restore the live DOM, run the frontend suite, build,
   `make test`, and `rtk git diff --check`, then document the smoke evidence.
 
-- [ ] **TRAIN-040 — Remove the stacked rectangular terrain bands exposed behind the train.**
+- [x] **TRAIN-040 — Remove the stacked rectangular terrain bands exposed behind the train.**
   Correct the post-TRAIN-039 defect confirmed by hiding the complete fixed
   train: the recognizable town-edge sprites now sit in front of a broad
   blue/green horizontal bar spanning the viewport. Computed-style inspection

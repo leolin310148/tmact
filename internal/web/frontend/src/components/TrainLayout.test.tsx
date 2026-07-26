@@ -18,6 +18,8 @@ import {
   TRAIN_WORLD_TRACK_PERSPECTIVE,
   TRAIN_WORLD_TRACK_TILE_WIDTH,
   trainPaletteContrastRatio,
+  trainTerrainContourForChunk,
+  trainTerrainHeightAtPercent,
   trainWorldCruiseSpeed,
   trainWorldReducedMotionForced,
   trainWorldRoutePosition,
@@ -1468,6 +1470,179 @@ describe("TrainLayout", () => {
       "[data-scenery-category='cloud']",
     )!;
     expect(Number.parseFloat(getComputedStyle(cloud).opacity)).toBeLessThan(1);
+  });
+
+  it("composes opaque shaped terrain for every region and variant with exact seams", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    const seed = "train-040-shaped-terrain";
+    const representatives = new Map<
+      string,
+      ReturnType<typeof generateRouteChunk>
+    >();
+    for (
+      let index = -5_000;
+      index <= 5_000 && representatives.size < 25;
+      index++
+    ) {
+      const chunk = generateRouteChunk(seed, index);
+      representatives.set(`${chunk.region}:${chunk.variant}`, chunk);
+    }
+    expect(representatives.size).toBe(25);
+    expect(
+      new Set([...representatives.values()].map((chunk) => chunk.region)),
+    ).toEqual(
+      new Set(["forest", "mountain", "town", "coast", "industrial"]),
+    );
+    expect(
+      new Set([...representatives.values()].map((chunk) => chunk.variant)),
+    ).toEqual(new Set([0, 1, 2, 3, 4]));
+
+    const solidLayers = [
+      "ultra-far",
+      "far",
+      "midground",
+      "near",
+    ] as const;
+    for (const chunk of representatives.values()) {
+      for (const layerName of solidLayers) {
+        const contour = trainTerrainContourForChunk(chunk, layerName);
+        expect(trainTerrainContourForChunk(chunk, layerName)).toEqual(contour);
+        expect(contour.points.map((point) => point.xPercent)).toEqual([
+          0, 18, 42, 68, 86, 100,
+        ]);
+        expect(contour.points[0]!.heightPx).toBe(contour.seamLeftHeightPx);
+        expect(contour.points.at(-1)!.heightPx).toBe(
+          contour.seamRightHeightPx,
+        );
+        expect(
+          new Set(contour.points.map((point) => point.heightPx)).size,
+        ).toBeGreaterThan(1);
+
+        const rightNeighbour = generateRouteChunk(
+          seed,
+          chunk.index - 1,
+          chunk.seedVersion,
+        );
+        expect(contour.seamRightHeightPx).toBe(
+          trainTerrainContourForChunk(rightNeighbour, layerName)
+            .seamLeftHeightPx,
+        );
+        const leftNeighbour = generateRouteChunk(
+          seed,
+          chunk.index + 1,
+          chunk.seedVersion,
+        );
+        expect(contour.seamLeftHeightPx).toBe(
+          trainTerrainContourForChunk(leftNeighbour, layerName)
+            .seamRightHeightPx,
+        );
+      }
+    }
+
+    const { container } = render(
+      <>
+        {[...representatives.values()].flatMap((chunk) =>
+          solidLayers.map((layerName) => (
+            <TrainRouteChunk
+              chunk={chunk}
+              layer={
+                TRAIN_PARALLAX_LAYERS.find(
+                  (layer) => layer.name === layerName,
+                )!
+              }
+              key={`${chunk.region}:${chunk.variant}:${layerName}`}
+            />
+          )),
+        )}
+      </>,
+    );
+    const chunks = [
+      ...container.querySelectorAll<HTMLElement>(".train-parallax-chunk"),
+    ];
+    const terrainBases = [
+      ...container.querySelectorAll<HTMLElement>(".train-terrain-base"),
+    ];
+    expect(chunks).toHaveLength(representatives.size * solidLayers.length);
+    expect(terrainBases).toHaveLength(chunks.length);
+    for (const terrain of terrainBases) {
+      expect(terrain).toHaveAttribute("data-terrain-owner", "chunk-contour");
+      expect(terrain.dataset.terrainMaterial).toBe(
+        `${terrain.dataset.terrainRegion}-material`,
+      );
+      expect(terrain.dataset.terrainContour?.split(",")).toHaveLength(6);
+      expect(getComputedStyle(terrain).opacity).toBe("1");
+      expect(getComputedStyle(terrain).pointerEvents).toBe("none");
+      expect(getComputedStyle(terrain).clipPath).toContain("polygon(");
+      expect(getComputedStyle(terrain).backgroundImage).not.toBe("none");
+    }
+
+    const groundedSprites = [
+      ...container.querySelectorAll<HTMLElement>(
+        ".train-scenery-asset:not([data-scenery-category='cloud'])",
+      ),
+    ];
+    expect(groundedSprites.length).toBeGreaterThan(0);
+    for (const sprite of groundedSprites) {
+      const chunkElement = sprite.closest<HTMLElement>(
+        ".train-parallax-chunk",
+      )!;
+      const chunk = generateRouteChunk(
+        seed,
+        Number(chunkElement.dataset.routeChunkIndex),
+      );
+      const layerName =
+        chunkElement.dataset.parallaxLayer as (typeof solidLayers)[number];
+      const expectedGround = trainTerrainHeightAtPercent(
+        trainTerrainContourForChunk(chunk, layerName),
+        Number.parseFloat(sprite.style.left),
+      );
+      expect(Number(sprite.dataset.sceneryGroundHeight)).toBe(expectedGround);
+      expect(
+        Number.parseFloat(
+          sprite.style.getPropertyValue("--train-scenery-ground-height"),
+        ),
+      ).toBe(expectedGround);
+    }
+
+    for (const layerName of solidLayers) {
+      const rule = trainLayoutCss.match(
+        new RegExp(
+          `\\.train-parallax-chunk--${layerName}\\s*\\{([^}]*)\\}`,
+        ),
+      )?.[1];
+      expect(rule).toBeDefined();
+      expect(rule).toMatch(/background:\s*none;/);
+      expect(rule).not.toMatch(/gradient\(/);
+    }
+    const terrainCss = trainLayoutCss.slice(
+      trainLayoutCss.indexOf(".train-terrain-base"),
+      trainLayoutCss.indexOf(".train-depth-veil"),
+    );
+    expect(terrainCss).toMatch(/clip-path:\s*polygon\(/);
+    expect(terrainCss).toMatch(
+      /background-color:\s*var\(--train-terrain-surface\);/,
+    );
+    for (const region of [
+      "forest",
+      "mountain",
+      "town",
+      "coast",
+      "industrial",
+    ]) {
+      expect(terrainCss).toContain(
+        `.train-terrain-base[data-terrain-region="${region}"]`,
+      );
+    }
+    for (const variant of [1, 2, 3, 4]) {
+      expect(terrainCss).toContain(
+        `.train-parallax-chunk--variant-${variant} .train-terrain-base`,
+      );
+    }
+    expect(terrainCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
+    expect(terrainCss).not.toMatch(/opacity:\s*0(?:\D|$)|transform:|animation:/);
   });
 
   it("builds both town-edge variants from recognizable opaque sprite settlements", () => {
