@@ -63,6 +63,7 @@ import {
 } from "./trainRoute";
 import {
   TRAIN_SCENERY_BUILDINGS,
+  TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_SCENERY_LANDMARKS,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
@@ -191,12 +192,6 @@ interface TrainTimePalette {
   emissive: string;
 }
 
-interface TrainSceneryDepthProfile {
-  saturation: number;
-  brightness: number;
-  contrast: number;
-}
-
 interface TrainSceneryTimeGrade {
   saturation: number;
   brightness: number;
@@ -245,15 +240,7 @@ export const TRAIN_TIME_PALETTES: Readonly<Record<SceneMode, TrainTimePalette>> 
   },
 };
 
-export const TRAIN_SCENERY_DEPTH_PROFILES: Readonly<
-  Record<TrainParallaxLayerName, TrainSceneryDepthProfile>
-> = {
-  sky: { saturation: 0.76, brightness: 1.08, contrast: 0.7 },
-  "ultra-far": { saturation: 0.72, brightness: 1.1, contrast: 0.72 },
-  far: { saturation: 0.8, brightness: 1.04, contrast: 0.82 },
-  midground: { saturation: 0.9, brightness: 0.98, contrast: 0.94 },
-  near: { saturation: 1, brightness: 0.94, contrast: 1.06 },
-};
+export const TRAIN_SCENERY_DEPTH_PROFILES = TRAIN_SCENERY_DEPTH_GRAMMAR;
 
 export const TRAIN_SCENERY_TIME_GRADES: Readonly<
   Record<SceneMode, TrainSceneryTimeGrade>
@@ -765,10 +752,14 @@ function TrainNightLife({
   plan,
   placement,
   groundHeight,
+  contourHeight,
+  instanceId,
 }: {
   plan: TrainNightLifePlan;
   placement: TrainSceneryPlacement;
   groundHeight?: number;
+  contourHeight?: number;
+  instanceId: string;
 }) {
   const { asset } = placement;
   const style: TrainNightLifeStyle = {
@@ -790,6 +781,12 @@ function TrainNightLife({
       ].join(" ")}
       data-emissive={plan.kind}
       data-emissive-owner={plan.ownerAssetId}
+      data-emissive-owner-instance={instanceId}
+      data-emissive-plane="owner-attached"
+      data-emissive-ground-height={groundHeight?.toFixed(3)}
+      data-emissive-contour-height={contourHeight?.toFixed(3)}
+      data-emissive-ground-inset={placement.groundInsetPx.toFixed(3)}
+      data-emissive-scale={placement.scale.toFixed(3)}
       data-night-life-region={plan.region}
       data-night-life-kind={plan.kind}
       data-night-life-variant={plan.variant}
@@ -1676,12 +1673,25 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
-        const sceneryGroundHeight = terrainContour
+        const sceneryContourHeight = terrainContour
           ? trainTerrainHeightAtPercent(
               terrainContour,
               placement.offsetPercent,
             )
           : undefined;
+        const sceneryGroundHeight =
+          sceneryContourHeight === undefined
+            ? undefined
+            : sceneryContourHeight - placement.groundInsetPx;
+        const anchorError =
+          sceneryContourHeight === undefined || sceneryGroundHeight === undefined
+            ? undefined
+            : sceneryGroundHeight +
+              placement.groundInsetPx -
+              sceneryContourHeight;
+        const sceneryInstanceId =
+          `${chunk.seedVersion}:${chunk.routeSeed}:${layer.name}:` +
+          `${chunk.index}:${ordinal}:${asset.id}`;
         const nightLife = trainNightLifeForPlacement(
           chunk,
           placement,
@@ -1714,10 +1724,14 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             width={asset.width}
             height={asset.height}
             data-scenery-asset={asset.id}
+            data-scenery-instance-id={sceneryInstanceId}
             data-scenery-category={asset.category}
             data-scenery-manifest-layer={asset.layer}
             data-scenery-anchor={asset.anchor}
             data-scenery-safe-scale={asset.safeScale.join("-")}
+            data-scenery-asset-scale={placement.assetScale.toFixed(3)}
+            data-scenery-depth-scale={placement.depthScaleMultiplier.toFixed(3)}
+            data-scenery-detail-budget={placement.detailBudget}
             data-scenery-day-night={asset.dayNightTreatment}
             data-scenery-landmark={placement.landmark ? "true" : "false"}
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
@@ -1729,6 +1743,17 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-minimum-spacing={placement.minimumSpacingPx}
             data-scenery-ground-height={
               sceneryGroundHeight?.toFixed(3) ?? undefined
+            }
+            data-scenery-contour-height={
+              sceneryContourHeight?.toFixed(3) ?? undefined
+            }
+            data-scenery-ground-inset={placement.groundInsetPx.toFixed(3)}
+            data-scenery-anchor-error={anchorError?.toFixed(3)}
+            data-scenery-overlap-limit={
+              placement.maximumCollisionOverlapRatio.toFixed(3)
+            }
+            data-scenery-terrain-owner={
+              terrainContour ? `${chunk.index}:${terrainContour.layer}` : undefined
             }
             data-cloud-altitude={
               placement.altitudePercent?.toFixed(3) ?? undefined
@@ -1760,11 +1785,21 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               data-emissive="building-windows"
               data-emissive-kind={asset.emissive.kind}
               data-emissive-owner={asset.id}
+              data-emissive-owner-instance={sceneryInstanceId}
+              data-emissive-plane="owner-attached"
               data-emissive-enabled={nightLife ? "true" : "false"}
               data-emissive-occupancy={nightLife?.occupancy ?? "none"}
               data-emissive-load="pending"
               data-scenery-anchor={asset.anchor}
               data-scenery-manifest-layer={asset.layer}
+              data-emissive-ground-height={
+                sceneryGroundHeight?.toFixed(3) ?? undefined
+              }
+              data-emissive-contour-height={
+                sceneryContourHeight?.toFixed(3) ?? undefined
+              }
+              data-emissive-ground-inset={placement.groundInsetPx.toFixed(3)}
+              data-emissive-scale={placement.scale.toFixed(3)}
               onLoad={(event) => {
                 event.currentTarget.dataset.emissiveLoad = "loaded";
               }}
@@ -1783,6 +1818,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               plan={nightLife}
               placement={placement}
               groundHeight={sceneryGroundHeight}
+              contourHeight={sceneryContourHeight}
+              instanceId={sceneryInstanceId}
               key={`night-life-${asset.id}-${ordinal}`}
             />,
           );
@@ -2717,6 +2754,11 @@ function TrainWorld({
             data-depth-saturation={depth.saturation}
             data-depth-brightness={depth.brightness}
             data-depth-contrast={depth.contrast}
+            data-depth-scale={depth.scaleMultiplier}
+            data-depth-detail-budget={depth.detailBudget}
+            data-depth-anchor-tolerance={depth.anchorToContourTolerancePx}
+            data-depth-overlap-limit={depth.maximumCollisionOverlapRatio}
+            data-atmosphere-inside-sprite="false"
             data-motion={reducedMotion ? "reduced" : "full"}
             style={style}
             key={layer.name}
@@ -2760,6 +2802,7 @@ function TrainWorld({
         className="train-depth-veil train-depth-veil--ultra-far"
         data-depth-veil="ultra-far"
         data-atmosphere-owner="depth-compositor"
+        data-haze-owner="dedicated-plane"
         data-between-layers="ultra-far,far"
       >
         {SCENE_MODES.map((mode) => (
@@ -2784,6 +2827,7 @@ function TrainWorld({
         className="train-depth-veil train-depth-veil--far"
         data-depth-veil="far"
         data-atmosphere-owner="depth-compositor"
+        data-haze-owner="dedicated-plane"
         data-between-layers="far,midground"
       >
         {SCENE_MODES.map((mode) => (

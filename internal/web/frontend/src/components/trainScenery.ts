@@ -79,22 +79,95 @@ export interface TrainSceneryAsset {
   height: number;
   collisionWidth: number;
   safeScale: readonly [minimum: number, maximum: number];
+  groundInsetPx: number;
   dayNightTreatment: TrainSceneryDayNightTreatment;
   emissive?: TrainSceneryEmissiveAsset;
 }
 
 function asset(
-  definition: Omit<TrainSceneryAsset, "collisionWidth" | "safeScale"> & {
+  definition: Omit<
+    TrainSceneryAsset,
+    "collisionWidth" | "safeScale" | "groundInsetPx"
+  > & {
     collisionWidth?: number;
     safeScale?: TrainSceneryAsset["safeScale"];
+    groundInsetPx?: number;
   },
 ): TrainSceneryAsset {
   return {
     collisionWidth: definition.width,
     safeScale: [0.75, 1.2],
+    groundInsetPx: definition.anchor === "bottom-center" ? 2 : 0,
     ...definition,
   };
 }
+
+export interface TrainSceneryDepthGrammar {
+  scaleMultiplier: number;
+  saturation: number;
+  brightness: number;
+  contrast: number;
+  detailBudget: number;
+  anchorToContourTolerancePx: number;
+  maximumGroundInsetPx: number;
+  maximumCollisionOverlapRatio: number;
+}
+
+export const TRAIN_SCENERY_DEPTH_GRAMMAR = {
+  sky: {
+    scaleMultiplier: 1,
+    saturation: 0.76,
+    brightness: 1.08,
+    contrast: 0.66,
+    detailBudget: 1,
+    anchorToContourTolerancePx: 0,
+    maximumGroundInsetPx: 0,
+    maximumCollisionOverlapRatio: 0.24,
+  },
+  "ultra-far": {
+    scaleMultiplier: 0.58,
+    saturation: 0.7,
+    brightness: 1.1,
+    contrast: 0.68,
+    detailBudget: 1,
+    anchorToContourTolerancePx: 0.001,
+    maximumGroundInsetPx: 3,
+    maximumCollisionOverlapRatio: 0.32,
+  },
+  far: {
+    scaleMultiplier: 0.78,
+    saturation: 0.79,
+    brightness: 1.03,
+    contrast: 0.8,
+    detailBudget: 2,
+    anchorToContourTolerancePx: 0.001,
+    maximumGroundInsetPx: 3,
+    maximumCollisionOverlapRatio: 0.22,
+  },
+  midground: {
+    scaleMultiplier: 0.96,
+    saturation: 0.9,
+    brightness: 0.97,
+    contrast: 0.94,
+    detailBudget: 3,
+    anchorToContourTolerancePx: 0.001,
+    maximumGroundInsetPx: 3,
+    maximumCollisionOverlapRatio: 0.12,
+  },
+  near: {
+    scaleMultiplier: 1.2,
+    saturation: 1,
+    brightness: 0.9,
+    contrast: 1.1,
+    detailBudget: 4,
+    anchorToContourTolerancePx: 0.001,
+    maximumGroundInsetPx: 3,
+    maximumCollisionOverlapRatio: 0,
+  },
+} as const satisfies Record<
+  TrainParallaxLayerName,
+  TrainSceneryDepthGrammar
+>;
 
 export const TRAIN_SCENERY_CLOUDS = [
   asset({
@@ -146,6 +219,7 @@ export const TRAIN_SCENERY_TERRAIN = [
     width: 244,
     height: 61,
     safeScale: [0.8, 1.25],
+    groundInsetPx: 3,
     dayNightTreatment: "atmospheric-filter",
   }),
   asset({
@@ -317,6 +391,7 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 100,
     height: 79,
     safeScale: [0.65, 1],
+    groundInsetPx: 3,
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -378,6 +453,7 @@ export const TRAIN_SCENERY_LANDMARKS = [
     height: 96,
     collisionWidth: 176,
     safeScale: [0.62, 0.82],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -391,6 +467,7 @@ export const TRAIN_SCENERY_LANDMARKS = [
     height: 104,
     collisionWidth: 160,
     safeScale: [0.58, 0.78],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -404,6 +481,7 @@ export const TRAIN_SCENERY_LANDMARKS = [
     height: 112,
     collisionWidth: 150,
     safeScale: [0.58, 0.78],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -417,6 +495,7 @@ export const TRAIN_SCENERY_LANDMARKS = [
     height: 112,
     collisionWidth: 160,
     safeScale: [0.58, 0.78],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -430,6 +509,7 @@ export const TRAIN_SCENERY_LANDMARKS = [
     height: 96,
     collisionWidth: 184,
     safeScale: [0.6, 0.82],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
@@ -445,6 +525,7 @@ export const TRAIN_SCENERY_BRIDGES = [
     width: 224,
     height: 67,
     safeScale: [0.75, 1],
+    groundInsetPx: 3,
     dayNightTreatment: "atmospheric-filter",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
@@ -512,6 +593,7 @@ export const TRAIN_SCENERY_PROPS = [
     height: 68,
     collisionWidth: 24,
     safeScale: [0.7, 1],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -525,6 +607,7 @@ export const TRAIN_SCENERY_PROPS = [
     height: 52,
     collisionWidth: 58,
     safeScale: [0.65, 0.95],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -538,6 +621,7 @@ export const TRAIN_SCENERY_PROPS = [
     height: 84,
     collisionWidth: 42,
     safeScale: [0.55, 0.85],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -551,6 +635,7 @@ export const TRAIN_SCENERY_PROPS = [
     height: 92,
     collisionWidth: 24,
     safeScale: [0.55, 0.85],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -564,6 +649,7 @@ export const TRAIN_SCENERY_PROPS = [
     height: 48,
     collisionWidth: 82,
     safeScale: [0.65, 0.95],
+    groundInsetPx: 0,
     dayNightTreatment: "solid-palette-grade",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
@@ -978,7 +1064,12 @@ export const TRAIN_NIGHT_LIFE_MAX_INTENSITY = 0.8;
 export interface TrainSceneryPlacement {
   asset: TrainSceneryAsset;
   offsetPercent: number;
+  assetScale: number;
   scale: number;
+  depthScaleMultiplier: number;
+  detailBudget: number;
+  groundInsetPx: number;
+  maximumCollisionOverlapRatio: number;
   collisionWidth: number;
   minimumSpacingPx: number;
   landmark: boolean;
@@ -987,6 +1078,37 @@ export interface TrainSceneryPlacement {
   cloudPattern?: TrainCloudPattern;
   cloudGroup?: string;
   routePositionPx?: number;
+}
+
+type TrainSceneryPlacementDefinition = Omit<
+  TrainSceneryPlacement,
+  | "assetScale"
+  | "scale"
+  | "depthScaleMultiplier"
+  | "detailBudget"
+  | "groundInsetPx"
+  | "maximumCollisionOverlapRatio"
+  | "collisionWidth"
+>;
+
+function sceneryPlacement(
+  layer: TrainParallaxLayerName,
+  assetScale: number,
+  definition: TrainSceneryPlacementDefinition,
+  scaleMultiplier = TRAIN_SCENERY_DEPTH_GRAMMAR[layer].scaleMultiplier,
+): TrainSceneryPlacement {
+  const grammar = TRAIN_SCENERY_DEPTH_GRAMMAR[layer];
+  const scale = assetScale * scaleMultiplier;
+  return {
+    ...definition,
+    assetScale,
+    scale,
+    depthScaleMultiplier: scaleMultiplier,
+    detailBudget: grammar.detailBudget,
+    groundInsetPx: definition.asset.groundInsetPx * scale,
+    maximumCollisionOverlapRatio: grammar.maximumCollisionOverlapRatio,
+    collisionWidth: definition.asset.collisionWidth * scale,
+  };
 }
 
 export interface TrainNightLifePoint {
@@ -1425,19 +1547,17 @@ function cloudPlacementsForRegion(
     const resolvedAsset = assetForID(assetID);
     previousAsset = resolvedAsset;
     const [minimumScale, maximumScale] = resolvedAsset.safeScale;
-    const scale =
+    const assetScale =
       minimumScale + candidate.scaleUnit * (maximumScale - minimumScale);
     const chunkIndex = Math.floor(
       candidate.routePositionPx / TRAIN_ROUTE_CHUNK_WIDTH,
     );
-    return {
+    return sceneryPlacement("sky", assetScale, {
       asset: resolvedAsset,
       offsetPercent:
         ((candidate.routePositionPx - chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH) /
           TRAIN_ROUTE_CHUNK_WIDTH) *
         100,
-      scale,
-      collisionWidth: resolvedAsset.collisionWidth * scale,
       minimumSpacingPx: TRAIN_CLOUD_MIN_SPACING_PX,
       landmark: false,
       setPiece: null,
@@ -1445,7 +1565,7 @@ function cloudPlacementsForRegion(
       cloudPattern: pattern,
       cloudGroup: candidate.group,
       routePositionPx: candidate.routePositionPx,
-    };
+    });
   });
 }
 
@@ -1475,7 +1595,7 @@ function setPiecePlacement(
         : null;
   if (!assetID) return null;
   const resolvedAsset = assetForID(assetID);
-  const scale = resolvedAsset.safeScale[1];
+  const assetScale = resolvedAsset.safeScale[1];
   const variantOffset =
     setPiece.visualVariant === 0
       ? 50
@@ -1484,15 +1604,18 @@ function setPiecePlacement(
         : setPiece.role === "exit"
           ? 38
           : 50;
-  return {
-    asset: resolvedAsset,
-    offsetPercent: variantOffset,
-    scale,
-    collisionWidth: resolvedAsset.collisionWidth * scale,
-    minimumSpacingPx: 0,
-    landmark: false,
-    setPiece,
-  };
+  return sceneryPlacement(
+    layer,
+    assetScale,
+    {
+      asset: resolvedAsset,
+      offsetPercent: variantOffset,
+      minimumSpacingPx: 0,
+      landmark: false,
+      setPiece,
+    },
+    1,
+  );
 }
 
 function nearTrackCandidateCount(
@@ -1799,17 +1922,18 @@ function regionLayerPlan(
       const landmarkVariant = Math.floor(
         trainRouteRandomUnit(`${chunkKey}:variant:0`) * 5,
       );
-      const landmarkScale = trainSceneryScale(landmarkAsset, landmarkVariant);
+      const landmarkScale = trainSceneryAssetScale(
+        landmarkAsset,
+        landmarkVariant,
+      );
       plan.push([
-        {
+        sceneryPlacement(layer, landmarkScale, {
           asset: landmarkAsset,
           offsetPercent: 75,
-          scale: landmarkScale,
-          collisionWidth: landmarkAsset.collisionWidth * landmarkScale,
           minimumSpacingPx: 0,
           landmark: true,
           setPiece: null,
-        },
+        }),
       ]);
       continue;
     }
@@ -1846,18 +1970,16 @@ function regionLayerPlan(
       const variant = Math.floor(
         trainRouteRandomUnit(`${chunkKey}:variant:${ordinal}`) * 5,
       );
-      const scale = trainSceneryScale(asset, variant);
+      const assetScale = trainSceneryAssetScale(asset, variant);
       recentIDs.push(asset.id);
       recentIDs.splice(0, Math.max(0, recentIDs.length - rule.cooldownChunks));
-      return {
+      return sceneryPlacement(layer, assetScale, {
         asset,
         offsetPercent,
-        scale,
-        collisionWidth: asset.collisionWidth * scale,
         minimumSpacingPx: rule.minimumSpacingPx,
         landmark: false,
         setPiece: null,
-      };
+      });
     });
     plan.push(placements);
   }
@@ -1878,6 +2000,17 @@ export function trainSceneryPlacementsForChunk(
 }
 
 export function trainSceneryScale(
+  asset: TrainSceneryAsset,
+  variant: number,
+  layer: TrainParallaxLayerName = asset.layer,
+): number {
+  return (
+    trainSceneryAssetScale(asset, variant) *
+    TRAIN_SCENERY_DEPTH_GRAMMAR[layer].scaleMultiplier
+  );
+}
+
+export function trainSceneryAssetScale(
   asset: TrainSceneryAsset,
   variant: number,
 ): number {

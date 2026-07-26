@@ -155,7 +155,7 @@ Treat these findings as regression targets:
   sunset/night composites. Reject any result that still reads as four
   near-horizontal stripes.
 
-- [ ] **TRAIN-046 — Enforce depth, scale, overlap, and ground-contact grammar.**
+- [x] **TRAIN-046 — Enforce depth, scale, overlap, and ground-contact grammar.**
   Define and apply a measurable visual grammar: ultra-far and far assets are
   smaller, lower-contrast, less detailed, and atmospherically separated;
   midground assets establish regional silhouettes; near assets are darker,

@@ -580,6 +580,54 @@ messages. The focused layout suite passed 78 tests, the complete frontend
 suite passed all 432 tests, the production build passed, and `make test`
 passed.
 
+TRAIN-046 depth-and-grounding run 2026-07-26: used route seed
+`train-046-proof` and ordinary central chunks town `23`, coast `70`, mountain
+`106`, forest `160`, and industrial `268`. Each chunk and both immediate
+neighbours were in the same region and free of set pieces; the centred chunk
+also had the deterministic `dense` composition role. The dedicated
+`tmact-train-workitems` borz profile used one explicit tab at 390×844,
+1280×800, and 2560×900. Every viewport repeated HTTP 200, fetched the plain
+non-cache-busted `/src/components/TrainLayout.tsx` module and found the current
+depth/grounding/illumination ownership source, opened the port-5234 page, set
+the viewport, reloaded, and asserted exact `window.innerWidth` and
+`window.innerHeight`.
+
+All 15 day and 15 night composites hid the fixed train through
+`.train-layout-inspection` together with `.train-world-debug-grid` and
+`.train-time-toggle`. The central near-layer chunk was the requested region,
+reported `setPiece:none`, and had a zero measured anchor error in every
+viewport. Ultrawide stayed bounded at 65 ordinary route chunks. Attached
+emissive overlays had a matching unique scenery instance and no orphan owner.
+The retained composites are
+`/private/tmp/train-046-proof/{compact,desktop,ultrawide}-{town,coast,mountain,forest,industrial}-{day,night}-composite.png`.
+
+Twelve isolated day captures centred the same ordinary town chunk independently
+in ultra-far, far, midground, and near coordinates at x `195px`, `640px`, and
+approximately `1280px`. The measured layer grammar was respectively scale
+multiplier/contrast/detail budget `0.58/0.68/1`, `0.78/0.80/2`,
+`0.96/0.94/3`, and `1.20/1.10/4`. The retained layer evidence is
+`/private/tmp/train-046-proof/{compact,desktop,ultrawide}-town-day-{ultra-far,far,midground,near}.png`.
+The six inspected contact sheets are
+`/private/tmp/train-046-proof/contact-{compact,desktop,ultrawide}-{composites,layers}.png`.
+
+Contact-sheet and representative-original inspection found progressively
+larger, darker, higher-contrast silhouettes toward the train; small pale
+distant ridges no longer shared the same scale as far terrain. Buildings,
+vegetation, poles, and props met their owning contour at the visible opaque
+base instead of floating, sinking, or sitting on the rail surface. Near props
+remained sparse and did not obscure the hidden train band. Night masks and
+regional light details remained attached to their physical owner geometry.
+Atmospheric haze remained on the two dedicated compositor veil planes; no
+sprite owned haze. No blurred edges, matte fringes, new alpha fill, gaps, or
+seams were observed.
+
+The temporary inspection stylesheet was removed afterward. The train
+inspection and time toggle restored to `flex` and `grid`; all five world layers
+and both depth veils restored to `block`, while the disabled debug grid remained
+absent. `borz errors --json` was empty. The focused scenery/layout/terrain
+suite passed 104 tests, the complete frontend suite and production build
+passed, and `make test` passed.
+
 ## Notes Template
 
 ```text

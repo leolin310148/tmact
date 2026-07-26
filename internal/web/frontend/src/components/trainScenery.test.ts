@@ -25,6 +25,7 @@ import {
   TRAIN_SCENERY_BUILDINGS,
   TRAIN_SCENERY_CLOUDS,
   TRAIN_SCENERY_COASTS,
+  TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_SCENERY_LANDMARKS,
   TRAIN_SCENERY_PROPS,
   TRAIN_SCENERY_TERRAIN,
@@ -33,6 +34,7 @@ import {
   trainNightLifeForPlacement,
   trainRegionCompositionForChunk,
   trainSceneryPlacementsForChunk,
+  trainSceneryAssetScale,
   trainSceneryScale,
   type TrainRegionSceneryProfile,
 } from "./trainScenery";
@@ -105,6 +107,11 @@ describe("train scenery asset kit", () => {
       expect(asset.collisionWidth).toBeLessThanOrEqual(asset.width);
       expect(asset.safeScale[0]).toBeGreaterThan(0);
       expect(asset.safeScale[1]).toBeGreaterThanOrEqual(asset.safeScale[0]);
+      expect(asset.groundInsetPx).toBeGreaterThanOrEqual(0);
+      expect(asset.groundInsetPx).toBeLessThanOrEqual(3);
+      if (asset.anchor === "center") {
+        expect(asset.groundInsetPx).toBe(0);
+      }
       expect(asset.dayNightTreatment).toMatch(
         /^(atmospheric-filter|emissive-windows|solid-palette-grade|water-reflection)$/,
       );
@@ -225,6 +232,49 @@ describe("train scenery asset kit", () => {
     }
   });
 
+  it("keeps ordinary placement overlap inside each depth grammar bound", () => {
+    for (const layer of TRAIN_PARALLAX_LAYERS) {
+      const placements = [];
+      for (let index = -600; index <= 600; index++) {
+        const chunk = generateRouteChunk("overlap-grammar-line", index);
+        placements.push(
+          ...trainSceneryPlacementsForChunk(layer.name, chunk)
+            .filter((placement) => placement.setPiece === null)
+            .map((placement) => ({
+              center:
+                index * TRAIN_ROUTE_CHUNK_WIDTH +
+                (placement.offsetPercent / 100) * TRAIN_ROUTE_CHUNK_WIDTH,
+              ...placement,
+            })),
+        );
+      }
+      placements.sort((left, right) => left.center - right.center);
+
+      for (let index = 1; index < placements.length; index++) {
+        const previous = placements[index - 1]!;
+        const current = placements[index]!;
+        const overlapPx = Math.max(
+          0,
+          previous.collisionWidth / 2 +
+            current.collisionWidth / 2 -
+            (current.center - previous.center),
+        );
+        const overlapRatio =
+          overlapPx /
+          Math.max(
+            1,
+            Math.min(previous.collisionWidth, current.collisionWidth),
+          );
+        expect(overlapRatio, `${layer.name}/${index}`).toBeLessThanOrEqual(
+          Math.max(
+            previous.maximumCollisionOverlapRatio,
+            current.maximumCollisionOverlapRatio,
+          ),
+        );
+      }
+    }
+  });
+
   it("reserves set-piece layers before placing incompatible small scenery", () => {
     for (let index = -1_200; index <= 1_200; index++) {
       const chunk = generateRouteChunk("reservation-line", index);
@@ -335,15 +385,112 @@ describe("train scenery asset kit", () => {
     }
   });
 
-  it("keeps deterministic variant scaling inside each asset safe range", () => {
+  it("combines safe asset scaling with deterministic monotonic depth scaling", () => {
     for (const asset of TRAIN_SCENERY_ASSETS) {
-      const scales = [0, 1, 2, 3, 4].map((variant) =>
-        trainSceneryScale(asset, variant),
+      const assetScales = [0, 1, 2, 3, 4].map((variant) =>
+        trainSceneryAssetScale(asset, variant),
       );
-      expect(scales[0]).toBe(asset.safeScale[0]);
-      expect(scales[4]).toBe(asset.safeScale[1]);
-      expect(scales).toEqual([...scales].sort((left, right) => left - right));
+      const scales = [0, 1, 2, 3, 4].map((variant) =>
+        trainSceneryScale(asset, variant, asset.layer),
+      );
+      expect(assetScales[0]).toBe(asset.safeScale[0]);
+      expect(assetScales[4]).toBe(asset.safeScale[1]);
+      expect(assetScales).toEqual(
+        [...assetScales].sort((left, right) => left - right),
+      );
+      expect(scales).toEqual(
+        assetScales.map(
+          (scale) =>
+            scale * TRAIN_SCENERY_DEPTH_GRAMMAR[asset.layer].scaleMultiplier,
+        ),
+      );
     }
+
+    for (const terrain of TRAIN_SCENERY_TERRAIN) {
+      for (let variant = 0; variant < 5; variant++) {
+        expect(trainSceneryScale(terrain, variant, "ultra-far")).toBeLessThan(
+          trainSceneryScale(terrain, variant, "far"),
+        );
+      }
+    }
+  });
+
+  it("applies measurable depth, detail, anchor, and overlap grammar to every placement", () => {
+    const solidLayers = ["ultra-far", "far", "midground", "near"] as const;
+    const multipliers = solidLayers.map(
+      (layer) => TRAIN_SCENERY_DEPTH_GRAMMAR[layer].scaleMultiplier,
+    );
+    const detailBudgets = solidLayers.map(
+      (layer) => TRAIN_SCENERY_DEPTH_GRAMMAR[layer].detailBudget,
+    );
+    const contrast = solidLayers.map(
+      (layer) => TRAIN_SCENERY_DEPTH_GRAMMAR[layer].contrast,
+    );
+
+    expect(multipliers).toEqual(
+      [...multipliers].sort((left, right) => left - right),
+    );
+    expect(detailBudgets).toEqual(
+      [...detailBudgets].sort((left, right) => left - right),
+    );
+    expect(contrast).toEqual(
+      [...contrast].sort((left, right) => left - right),
+    );
+    expect(new Set(multipliers).size).toBe(solidLayers.length);
+    expect(new Set(detailBudgets).size).toBe(solidLayers.length);
+    expect(new Set(contrast).size).toBe(solidLayers.length);
+
+    let placementCount = 0;
+    for (let index = -900; index <= 900; index++) {
+      const chunk = generateRouteChunk("depth-grammar-line", index);
+      for (const layer of TRAIN_PARALLAX_LAYERS) {
+        const grammar = TRAIN_SCENERY_DEPTH_GRAMMAR[layer.name];
+        for (const placement of trainSceneryPlacementsForChunk(
+          layer.name,
+          chunk,
+        )) {
+          placementCount++;
+          expect(placement.assetScale).toBeGreaterThanOrEqual(
+            placement.asset.safeScale[0],
+          );
+          expect(placement.assetScale).toBeLessThanOrEqual(
+            placement.asset.safeScale[1],
+          );
+          expect(placement.depthScaleMultiplier).toBe(
+            placement.setPiece ? 1 : grammar.scaleMultiplier,
+          );
+          expect(placement.scale).toBeCloseTo(
+            placement.assetScale * placement.depthScaleMultiplier,
+            10,
+          );
+          expect(placement.detailBudget).toBe(grammar.detailBudget);
+          expect(placement.groundInsetPx).toBeCloseTo(
+            placement.asset.groundInsetPx * placement.scale,
+            10,
+          );
+          expect(placement.groundInsetPx).toBeLessThanOrEqual(
+            grammar.maximumGroundInsetPx,
+          );
+          expect(placement.maximumCollisionOverlapRatio).toBe(
+            grammar.maximumCollisionOverlapRatio,
+          );
+          expect(placement.collisionWidth).toBeCloseTo(
+            placement.asset.collisionWidth * placement.scale,
+            10,
+          );
+        }
+      }
+    }
+    expect(placementCount).toBeGreaterThan(5_000);
+    expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.scaleMultiplier).toBeGreaterThan(
+      TRAIN_SCENERY_DEPTH_GRAMMAR.far.scaleMultiplier,
+    );
+    expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.brightness).toBeLessThan(
+      TRAIN_SCENERY_DEPTH_GRAMMAR.midground.brightness,
+    );
+    expect(
+      TRAIN_SCENERY_DEPTH_GRAMMAR.near.maximumCollisionOverlapRatio,
+    ).toBe(0);
   });
 
   it("gives every region a distinct daytime profile and landmark vocabulary", () => {

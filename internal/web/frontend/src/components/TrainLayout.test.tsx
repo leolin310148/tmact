@@ -1816,6 +1816,23 @@ describe("TrainLayout", () => {
       expect(layer).toHaveAttribute("data-depth-saturation", String(profile.saturation));
       expect(layer).toHaveAttribute("data-depth-brightness", String(profile.brightness));
       expect(layer).toHaveAttribute("data-depth-contrast", String(profile.contrast));
+      expect(layer).toHaveAttribute(
+        "data-depth-scale",
+        String(profile.scaleMultiplier),
+      );
+      expect(layer).toHaveAttribute(
+        "data-depth-detail-budget",
+        String(profile.detailBudget),
+      );
+      expect(layer).toHaveAttribute(
+        "data-depth-anchor-tolerance",
+        String(profile.anchorToContourTolerancePx),
+      );
+      expect(layer).toHaveAttribute(
+        "data-depth-overlap-limit",
+        String(profile.maximumCollisionOverlapRatio),
+      );
+      expect(layer).toHaveAttribute("data-atmosphere-inside-sprite", "false");
       expect(layer.style.getPropertyValue("--train-depth-saturation")).toBe(
         String(profile.saturation),
       );
@@ -1825,6 +1842,14 @@ describe("TrainLayout", () => {
       expect(layer.style.getPropertyValue("--train-depth-contrast")).toBe(
         String(profile.contrast),
       );
+    }
+    const depthVeils = [
+      ...container.querySelectorAll<HTMLElement>("[data-depth-veil]"),
+    ];
+    expect(depthVeils).toHaveLength(2);
+    for (const veil of depthVeils) {
+      expect(veil).toHaveAttribute("data-atmosphere-owner", "depth-compositor");
+      expect(veil).toHaveAttribute("data-haze-owner", "dedicated-plane");
     }
 
     expect(world.style.getPropertyValue("--train-time-scenery-saturation")).toBe(
@@ -2061,12 +2086,32 @@ describe("TrainLayout", () => {
         trainTerrainContourForChunk(chunk, layerName),
         Number.parseFloat(sprite.style.left),
       );
-      expect(Number(sprite.dataset.sceneryGroundHeight)).toBe(expectedGround);
+      const groundInset = Number(sprite.dataset.sceneryGroundInset);
+      const expectedCanvasBottom = expectedGround - groundInset;
+      expect(Number(sprite.dataset.sceneryContourHeight)).toBe(expectedGround);
       expect(
-        Number.parseFloat(
-          sprite.style.getPropertyValue("--train-scenery-ground-height"),
+        Math.abs(
+          Number(sprite.dataset.sceneryGroundHeight) - expectedCanvasBottom,
         ),
-      ).toBe(expectedGround);
+      ).toBeLessThanOrEqual(0.001_1);
+      expect(
+        Math.abs(
+          Number.parseFloat(
+            sprite.style.getPropertyValue("--train-scenery-ground-height"),
+          ) - expectedCanvasBottom,
+        ),
+      ).toBeLessThanOrEqual(0.001_1);
+      expect(
+        Math.abs(Number(sprite.dataset.sceneryAnchorError)),
+      ).toBeLessThanOrEqual(
+        TRAIN_SCENERY_DEPTH_PROFILES[layerName].anchorToContourTolerancePx,
+      );
+      expect(groundInset).toBeLessThanOrEqual(
+        TRAIN_SCENERY_DEPTH_PROFILES[layerName].maximumGroundInsetPx,
+      );
+      expect(sprite.dataset.sceneryTerrainOwner).toBe(
+        `${chunk.index}:${layerName}`,
+      );
     }
 
     for (const layerName of solidLayers) {
@@ -2895,14 +2940,30 @@ describe("TrainLayout", () => {
     expect(masks.length).toBe(bases.length);
 
     for (const mask of masks) {
-      const owner = mask.dataset.emissiveOwner!;
+      const ownerInstance = mask.dataset.emissiveOwnerInstance!;
       const chunk = mask.closest<HTMLElement>(".train-parallax-chunk")!;
       const base = chunk.querySelector<HTMLImageElement>(
-        `[data-scenery-asset="${owner}"]`,
+        `[data-scenery-instance-id="${ownerInstance}"]`,
       )!;
       expect(base).not.toBeNull();
       expect(mask).toHaveAttribute("data-emissive-kind", "windows");
+      expect(mask).toHaveAttribute("data-emissive-plane", "owner-attached");
       expect(mask).toHaveAttribute("data-emissive-load", "pending");
+      expect(mask.dataset.emissiveOwner).toBe(base.dataset.sceneryAsset);
+      expect(mask.dataset.emissiveGroundHeight).toBe(
+        base.dataset.sceneryGroundHeight,
+      );
+      expect(mask.dataset.emissiveContourHeight).toBe(
+        base.dataset.sceneryContourHeight,
+      );
+      expect(mask.dataset.emissiveGroundInset).toBe(
+        base.dataset.sceneryGroundInset,
+      );
+      expect(mask.dataset.emissiveScale).toBe(
+        Number.parseFloat(
+          base.style.getPropertyValue("--train-scenery-scale"),
+        ).toFixed(3),
+      );
       expect(mask.dataset.sceneryAnchor).toBe(base.dataset.sceneryAnchor);
       expect(mask.dataset.sceneryManifestLayer).toBe(
         base.dataset.sceneryManifestLayer,
@@ -2926,7 +2987,7 @@ describe("TrainLayout", () => {
     const ownerBase = mask
       .closest<HTMLElement>(".train-parallax-chunk")!
       .querySelector<HTMLImageElement>(
-        `[data-scenery-asset="${mask.dataset.emissiveOwner}"]`,
+        `[data-scenery-instance-id="${mask.dataset.emissiveOwnerInstance}"]`,
       )!;
     expect(getComputedStyle(mask).opacity).toBe("0");
     rendered.rerender(routeChunk("sunset"));
@@ -2990,6 +3051,21 @@ describe("TrainLayout", () => {
       } else if (!ownerlessSkyKinds.has(overlay.dataset.emissive!)) {
         expect(overlay).toHaveAttribute("data-emissive-owner");
       }
+    }
+    for (const overlay of container.querySelectorAll<HTMLElement>(
+      '[data-emissive-plane="owner-attached"]',
+    )) {
+      const ownerInstance = overlay.dataset.emissiveOwnerInstance;
+      expect(ownerInstance).toBeTruthy();
+      expect(
+        overlay
+          .closest<HTMLElement>(".train-parallax-chunk")
+          ?.querySelector(`[data-scenery-instance-id="${ownerInstance}"]`),
+      ).not.toBeNull();
+      expect(overlay.dataset.emissiveGroundHeight).toBeDefined();
+      expect(overlay.dataset.emissiveContourHeight).toBeDefined();
+      expect(overlay.dataset.emissiveGroundInset).toBeDefined();
+      expect(overlay.dataset.emissiveScale).toBeDefined();
     }
     expect(
       container.querySelectorAll(".train-emissive-overlay--windows"),
