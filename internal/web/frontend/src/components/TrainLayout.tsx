@@ -630,6 +630,63 @@ type TrainDepthVeilPaletteStyle = CSSProperties & {
   "--train-depth-veil-color": string;
 };
 
+const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
+  {
+    bay: "entrance",
+    door: "single",
+    hasWindows: false,
+    windowLight: null,
+    lampSlots: ["trailing"],
+    supportSlots: ["trailing"],
+    signalAspect: "approach",
+  },
+  {
+    bay: "west-waiting",
+    door: null,
+    hasWindows: true,
+    windowLight: "night",
+    lampSlots: [],
+    supportSlots: ["leading"],
+    signalAspect: null,
+  },
+  {
+    bay: "ticket-hall",
+    door: "double",
+    hasWindows: true,
+    windowLight: "sunset-night",
+    lampSlots: ["leading"],
+    supportSlots: ["leading", "trailing"],
+    signalAspect: null,
+  },
+  {
+    bay: "platform-view",
+    door: null,
+    hasWindows: false,
+    windowLight: null,
+    lampSlots: [],
+    supportSlots: ["center"],
+    signalAspect: null,
+  },
+  {
+    bay: "freight-office",
+    door: "freight",
+    hasWindows: true,
+    windowLight: "night",
+    lampSlots: ["trailing"],
+    supportSlots: ["trailing"],
+    signalAspect: null,
+  },
+  {
+    bay: "departure",
+    door: "single",
+    hasWindows: true,
+    windowLight: null,
+    lampSlots: ["leading"],
+    supportSlots: ["leading"],
+    signalAspect: "proceed",
+  },
+] as const;
+
 function TrainNightLife({
   plan,
   placement,
@@ -1077,6 +1134,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
   const sceneryPlacements = trainSceneryPlacementsForChunk(layer.name, chunk);
   const stationSegment =
     chunk.setPiece?.type === "station" ? chunk.setPiece : null;
+  const stationComposition = stationSegment
+    ? TRAIN_STATION_SEGMENT_COMPOSITIONS[stationSegment.segmentOffset]
+    : null;
   const terrainContour =
     layer.name === "sky"
       ? null
@@ -1168,7 +1228,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             }
             data-station-assets={
               stationSegment
-                ? "platform,building,canopy,lamps"
+                ? "platform,building,canopy,fixtures"
                 : undefined
             }
             data-station-vertical-zone={
@@ -1198,15 +1258,56 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   data-station-architecture="whole"
                   data-station-role={stationSegment.role}
                   data-station-segment={stationSegment.segmentOffset}
+                  data-station-bay={stationComposition?.bay}
                 >
                   <span
                     className="train-station-building"
                     data-station-asset="building"
+                    data-station-surface="opaque"
                   >
-                    <span
-                      className="train-station-window-row"
-                      data-station-asset="windows"
-                    />
+                    {stationComposition?.hasWindows ? (
+                      <span
+                        className="train-station-window-row"
+                        data-station-asset="windows"
+                        data-station-fixture="window-bank"
+                      >
+                        {stationComposition.windowLight ? (
+                          <span
+                            className={[
+                              "train-emissive-overlay",
+                              "train-station-emissive",
+                              "train-station-window-emissive",
+                            ].join(" ")}
+                            data-emissive="station-windows"
+                            data-emissive-owner={`station-segment-${stationSegment.segmentOffset}`}
+                            data-station-light-schedule={
+                              stationComposition.windowLight
+                            }
+                          />
+                        ) : null}
+                      </span>
+                    ) : null}
+                    {stationComposition?.door ? (
+                      <span
+                        className={[
+                          "train-station-door",
+                          `train-station-door--${stationComposition.door}`,
+                        ].join(" ")}
+                        data-station-asset="door"
+                        data-station-door={stationComposition.door}
+                      />
+                    ) : null}
+                    {stationComposition?.bay === "platform-view" ? (
+                      <span
+                        className="train-station-open-bay"
+                        data-station-framed-opening="platform-view"
+                      >
+                        <span
+                          className="train-station-open-bay-view"
+                          data-station-view-owner="station-composition"
+                        />
+                      </span>
+                    ) : null}
                     {stationSegment.segmentOffset === 2 ? (
                       <span
                         className="train-station-name-board"
@@ -1219,37 +1320,86 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   <span
                     className="train-station-canopy"
                     data-station-asset="canopy"
-                  />
-                  <span
-                    className="train-station-lamp train-station-lamp--leading"
-                    data-station-asset="lamp"
-                  />
-                  <span
-                    className="train-station-lamp train-station-lamp--trailing"
-                    data-station-asset="lamp"
-                  />
+                  >
+                    {stationComposition?.supportSlots.map((slot) => (
+                      <span
+                        className={[
+                          "train-station-canopy-support",
+                          `train-station-canopy-support--${slot}`,
+                        ].join(" ")}
+                        data-station-asset="canopy-support"
+                        data-station-fixture-slot={slot}
+                        key={slot}
+                      />
+                    ))}
+                  </span>
+                  {stationComposition?.lampSlots.map((slot) => (
+                    <span
+                      className={[
+                        "train-station-lamp",
+                        `train-station-lamp--${slot}`,
+                      ].join(" ")}
+                      data-station-asset="lamp"
+                      data-station-fixture-slot={slot}
+                      data-station-light-schedule={
+                        stationSegment.segmentOffset === 2
+                          ? "sunset-night"
+                          : "night"
+                      }
+                      key={slot}
+                    >
+                      <span
+                        className="train-station-lamp-fixture"
+                        data-station-fixture="lamp-head"
+                      />
+                      <span
+                        className={[
+                          "train-emissive-overlay",
+                          "train-station-emissive",
+                          "train-station-lamp-emissive",
+                        ].join(" ")}
+                        data-emissive="station-lamp"
+                        data-emissive-owner={`station-segment-${stationSegment.segmentOffset}-${slot}`}
+                        data-station-light-schedule={
+                          stationSegment.segmentOffset === 2
+                            ? "sunset-night"
+                            : "night"
+                        }
+                      />
+                    </span>
+                  ))}
                 </span>
               </>
             ) : null}
           </span>
-          {stationSegment &&
-          stationSegment.segmentOffset >= 1 &&
-          stationSegment.segmentOffset <= 4 ? (
-            <>
+          {stationSegment && stationComposition?.signalAspect ? (
+            <span
+              className="train-station-signal"
+              data-station-asset="signal"
+              data-station-signal-aspect={stationComposition.signalAspect}
+              data-station-owner-segment={stationSegment.segmentOffset}
+            >
               <span
-                className="train-station-signal"
-                data-station-asset="signal"
-                data-station-signal-aspect={
-                  stationSegment.segmentOffset >= 3 ? "proceed" : "approach"
-                }
+                className="train-station-signal-head"
+                data-station-fixture="signal-head"
               />
-              {stationSegment.segmentOffset === 2 ? (
-                <span
-                  className="train-station-ambient-steam"
-                  data-station-ambient-detail="steam"
-                />
-              ) : null}
-            </>
+              <span
+                className={[
+                  "train-emissive-overlay",
+                  "train-station-emissive",
+                  "train-station-signal-emissive",
+                ].join(" ")}
+                data-emissive="station-signal"
+                data-emissive-owner={`station-segment-${stationSegment.segmentOffset}`}
+                data-station-light-schedule="sunset-night"
+              />
+            </span>
+          ) : null}
+          {stationSegment?.segmentOffset === 2 ? (
+            <span
+              className="train-station-ambient-steam"
+              data-station-ambient-detail="steam"
+            />
           ) : null}
         </>
       ) : null}

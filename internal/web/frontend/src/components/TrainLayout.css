@@ -574,6 +574,36 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--station {
+  --train-station-wall: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    white 11%
+  );
+  --train-station-wall-accent: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 34%
+  );
+  --train-station-trim: color-mix(
+    in srgb,
+    var(--train-palette-silhouette),
+    black 12%
+  );
+  --train-station-roof: color-mix(
+    in srgb,
+    var(--train-palette-silhouette),
+    black 8%
+  );
+  --train-station-glass: color-mix(
+    in srgb,
+    var(--train-palette-control-surface),
+    var(--train-palette-mid-surface) 44%
+  );
+  --train-station-fixture-glass: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    white 24%
+  );
   bottom: 17px;
   height: 112px;
   opacity: 1;
@@ -595,11 +625,12 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-station-platform {
   position: absolute;
   inset: 0;
-  border-top: 4px solid color-mix(
-    in srgb,
-    var(--train-palette-foreground-contrast),
-    transparent 48%
-  );
+  border-top: 4px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-foreground-contrast),
+      var(--train-palette-mid-surface) 48%
+    );
   background:
     repeating-linear-gradient(
       135deg,
@@ -620,45 +651,90 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-building {
   position: absolute;
-  right: 7%;
+  right: -2px;
   bottom: 20px;
-  left: 7%;
+  left: -2px;
+  box-sizing: border-box;
   height: 78px;
-  border: 3px solid color-mix(
-    in srgb,
-    var(--train-palette-silhouette),
-    black 12%
-  );
+  border: 3px solid var(--train-station-trim);
   border-bottom: 0;
-  background:
+  background-color: var(--train-station-wall);
+  background-image:
     linear-gradient(
       90deg,
-      transparent 0 12%,
-      color-mix(in srgb, var(--train-palette-mid-surface), white 9%) 12% 88%,
-      transparent 88%
-    ),
-    color-mix(
-      in srgb,
-      var(--train-palette-mid-surface),
-      var(--train-palette-haze) 24%
+      var(--train-station-wall-accent) 0 3px,
+      var(--train-station-wall) 3px 31px,
+      color-mix(
+          in srgb,
+          var(--train-station-wall),
+          white 7%
+        )
+        31px 34px,
+      var(--train-station-wall) 34px 100%
     );
+  background-size: 64px 100%;
   opacity: 1;
+  filter: none;
 }
 
 .train-station-building::before {
   content: "";
   position: absolute;
   top: -12px;
-  right: -6px;
-  left: -6px;
+  right: -3px;
+  left: -3px;
+  box-sizing: border-box;
   height: 12px;
-  border-bottom: 4px solid color-mix(
+  border-bottom: 4px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-foreground-contrast),
+      var(--train-station-roof) 52%
+    );
+  background: var(--train-station-roof);
+}
+
+.train-set-piece--station[data-set-piece-segment="0"]
+  .train-station-building::before {
+  clip-path: polygon(0 100%, 7% 0, 100% 0, 100% 100%);
+}
+
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-building::before {
+  clip-path: polygon(0 0, 93% 0, 100% 100%, 0 100%);
+}
+
+.train-set-piece--station[data-set-piece-segment="0"]
+  .train-station-building,
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-building {
+  --train-station-wall: color-mix(
     in srgb,
-    var(--train-palette-foreground-contrast),
-    transparent 52%
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 16%
   );
-  background: var(--train-palette-silhouette);
-  clip-path: polygon(0 100%, 8% 18%, 92% 18%, 100% 100%);
+}
+
+.train-set-piece--station[data-set-piece-segment="2"]
+  .train-station-building {
+  --train-station-wall: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    white 17%
+  );
+}
+
+.train-set-piece--station[data-set-piece-segment="4"]
+  .train-station-building {
+  background-image:
+    linear-gradient(
+      90deg,
+      var(--train-station-wall-accent) 0 4px,
+      var(--train-station-wall) 4px 42px,
+      var(--train-station-wall-accent) 42px 45px,
+      var(--train-station-wall) 45px 100%
+    );
+  background-size: 82px 100%;
 }
 
 .train-set-piece--station[data-set-piece-segment="2"]
@@ -676,19 +752,20 @@ html[data-pane-switcher-layout="train"] .statusline {
   left: 50%;
   width: 42px;
   height: 29px;
-  border-bottom: 3px solid color-mix(
-    in srgb,
-    var(--train-palette-foreground-contrast),
-    transparent 52%
-  );
+  border-bottom: 3px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-foreground-contrast),
+      var(--train-station-roof) 52%
+    );
   background:
     radial-gradient(
       circle at 50% 64%,
-      var(--train-palette-emissive) 0 4px,
+      var(--train-palette-control-surface) 0 4px,
       var(--train-palette-silhouette) 5px 7px,
       transparent 8px
     ),
-    var(--train-palette-silhouette);
+    var(--train-station-roof);
   clip-path: polygon(0 100%, 0 38%, 50% 0, 100% 38%, 100% 100%);
   transform: translateX(-50%);
 }
@@ -698,15 +775,144 @@ html[data-pane-switcher-layout="train"] .statusline {
   top: 20px;
   right: 10%;
   left: 10%;
+  box-sizing: border-box;
   height: 20px;
+  overflow: hidden;
+  border: 3px solid var(--train-station-trim);
   background:
     repeating-linear-gradient(
       90deg,
-      color-mix(in srgb, var(--train-palette-emissive), transparent 18%) 0 12px,
-      transparent 12px 24px
+      var(--train-station-glass) 0 11px,
+      var(--train-station-trim) 11px 15px
     );
-  filter: drop-shadow(0 0 4px var(--train-palette-emissive));
-  opacity: 0.54;
+  opacity: 1;
+  filter: none;
+  box-shadow: none;
+}
+
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-window-row {
+  right: 28%;
+  left: 10%;
+}
+
+.train-station-window-emissive {
+  inset: 1px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-palette-emissive) 0 8px,
+      transparent 8px 15px
+    );
+}
+
+.train-station-door {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: 28px;
+  height: 39px;
+  border: 3px solid var(--train-station-trim);
+  border-bottom: 0;
+  background:
+    linear-gradient(
+      90deg,
+      var(--train-station-trim) 0 3px,
+      var(--train-station-glass) 3px 11px,
+      var(--train-station-trim) 11px 14px,
+      var(--train-station-glass) 14px 22px,
+      var(--train-station-trim) 22px 100%
+    );
+  transform: translateX(-50%);
+}
+
+.train-station-door--single {
+  width: 24px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--train-station-trim) 0 3px,
+      var(--train-station-glass) 3px 18px,
+      var(--train-station-trim) 18px 100%
+    );
+}
+
+.train-set-piece--station[data-set-piece-segment="0"]
+  .train-station-door {
+  left: 30%;
+}
+
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-door {
+  left: 72%;
+}
+
+.train-station-door--freight {
+  left: 58%;
+  width: 54px;
+  height: 46px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--train-station-wall-accent) 0 9px,
+      var(--train-station-trim) 9px 12px
+    );
+}
+
+.train-station-open-bay {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: 112px;
+  height: 51px;
+  overflow: hidden;
+  border: 5px solid var(--train-station-trim);
+  border-bottom: 0;
+  background: var(--train-station-trim);
+  transform: translateX(-50%);
+}
+
+.train-station-open-bay-view {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(
+          in srgb,
+          var(--train-palette-far-surface),
+          var(--train-palette-control-surface) 18%
+        )
+        0 48%,
+      var(--train-station-wall-accent) 48% 56%,
+      color-mix(
+          in srgb,
+          var(--train-palette-mid-surface),
+          black 9%
+        )
+        56% 100%
+    );
+}
+
+.train-station-open-bay-view::before,
+.train-station-open-bay-view::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: var(--train-station-trim);
+}
+
+.train-station-open-bay-view::before {
+  left: 31%;
+}
+
+.train-station-open-bay-view::after {
+  right: 31%;
 }
 
 .train-station-name-board {
@@ -732,32 +938,43 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-canopy {
   position: absolute;
-  right: 2%;
+  right: -1px;
   bottom: 92px;
-  left: 2%;
+  left: -1px;
+  box-sizing: border-box;
   height: 8px;
-  border-top: 3px solid color-mix(
-    in srgb,
-    var(--train-palette-foreground-contrast),
-    transparent 42%
-  );
+  border-top: 3px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-foreground-contrast),
+      var(--train-palette-mid-surface) 42%
+    );
   border-bottom: 3px solid var(--train-palette-silhouette);
   background: color-mix(
     in srgb,
     var(--train-palette-mid-surface),
     white 14%
   );
-  box-shadow:
-    0 3px 0 color-mix(
+  box-shadow: 0 3px 0
+    color-mix(
       in srgb,
       var(--train-palette-mid-surface),
-      transparent 18%
+      var(--train-palette-silhouette) 18%
     );
+  filter: none;
 }
 
-.train-station-canopy::before,
-.train-station-canopy::after {
-  content: "";
+.train-set-piece--station[data-set-piece-segment="0"]
+  .train-station-canopy {
+  left: 7%;
+}
+
+.train-set-piece--station[data-set-piece-segment="5"]
+  .train-station-canopy {
+  right: 7%;
+}
+
+.train-station-canopy-support {
   position: absolute;
   top: 8px;
   width: 4px;
@@ -765,11 +982,15 @@ html[data-pane-switcher-layout="train"] .statusline {
   background: var(--train-palette-silhouette);
 }
 
-.train-station-canopy::before {
+.train-station-canopy-support--leading {
   left: 12%;
 }
 
-.train-station-canopy::after {
+.train-station-canopy-support--center {
+  left: calc(50% - 2px);
+}
+
+.train-station-canopy-support--trailing {
   right: 12%;
 }
 
@@ -779,24 +1000,28 @@ html[data-pane-switcher-layout="train"] .statusline {
   width: 3px;
   height: 94px;
   background: var(--train-palette-silhouette);
-  opacity: 0.92;
+  opacity: 1;
 }
 
-.train-station-lamp::before {
-  content: "";
+.train-station-lamp-fixture,
+.train-station-lamp-emissive {
   position: absolute;
   top: -2px;
   left: -6px;
+  box-sizing: border-box;
   width: 15px;
   height: 7px;
   border: 2px solid var(--train-palette-silhouette);
   border-radius: 5px 5px 2px 2px;
+}
+
+.train-station-lamp-fixture {
+  background: var(--train-station-fixture-glass);
+  box-shadow: none;
+}
+
+.train-station-lamp-emissive {
   background: var(--train-palette-emissive);
-  box-shadow: 0 0 9px color-mix(
-    in srgb,
-    var(--train-palette-emissive),
-    transparent 18%
-  );
 }
 
 .train-station-lamp--leading {
@@ -805,6 +1030,38 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-lamp--trailing {
   right: 25%;
+}
+
+.train-station-emissive.train-emissive-overlay {
+  opacity: 0;
+  filter: none;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-station-emissive.train-emissive-overlay {
+  opacity: 0;
+  filter: none;
+}
+
+.train-layout-world[data-time-of-day="sunset"]
+  .train-station-emissive.train-emissive-overlay[data-station-light-schedule="sunset-night"] {
+  opacity: 0.24;
+  filter: drop-shadow(
+    0 0 3px color-mix(in srgb, var(--train-palette-emissive), transparent 42%)
+  );
+}
+
+.train-layout-world[data-time-of-day="night"]
+  .train-station-emissive.train-emissive-overlay {
+  opacity: 0.66;
+  filter: drop-shadow(
+    0 0 5px color-mix(in srgb, var(--train-palette-emissive), transparent 30%)
+  );
+}
+
+.train-layout-world[data-time-of-day="night"]
+  .train-station-signal-emissive.train-emissive-overlay {
+  opacity: 0.48;
 }
 
 .train-station-transition--entry {
@@ -822,11 +1079,12 @@ html[data-pane-switcher-layout="train"] .statusline {
   left: 8%;
   width: 4px;
   height: 103px;
-  border-left: 1px solid color-mix(
-    in srgb,
-    var(--train-palette-foreground-contrast),
-    transparent 58%
-  );
+  border-left: 1px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-foreground-contrast),
+      var(--train-palette-silhouette) 58%
+    );
   background: color-mix(
     in srgb,
     var(--train-palette-silhouette),
@@ -834,17 +1092,25 @@ html[data-pane-switcher-layout="train"] .statusline {
   );
 }
 
-.train-station-signal::before {
-  content: "";
+.train-station-signal-head,
+.train-station-signal-emissive {
   position: absolute;
   top: -2px;
   left: -5px;
+  box-sizing: border-box;
   width: 12px;
   height: 16px;
   border: 3px solid var(--train-palette-silhouette);
   border-radius: 4px 4px 2px 2px;
-  background: #d95f4d;
-  box-shadow: 0 0 9px color-mix(in srgb, #ff6d57, transparent 12%);
+  background: #a6493f;
+}
+
+.train-station-signal-head {
+  box-shadow: none;
+}
+
+.train-station-signal-emissive {
+  background: #ff6d57;
 }
 
 .train-station-signal[data-station-signal-aspect="proceed"] {
@@ -852,15 +1118,22 @@ html[data-pane-switcher-layout="train"] .statusline {
   left: auto;
 }
 
-.train-station-signal[data-station-signal-aspect="proceed"]::before {
+.train-station-signal[data-station-signal-aspect="proceed"]
+  .train-station-signal-head {
+  background: #3e8856;
+}
+
+.train-station-signal[data-station-signal-aspect="proceed"]
+  .train-station-signal-emissive {
   background: #72d78a;
-  box-shadow: 0 0 6px color-mix(in srgb, #72d78a, transparent 20%);
 }
 
 .train-layout-world[data-station-state="approach"]
-  .train-station-signal[data-station-signal-aspect="approach"]::before,
+  .train-station-signal[data-station-signal-aspect="approach"]
+  .train-station-signal-emissive,
 .train-layout-world[data-station-state="decelerate"]
-  .train-station-signal[data-station-signal-aspect="approach"]::before {
+  .train-station-signal[data-station-signal-aspect="approach"]
+  .train-station-signal-emissive {
   animation: train-station-signal-pulse 1.2s steps(2, end) infinite;
 }
 
@@ -2141,7 +2414,7 @@ html[data-pane-switcher-layout="train"] .statusline {
     opacity: 0.42;
   }
 
-  .train-station-signal::before {
+  .train-station-signal-emissive {
     animation: none !important;
   }
 
@@ -2163,13 +2436,8 @@ html[data-pane-switcher-layout="train"] .statusline {
     padding-left: 0;
   }
 
-  .train-station-building {
-    right: 5%;
-    left: 5%;
-  }
-
   .train-station-canopy {
-    right: 0;
-    left: 0;
+    right: -1px;
+    left: -1px;
   }
 }

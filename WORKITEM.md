@@ -380,7 +380,7 @@ and safety properties established by the archived queue remain the baseline.
   frontend suite, build, `make test`, and `rtk git diff --check`, then document
   the retained screenshot evidence.
 
-- [ ] **TRAIN-042 — Recompose station depth, joins, and time-owned illumination.**
+- [x] **TRAIN-042 — Recompose station depth, joins, and time-owned illumination.**
   Correct the defects exposed by a post-TRAIN-041 layer-by-layer audit with the
   fixed train hidden. The diagonal station crop is gone, but the station still
   fails the opaque compositor and coherent set-piece contracts in all three

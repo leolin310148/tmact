@@ -821,7 +821,7 @@ describe("TrainLayout", () => {
       stationSegments.every(
         (segment) =>
           segment.dataset.stationAssets ===
-            "platform,building,canopy,lamps" &&
+            "platform,building,canopy,fixtures" &&
           segment.dataset.stationVerticalZone === "behind-train",
       ),
     ).toBe(true);
@@ -835,16 +835,31 @@ describe("TrainLayout", () => {
       container.querySelectorAll("[data-station-asset='canopy']"),
     ).toHaveLength(6);
     expect(
+      container.querySelectorAll("[data-station-asset='canopy-support']"),
+    ).toHaveLength(7);
+    expect(
       container.querySelectorAll("[data-station-asset='lamp']"),
-    ).toHaveLength(12);
+    ).toHaveLength(4);
     expect(
       container.querySelectorAll("[data-station-asset='signal']"),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
     expect(
       [...container.querySelectorAll<HTMLElement>(
         "[data-station-asset='signal']",
       )].map((signal) => signal.dataset.stationSignalAspect),
-    ).toEqual(["approach", "approach", "proceed", "proceed"]);
+    ).toEqual(["approach", "proceed"]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-architecture]",
+      )].map((architecture) => architecture.dataset.stationBay),
+    ).toEqual([
+      "entrance",
+      "west-waiting",
+      "ticket-hall",
+      "platform-view",
+      "freight-office",
+      "departure",
+    ]);
     expect(
       container.querySelectorAll("[data-station-ambient-detail='steam']"),
     ).toHaveLength(1);
@@ -916,7 +931,7 @@ describe("TrainLayout", () => {
       );
       expect(
         architecture.querySelectorAll("[data-station-asset='lamp']"),
-      ).toHaveLength(2);
+      ).toHaveLength([1, 0, 1, 0, 1, 1][index]!);
       expect(architecture).not.toContainElement(
         segment.querySelector("[data-station-asset='platform']"),
       );
@@ -948,7 +963,182 @@ describe("TrainLayout", () => {
     ).toBeInTheDocument();
     expect(
       container.querySelectorAll("[data-station-asset='signal']"),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
+  });
+
+  it("joins six role-owned station bays without accidental reveal gaps", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const stationSegments = [
+      ...container.querySelectorAll<HTMLElement>(
+        '.train-set-piece[data-set-piece-type="station"]',
+      ),
+    ].sort(
+      (left, right) =>
+        Number(left.dataset.setPieceSegment) -
+        Number(right.dataset.setPieceSegment),
+    );
+
+    expect(
+      stationSegments.map(
+        (segment) =>
+          segment.querySelector<HTMLElement>("[data-station-architecture]")
+            ?.dataset.stationBay,
+      ),
+    ).toEqual([
+      "entrance",
+      "west-waiting",
+      "ticket-hall",
+      "platform-view",
+      "freight-office",
+      "departure",
+    ]);
+    expect(
+      stationSegments.map(
+        (segment) =>
+          segment.querySelectorAll("[data-station-asset='lamp']").length,
+      ),
+    ).toEqual([1, 0, 1, 0, 1, 1]);
+    expect(
+      stationSegments.map(
+        (segment) =>
+          segment.querySelectorAll("[data-station-asset='canopy-support']")
+            .length,
+      ),
+    ).toEqual([1, 1, 2, 1, 1, 1]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-asset='signal']",
+      )].map((signal) => [
+        signal.dataset.stationOwnerSegment,
+        signal.dataset.stationSignalAspect,
+      ]),
+    ).toEqual([
+      ["0", "approach"],
+      ["5", "proceed"],
+    ]);
+
+    const framedOpening = stationSegments[3]!.querySelector(
+      "[data-station-framed-opening='platform-view']",
+    );
+    expect(framedOpening).toContainElement(
+      framedOpening?.querySelector(
+        "[data-station-view-owner='station-composition']",
+      ) ?? null,
+    );
+    expect(
+      stationSegments.every(
+        (segment) =>
+          segment.querySelector("[data-station-surface='opaque']") !== null,
+      ),
+    ).toBe(true);
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-building\s*\{[^}]*right:\s*-2px;[^}]*left:\s*-2px;/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-station-building\s*\{[^}]*(?:right|left):\s*7%;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-open-bay-view\s*\{[^}]*background:\s*linear-gradient\(/,
+    );
+  });
+
+  it("keeps station solids opaque while time palettes own sparse illumination", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const buildings = [
+      ...container.querySelectorAll<HTMLElement>(
+        "[data-station-surface='opaque']",
+      ),
+    ];
+    const stationEmissives = [
+      ...container.querySelectorAll<HTMLElement>(
+        ".train-station-emissive",
+      ),
+    ];
+    const sunsetOwned = stationEmissives.filter(
+      (emissive) =>
+        emissive.dataset.stationLightSchedule === "sunset-night",
+    );
+    const nightOnly = stationEmissives.filter(
+      (emissive) => emissive.dataset.stationLightSchedule === "night",
+    );
+
+    expect(buildings).toHaveLength(6);
+    expect(stationEmissives).toHaveLength(9);
+    expect(sunsetOwned).toHaveLength(4);
+    expect(nightOnly).toHaveLength(5);
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-building\s*\{[^}]*background-color:\s*var\(--train-station-wall\);[^}]*opacity:\s*1;[^}]*filter:\s*none;/,
+    );
+    const stationBuildingRule =
+      trainLayoutCss.match(/\.train-station-building\s*\{([^}]*)\}/)?.[1] ??
+      "";
+    expect(stationBuildingRule).not.toContain("--train-palette-haze");
+    expect(stationBuildingRule).not.toContain("transparent");
+
+    for (const mode of ["day", "sunset", "night"] as const) {
+      world.dataset.timeOfDay = mode;
+      for (const building of buildings) {
+        expect(getComputedStyle(building).opacity).toBe("1");
+        expect(getComputedStyle(building).filter).toBe("none");
+      }
+      for (const fixture of container.querySelectorAll<HTMLElement>(
+        ".train-station-lamp-fixture, .train-station-signal-head, .train-station-window-row",
+      )) {
+        expect(getComputedStyle(fixture).filter).toBe("none");
+        expect(getComputedStyle(fixture).boxShadow).toBe("none");
+      }
+
+      if (mode === "day") {
+        expect(
+          stationEmissives.every(
+            (emissive) =>
+              getComputedStyle(emissive).opacity === "0" &&
+              getComputedStyle(emissive).filter === "none",
+          ),
+        ).toBe(true);
+      } else if (mode === "sunset") {
+        expect(
+          sunsetOwned.every(
+            (emissive) => getComputedStyle(emissive).opacity === "0.24",
+          ),
+        ).toBe(true);
+        expect(
+          nightOnly.every(
+            (emissive) => getComputedStyle(emissive).opacity === "0",
+          ),
+        ).toBe(true);
+      } else {
+        expect(
+          stationEmissives.every(
+            (emissive) =>
+              Number.parseFloat(getComputedStyle(emissive).opacity) > 0,
+          ),
+        ).toBe(true);
+      }
+    }
   });
 
   it("keeps station scenery pointer-inert below the train and caps compact station geometry", () => {
@@ -977,7 +1167,7 @@ describe("TrainLayout", () => {
       /\.train-set-piece--station\.train-set-piece--(?:entry|exit)\s*\{[^}]*clip-path:/,
     );
     expect(trainLayoutCss).toMatch(
-      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*0;/,
+      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[\s\S]*?right:\s*-1px;[\s\S]*?left:\s*-1px;/,
     );
   });
 

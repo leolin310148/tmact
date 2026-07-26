@@ -429,6 +429,47 @@ sky holes, duplicate walls, floating columns, or track gaps. `borz errors
 --json` reported no page errors, and no private pane names, output, or payloads
 were recorded.
 
+TRAIN-042 station-compositor audit 2026-07-26: repeated HTTP 200, plain
+`/src/main.tsx` and `/src/components/TrainLayout.tsx` module freshness, open,
+viewport, hard-reload, and exact `window.innerWidth`/`window.innerHeight`
+checks at 390×844, 1280×800, and 2560×900 with the dedicated
+`tmact-train-workitems` borz profile. The `infinite-journey` station was held
+near route positions `3680px` and `4480px` at `0.001px/s`; the final
+post-build freshness pass again loaded the current station composition source
+and found all six expected segments at 2560×900.
+
+Computed-style inspection in day, sunset, and night found every station wall
+at `opacity: 1` with an opaque resolved `color(srgb …)` background and
+`filter: none`. Sorted wall bounding boxes overlapped adjacent segments by
+8px, replacing the former 41.34px reveal widths without changing the
+entry/exit platform ramps. The composition owns six distinct bays
+(`entrance`, `west-waiting`, `ticket-hall`, framed `platform-view`,
+`freight-office`, and `departure`), seven role-distributed canopy supports,
+four platform lamps, and only the segment-0 approach plus segment-5 departure
+signals. The framed platform view remained station-owned and opaque instead
+of exposing a random far-layer sprite.
+
+All nine station emissive overlays computed to opacity `0` and `filter: none`
+in day. Sunset lit only the four `sunset-night` fixtures at opacity `0.24`;
+night lit the deliberately sparse three window banks, four lamps, and two
+operational signal aspects, with illumination still owned by the corresponding
+physical fixture. The ultrawide route window remained bounded at 65 chunks.
+Additional deterministic samples confirmed opaque non-cloud sprites for
+forest, mountain, town, coast, and industrial scenery, including industrial
+midground buildings and far/ultra-far terrain.
+
+For every route position, palette, and viewport, the complete station plus
+isolated sky, ultra-far, far, midground, and near evidence is retained as 108
+screenshots:
+`/private/tmp/train-042-{entry,exit}-{compact,desktop,ultrawide}-{day,sunset,night}{,-sky,-ultra-far,-far,-midground,-near}.png`.
+The contact inspection showed coherent wall/roof/canopy joins, intentional
+architectural ends, unlit daylight fixture glass, restrained sunset light,
+sparse night light, and no mountains, trees, or unrelated buildings embedded
+inside station walls. The temporary live-DOM styles were removed; restored
+displays were `flex`, `block`, and `grid` for the inspection, debug grid, and
+time toggle. `borz errors --json` reported no page errors, and no private pane
+names, output, or payloads were recorded.
+
 ## Notes Template
 
 ```text
