@@ -12,6 +12,11 @@ import {
   TRAIN_SET_PIECE_VISUAL_VARIANT_COUNT,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_OVERSCAN_CHUNKS,
+  trainJourneyPositionForProjectedSetPieceCenter,
+  trainSetPieceFocusForOccurrence,
+  trainSetPieceProjectedCoordinate,
+  trainSetPieceReservationIntersectsChunk,
+  trainSetPieceScreenGeometry,
   trainSetPiecesAreIncompatible,
   trainSetPieceVisualVariant,
   trainRegionAtIndex,
@@ -376,5 +381,155 @@ describe("train route chunks", () => {
     expect(trainParallaxLayerTransform(240, 1, true)).toBe("none");
     expect(trainParallaxLayerPosition(Number.NaN, 1)).toBe(0);
     expect(trainParallaxLayerPosition(240, Number.NaN)).toBe(0);
+  });
+
+  it("centres every requested set-piece occurrence on its actual render layer", () => {
+    const viewportWidth = 1_280;
+    for (const type of [
+      "bridge",
+      "tunnel",
+      "town-edge",
+      "coast-reveal",
+      "station",
+    ] as const) {
+      const focus = trainSetPieceFocusForOccurrence(
+        "focus-catalogue",
+        type,
+        viewportWidth,
+      );
+      expect(focus, type).not.toBeNull();
+      const layer = TRAIN_PARALLAX_LAYERS.find(
+        ({ name }) => name === focus!.renderLayer,
+      )!;
+      const geometry = trainSetPieceScreenGeometry(
+        focus!,
+        layer.speedRatio,
+      );
+
+      expect(geometry.screenCenterPx, type).toBeCloseTo(
+        viewportWidth / 2,
+        9,
+      );
+      expect(geometry.visibleWidthPx, type).toBeGreaterThanOrEqual(
+        Math.min(320, viewportWidth * 0.5),
+      );
+      expect(focus!.expectedVisibleSegmentIDs).toHaveLength(focus!.span);
+      expect(new Set(focus!.expectedVisibleSegmentIDs)).toHaveProperty(
+        "size",
+        focus!.span,
+      );
+    }
+  });
+
+  it("projects one logical anchor to identical focus coordinates across layer speeds", () => {
+    const viewportWidth = 1_920;
+    const focus = trainSetPieceFocusForOccurrence(
+      "cross-layer-focus",
+      "coast-reveal",
+      viewportWidth,
+      1,
+    )!;
+
+    for (const speedRatio of [0.1, 0.25, 0.55, 1]) {
+      const geometry = trainSetPieceScreenGeometry(focus, speedRatio);
+      expect(geometry.screenLeftPx).toBeCloseTo(
+        viewportWidth / 2 - focus.span * TRAIN_ROUTE_CHUNK_WIDTH / 2,
+        9,
+      );
+      expect(geometry.screenRightPx).toBeCloseTo(
+        viewportWidth / 2 + focus.span * TRAIN_ROUTE_CHUNK_WIDTH / 2,
+        9,
+      );
+      expect(
+        trainJourneyPositionForProjectedSetPieceCenter(focus, speedRatio),
+      ).toBeCloseTo(focus.journeyPosition, 9);
+
+      const projected = Array.from({ length: focus.span }, (_, offset) =>
+        trainSetPieceProjectedCoordinate(
+          focus,
+          focus.startIndex + offset,
+          speedRatio,
+        ),
+      );
+      expect(
+        projected.slice(1).map((coordinate, index) =>
+          coordinate - projected[index]!,
+        ),
+      ).toEqual(
+        Array.from(
+          { length: focus.span - 1 },
+          () => TRAIN_ROUTE_CHUNK_WIDTH,
+        ),
+      );
+    }
+  });
+
+  it("round-trips deterministic occurrence focus without changing bounded route windows", () => {
+    const first = trainSetPieceFocusForOccurrence(
+      "focus-round-trip",
+      "bridge",
+      375,
+      2,
+    )!;
+    const repeated = trainSetPieceFocusForOccurrence(
+      "focus-round-trip",
+      "bridge",
+      375,
+      2,
+    )!;
+    expect(repeated).toEqual(first);
+
+    const route = new RouteChunkWindow("focus-round-trip");
+    const focusedWindow = route.update(first.journeyPosition, 375);
+    const maximumMounted =
+      Math.ceil(375 / TRAIN_ROUTE_CHUNK_WIDTH) +
+      1 +
+      TRAIN_ROUTE_OVERSCAN_CHUNKS * 2;
+    expect(focusedWindow.chunks.length).toBeLessThanOrEqual(maximumMounted);
+    expect(
+      focusedWindow.chunks.some(
+        (chunk) => chunk.setPiece?.id === first.id,
+      ),
+    ).toBe(true);
+  });
+
+  it("reserves collisions at projected layer coordinates instead of logical near chunks", () => {
+    const focus = trainSetPieceFocusForOccurrence(
+      "projected-reservation",
+      "coast-reveal",
+      2_560,
+    )!;
+
+    for (const speedRatio of [0.25, 0.55, 1]) {
+      const projectedStart = trainSetPieceProjectedCoordinate(
+        focus,
+        focus.startIndex,
+        speedRatio,
+      );
+      const firstReservedChunk = Math.floor(
+        projectedStart / TRAIN_ROUTE_CHUNK_WIDTH,
+      );
+      const reserved = Array.from(
+        { length: focus.span + 2 },
+        (_, offset) => firstReservedChunk + offset - 1,
+      ).filter((chunkIndex) =>
+        trainSetPieceReservationIntersectsChunk(
+          focus,
+          speedRatio,
+          chunkIndex,
+        ),
+      );
+      expect(reserved.length).toBeGreaterThanOrEqual(focus.span);
+      expect(
+        trainSetPieceReservationIntersectsChunk(
+          focus,
+          speedRatio,
+          firstReservedChunk - 2,
+        ),
+      ).toBe(false);
+      if (speedRatio !== 1) {
+        expect(reserved).not.toContain(focus.startIndex);
+      }
+    }
   });
 });

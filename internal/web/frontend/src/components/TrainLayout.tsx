@@ -47,11 +47,19 @@ import {
   TRAIN_PARALLAX_SEAM_OVERLAP,
   TRAIN_ROUTE_CHUNK_WIDTH,
   TRAIN_ROUTE_SEED_VERSION,
+  TRAIN_SET_PIECE_DEFINITIONS,
+  trainSetPieceFocusForOccurrence,
+  trainSetPieceFocusFromSegment,
+  trainSetPieceProjectedCoordinate,
+  trainSetPieceReservationIntersectsChunk,
+  trainSetPieceScreenGeometry,
   trainParallaxLayerPosition,
   type RouteChunk,
   type RouteChunkWindowSnapshot,
   type TrainParallaxLayer,
   type TrainParallaxLayerName,
+  type TrainSetPieceFocus,
+  type TrainSetPieceType,
 } from "./trainRoute";
 import {
   TRAIN_SCENERY_BUILDINGS,
@@ -134,6 +142,9 @@ const TRAIN_WORLD_SEED_PARAM = "train-route-seed";
 const TRAIN_WORLD_SPEED_PARAM = "train-cruise-speed";
 const TRAIN_WORLD_POSITION_PARAM = "train-route-position";
 const TRAIN_WORLD_REDUCED_MOTION_PARAM = "train-reduced-motion";
+const TRAIN_WORLD_SET_PIECE_FOCUS_PARAM = "train-set-piece-focus";
+const TRAIN_WORLD_SET_PIECE_OCCURRENCE_PARAM =
+  "train-set-piece-occurrence";
 const TRAIN_WORLD_MAX_DEVELOPMENT_POSITION = 1_000_000;
 const TRAIN_PALETTE_TRANSITION_MS = 450;
 const TRAIN_WORLD_TRACK_SPEED_RATIO = 1;
@@ -314,6 +325,43 @@ export function trainWorldReducedMotionForced(search: string): boolean {
   return (
     import.meta.env.DEV &&
     new URLSearchParams(search).get(TRAIN_WORLD_REDUCED_MOTION_PARAM) === "1"
+  );
+}
+
+const TRAIN_WORLD_FOCUS_TYPES = new Set<TrainSetPieceType>([
+  "bridge",
+  "tunnel",
+  "coast-reveal",
+  "town-edge",
+  "station",
+]);
+
+export function trainWorldSetPieceFocus(
+  search: string,
+  seed: string,
+  viewportWidth: number,
+): TrainSetPieceFocus | null {
+  if (!import.meta.env.DEV) return null;
+  const parameters = new URLSearchParams(search);
+  const requestedType = parameters
+    .get(TRAIN_WORLD_SET_PIECE_FOCUS_PARAM)
+    ?.trim() as TrainSetPieceType | undefined;
+  if (!requestedType || !TRAIN_WORLD_FOCUS_TYPES.has(requestedType)) {
+    return null;
+  }
+  const requestedOccurrence = Number.parseInt(
+    parameters.get(TRAIN_WORLD_SET_PIECE_OCCURRENCE_PARAM) ?? "0",
+    10,
+  );
+  const occurrence =
+    Number.isInteger(requestedOccurrence) && requestedOccurrence >= 0
+      ? Math.min(99, requestedOccurrence)
+      : 0;
+  return trainSetPieceFocusForOccurrence(
+    seed,
+    requestedType,
+    viewportWidth,
+    occurrence,
   );
 }
 
@@ -1115,15 +1163,30 @@ export function trainTerrainHeightAtPercent(
 }
 
 export const TrainRouteChunk = memo(function TrainRouteChunk({
-  chunk,
+  chunk: sourceChunk,
   layer,
+  includeSetPieces = true,
+  projection,
+  suppressScenery = false,
 }: {
   chunk: RouteChunk;
   layer: TrainParallaxLayer;
+  includeSetPieces?: boolean;
+  projection?: {
+    coordinatePx: number;
+    focus: TrainSetPieceFocus;
+  };
+  suppressScenery?: boolean;
 }) {
+  const chunk = includeSetPieces
+    ? sourceChunk
+    : { ...sourceChunk, setPiece: null };
+  const diagnosticSetPiece = projection
+    ? chunk.setPiece
+    : sourceChunk.setPiece;
   const style: TrainRouteChunkStyle = {
     left: `${
-      -chunk.index * TRAIN_ROUTE_CHUNK_WIDTH -
+      -(projection?.coordinatePx ?? chunk.index * TRAIN_ROUTE_CHUNK_WIDTH) -
       TRAIN_PARALLAX_SEAM_OVERLAP / 2
     }px`,
     width: `${TRAIN_ROUTE_CHUNK_WIDTH + TRAIN_PARALLAX_SEAM_OVERLAP}px`,
@@ -1131,7 +1194,11 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
     "--train-chunk-ridge-height": `${chunk.ridgeHeight}px`,
     "--train-chunk-feature-offset": `${chunk.featureOffset}%`,
   };
-  const sceneryPlacements = trainSceneryPlacementsForChunk(layer.name, chunk);
+  const sceneryPlacements = suppressScenery
+    ? []
+    : trainSceneryPlacementsForChunk(layer.name, chunk, {
+        includeSetPieces,
+      });
   const stationSegment =
     chunk.setPiece?.type === "station" ? chunk.setPiece : null;
   const stationComposition = stationSegment
@@ -1155,10 +1222,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
   return (
     <div
       className={[
-        "train-parallax-chunk",
+        projection
+          ? "train-set-piece-projection-segment"
+          : "train-parallax-chunk",
         `train-parallax-chunk--${layer.name}`,
         `train-parallax-chunk--variant-${chunk.variant}`,
-        layer.name === "near" ? "train-route-chunk" : "",
+        layer.name === "near" && !projection ? "train-route-chunk" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -1167,14 +1236,30 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       data-route-region={chunk.region}
       data-route-region-index={chunk.regionIndex}
       data-route-region-offset={chunk.regionChunkOffset}
-      data-route-set-piece={chunk.setPiece?.type ?? "none"}
-      data-route-set-piece-role={chunk.setPiece?.role ?? "none"}
+      data-route-set-piece={diagnosticSetPiece?.type ?? "none"}
+      data-route-set-piece-role={diagnosticSetPiece?.role ?? "none"}
       data-route-set-piece-variant={
-        chunk.setPiece?.visualVariant ?? "none"
+        diagnosticSetPiece?.visualVariant ?? "none"
       }
       data-route-set-piece-reserved-layers={
-        chunk.setPiece?.reservedLayers.join(",") ?? ""
+        diagnosticSetPiece?.reservedLayers.join(",") ?? ""
       }
+      data-set-piece-projection={projection ? "journey-anchor" : undefined}
+      data-set-piece-focus-id={projection?.focus.id}
+      data-set-piece-focus-position={
+        projection?.focus.journeyPosition.toFixed(3)
+      }
+      data-set-piece-segment-id={
+        projection && chunk.setPiece
+          ? `${chunk.setPiece.id}:${chunk.setPiece.segmentOffset}`
+          : undefined
+      }
+      data-set-piece-reservation={
+        projection && chunk.setPiece?.reservedLayers.includes(layer.name)
+          ? chunk.setPiece.id
+          : undefined
+      }
+      data-scenery-reserved={suppressScenery ? "projected-set-piece" : undefined}
       data-parallax-layer={layer.name}
       data-seam-overlap={TRAIN_PARALLAX_SEAM_OVERLAP}
       style={style}
@@ -1567,6 +1652,80 @@ function totalMountedRouteChunks(routeWindows: TrainRouteWindows): number {
   );
 }
 
+interface TrainProjectedSetPieceSegment {
+  chunk: RouteChunk;
+  coordinatePx: number;
+  focus: TrainSetPieceFocus;
+}
+
+function projectedSetPieceSegmentsForLayer(
+  seed: string,
+  layer: TrainParallaxLayer,
+  routePosition: number,
+  viewportWidth: number,
+): readonly TrainProjectedSetPieceSegment[] {
+  if (layer.name === "sky" || layer.name === "ultra-far") return [];
+  const maximumCompositionWidth =
+    TRAIN_ROUTE_CHUNK_WIDTH *
+    Math.max(
+      ...Object.values(TRAIN_SET_PIECE_DEFINITIONS).map(
+        (definition) => definition.span,
+      ),
+    );
+  const journeyMargin =
+    (viewportWidth / 2 + maximumCompositionWidth) / layer.speedRatio;
+  const firstChunk =
+    Math.floor(
+      (routePosition - journeyMargin - viewportWidth / 2) /
+        TRAIN_ROUTE_CHUNK_WIDTH,
+    ) - 1;
+  const lastChunk =
+    Math.ceil(
+      (routePosition + journeyMargin - viewportWidth / 2) /
+        TRAIN_ROUTE_CHUNK_WIDTH,
+    ) + 1;
+  const seen = new Set<string>();
+  const projected: TrainProjectedSetPieceSegment[] = [];
+
+  for (let chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex++) {
+    const entry = generateRouteChunk(seed, chunkIndex).setPiece;
+    if (
+      !entry ||
+      entry.role !== "entry" ||
+      seen.has(entry.id) ||
+      !entry.reservedLayers.includes(layer.name)
+    ) {
+      continue;
+    }
+    seen.add(entry.id);
+    const focus = trainSetPieceFocusFromSegment(entry, viewportWidth);
+    const geometry = trainSetPieceScreenGeometry(
+      focus,
+      layer.speedRatio,
+      routePosition,
+    );
+    if (
+      geometry.screenRightPx < -TRAIN_ROUTE_CHUNK_WIDTH ||
+      geometry.screenLeftPx > viewportWidth + TRAIN_ROUTE_CHUNK_WIDTH
+    ) {
+      continue;
+    }
+    for (let offset = 0; offset < entry.span; offset++) {
+      const segmentIndex = entry.startIndex + offset;
+      projected.push({
+        chunk: generateRouteChunk(seed, segmentIndex),
+        coordinatePx: trainSetPieceProjectedCoordinate(
+          focus,
+          segmentIndex,
+          layer.speedRatio,
+        ),
+        focus,
+      });
+    }
+  }
+  return projected;
+}
+
 function usePrefersReducedTrainMotion(): boolean {
   const forced = trainWorldReducedMotionForced(window.location.search);
   const [reducedMotion, setReducedMotion] = useState(
@@ -1645,8 +1804,14 @@ function TrainWorld({
     const seed = hasSeedOverride
       ? trainWorldRouteSeed(search)
       : stored?.routeSeed ?? trainWorldRouteSeed(search);
+    const focusOverride = trainWorldSetPieceFocus(
+      search,
+      seed,
+      initialWorldWidth(),
+    );
     const restoreCandidate =
       !hasPositionOverride &&
+      focusOverride === null &&
       trigger === null &&
       stored?.routeSeed === seed
         ? createTrainStationJourney(
@@ -1659,12 +1824,15 @@ function TrainWorld({
     const canRestore = restoreCandidate?.state === "cruise";
     const routePosition = hasPositionOverride
       ? trainWorldRoutePosition(search)
+      : focusOverride
+        ? focusOverride.journeyPosition
       : canRestore && restoreCandidate
         ? restoreCandidate.routePosition
         : 0;
     return {
       restored: canRestore,
       restoredSnapshot: canRestore ? stored : null,
+      focusOverride,
       stationJourney:
         canRestore && restoreCandidate
           ? restoreCandidate
@@ -2055,6 +2223,25 @@ function TrainWorld({
   }, [cruiseSpeed, journeyStorage, reducedMotion, routeEngines, seed]);
 
   const nearWindow = routeWindows.near;
+  const projectionViewportWidth = nearWindow.viewportWidth;
+  const projectedSetPieces = Object.fromEntries(
+    TRAIN_PARALLAX_LAYERS.map((layer) => [
+      layer.name,
+      projectedSetPieceSegmentsForLayer(
+        seed,
+        layer,
+        routePositionRef.current,
+        projectionViewportWidth,
+      ),
+    ]),
+  ) as Record<
+    TrainParallaxLayerName,
+    readonly TrainProjectedSetPieceSegment[]
+  >;
+  const projectedSetPieceCount = TRAIN_PARALLAX_LAYERS.reduce(
+    (total, layer) => total + projectedSetPieces[layer.name].length,
+    0,
+  );
 
   return (
     <div
@@ -2081,6 +2268,15 @@ function TrainWorld({
         .join(",")}
       data-route-mounted-chunks={nearWindow.chunks.length}
       data-route-total-mounted-chunks={totalMountedRouteChunks(routeWindows)}
+      data-projected-set-piece-segments={projectedSetPieceCount}
+      data-set-piece-focus-type={initialJourney.focusOverride?.type}
+      data-set-piece-focus-id={initialJourney.focusOverride?.id}
+      data-set-piece-focus-position={
+        initialJourney.focusOverride?.journeyPosition.toFixed(3)
+      }
+      data-set-piece-focus-segments={
+        initialJourney.focusOverride?.expectedVisibleSegmentIDs.join(",")
+      }
       data-motion={reducedMotion ? "reduced" : "full"}
       data-motion-state={
         document.visibilityState === "hidden" ? "suspended" : "running"
@@ -2344,10 +2540,30 @@ function TrainWorld({
                 <TrainRouteChunk
                   chunk={chunk}
                   layer={layer}
+                  includeSetPieces={false}
+                  suppressScenery={projectedSetPieces[layer.name].some(
+                    ({ focus }) =>
+                      trainSetPieceReservationIntersectsChunk(
+                        focus,
+                        layer.speedRatio,
+                        chunk.index,
+                      ),
+                  )}
                   key={`${layer.name}-${routeChunkSlotKey(
                     chunk.index,
                     layerWindow.chunks.length,
                   )}`}
+                />
+              ))}
+              {projectedSetPieces[layer.name].map((projection) => (
+                <TrainRouteChunk
+                  chunk={projection.chunk}
+                  layer={layer}
+                  projection={projection}
+                  key={
+                    `${layer.name}:${projection.focus.id}:` +
+                    `${projection.chunk.index}`
+                  }
                 />
               ))}
             </div>

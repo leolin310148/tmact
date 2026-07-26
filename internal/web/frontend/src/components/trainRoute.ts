@@ -10,6 +10,7 @@ export const TRAIN_ROUTE_CHUNK_WIDTH = 320;
 export const TRAIN_ROUTE_OVERSCAN_CHUNKS = 2;
 export const TRAIN_PARALLAX_SEAM_OVERLAP = 2;
 export const TRAIN_REGION_CHUNK_LENGTH = 9;
+export const TRAIN_SET_PIECE_FOCUS_SCAN_LIMIT_CHUNKS = 20_000;
 const TRAIN_REGION_MACRO_LENGTH = 32;
 
 export const TRAIN_PARALLAX_LAYERS = [
@@ -60,6 +61,34 @@ export interface TrainSetPieceSegment {
   renderLayer: TrainParallaxLayerName;
   reservedLayers: readonly TrainParallaxLayerName[];
   incompatibleWith: readonly TrainSetPieceType[];
+}
+
+export interface TrainSetPieceFocus {
+  id: string;
+  type: TrainSetPieceType;
+  occurrence: number;
+  startIndex: number;
+  endIndex: number;
+  span: number;
+  visualVariant: TrainSetPieceVisualVariant;
+  renderLayer: TrainParallaxLayerName;
+  reservedLayers: readonly TrainParallaxLayerName[];
+  logicalStartPx: number;
+  logicalEndPx: number;
+  logicalCenterPx: number;
+  viewportWidth: number;
+  journeyPosition: number;
+  expectedVisibleSegmentIDs: readonly string[];
+}
+
+export interface TrainSetPieceScreenGeometry {
+  screenLeftPx: number;
+  screenRightPx: number;
+  screenCenterPx: number;
+  unionWidthPx: number;
+  visibleLeftPx: number;
+  visibleRightPx: number;
+  visibleWidthPx: number;
 }
 
 export const TRAIN_SET_PIECE_DEFINITIONS = {
@@ -419,6 +448,166 @@ export function trainRouteSetPieceForChunk(
     reservedLayers: definition.reservedLayers,
     incompatibleWith: definition.incompatibleWith,
   };
+}
+
+function safeViewportWidth(viewportWidth: number): number {
+  return Number.isFinite(viewportWidth) && viewportWidth > 0
+    ? viewportWidth
+    : 1;
+}
+
+function safeLayerSpeedRatio(speedRatio: number): number {
+  if (!Number.isFinite(speedRatio) || speedRatio <= 0) {
+    throw new Error("train set-piece layer speed ratio must be positive");
+  }
+  return speedRatio;
+}
+
+export function trainSetPieceFocusFromSegment(
+  segment: TrainSetPieceSegment,
+  viewportWidth: number,
+  occurrence = 0,
+): TrainSetPieceFocus {
+  if (!Number.isInteger(occurrence) || occurrence < 0) {
+    throw new Error("train set-piece occurrence must be a non-negative integer");
+  }
+  const resolvedViewportWidth = safeViewportWidth(viewportWidth);
+  // Chunk coordinates mark their screen-left edge while the 320px body
+  // extends toward the screen-right (the world itself travels right). The
+  // composition's covered route interval therefore begins one chunk before
+  // its entry coordinate and ends at the exit coordinate.
+  const logicalStartPx =
+    (segment.startIndex - 1) * TRAIN_ROUTE_CHUNK_WIDTH;
+  const logicalEndPx = segment.endIndex * TRAIN_ROUTE_CHUNK_WIDTH;
+  const logicalCenterPx = (logicalStartPx + logicalEndPx) / 2;
+  return {
+    id: segment.id,
+    type: segment.type,
+    occurrence,
+    startIndex: segment.startIndex,
+    endIndex: segment.endIndex,
+    span: segment.span,
+    visualVariant: segment.visualVariant,
+    renderLayer: segment.renderLayer,
+    reservedLayers: segment.reservedLayers,
+    logicalStartPx,
+    logicalEndPx,
+    logicalCenterPx,
+    viewportWidth: resolvedViewportWidth,
+    journeyPosition: logicalCenterPx + resolvedViewportWidth / 2,
+    expectedVisibleSegmentIDs: Array.from(
+      { length: segment.span },
+      (_, segmentOffset) => `${segment.id}:${segmentOffset}`,
+    ),
+  };
+}
+
+export function trainSetPieceFocusForOccurrence(
+  seed: string,
+  type: TrainSetPieceType,
+  viewportWidth: number,
+  occurrence = 0,
+  fromChunk = 0,
+  seedVersion = TRAIN_ROUTE_SEED_VERSION,
+): TrainSetPieceFocus | null {
+  if (!Number.isInteger(occurrence) || occurrence < 0) {
+    throw new Error("train set-piece occurrence must be a non-negative integer");
+  }
+  assertInteger(fromChunk, "train set-piece focus start chunk");
+  let matchedOccurrence = 0;
+  for (
+    let chunkIndex = fromChunk;
+    chunkIndex < fromChunk + TRAIN_SET_PIECE_FOCUS_SCAN_LIMIT_CHUNKS;
+    chunkIndex++
+  ) {
+    const segment = trainRouteSetPieceForChunk(seed, chunkIndex, seedVersion);
+    if (segment?.type !== type || segment.role !== "entry") continue;
+    if (matchedOccurrence === occurrence) {
+      return trainSetPieceFocusFromSegment(
+        segment,
+        viewportWidth,
+        occurrence,
+      );
+    }
+    matchedOccurrence++;
+  }
+  return null;
+}
+
+export function trainSetPieceProjectionOffset(
+  focus: TrainSetPieceFocus,
+  speedRatio: number,
+): number {
+  return (safeLayerSpeedRatio(speedRatio) - 1) * focus.journeyPosition;
+}
+
+export function trainSetPieceProjectedCoordinate(
+  focus: TrainSetPieceFocus,
+  chunkIndex: number,
+  speedRatio: number,
+): number {
+  assertInteger(chunkIndex, "train set-piece projected chunk index");
+  return (
+    chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH +
+    trainSetPieceProjectionOffset(focus, speedRatio)
+  );
+}
+
+export function trainSetPieceScreenGeometry(
+  focus: TrainSetPieceFocus,
+  speedRatio: number,
+  routePosition = focus.journeyPosition,
+): TrainSetPieceScreenGeometry {
+  const resolvedSpeedRatio = safeLayerSpeedRatio(speedRatio);
+  const safeRoutePosition =
+    Number.isFinite(routePosition) && routePosition > 0 ? routePosition : 0;
+  const projectionOffset = trainSetPieceProjectionOffset(
+    focus,
+    resolvedSpeedRatio,
+  );
+  const screenLeftPx =
+    safeRoutePosition * resolvedSpeedRatio -
+    (focus.logicalEndPx + projectionOffset);
+  const screenRightPx =
+    safeRoutePosition * resolvedSpeedRatio -
+    (focus.logicalStartPx + projectionOffset);
+  const visibleLeftPx = Math.max(0, screenLeftPx);
+  const visibleRightPx = Math.min(focus.viewportWidth, screenRightPx);
+  return {
+    screenLeftPx,
+    screenRightPx,
+    screenCenterPx: (screenLeftPx + screenRightPx) / 2,
+    unionWidthPx: screenRightPx - screenLeftPx,
+    visibleLeftPx,
+    visibleRightPx,
+    visibleWidthPx: Math.max(0, visibleRightPx - visibleLeftPx),
+  };
+}
+
+export function trainSetPieceReservationIntersectsChunk(
+  focus: TrainSetPieceFocus,
+  speedRatio: number,
+  chunkIndex: number,
+): boolean {
+  assertInteger(chunkIndex, "train set-piece reservation chunk index");
+  const reservationStart =
+    focus.logicalStartPx + trainSetPieceProjectionOffset(focus, speedRatio);
+  const reservationEnd =
+    focus.logicalEndPx + trainSetPieceProjectionOffset(focus, speedRatio);
+  const chunkStart = chunkIndex * TRAIN_ROUTE_CHUNK_WIDTH;
+  const chunkEnd = chunkStart + TRAIN_ROUTE_CHUNK_WIDTH;
+  return chunkStart < reservationEnd && chunkEnd > reservationStart;
+}
+
+export function trainJourneyPositionForProjectedSetPieceCenter(
+  focus: TrainSetPieceFocus,
+  speedRatio: number,
+): number {
+  const resolvedSpeedRatio = safeLayerSpeedRatio(speedRatio);
+  const projectedCenter =
+    focus.logicalCenterPx +
+    trainSetPieceProjectionOffset(focus, resolvedSpeedRatio);
+  return (projectedCenter + focus.viewportWidth / 2) / resolvedSpeedRatio;
 }
 
 export function trainSetPiecesAreIncompatible(

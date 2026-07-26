@@ -97,7 +97,7 @@ Treat these findings as regression targets:
 
 ## Queue
 
-- [ ] **TRAIN-043 — Synchronize set-piece choreography and make visual proof trustworthy.**
+- [x] **TRAIN-043 — Synchronize set-piece choreography and make visual proof trustworthy.**
   Establish one logical journey anchor for every bridge, tunnel, town-edge,
   coast-reveal, and station composition. Project its participating geometry
   into the owning parallax layers so entry, body, exit, reserved clearings, and

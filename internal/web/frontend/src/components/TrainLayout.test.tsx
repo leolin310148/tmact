@@ -23,6 +23,7 @@ import {
   trainWorldCruiseSpeed,
   trainWorldReducedMotionForced,
   trainWorldRoutePosition,
+  trainWorldSetPieceFocus,
   trainWorldTrackTransform,
   TrainLayout,
   TrainRouteChunk,
@@ -418,6 +419,69 @@ describe("TrainLayout", () => {
     expect(trainWorldReducedMotionForced("?train-reduced-motion=1")).toBe(true);
     expect(trainWorldReducedMotionForced("?train-reduced-motion=0")).toBe(false);
     expect(trainWorldReducedMotionForced("")).toBe(false);
+  });
+
+  it("focuses actual projected geometry and reserves every participating layer", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1_280);
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=layout-focus&train-set-piece-focus=coast-reveal&train-reduced-motion=1",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const focus = trainWorldSetPieceFocus(
+      window.location.search,
+      "layout-focus",
+      1_280,
+    )!;
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+
+    expect(world).toHaveAttribute("data-set-piece-focus-type", "coast-reveal");
+    expect(world).toHaveAttribute("data-set-piece-focus-id", focus.id);
+    expect(world).toHaveAttribute(
+      "data-set-piece-focus-position",
+      focus.journeyPosition.toFixed(3),
+    );
+    expect(world).toHaveAttribute(
+      "data-set-piece-focus-segments",
+      focus.expectedVisibleSegmentIDs.join(","),
+    );
+
+    const rendered = [
+      ...container.querySelectorAll<HTMLElement>(
+        '.train-set-piece-projection-segment[data-parallax-layer="far"] ' +
+          '[data-set-piece-type="coast-reveal"]',
+      ),
+    ];
+    expect(rendered).toHaveLength(focus.span);
+    expect(rendered.map((segment) => segment.dataset.setPieceSegment)).toEqual(
+      Array.from({ length: focus.span }, (_, offset) => String(offset)),
+    );
+
+    for (const layer of ["far", "midground", "near"]) {
+      const reservations = container.querySelectorAll<HTMLElement>(
+        `.train-set-piece-projection-segment[data-parallax-layer="${layer}"]` +
+          `[data-set-piece-reservation="${focus.id}"]`,
+      );
+      expect(reservations).toHaveLength(focus.span);
+    }
+    for (const reservedChunk of container.querySelectorAll<HTMLElement>(
+      '[data-scenery-reserved="projected-set-piece"]',
+    )) {
+      expect(
+        reservedChunk.querySelector("[data-scenery-asset]"),
+      ).not.toBeInTheDocument();
+    }
+    expect(
+      Number(world.dataset.projectedSetPieceSegments),
+    ).toBeLessThanOrEqual(48);
+    expect(container.querySelectorAll(".train-parallax-chunk")).toHaveLength(
+      Number(world.dataset.routeTotalMountedChunks),
+    );
   });
 
   it("persists at a restrained cadence and remounts at identical route geometry", () => {

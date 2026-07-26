@@ -470,6 +470,37 @@ displays were `flex`, `block`, and `grid` for the inspection, debug grid, and
 time toggle. `borz errors --json` reported no page errors, and no private pane
 names, output, or payloads were recorded.
 
+TRAIN-043 set-piece choreography run 2026-07-26: used route seed
+`train-043-proof` and the dedicated `tmact-train-workitems` borz profile at
+375×812, 1280×800, and 2560×1080. Every capture repeated HTTP 200, confirmed
+the plain non-cache-busted `/src/components/trainRoute.ts` contained the
+current projection source, opened the port-5234 page, applied the viewport,
+requested a hard reload, waited for the reloaded train controls, and asserted
+the exact `window.innerWidth` and `window.innerHeight`.
+
+The deterministic `train-set-piece-focus` diagnostic centred the first
+`bridge`, `tunnel`, `town-edge`, `coast-reveal`, and `station` occurrence.
+For all 15 captures, the actual render-layer geometry—not route metadata—had
+the complete expected segment-ID set and a meaningful non-zero bounding box.
+Every union centre was exactly 50% of the viewport width. Visible union widths
+were 375px at compact size, 964–1280px on desktop, and 964–1924px ultrawide,
+all above `min(320px, 50% of viewport width)`. The synchronized projection
+overlay remained bounded at 34 segments or fewer while ordinary route chunks
+retained their existing bounded windows. Projected reservations suppressed
+ordinary scenery in intersecting layer-space chunks.
+
+The train plus `.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle` were temporarily hidden before each day screenshot and
+restored afterward. The retained evidence is:
+`/tmp/tmact-train-043-proof/{compact,desktop,ultrawide}-{bridge,tunnel,town-edge,coast-reveal,station}-day.png`;
+the inspected contact sheets are
+`/tmp/tmact-train-043-proof/contact-{compact,desktop,ultrawide}-day.png`.
+Visual inspection confirmed that each named composition was centred and
+recognizable rather than an edge sliver or metadata-only pass. `borz errors`
+was empty; the console contained only Vite connection and React development
+messages. Focused route/scenery/layout tests, all 432 frontend tests,
+production build, and `make test` passed.
+
 ## Notes Template
 
 ```text

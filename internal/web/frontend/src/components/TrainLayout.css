@@ -281,6 +281,13 @@ html[data-pane-switcher-layout="train"] .statusline {
   background: none;
 }
 
+.train-set-piece-projection-segment {
+  position: absolute;
+  inset-block: 0;
+  overflow: visible;
+  background: none;
+}
+
 .train-set-piece {
   --train-set-piece-phase: 0px;
   position: absolute;

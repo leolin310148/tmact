@@ -1646,8 +1646,11 @@ function regionCompositionPlan(
   regionIndex: number,
   seedVersion: string,
   profile: TrainRegionSceneryProfile,
+  includeSetPieces = true,
 ): TrainRegionCompositionPlan {
-  const key = `${seedVersion}:${routeSeed}:${regionIndex}`;
+  const key =
+    `${seedVersion}:${routeSeed}:${regionIndex}:` +
+    `${includeSetPieces ? "set-pieces" : "ordinary"}`;
   const cached = trainRegionCompositionCache.get(key);
   if (cached) {
     trainRegionCompositionCache.delete(key);
@@ -1655,11 +1658,21 @@ function regionCompositionPlan(
     return cached;
   }
 
-  const setPieces = Array.from(
-    { length: TRAIN_REGION_CHUNK_LENGTH },
-    (_, regionOffset) =>
-      regionSetPieceAtOffset(routeSeed, regionIndex, regionOffset, seedVersion),
-  );
+  const setPieces = includeSetPieces
+    ? Array.from(
+        { length: TRAIN_REGION_CHUNK_LENGTH },
+        (_, regionOffset) =>
+          regionSetPieceAtOffset(
+            routeSeed,
+            regionIndex,
+            regionOffset,
+            seedVersion,
+          ),
+      )
+    : Array.from(
+        { length: TRAIN_REGION_CHUNK_LENGTH },
+        () => null as TrainSetPieceSegment | null,
+      );
   const landmark = regionLandmarkPlan(
     routeSeed,
     regionIndex,
@@ -1718,6 +1731,7 @@ export function trainRegionCompositionForChunk(
 function regionLayerPlan(
   chunk: RouteChunk,
   layer: TrainParallaxLayerName,
+  includeSetPieces = true,
 ): readonly (readonly TrainSceneryPlacement[])[] {
   const profile: TrainRegionSceneryProfile =
     TRAIN_REGION_SCENERY_PROFILES[chunk.region];
@@ -1732,6 +1746,7 @@ function regionLayerPlan(
     chunk.regionIndex,
     chunk.seedVersion,
     profile,
+    includeSetPieces,
   );
   const { landmark } = compositionPlan;
   const previousRegion =
@@ -1852,9 +1867,14 @@ function regionLayerPlan(
 export function trainSceneryPlacementsForChunk(
   layer: TrainParallaxLayerName,
   chunk: RouteChunk,
+  options: { includeSetPieces?: boolean } = {},
 ): readonly TrainSceneryPlacement[] {
   if (layer === "sky") return trainCloudPlacementsForChunk(chunk);
-  return regionLayerPlan(chunk, layer)[chunk.regionChunkOffset] ?? [];
+  return regionLayerPlan(
+    chunk,
+    layer,
+    options.includeSetPieces ?? true,
+  )[chunk.regionChunkOffset] ?? [];
 }
 
 export function trainSceneryScale(
