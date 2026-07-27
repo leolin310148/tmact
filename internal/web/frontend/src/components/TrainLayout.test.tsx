@@ -981,12 +981,19 @@ describe("TrainLayout", () => {
     expect(
       new Set(stationSegments.map((segment) => segment.dataset.setPieceId)),
     ).toHaveProperty("size", 1);
+    expect(stationSegments.map((segment) => segment.dataset.stationAssets)).toEqual(
+      [
+        "platform,campus,canopy,fixtures,service",
+        "platform,campus,canopy,fixtures,service",
+        "platform,campus,canopy,fixtures,service",
+        "platform,campus,fixtures,service",
+        "platform,campus,fixtures,service",
+        "platform,campus,canopy,fixtures,service",
+      ],
+    );
     expect(
       stationSegments.every(
-        (segment) =>
-          segment.dataset.stationAssets ===
-            "platform,campus,canopy,fixtures,service" &&
-          segment.dataset.stationVerticalZone === "behind-train",
+        (segment) => segment.dataset.stationVerticalZone === "behind-train",
       ),
     ).toBe(true);
     expect(
@@ -997,13 +1004,13 @@ describe("TrainLayout", () => {
     ).toHaveLength(3);
     expect(
       container.querySelectorAll("[data-station-asset='canopy']"),
-    ).toHaveLength(6);
+    ).toHaveLength(4);
     expect(
       container.querySelectorAll("[data-station-asset='canopy-support']"),
-    ).toHaveLength(9);
+    ).toHaveLength(7);
     expect(
       container.querySelectorAll("[data-station-asset='lamp']"),
-    ).toHaveLength(7);
+    ).toHaveLength(4);
     expect(
       container.querySelectorAll("[data-station-asset='signal']"),
     ).toHaveLength(2);
@@ -1043,7 +1050,7 @@ describe("TrainLayout", () => {
     ).toEqual(["gatehouse", "station-house", "service-shed"]);
     expect(
       container.querySelectorAll("[data-station-framed-opening]"),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     expect(
       container.querySelectorAll("[data-station-asset='service']"),
     ).toHaveLength(8);
@@ -1119,12 +1126,18 @@ describe("TrainLayout", () => {
           segment.querySelector("[data-station-asset='building']"),
         ).not.toBeInTheDocument();
       }
-      expect(architecture).toContainElement(
-        segment.querySelector("[data-station-asset='canopy']"),
-      );
+      if ([0, 1, 2, 5].includes(index)) {
+        expect(architecture).toContainElement(
+          segment.querySelector("[data-station-asset='canopy']"),
+        );
+      } else {
+        expect(
+          segment.querySelector("[data-station-asset='canopy']"),
+        ).not.toBeInTheDocument();
+      }
       expect(
         architecture.querySelectorAll("[data-station-asset='lamp']"),
-      ).toHaveLength([1, 1, 2, 1, 1, 1][index]!);
+      ).toHaveLength([0, 1, 1, 1, 0, 1][index]!);
       expect(architecture).not.toContainElement(
         segment.querySelector("[data-station-asset='platform']"),
       );
@@ -1204,14 +1217,14 @@ describe("TrainLayout", () => {
         (segment) =>
           segment.querySelectorAll("[data-station-asset='lamp']").length,
       ),
-    ).toEqual([1, 1, 2, 1, 1, 1]);
+    ).toEqual([0, 1, 1, 1, 0, 1]);
     expect(
       stationSegments.map(
         (segment) =>
           segment.querySelectorAll("[data-station-asset='canopy-support']")
             .length,
       ),
-    ).toEqual([1, 2, 2, 2, 1, 1]);
+    ).toEqual([1, 2, 2, 0, 0, 2]);
     expect(
       [...container.querySelectorAll<HTMLElement>(
         "[data-station-asset='signal']",
@@ -1234,6 +1247,7 @@ describe("TrainLayout", () => {
     ).toEqual([
       "entry-vista",
       "waiting-vista",
+      "ticket-vista",
       "garden-vista",
       "service-vista",
       "exit-vista",
@@ -1254,13 +1268,115 @@ describe("TrainLayout", () => {
       ),
     ).toEqual([1, 1, 1, 1, 1, 1]);
     expect(trainLayoutCss).toMatch(
-      /\.train-station-building--station-house\s*\{[^}]*right:\s*18%;[^}]*left:\s*18%;/,
+      /\.train-station-building--station-house\s*\{[^}]*right:\s*26%;[^}]*left:\s*26%;/,
     );
     expect(trainLayoutCss).not.toMatch(
       /\.train-station-building\s*\{[^}]*(?:right|left):\s*-2px;/,
     );
     expect(trainLayoutCss).toMatch(
       /\.train-station-open-air-view\s*\{[^}]*background:\s*transparent;/,
+    );
+  });
+
+  it("limits campus masses and fixtures while preserving platform contact and negative space", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-station-trigger=approach",
+    );
+    installAnimationFrame();
+    mockVisibility();
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const stationSegments = [
+      ...container.querySelectorAll<HTMLElement>(
+        '.train-set-piece[data-set-piece-type="station"]',
+      ),
+    ].sort(
+      (left, right) =>
+        Number(left.dataset.setPieceSegment) -
+        Number(right.dataset.setPieceSegment),
+    );
+    const architectures = stationSegments.map(
+      (segment) =>
+        segment.querySelector<HTMLElement>("[data-station-architecture]")!,
+    );
+
+    expect(
+      architectures.map((architecture) => architecture.dataset.stationMassRole),
+    ).toEqual([
+      "entry-house",
+      "open-waiting",
+      "ticket-house",
+      "open-garden",
+      "service-house",
+      "open-departure",
+    ]);
+    expect(
+      architectures.map(
+        (architecture) => architecture.dataset.stationNegativeSpace,
+      ),
+    ).toEqual([
+      "entry-vista",
+      "waiting-vista",
+      "ticket-vista",
+      "garden-vista",
+      "service-vista",
+      "exit-vista",
+    ]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-asset='canopy'][data-station-canopy-role]",
+      )].map((canopy) => canopy.dataset.stationCanopyRole),
+    ).toEqual([
+      "entry-awning",
+      "waiting-shelter",
+      "ticket-awning",
+      "departure-shelter",
+    ]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-entrance]",
+      )].map((entrance) => entrance.dataset.stationEntrance),
+    ).toEqual(["side-entrance", "main-entrance", "service-entrance"]);
+    expect(
+      [...container.querySelectorAll<HTMLElement>(
+        "[data-station-platform-contact]",
+      )].every(
+        (platform) =>
+          platform.dataset.stationPlatformContact === "fixed-train-overlap",
+      ),
+    ).toBe(true);
+    expect(
+      stationSegments.every(
+        (segment) =>
+          segment.querySelectorAll("[data-station-asset='service']").length <=
+            2 &&
+          segment.querySelectorAll("[data-station-asset='lamp']").length <= 1,
+      ),
+    ).toBe(true);
+
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-building--gatehouse\s*\{[^}]*right:\s*8%;[^}]*left:\s*62%;[^}]*height:\s*50px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-building--station-house\s*\{[^}]*right:\s*26%;[^}]*left:\s*26%;[^}]*height:\s*60px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-building--service-shed\s*\{[^}]*right:\s*44%;[^}]*left:\s*16%;[^}]*height:\s*48px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-open-air-bay\s*\{[^}]*bottom:\s*20px;[^}]*height:\s*46px;[^}]*background:\s*transparent;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-canopy-support\s*\{[^}]*height:\s*calc\(var\(--train-station-canopy-bottom\) - 20px\);/,
+    );
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-station-architecture\[data-station-bay="(?:garden-platform|service-yard)"\]\s*\.train-station-canopy/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-layout-consist\s*\{[^}]*z-index:\s*2;[\s\S]*?margin-bottom:\s*var\(--train-track-h\);[\s\S]*?transform:\s*translateY\(var\(--train-consist-track-overlap\)\);/,
     );
   });
 
@@ -1299,9 +1415,9 @@ describe("TrainLayout", () => {
     );
 
     expect(buildings).toHaveLength(3);
-    expect(stationEmissives).toHaveLength(11);
-    expect(sunsetOwned).toHaveLength(5);
-    expect(nightOnly).toHaveLength(6);
+    expect(stationEmissives).toHaveLength(8);
+    expect(sunsetOwned).toHaveLength(4);
+    expect(nightOnly).toHaveLength(4);
     expect(trainLayoutCss).toMatch(
       /\.train-station-building\s*\{[^}]*background-color:\s*var\(--train-station-wall\);[^}]*opacity:\s*1;[^}]*filter:\s*none;/,
     );
@@ -1312,7 +1428,7 @@ describe("TrainLayout", () => {
     expect(stationBuildingRule).not.toContain("transparent");
     expect(
       container.querySelectorAll("[data-station-solid-surface='opaque']"),
-    ).toHaveLength(33);
+    ).toHaveLength(26);
 
     for (const mode of ["day", "sunset", "night"] as const) {
       world.dataset.timeOfDay = mode;
@@ -1383,7 +1499,7 @@ describe("TrainLayout", () => {
       /\.train-set-piece--station\.train-set-piece--(?:entry|exit)\s*\{[^}]*clip-path:/,
     );
     expect(trainLayoutCss).toMatch(
-      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-building--station-house\s*\{[\s\S]*?right:\s*20%;[\s\S]*?left:\s*20%;/,
+      /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-building--station-house\s*\{[\s\S]*?right:\s*28%;[\s\S]*?left:\s*28%;/,
     );
     expect(trainLayoutCss).not.toMatch(
       /@media \(max-width:\s*760px\)[\s\S]*?\.train-station-canopy\s*\{[^}]*(?:right|left):\s*-1px;/,
@@ -1405,6 +1521,26 @@ describe("TrainLayout", () => {
     const track = container.querySelector<HTMLElement>(".train-world-track")!;
     const layout = container.querySelector<HTMLElement>(".train-layout")!;
     const states = new Set<string>([world.dataset.stationState!]);
+    const stationStructure = () => ({
+      segments: container.querySelectorAll(
+        '.train-set-piece[data-set-piece-type="station"]',
+      ).length,
+      buildings: container.querySelectorAll(
+        "[data-station-asset='building']",
+      ).length,
+      canopies: container.querySelectorAll(
+        "[data-station-asset='canopy']",
+      ).length,
+      entrances: container.querySelectorAll("[data-station-entrance]").length,
+      openings: container.querySelectorAll("[data-station-negative-space]")
+        .length,
+      platformContacts: container.querySelectorAll(
+        "[data-station-platform-contact='fixed-train-overlap']",
+      ).length,
+    });
+    const campusByState = new Map<string, ReturnType<typeof stationStructure>>([
+      [world.dataset.stationState!, stationStructure()],
+    ]);
     const firstStation = world.dataset.stationEventId;
     let timestamp = 0;
 
@@ -1417,6 +1553,7 @@ describe("TrainLayout", () => {
       timestamp += 250;
       animation.run(timestamp);
       states.add(world.dataset.stationState!);
+      campusByState.set(world.dataset.stationState!, stationStructure());
     }
 
     expect(world).toHaveAttribute("data-station-state", "dwell");
@@ -1465,6 +1602,7 @@ describe("TrainLayout", () => {
       timestamp += 250;
       animation.run(timestamp);
       states.add(world.dataset.stationState!);
+      campusByState.set(world.dataset.stationState!, stationStructure());
     }
 
     expect(states).toEqual(
@@ -1477,6 +1615,22 @@ describe("TrainLayout", () => {
         "cruise",
       ]),
     );
+    for (const state of [
+      "approach",
+      "decelerate",
+      "platform",
+      "dwell",
+      "depart",
+    ]) {
+      expect(campusByState.get(state)).toEqual({
+        segments: 6,
+        buildings: 3,
+        canopies: 4,
+        entrances: 3,
+        openings: 6,
+        platformContacts: 6,
+      });
+    }
     expect(world.dataset.stationEventId).not.toBe(firstStation);
     expect(Number.parseFloat(world.dataset.routePosition!)).toBeGreaterThan(
       Number.parseFloat(dwellPosition!),

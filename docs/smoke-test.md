@@ -1249,6 +1249,45 @@ passed all 93 tests, the single-worker complete frontend suite passed all 470
 tests, the production TypeScript/Vite build passed, and repository-root
 `make test` passed.
 
+TRAIN-060 station campus run 2026-07-27: used only the dedicated
+`tmact-train-workitems` borz profile and `127.0.0.1:5234`, with canonical pane
+`%46` (`tmact-train-workitems:0.0`). Every requested viewport first returned
+HTTP 200, matched the plain non-cache-busted `TrainLayout.tsx` Vite module to
+the current station source, opened the route-position URL, set the viewport
+after opening, hard reloaded, and asserted the actual inner dimensions before
+capture.
+
+The measured `.train-layout` rectangles were `y=660.75`, height `149.25` at
+compact `390×844`; `y=572.921875`, height `184.078125` at desktop
+`1280×800`; and `y=672.921875`, height `184.078125` at ultrawide
+`2560×900`. Entry/centre/exit route positions were `2915/3715/4515`,
+`3360/4160/4960`, and `4000/4800/5600` respectively. Approach, platform,
+dwell, and departure were also reproduced through the actual station lifecycle.
+Each of the seven states was retained in day and night with the train both
+hidden and visible, producing 84 measured real-band crops under
+`/private/tmp/train-060-proof/`. All retained pixels were opened at original
+resolution through the six viewport/palette contact strips. The labelled
+committed comparison is
+[`train-060-station-contact-sheet.png`](train-060-station-contact-sheet.png).
+
+Direct pixel inspection shows three separated short station masses, open
+platform stretches, local supported shelters, explicit entrances, furniture,
+and scenery-visible negative space. Entry and exit remain square and complete;
+there is no broad featureless wall, floating canopy, clipped end, or return of
+the previous diagonal cut. Train-visible captures confirm that the fixed
+consist naturally overlaps the opaque platform edge while doors, windows,
+canopies, and station identity remain readable in compact, desktop, and
+ultrawide views.
+
+The final live composition contained three buildings, four canopies, seven
+canopy supports, four lamps, six openings, and three entrances, with no browser
+errors or leftover capture styles. Regression coverage locks campus mass roles,
+negative spaces, segment roles, fixed-train/platform overlap, sparse fixtures,
+day/sunset/night illumination, and approach/platform/dwell/depart lifecycle
+stability. The focused station run passed all 101 tests, the complete frontend
+suite passed all 471 tests, the production TypeScript/Vite build passed, and
+repository-root `make test` passed.
+
 ## Notes Template
 
 ```text

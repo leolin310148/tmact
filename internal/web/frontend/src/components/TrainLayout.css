@@ -1579,7 +1579,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 20px;
   z-index: 1;
   box-sizing: border-box;
-  height: 62px;
+  height: 54px;
   border: 3px solid var(--train-station-trim);
   border-bottom: 0;
   background-color: var(--train-station-wall);
@@ -1602,21 +1602,21 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-station-building--gatehouse {
-  right: 5%;
-  left: 57%;
-  height: 58px;
+  right: 8%;
+  left: 62%;
+  height: 50px;
 }
 
 .train-station-building--station-house {
-  right: 18%;
-  left: 18%;
-  height: 72px;
+  right: 26%;
+  left: 26%;
+  height: 60px;
 }
 
 .train-station-building--service-shed {
-  right: 34%;
-  left: 8%;
-  height: 56px;
+  right: 44%;
+  left: 16%;
+  height: 48px;
 }
 
 .train-station-building::before {
@@ -1791,47 +1791,50 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-station-open-air-bay {
   position: absolute;
   z-index: 0;
-  bottom: 0;
+  bottom: 20px;
   box-sizing: border-box;
-  height: 78px;
-  border-right: 4px solid var(--train-station-trim);
-  border-left: 4px solid var(--train-station-trim);
+  height: 46px;
+  border-right: 3px solid var(--train-station-trim);
+  border-left: 3px solid var(--train-station-trim);
   background: transparent;
-  box-shadow:
-    inset 3px 0 var(--train-station-wall-accent),
-    inset -3px 0 var(--train-station-wall-accent);
+  box-shadow: none;
 }
 
 .train-station-open-air-bay--entry-vista {
-  right: 55%;
-  left: 7%;
+  right: 68%;
+  left: 6%;
 }
 
 .train-station-open-air-bay--waiting-vista {
-  right: 8%;
-  left: 8%;
+  right: 10%;
+  left: 61%;
+}
+
+.train-station-open-air-bay--ticket-vista {
+  right: 76%;
+  left: 5%;
 }
 
 .train-station-open-air-bay--garden-vista {
-  right: 7%;
-  left: 7%;
+  right: 12%;
+  left: 12%;
 }
 
 .train-station-open-air-bay--service-vista {
-  right: 5%;
-  left: 70%;
+  right: 6%;
+  left: 72%;
 }
 
 .train-station-open-air-bay--exit-vista {
-  right: 8%;
-  left: 12%;
+  right: 52%;
+  left: 10%;
 }
 
 .train-station-open-air-view {
   position: absolute;
   inset: 0 7px;
   display: block;
-  border-top: 3px solid var(--train-station-trim);
+  border-top: 0;
   background: transparent;
 }
 
@@ -2049,10 +2052,11 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-station-canopy {
+  --train-station-canopy-bottom: 80px;
   position: absolute;
-  right: 8%;
-  bottom: 91px;
-  left: 8%;
+  right: 40%;
+  bottom: var(--train-station-canopy-bottom);
+  left: 10%;
   box-sizing: border-box;
   height: 8px;
   border-top: 3px solid
@@ -2078,46 +2082,37 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-station-architecture[data-station-bay="entrance"]
   .train-station-canopy {
-  right: 4%;
-  left: 23%;
+  --train-station-canopy-bottom: 76px;
+  right: 12%;
+  left: 58%;
 }
 
 .train-station-architecture[data-station-bay="west-waiting"]
   .train-station-canopy {
-  right: 8%;
-  left: 8%;
+  --train-station-canopy-bottom: 84px;
+  right: 46%;
+  left: 10%;
 }
 
 .train-station-architecture[data-station-bay="ticket-hall"]
   .train-station-canopy {
-  right: 12%;
-  bottom: 98px;
-  left: 12%;
-}
-
-.train-station-architecture[data-station-bay="garden-platform"]
-  .train-station-canopy {
-  right: 7%;
-  left: 7%;
-}
-
-.train-station-architecture[data-station-bay="service-yard"]
-  .train-station-canopy {
-  right: 24%;
-  left: 5%;
+  --train-station-canopy-bottom: 58px;
+  right: 34%;
+  left: 34%;
 }
 
 .train-station-architecture[data-station-bay="departure"]
   .train-station-canopy {
-  right: 22%;
-  left: 5%;
+  --train-station-canopy-bottom: 80px;
+  right: 58%;
+  left: 8%;
 }
 
 .train-station-canopy-support {
   position: absolute;
   top: 8px;
   width: 4px;
-  height: 76px;
+  height: calc(var(--train-station-canopy-bottom) - 20px);
   background: var(--train-palette-silhouette);
 }
 
@@ -4859,7 +4854,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   }
 
   .train-station-building--station-house {
-    right: 20%;
-    left: 20%;
+    right: 28%;
+    left: 28%;
   }
 }

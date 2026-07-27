@@ -761,12 +761,16 @@ const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
   {
     bay: "entrance",
     structure: "gatehouse",
+    massRole: "entry-house",
     hasBuilding: true,
+    hasCanopy: true,
+    canopyRole: "entry-awning",
     opening: "entry-vista",
     door: "single",
+    entrance: "side-entrance",
     hasWindows: false,
     windowLight: null,
-    lampSlots: ["trailing"],
+    lampSlots: [],
     supportSlots: ["trailing"],
     serviceElements: ["wayfinding"],
     signalAspect: "approach",
@@ -774,9 +778,13 @@ const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
   {
     bay: "west-waiting",
     structure: "waiting-bay",
+    massRole: "open-waiting",
     hasBuilding: false,
+    hasCanopy: true,
+    canopyRole: "waiting-shelter",
     opening: "waiting-vista",
     door: null,
+    entrance: null,
     hasWindows: false,
     windowLight: null,
     lampSlots: ["leading"],
@@ -787,12 +795,16 @@ const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
   {
     bay: "ticket-hall",
     structure: "station-house",
+    massRole: "ticket-house",
     hasBuilding: true,
-    opening: null,
+    hasCanopy: true,
+    canopyRole: "ticket-awning",
+    opening: "ticket-vista",
     door: "double",
+    entrance: "main-entrance",
     hasWindows: true,
     windowLight: "sunset-night",
-    lampSlots: ["leading", "trailing"],
+    lampSlots: ["trailing"],
     supportSlots: ["leading", "trailing"],
     serviceElements: ["timetable"],
     signalAspect: null,
@@ -800,39 +812,51 @@ const TRAIN_STATION_SEGMENT_COMPOSITIONS = [
   {
     bay: "garden-platform",
     structure: "garden-bay",
+    massRole: "open-garden",
     hasBuilding: false,
+    hasCanopy: false,
+    canopyRole: null,
     opening: "garden-vista",
     door: null,
+    entrance: null,
     hasWindows: false,
     windowLight: null,
     lampSlots: ["center"],
-    supportSlots: ["leading", "trailing"],
+    supportSlots: [],
     serviceElements: ["bench", "planter"],
     signalAspect: null,
   },
   {
     bay: "service-yard",
     structure: "service-shed",
+    massRole: "service-house",
     hasBuilding: true,
+    hasCanopy: false,
+    canopyRole: null,
     opening: "service-vista",
     door: "freight",
+    entrance: "service-entrance",
     hasWindows: true,
     windowLight: "night",
-    lampSlots: ["trailing"],
-    supportSlots: ["leading"],
+    lampSlots: [],
+    supportSlots: [],
     serviceElements: ["baggage-cart", "parcel-stack"],
     signalAspect: null,
   },
   {
     bay: "departure",
     structure: "exit-platform",
+    massRole: "open-departure",
     hasBuilding: false,
+    hasCanopy: true,
+    canopyRole: "departure-shelter",
     opening: "exit-vista",
     door: null,
+    entrance: null,
     hasWindows: false,
     windowLight: null,
     lampSlots: ["leading"],
-    supportSlots: ["leading"],
+    supportSlots: ["leading", "trailing"],
     serviceElements: ["wayfinding"],
     signalAspect: "proceed",
   },
@@ -2499,7 +2523,15 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             }
             data-station-assets={
               stationSegment
-                ? "platform,campus,canopy,fixtures,service"
+                ? [
+                    "platform",
+                    "campus",
+                    stationComposition?.hasCanopy ? "canopy" : null,
+                    "fixtures",
+                    "service",
+                  ]
+                    .filter(Boolean)
+                    .join(",")
                 : undefined
             }
             data-station-vertical-zone={
@@ -2537,6 +2569,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   <span
                     className="train-station-platform"
                     data-station-asset="platform"
+                    data-station-platform-contact="fixed-train-overlap"
                     data-station-solid-surface="opaque"
                   />
                 </span>
@@ -2547,7 +2580,14 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                   data-station-segment={stationSegment.segmentOffset}
                   data-station-bay={stationComposition?.bay}
                   data-station-structure={stationComposition?.structure}
+                  data-station-mass-role={stationComposition?.massRole}
                   data-station-opening={stationComposition?.opening ?? "none"}
+                  data-station-negative-space={
+                    stationComposition?.opening ?? "open-platform"
+                  }
+                  data-station-canopy-role={
+                    stationComposition?.canopyRole ?? "none"
+                  }
                 >
                   {stationComposition?.hasBuilding ? (
                     <span
@@ -2590,6 +2630,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                           ].join(" ")}
                           data-station-asset="door"
                           data-station-door={stationComposition.door}
+                          data-station-entrance={stationComposition.entrance}
                         />
                       ) : null}
                       {stationSegment.segmentOffset === 2 ? (
@@ -2649,25 +2690,28 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                       ) : null}
                     </span>
                   ))}
-                  <span
-                    className="train-station-canopy"
-                    data-station-asset="canopy"
-                    data-station-surface="opaque"
-                    data-station-solid-surface="opaque"
-                  >
-                    {stationComposition?.supportSlots.map((slot) => (
-                      <span
-                        className={[
-                          "train-station-canopy-support",
-                          `train-station-canopy-support--${slot}`,
-                        ].join(" ")}
-                        data-station-asset="canopy-support"
-                        data-station-fixture-slot={slot}
-                        data-station-solid-surface="opaque"
-                        key={slot}
-                      />
-                    ))}
-                  </span>
+                  {stationComposition?.hasCanopy ? (
+                    <span
+                      className="train-station-canopy"
+                      data-station-asset="canopy"
+                      data-station-canopy-role={stationComposition.canopyRole}
+                      data-station-surface="opaque"
+                      data-station-solid-surface="opaque"
+                    >
+                      {stationComposition.supportSlots.map((slot) => (
+                        <span
+                          className={[
+                            "train-station-canopy-support",
+                            `train-station-canopy-support--${slot}`,
+                          ].join(" ")}
+                          data-station-asset="canopy-support"
+                          data-station-fixture-slot={slot}
+                          data-station-solid-surface="opaque"
+                          key={slot}
+                        />
+                      ))}
+                    </span>
+                  ) : null}
                   {stationComposition?.lampSlots.map((slot) => (
                     <span
                       className={[

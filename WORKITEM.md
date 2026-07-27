@@ -202,7 +202,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   lattice, missing crossing void, duplicated truss, or train floating above/
   below the deck.
 
-- [ ] **TRAIN-060 — Refine the station into a lighter articulated campus.**
+- [x] **TRAIN-060 — Refine the station into a lighter articulated campus.**
   Preserve the repaired day/night joins and fixture lighting, but reduce the
   remaining continuous industrial-wall impression. Use shorter station-house
   masses, open platform stretches, canopy gaps, platform furniture, explicit
