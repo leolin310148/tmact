@@ -2662,6 +2662,8 @@ describe("TrainLayout", () => {
     const requestedRoles = [
       "forest-stream",
       "forest-canopy-cluster",
+      "forest-undergrowth",
+      "forest-clearing",
       "mountain-cliff",
       "mountain-rock-field",
       "mountain-open-vista",
@@ -2723,6 +2725,9 @@ describe("TrainLayout", () => {
       expect(sprite.dataset.sceneryTransition).toMatch(
         /^(entry|interior|exit)$/,
       );
+      expect(sprite.dataset.sceneryScaleFamily).toMatch(
+        /^(forest|mountain)-/,
+      );
     }
     expect(trainLayoutCss).toContain(
       '[data-regional-scenery-role="forest-stream"]',
@@ -2736,6 +2741,72 @@ describe("TrainLayout", () => {
     expect(trainLayoutCss).toContain(
       '[data-regional-scenery-role="mountain-rock-field"]',
     );
+
+    const near = TRAIN_PARALLAX_LAYERS.find(
+      (layer) => layer.name === "near",
+    )!;
+    const forestChunks = chunks.filter(
+      (chunk) => chunk.region === "forest",
+    );
+    const nearRender = render(
+      <>
+        {forestChunks.map((chunk) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            layer={near}
+            includeSetPieces={false}
+            key={chunk.index}
+          />
+        ))}
+      </>,
+    );
+    const groundDetails = [
+      ...nearRender.container.querySelectorAll<HTMLElement>(
+        "[data-forest-ground-role]",
+      ),
+    ];
+    expect(groundDetails).toHaveLength(forestChunks.length);
+    for (const [index, details] of groundDetails.entries()) {
+      expect(details.dataset.forestGroundOwner).toBe(
+        `${forestChunks[index]!.index}:near`,
+      );
+      expect(details.dataset.forestGroundFamily).toBeTruthy();
+      expect(details.dataset.forestGroundVariant).toMatch(/^[012]$/);
+      const accents = [
+        ...details.querySelectorAll<HTMLElement>(
+          "[data-forest-ground-detail]",
+        ),
+      ];
+      expect(accents).toHaveLength(3);
+      for (const accent of accents) {
+        expect(accent.dataset.forestGroundAnchor).toBe("contour");
+        expect(Number(accent.dataset.forestGroundHeight)).toBeCloseTo(
+          Number.parseFloat(accent.style.bottom),
+          3,
+        );
+        expect(accent.style.left).toMatch(/%$/);
+        if (accent instanceof HTMLImageElement) {
+          expect(accent.dataset.forestGroundAsset).toMatch(
+            /^vegetation-/,
+          );
+          expect(accent.width).toBeGreaterThan(0);
+          expect(accent.height).toBeGreaterThan(0);
+          expect(accent).toHaveAttribute("loading", "lazy");
+          expect(accent).toHaveAttribute("decoding", "async");
+        }
+      }
+    }
+    const forestGroundCss = trainLayoutCss.slice(
+      trainLayoutCss.indexOf(".train-forest-ground-details"),
+      trainLayoutCss.indexOf(
+        '.train-parallax-chunk--midground[data-regional-scenery-role="forest-canopy-cluster"]',
+      ),
+    );
+    expect(forestGroundCss).not.toContain("repeating-linear-gradient");
+    expect(forestGroundCss).toContain(
+      ".train-forest-ground-detail--sprite",
+    );
+    expect(forestGroundCss).toContain(".train-forest-ground-detail--meadow");
   });
 
   it("renders grounded town blocks and industrial fixtures with owner-attached light", () => {

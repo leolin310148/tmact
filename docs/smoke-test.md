@@ -1016,6 +1016,50 @@ twice put the pre-existing long-route scenery test just over its 5 second
 timeout; production TypeScript/Vite build and repository-root `make test`
 both passed.
 
+TRAIN-055 forest/mountain composition run 2026-07-27: used the dedicated
+`tmact-train-workitems` borz profile against only `127.0.0.1:5234`. Each
+forest/mountain and viewport pair independently confirmed HTTP 200, matched
+the plain non-cache-busted source module to the current forest vegetation
+owner and props-only near pool, opened the proof URL, set the viewport after
+opening, hard reloaded, and asserted the exact `window.innerWidth` and
+`window.innerHeight`. Forest positions were `6754/7199/7839px` and mountain
+positions were `24674/25119/25759px` at compact `390×844`, desktop
+`1280×800`, and ultrawide `2560×900`, respectively.
+
+Every day, sunset, and night capture temporarily hid
+`.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle`, then removed the proof style and verified their displays
+returned to `flex`, `block`, and `grid`. The measured `.train-layout` rectangles
+were `y=623.75`, height `149.25` compact; `y=572.921875`, height `184.078125`
+desktop; and `y=672.921875`, height `184.078125` ultrawide. The physical crops
+were therefore `390×150`, `1280×185`, and `2560×185`. All 18 source crops were
+opened individually at original resolution and remain in
+`/private/tmp/train-055-final/`; the labelled inspection sheet is committed as
+[`train-055-forest-mountain-contact-sheet.png`](train-055-forest-mountain-contact-sheet.png).
+
+Direct comparison with the corresponding TRAIN-053 contact-sheet tiles found
+that ordinary forest no longer reads as mountains and terrain alone. The
+foreground now has contour-anchored conifer, deciduous, hedgerow, reeds, and
+bounded meadow/clearing families in all three palettes and widths, while the
+generic near-track pool remains props-only and sparse. Mountain views replace
+the equal-scale snowy-peak and orange-mesa row with separated ridge, rock-face,
+alpine-vegetation, and negative-vista families. No retained crop introduced a
+fence-like vegetation row, crosshatch, scaffold, diamond grid, or full-surface
+stripe. The bridge lattice in the forest sample and tunnel body in the
+mountain sample are the unchanged, non-regional traversal defects reserved for
+TRAIN-059 and TRAIN-058.
+
+At the default `24px/s` cruise speed, a desktop sample advanced route position
+from `7205.361px` to `7225.401px` while the fixed consist stayed at `x=0`;
+the bounded DOM remained at 45 route chunks and 18 ordinary scenery assets.
+`borz errors --json` was empty. The focused scenery/layout/vegetation run
+passed 127 tests, the single-worker complete frontend suite passed all 467
+tests, the production TypeScript/Vite build passed, and repository-root
+`make test` passed. The deliberately long 3,601-chunk determinism test now has
+a focused 15-second timeout after the denser regional pools made its former
+5-second default intermittently expire; its route range and assertions are
+unchanged.
+
 ## Notes Template
 
 ```text

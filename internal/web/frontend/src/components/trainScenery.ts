@@ -771,6 +771,15 @@ export type TrainForestMountainSilhouetteFamily =
   | "open-ridge"
   | "lookout-perch";
 
+export type TrainForestMountainDepthFamily =
+  | "forest-distant-canopy"
+  | "forest-layered-grove"
+  | "forest-trackside-accent"
+  | "mountain-distant-ridge"
+  | "mountain-rock-face"
+  | "mountain-alpine-vegetation"
+  | "mountain-trackside-marker";
+
 export interface TrainForestMountainSceneryBeat {
   region: TrainForestMountainRegion;
   role: TrainForestMountainSceneryRole;
@@ -1502,11 +1511,16 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 0,
       },
       far: {
-        assetIds: ["terrain-foothills"],
-        density: 0.85,
-        maxPerChunk: 1,
-        minimumSpacingPx: 0,
-        cooldownChunks: 0,
+        assetIds: [
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+          "vegetation-deciduous",
+          "vegetation-hedgerow",
+        ],
+        density: 1.6,
+        maxPerChunk: 2,
+        minimumSpacingPx: 144,
+        cooldownChunks: 2,
       },
       midground: {
         assetIds: [
@@ -1549,15 +1563,20 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 1,
       },
       "ultra-far": {
-        assetIds: ["terrain-alpine"],
+        assetIds: ["terrain-alpine", "terrain-foothills"],
         density: 1,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
       },
       far: {
-        assetIds: ["terrain-foothills"],
-        density: 0.9,
+        assetIds: [
+          "terrain-foothills",
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+          "vegetation-coastal-pine",
+        ],
+        density: 0.78,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
@@ -1601,14 +1620,14 @@ export const TRAIN_REGION_SCENERY_PROFILES = {
         cooldownChunks: 1,
       },
       "ultra-far": {
-        assetIds: ["terrain-foothills", "terrain-mesa"],
+        assetIds: ["terrain-foothills"],
         density: 1,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
         cooldownChunks: 0,
       },
       far: {
-        assetIds: ["terrain-foothills", "terrain-mesa"],
+        assetIds: ["terrain-foothills"],
         density: 0.72,
         maxPerChunk: 1,
         minimumSpacingPx: 0,
@@ -1841,7 +1860,9 @@ export interface TrainSceneryPlacement {
     | TrainForestMountainSilhouetteFamily
     | TrainTownIndustrialCompositionFamily
     | TrainCoastShoreFamily;
-  regionalScaleFamily?: TrainTownIndustrialScaleFamily;
+  regionalScaleFamily?:
+    | TrainForestMountainDepthFamily
+    | TrainTownIndustrialScaleFamily;
   regionalWaterKind?: TrainCoastWaterKind;
   regionalTemplateVariant?: number;
   regionalTransition?:
@@ -2639,13 +2660,13 @@ function forestMountainCountForLayer(
   if (!beat || layer === "sky") return fallback;
   const counts: Partial<Record<TrainParallaxLayerName, number>> =
     beat.role === "forest-transition-grove"
-      ? { "ultra-far": 1, far: 1, midground: 1, near: 0 }
+      ? { "ultra-far": 0, far: 1, midground: 1, near: 0 }
       : beat.role === "forest-canopy-cluster"
-        ? { "ultra-far": 1, far: 1, midground: 2, near: 0 }
+        ? { "ultra-far": 0, far: 2, midground: 2, near: 0 }
         : beat.role === "forest-undergrowth"
           ? { "ultra-far": 0, far: 1, midground: 2, near: 0 }
           : beat.role === "forest-stream"
-            ? { "ultra-far": 0, far: 0, midground: 1, near: 0 }
+            ? { "ultra-far": 0, far: 1, midground: 1, near: 0 }
             : beat.role === "forest-clearing"
               ? { "ultra-far": 1, far: 0, midground: 0, near: 1 }
               : beat.role === "forest-fence-line"
@@ -2657,13 +2678,13 @@ function forestMountainCountForLayer(
                     : beat.role === "mountain-layered-ridge"
                       ? { "ultra-far": 1, far: 1, midground: 1, near: 0 }
                       : beat.role === "mountain-cliff"
-                        ? { "ultra-far": 1, far: 0, midground: 1, near: 0 }
+                        ? { "ultra-far": 0, far: 0, midground: 1, near: 0 }
                         : beat.role === "mountain-rock-field"
                           ? { "ultra-far": 0, far: 1, midground: 0, near: 1 }
                           : beat.role === "mountain-alpine-scrub"
                             ? {
-                                "ultra-far": 1,
-                                far: 0,
+                                "ultra-far": 0,
+                                far: 1,
                                 midground: 1,
                                 near: 0,
                               }
@@ -2676,7 +2697,7 @@ function forestMountainCountForLayer(
                                 }
                               : beat.role === "mountain-lookout-approach"
                                 ? {
-                                    "ultra-far": 1,
+                                    "ultra-far": 0,
                                     far: 1,
                                     midground: 1,
                                     near: 1,
@@ -2691,6 +2712,50 @@ function forestMountainAssetPool(
   fallback: readonly string[],
 ): readonly string[] {
   if (!beat) return fallback;
+  if (layer === "ultra-far") {
+    if (beat.region === "forest") return ["terrain-foothills"];
+    if (beat.role === "mountain-layered-ridge") {
+      return ["terrain-alpine", "terrain-foothills"];
+    }
+    if (beat.role === "mountain-open-vista") return ["terrain-foothills"];
+    return fallback;
+  }
+  if (layer === "far") {
+    if (beat.region === "forest") {
+      switch (beat.role) {
+        case "forest-transition-grove":
+          return ["vegetation-conifer-tall", "vegetation-conifer-squat"];
+        case "forest-undergrowth":
+        case "forest-stream":
+          return ["vegetation-hedgerow", "vegetation-deciduous"];
+        default:
+          return [
+            "vegetation-conifer-tall",
+            "vegetation-conifer-squat",
+            "vegetation-deciduous",
+          ];
+      }
+    }
+    switch (beat.role) {
+      case "mountain-transition-pines":
+        return [
+          "vegetation-coastal-pine",
+          "vegetation-conifer-tall",
+          "vegetation-conifer-squat",
+        ];
+      case "mountain-layered-ridge":
+      case "mountain-rock-field":
+        return ["terrain-foothills"];
+      case "mountain-alpine-scrub":
+      case "mountain-lookout-approach":
+        return [
+          "vegetation-coastal-pine",
+          "vegetation-conifer-squat",
+        ];
+      default:
+        return fallback;
+    }
+  }
   if (layer === "midground") {
     switch (beat.role) {
       case "forest-transition-grove":
@@ -2745,13 +2810,39 @@ function forestMountainAssetPool(
   return fallback;
 }
 
+function forestMountainDepthFamily(
+  beat: TrainForestMountainSceneryBeat,
+  layer: TrainParallaxLayerName,
+): TrainForestMountainDepthFamily {
+  if (beat.region === "forest") {
+    if (layer === "ultra-far" || layer === "far") {
+      return "forest-distant-canopy";
+    }
+    return layer === "near"
+      ? "forest-trackside-accent"
+      : "forest-layered-grove";
+  }
+  if (layer === "ultra-far") return "mountain-distant-ridge";
+  if (layer === "near") return "mountain-trackside-marker";
+  if (
+    beat.role === "mountain-cliff" ||
+    beat.role === "mountain-rock-field" ||
+    beat.role === "mountain-layered-ridge"
+  ) {
+    return "mountain-rock-face";
+  }
+  return "mountain-alpine-vegetation";
+}
+
 function forestMountainPlacementMetadata(
   beat: TrainForestMountainSceneryBeat | null,
+  layer: TrainParallaxLayerName,
   roleOverride?: TrainForestMountainSceneryRole,
 ): Pick<
   TrainSceneryPlacement,
   | "regionalRole"
   | "silhouetteFamily"
+  | "regionalScaleFamily"
   | "regionalTemplateVariant"
   | "regionalTransition"
 > {
@@ -2761,6 +2852,7 @@ function forestMountainPlacementMetadata(
     regionalRole: role,
     silhouetteFamily:
       TRAIN_FOREST_MOUNTAIN_ROLE_GRAMMAR[role][0],
+    regionalScaleFamily: forestMountainDepthFamily(beat, layer),
     regionalTemplateVariant: beat.templateVariant,
     regionalTransition: beat.transition,
   };
@@ -3185,6 +3277,7 @@ function regionLayerPlan(
           setPiece: null,
           ...forestMountainPlacementMetadata(
             regionalBeat,
+            layer,
             chunk.region === "forest"
               ? "forest-landmark"
               : chunk.region === "mountain"
@@ -3282,7 +3375,7 @@ function regionLayerPlan(
         minimumSpacingPx: rule.minimumSpacingPx,
         landmark: false,
         setPiece: null,
-        ...forestMountainPlacementMetadata(regionalBeat),
+        ...forestMountainPlacementMetadata(regionalBeat, layer),
         ...townIndustrialPlacementMetadata(builtEnvironmentBeat),
         ...coastPlacementMetadata(coastBeat),
       });

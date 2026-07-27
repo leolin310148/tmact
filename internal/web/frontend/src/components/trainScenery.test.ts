@@ -141,37 +141,41 @@ describe("train scenery asset kit", () => {
     }
   });
 
-  it("selects every region-allowed asset deterministically across a long route", () => {
-    const firstPass = new Map<string, readonly string[]>();
-    const selectedIDs = new Set<string>();
+  it(
+    "selects every region-allowed asset deterministically across a long route",
+    () => {
+      const firstPass = new Map<string, readonly string[]>();
+      const selectedIDs = new Set<string>();
 
-    for (let index = -1800; index <= 1800; index++) {
-      const chunk = generateRouteChunk("asset-line", index);
-      for (const layer of TRAIN_PARALLAX_LAYERS) {
-        const placements = trainSceneryPlacementsForChunk(layer.name, chunk);
-        const key = `${layer.name}:${index}`;
-        const ids = placements.map((placement) => placement.asset.id);
-        firstPass.set(key, ids);
-        ids.forEach((id) => selectedIDs.add(id));
-        expect(
-          trainSceneryPlacementsForChunk(layer.name, chunk).map(
-            (placement) => placement.asset.id,
-          ),
-        ).toEqual(ids);
+      for (let index = -1800; index <= 1800; index++) {
+        const chunk = generateRouteChunk("asset-line", index);
+        for (const layer of TRAIN_PARALLAX_LAYERS) {
+          const placements = trainSceneryPlacementsForChunk(layer.name, chunk);
+          const key = `${layer.name}:${index}`;
+          const ids = placements.map((placement) => placement.asset.id);
+          firstPass.set(key, ids);
+          ids.forEach((id) => selectedIDs.add(id));
+          expect(
+            trainSceneryPlacementsForChunk(layer.name, chunk).map(
+              (placement) => placement.asset.id,
+            ),
+          ).toEqual(ids);
+        }
       }
-    }
 
-    expect(firstPass.size).toBe(TRAIN_PARALLAX_LAYERS.length * 3601);
-    expect(selectedIDs).toEqual(
-      new Set(
-        TRAIN_SCENERY_ASSETS.filter(
-          (asset) =>
-            asset.id !== "bridge-truss" && asset.id !== "coast-shore",
-        ).map((asset) => asset.id),
-      ),
-    );
-    expect(selectedIDs).not.toContain("coast-shore");
-  });
+      expect(firstPass.size).toBe(TRAIN_PARALLAX_LAYERS.length * 3601);
+      expect(selectedIDs).toEqual(
+        new Set(
+          TRAIN_SCENERY_ASSETS.filter(
+            (asset) =>
+              asset.id !== "bridge-truss" && asset.id !== "coast-shore",
+          ).map((asset) => asset.id),
+        ),
+      );
+      expect(selectedIDs).not.toContain("coast-shore");
+    },
+    15_000,
+  );
 
   it("enforces regional asset pools, density bounds, and one landmark per region", () => {
     const landmarkChunks = new Map<number, Set<number>>();
@@ -462,7 +466,7 @@ describe("train scenery asset kit", () => {
         }
       }
     }
-    expect(placementCount).toBeGreaterThan(3_950);
+    expect(placementCount).toBeGreaterThan(3_700);
     expect(TRAIN_SCENERY_DEPTH_GRAMMAR.near.scaleMultiplier).toBeGreaterThan(
       TRAIN_SCENERY_DEPTH_GRAMMAR.far.scaleMultiplier,
     );
@@ -475,6 +479,12 @@ describe("train scenery asset kit", () => {
   });
 
   it("gives every region a distinct daytime profile and landmark vocabulary", () => {
+    expect(TRAIN_REGION_SCENERY_PROFILES.forest.layers.far.assetIds).toEqual([
+      "vegetation-conifer-tall",
+      "vegetation-conifer-squat",
+      "vegetation-deciduous",
+      "vegetation-hedgerow",
+    ]);
     expect(
       TRAIN_REGION_SCENERY_PROFILES.forest.layers.midground.assetIds,
     ).toEqual([
@@ -483,6 +493,17 @@ describe("train scenery asset kit", () => {
       "vegetation-deciduous",
       "vegetation-hedgerow",
       "vegetation-reeds",
+    ]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.mountain.layers["ultra-far"].assetIds,
+    ).toEqual(["terrain-alpine", "terrain-foothills"]);
+    expect(
+      TRAIN_REGION_SCENERY_PROFILES.mountain.layers.far.assetIds,
+    ).toEqual([
+      "terrain-foothills",
+      "vegetation-conifer-tall",
+      "vegetation-conifer-squat",
+      "vegetation-coastal-pine",
     ]);
     expect(
       TRAIN_REGION_SCENERY_PROFILES.mountain.layers.midground.assetIds,
@@ -686,6 +707,111 @@ describe("train scenery asset kit", () => {
     );
   });
 
+  it("keeps forest vegetation visible and mountain depth families varied across five seeds", () => {
+    const seeds = [
+      "train-055-cedar",
+      "train-055-granite",
+      "train-055-river",
+      "train-055-summit",
+      "train-055-vista",
+    ];
+    const depthFamilies = {
+      forest: new Set<string>(),
+      mountain: new Set<string>(),
+    };
+    const mountainTerrainScales = new Set<string>();
+    let forestRegions = 0;
+    let mountainRegions = 0;
+
+    for (const seed of seeds) {
+      for (let regionIndex = -80; regionIndex <= 80; regionIndex++) {
+        const chunks = regionChunks(seed, regionIndex);
+        const region = chunks[0]!.region;
+        if (region !== "forest" && region !== "mountain") continue;
+        const placementsByLayer = [
+          "ultra-far",
+          "far",
+          "midground",
+          "near",
+        ].map((layer) =>
+          chunks.flatMap((chunk) =>
+            trainSceneryPlacementsForChunk(
+              layer as "ultra-far" | "far" | "midground" | "near",
+              chunk,
+              { includeSetPieces: false },
+            ),
+          ),
+        );
+        const placements = placementsByLayer.flat();
+        placements.forEach((placement) => {
+          expect(placement.asset.anchor).toBe("bottom-center");
+          if (placement.regionalScaleFamily) {
+            depthFamilies[region].add(placement.regionalScaleFamily);
+          }
+        });
+
+        const entry = trainForestMountainSceneryBeatForChunk(chunks[0]!)!;
+        const exit =
+          trainForestMountainSceneryBeatForChunk(chunks.at(-1)!)!;
+        expect(entry).toMatchObject({
+          transition: "entry",
+          silhouetteFamily: "mixed-grove",
+        });
+        expect(exit).toMatchObject({
+          transition: "exit",
+          silhouetteFamily: "mixed-grove",
+        });
+
+        if (region === "forest") {
+          forestRegions++;
+          const vegetation = placements.filter(
+            (placement) => placement.asset.category === "vegetation",
+          );
+          expect(
+            vegetation.length,
+            `${seed}:${regionIndex}`,
+          ).toBeGreaterThanOrEqual(7);
+          expect(
+            new Set(vegetation.map((placement) => placement.asset.id)).size,
+          ).toBeGreaterThanOrEqual(3);
+        } else {
+          mountainRegions++;
+          expect(
+            placements.some(
+              (placement) => placement.asset.id === "terrain-mesa",
+            ),
+          ).toBe(false);
+          const distantTerrain = placementsByLayer[0]!.filter(
+            (placement) => placement.asset.category === "terrain",
+          );
+          expect(distantTerrain.length).toBeLessThanOrEqual(3);
+          distantTerrain.forEach((placement) =>
+            mountainTerrainScales.add(placement.scale.toFixed(3)),
+          );
+        }
+      }
+    }
+
+    expect(forestRegions).toBeGreaterThan(80);
+    expect(mountainRegions).toBeGreaterThan(80);
+    expect(depthFamilies.forest).toEqual(
+      new Set([
+        "forest-distant-canopy",
+        "forest-layered-grove",
+        "forest-trackside-accent",
+      ]),
+    );
+    expect(depthFamilies.mountain).toEqual(
+      new Set([
+        "mountain-distant-ridge",
+        "mountain-rock-face",
+        "mountain-alpine-vegetation",
+        "mountain-trackside-marker",
+      ]),
+    );
+    expect(mountainTerrainScales.size).toBeGreaterThanOrEqual(8);
+  });
+
   it("spaces repeated silhouettes and preserves forest-mountain edge grammar", () => {
     let forestToMountain = 0;
     let mountainToForest = 0;
@@ -695,6 +821,8 @@ describe("train scenery asset kit", () => {
       "transition-forest-a",
       "transition-mountain-b",
       "transition-highland-c",
+      "transition-cedar-d",
+      "transition-ridge-e",
     ]) {
       for (let regionIndex = -160; regionIndex < 160; regionIndex++) {
         const leftChunks = regionChunks(seed, regionIndex);

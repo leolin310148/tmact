@@ -66,12 +66,14 @@ import {
   TRAIN_SCENERY_BUILDINGS,
   TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_SCENERY_LANDMARKS,
+  TRAIN_SCENERY_VEGETATION,
   trainCoastSceneryBeatForChunk,
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
   trainTownIndustrialSceneryBeatForChunk,
   type TrainCoastSceneryBeat,
+  type TrainForestMountainSceneryBeat,
   type TrainNightLifePlan,
   type TrainSceneryAsset,
   type TrainSceneryPlacement,
@@ -1813,6 +1815,124 @@ function TrainCoastComposition({
   );
 }
 
+const TRAIN_FOREST_GROUND_VEGETATION = new Map(
+  TRAIN_SCENERY_VEGETATION.map((asset) => [asset.id, asset]),
+);
+
+function TrainForestGroundDetails({
+  beat,
+  chunk,
+  contour,
+}: {
+  beat: TrainForestMountainSceneryBeat;
+  chunk: RouteChunk;
+  contour: TrainTerrainContour;
+}) {
+  const variant = (beat.templateVariant + chunk.variant) % 3;
+  const positions =
+    variant === 0 ? [14, 46, 81] : variant === 1 ? [24, 61, 88] : [9, 39, 72];
+  const kinds =
+    beat.role === "forest-clearing"
+      ? (["tree-small", "meadow", "tree-small"] as const)
+      : beat.role === "forest-stream"
+        ? (["reeds", "tree-small", "reeds"] as const)
+        : beat.role === "forest-undergrowth"
+          ? (["tree-small", "shrub", "tree-small"] as const)
+          : (["tree-tall", "shrub", "tree-small"] as const);
+  const assetFor = (
+    kind: (typeof kinds)[number],
+    index: number,
+  ): TrainSceneryAsset | null => {
+    if (kind === "meadow") return null;
+    const id =
+      kind === "reeds"
+        ? "vegetation-reeds"
+        : kind === "shrub"
+          ? "vegetation-hedgerow"
+          : kind === "tree-tall"
+            ? variant === 1
+              ? "vegetation-deciduous"
+              : "vegetation-conifer-tall"
+            : (variant + index) % 2 === 0
+              ? "vegetation-conifer-squat"
+              : "vegetation-deciduous";
+    return TRAIN_FOREST_GROUND_VEGETATION.get(id) ?? null;
+  };
+
+  return (
+    <span
+      className="train-forest-ground-details"
+      data-forest-ground-role={beat.role}
+      data-forest-ground-family={beat.silhouetteFamily}
+      data-forest-ground-variant={variant}
+      data-forest-ground-owner={`${chunk.index}:near`}
+      aria-hidden="true"
+    >
+      {kinds.map((kind, index) => {
+        const xPercent = positions[index]!;
+        const groundHeight = trainTerrainHeightAtPercent(contour, xPercent);
+        const asset = assetFor(kind, index);
+        const scale =
+          kind === "tree-tall"
+            ? 0.66
+            : kind === "tree-small"
+              ? 0.58
+              : kind === "shrub"
+                ? 0.52
+                : kind === "reeds"
+                  ? 0.54
+                  : 1;
+        const style = {
+          left: `${xPercent}%`,
+          bottom: `${groundHeight}px`,
+          "--train-forest-detail-scale":
+            scale + ((variant + index) % 3) * 0.04,
+        } as CSSProperties;
+        if (asset) {
+          return (
+            <img
+              className={[
+                "train-forest-ground-detail",
+                "train-forest-ground-detail--sprite",
+                `train-forest-ground-detail--${kind}`,
+                `train-forest-ground-detail--ordinal-${index}`,
+              ].join(" ")}
+              src={asset.src}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              loading="lazy"
+              decoding="async"
+              width={asset.width}
+              height={asset.height}
+              data-forest-ground-detail={kind}
+              data-forest-ground-asset={asset.id}
+              data-forest-ground-anchor="contour"
+              data-forest-ground-height={groundHeight.toFixed(3)}
+              style={style}
+              key={`${kind}-${index}`}
+            />
+          );
+        }
+        return (
+          <span
+            className={[
+              "train-forest-ground-detail",
+              `train-forest-ground-detail--${kind}`,
+              `train-forest-ground-detail--ordinal-${index}`,
+            ].join(" ")}
+            data-forest-ground-detail={kind}
+            data-forest-ground-anchor="contour"
+            data-forest-ground-height={groundHeight.toFixed(3)}
+            style={style}
+            key={`${kind}-${index}`}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 export const TrainRouteChunk = memo(function TrainRouteChunk({
   chunk: sourceChunk,
   layer,
@@ -2011,6 +2131,16 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             />
           ) : null}
         </span>
+      ) : null}
+      {regionalSceneryBeat?.region === "forest" &&
+      terrainContour &&
+      layer.name === "near" &&
+      !projection ? (
+        <TrainForestGroundDetails
+          beat={regionalSceneryBeat}
+          chunk={chunk}
+          contour={terrainContour}
+        />
       ) : null}
       {coastBeat &&
       terrainContour &&

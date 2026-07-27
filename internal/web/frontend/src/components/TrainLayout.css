@@ -3201,6 +3201,72 @@ html[data-pane-switcher-layout="train"] .statusline {
   background: #ff9b55;
 }
 
+.train-forest-ground-details {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.train-forest-ground-detail {
+  position: absolute;
+  display: block;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.train-forest-ground-detail--sprite {
+  width: auto;
+  height: auto;
+  max-width: none;
+  transform: translateX(-50%) scale(var(--train-forest-detail-scale));
+  transform-origin: 50% 100%;
+  image-rendering: pixelated;
+  filter:
+    saturate(var(--train-depth-saturation))
+    brightness(var(--train-depth-brightness))
+    contrast(var(--train-depth-contrast))
+    saturate(var(--train-time-scenery-saturation))
+    brightness(var(--train-time-scenery-brightness))
+    sepia(var(--train-time-scenery-warmth));
+  transition: filter 450ms ease;
+}
+
+.train-forest-ground-detail--meadow {
+  width: 104px;
+  height: 9px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-forest-soil),
+    var(--train-palette-life-forest) 38%
+  );
+  clip-path: polygon(
+    0 60%,
+    11% 60%,
+    11% 22%,
+    16% 22%,
+    16% 67%,
+    36% 67%,
+    36% 11%,
+    42% 11%,
+    42% 55%,
+    66% 55%,
+    66% 24%,
+    71% 24%,
+    71% 69%,
+    91% 69%,
+    91% 38%,
+    96% 38%,
+    96% 72%,
+    100% 72%,
+    100% 100%,
+    0 100%
+  );
+}
+
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-canopy-cluster"]
   .train-terrain-base::after,
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-undergrowth"]

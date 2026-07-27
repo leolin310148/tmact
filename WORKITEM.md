@@ -113,7 +113,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   images and explicitly reject any remaining fence, scaffold, diamond-grid,
   or full-surface stripe reading before checking the item.
 
-- [ ] **TRAIN-055 — Restore ordinary forest and mountain compositions after material cleanup.**
+- [x] **TRAIN-055 — Restore ordinary forest and mountain compositions after material cleanup.**
   Recompose ordinary forest so it visibly contains layered tree and shrub
   families, clearings, ground vegetation, and occasional human-scale details;
   the forest sample must not be only mountains and terrain. Recompose mountain
