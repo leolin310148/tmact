@@ -217,7 +217,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   both train-hidden and train-visible crops; reject a broad featureless wall,
   clipped ends, floating canopy, or any return of the previous diagonal cut.
 
-- [ ] **TRAIN-061 — Perform an adversarial visual audit and lock only observed fixes.**
+- [x] **TRAIN-061 — Perform an adversarial visual audit and lock only observed fixes.**
   Run a fresh red-team audit rather than extending the previous pass report.
   Cover at least five seeds; ordinary forest, mountain, town, coast, and
   industrial scenes; all boundaries; station phases; and both variants of

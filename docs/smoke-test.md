@@ -1288,6 +1288,71 @@ stability. The focused station run passed all 101 tests, the complete frontend
 suite passed all 471 tests, the production TypeScript/Vite build passed, and
 repository-root `make test` passed.
 
+TRAIN-061 adversarial visual audit run 2026-07-27: audited the converged train
+scene as a red-team pass rather than assuming the preceding item proofs were
+still sufficient. The run used only the dedicated `tmact-train-workitems`
+borz profile and `127.0.0.1:5234`. Before trusting each compact `390×844`,
+desktop `1280×800`, and ultrawide `2560×900` pass, it independently received
+HTTP 200, fetched the plain non-cache-busted Vite module and matched it to the
+current traversal ownership source, opened the page, set the viewport after
+opening, hard reloaded, and asserted the actual inner dimensions.
+
+The audit covered all five deterministic seeds from TRAIN-053, all five
+ordinary regions, both variants of bridge, tunnel, town-edge, coast-reveal,
+and station, plus station approach/decelerate/platform/dwell/depart/cruise
+states. It also searched the deterministic routes and inspected all seven
+observed region boundary families: mountain→forest, coast→mountain,
+town→mountain, industrial→forest, industrial→mountain, town→forest, and
+forest→mountain. Default-speed motion remained live: a desktop sample advanced
+route and near-layer positions together from `7202.955px` to `7223.799px`
+over 850ms, with the fixed train still separated from the moving world.
+
+The measured `.train-layout` rectangles were `y=623.75`, height `149.25`
+compact; `y=572.921875`, height `184.078125` desktop; and `y=672.921875`,
+height `184.078125` ultrawide. Scenery captures hid the train and inspection
+controls, then restored the live DOM; train-visible bridge, tunnel, station,
+platform, shore, and boundary captures separately checked contact geometry.
+Every retained compact, desktop, ultrawide, phase, boundary, and historical
+comparison crop was opened at original resolution and judged on its pixels.
+The labelled committed comparison places the real TRAIN-053 failure bands
+beside the corresponding final bands:
+[`train-061-before-after-contact-sheet.png`](train-061-before-after-contact-sheet.png).
+
+The red-team pass found three remaining defects instead of broadening scope.
+First, bridge variant 0 exposed too little river and variant 1 still read as a
+horizontal wall rather than a gorge. The crossing is now deeper, the river and
+dark gorge surfaces are locally visible, and supports terminate below a thin
+deck/parapet. Second, all three tunnel segment apertures were visible at once,
+recreating the wide multi-bore defect. Live route position now selects the
+entry, body, or exit aperture, hides inactive portal geometry, and orients end
+portals inward while preserving one bounded bore. Third, a compact forest
+bridge reservation could leave the focused crossing almost vegetation-free.
+Existing conifer and hedgerow raster assets now frame bridge approaches and
+root body vegetation on the gorge rim without creating a viewport lattice.
+
+Fresh train-hidden and train-visible captures confirmed that river, gorge,
+deck, wheel/rail, bore, portal, forest rim, platform, and shoreline contacts
+remain possible at all retained widths. The station continues to preserve
+short masses and negative space throughout the live stop lifecycle; town and
+industrial structures retain one pixel-density family and contour-owned
+foundations; coast fixtures remain separated into dry-land and waterline
+owners; coast reveal remains visibly sparser than ordinary coast. No retained
+band shows terrain crosshatch, a viewport-wide bridge lattice, three tunnel
+openings, a station wall, a floating shoreline fixture, or a deterministic
+boundary seam.
+
+Two proof failures were treated as diagnostics and discarded: an early station
+lifecycle script overshot the requested phases, and the initial compact forest
+bridge result remained too sparse. The station phases were reproduced from
+the live state machine, and the bridge was fixed and recaptured before
+acceptance. Browser error inspection was empty; console output contained only
+Vite connection/HMR and React development notices. Focused layout and visual
+convergence coverage passed all 97 tests, including new locks for regional
+rhythm, pixel-density/ground ownership, coast contact, station negative space,
+single active tunnel aperture, bridge crossing depth, and forest rim framing.
+The single-worker complete frontend suite passed all 472 tests, the production
+TypeScript/Vite build passed, and repository-root `make test` passed.
+
 ## Notes Template
 
 ```text

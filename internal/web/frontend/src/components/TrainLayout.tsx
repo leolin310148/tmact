@@ -1340,9 +1340,13 @@ const TRAIN_TRAVERSAL_TYPES = new Set<TrainSetPieceType>([
 function TrainTraversalComposition({
   segment,
   layer,
+  activeRole,
+  region,
 }: {
   segment: NonNullable<RouteChunk["setPiece"]>;
   layer: TrainParallaxLayerName;
+  activeRole: NonNullable<RouteChunk["setPiece"]>["role"] | null;
+  region: RouteChunk["region"];
 }) {
   if (!TRAIN_TRAVERSAL_TYPES.has(segment.type)) return null;
 
@@ -1358,6 +1362,10 @@ function TrainTraversalComposition({
       data-traversal-role={segment.role}
       data-traversal-variant={segment.visualVariant}
       data-traversal-segment={segment.segmentOffset}
+      data-traversal-active={
+        activeRole === null || segment.role === activeRole ? "true" : "false"
+      }
+      data-traversal-viewport-state={activeRole ?? undefined}
       data-traversal-track-contact="17"
       data-traversal-geometry-owner={`${segment.id}:${layer}:${segment.segmentOffset}`}
       data-tunnel-state={segment.type === "tunnel" ? segment.role : undefined}
@@ -1452,6 +1460,36 @@ function TrainTraversalComposition({
                 <i data-bridge-support="centre" />
                 <i data-bridge-support="right" />
               </span>
+              {region === "forest" ? (
+                <span
+                  className="train-bridge-forest-framing"
+                  data-bridge-forest-framing={segment.role}
+                  data-bridge-forest-ground={
+                    segment.role === "body" ? "gorge-rim" : "approach"
+                  }
+                >
+                  <img
+                    src={
+                      TRAIN_SCENERY_VEGETATION.find(
+                        (asset) => asset.id === "vegetation-conifer-tall",
+                      )!.src
+                    }
+                    alt=""
+                    draggable={false}
+                    data-bridge-forest-detail="tree"
+                  />
+                  <img
+                    src={
+                      TRAIN_SCENERY_VEGETATION.find(
+                        (asset) => asset.id === "vegetation-hedgerow",
+                      )!.src
+                    }
+                    alt=""
+                    draggable={false}
+                    data-bridge-forest-detail="shrub"
+                  />
+                </span>
+              ) : null}
             </>
           ) : (
             <span
@@ -2244,6 +2282,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
   includeSetPieces = true,
   projection,
   suppressScenery = false,
+  activeTraversalRole = null,
 }: {
   chunk: RouteChunk;
   layer: TrainParallaxLayer;
@@ -2253,6 +2292,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
     focus: TrainSetPieceFocus;
   };
   suppressScenery?: boolean;
+  activeTraversalRole?: NonNullable<RouteChunk["setPiece"]>["role"] | null;
 }) {
   const chunk = includeSetPieces
     ? sourceChunk
@@ -2542,6 +2582,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               <TrainTraversalComposition
                 segment={traversalSegment}
                 layer={layer.name}
+                activeRole={activeTraversalRole}
+                region={chunk.region}
               />
             ) : null}
             {chunk.setPiece.type === "town-edge" ? (
@@ -3087,6 +3129,21 @@ interface TrainProjectedSetPieceSegment {
   chunk: RouteChunk;
   coordinatePx: number;
   focus: TrainSetPieceFocus;
+}
+
+export function trainTraversalActiveRole(
+  focus: TrainSetPieceFocus,
+  routePosition: number,
+): NonNullable<RouteChunk["setPiece"]>["role"] {
+  const renderLayer = TRAIN_PARALLAX_LAYERS.find(
+    (layer) => layer.name === focus.renderLayer,
+  );
+  if (!renderLayer) return "body";
+  const segmentJourneyWidth = TRAIN_ROUTE_CHUNK_WIDTH / renderLayer.speedRatio;
+  const delta = routePosition - focus.journeyPosition;
+  if (delta < -segmentJourneyWidth / 2) return "entry";
+  if (delta > segmentJourneyWidth / 2) return "exit";
+  return "body";
 }
 
 type TrainProjectedSetPieceLayers = Record<
@@ -4111,6 +4168,15 @@ function TrainWorld({
                   chunk={projection.chunk}
                   layer={layer}
                   projection={projection}
+                  activeTraversalRole={
+                    projection.chunk.setPiece &&
+                    TRAIN_TRAVERSAL_TYPES.has(projection.chunk.setPiece.type)
+                      ? trainTraversalActiveRole(
+                          projection.focus,
+                          routePositionRef.current,
+                        )
+                      : null
+                  }
                   key={
                     `${layer.name}:${projection.focus.id}:` +
                     `${projection.chunk.index}`

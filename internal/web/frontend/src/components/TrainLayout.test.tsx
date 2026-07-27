@@ -23,6 +23,7 @@ import {
   trainPaletteLuminanceOrder,
   trainTerrainContourForChunk,
   trainTerrainHeightAtPercent,
+  trainTraversalActiveRole,
   trainWorldCruiseSpeed,
   trainWorldReducedMotionForced,
   trainWorldRoutePosition,
@@ -3958,7 +3959,13 @@ describe("TrainLayout", () => {
       /\.train-set-piece--bridge\.train-set-piece--variant-1\s+\.train-bridge-lattice\s*\{[\s\S]*?display:\s*none;/,
     );
     expect(bridgeCss).toMatch(
-      /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*19px;[\s\S]*?height:\s*48px;/,
+      /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*68px;/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--variant-1\.train-set-piece--entry[\s\S]*?\.train-bridge-crossing-void[\s\S]*?i:first-child,[\s\S]*?i:last-child\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?width:\s*42%;/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--variant-1[\s\S]*?\.train-bridge-supports[\s\S]*?i\s*\{[\s\S]*?height:\s*46px;/,
     );
     expect(trainLayoutCss).toContain(".train-tunnel-mountain-mass");
     expect(trainLayoutCss).toContain(".train-tunnel-opening");
@@ -3971,6 +3978,30 @@ describe("TrainLayout", () => {
     const steppedBodyOpeningRule = trainLayoutCss.match(
       /\.train-set-piece--tunnel\.train-set-piece--variant-1\.train-set-piece--body\s+\.train-tunnel-opening\s*\{([^}]+)\}/,
     )?.[1];
+    const entryOpeningRule = trainLayoutCss.match(
+      /\.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    const exitOpeningRule = trainLayoutCss.match(
+      /\.train-set-piece--tunnel\.train-set-piece--exit \.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    const steppedEntryOpeningRule = trainLayoutCss.match(
+      /\.train-set-piece--tunnel\.train-set-piece--variant-1\s+\.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    const steppedExitOpeningRule = trainLayoutCss.match(
+      /\.train-set-piece--tunnel\.train-set-piece--variant-1\.train-set-piece--exit\s+\.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    expect(entryOpeningRule).toBeDefined();
+    expect(entryOpeningRule).toMatch(/right:\s*0;[\s\S]*?left:\s*24%;/);
+    expect(exitOpeningRule).toBeDefined();
+    expect(exitOpeningRule).toMatch(/right:\s*24%;[\s\S]*?left:\s*0;/);
+    expect(steppedEntryOpeningRule).toBeDefined();
+    expect(steppedEntryOpeningRule).toMatch(
+      /right:\s*0;[\s\S]*?left:\s*28%;/,
+    );
+    expect(steppedExitOpeningRule).toBeDefined();
+    expect(steppedExitOpeningRule).toMatch(
+      /right:\s*28%;[\s\S]*?left:\s*0;/,
+    );
     expect(bodyOpeningRule).toBeDefined();
     expect(bodyOpeningRule).toMatch(/right:\s*3%;[\s\S]*left:\s*3%;/);
     expect(bodyOpeningRule).toMatch(/border-radius:\s*30% 30% 0 0;/);
@@ -4083,6 +4114,34 @@ describe("TrainLayout", () => {
         "data-bridge-crossing-medium",
         variant === 0 ? "river" : "gorge",
       );
+      if (variant === 1) {
+        const framing = [
+          ...rendered.container.querySelectorAll<HTMLElement>(
+            `[data-set-piece-id="${focus.id}"] [data-bridge-forest-framing]`,
+          ),
+        ];
+        expect(framing.map((owner) => owner.dataset.bridgeForestFraming)).toEqual(
+          ["entry", "body", "body", "exit"],
+        );
+        expect(
+          framing.every(
+            (owner) =>
+              (owner.dataset.bridgeForestGround === "approach" ||
+                owner.dataset.bridgeForestGround === "gorge-rim") &&
+              owner.querySelectorAll("[data-bridge-forest-detail]").length === 2,
+          ),
+        ).toBe(true);
+        expect(
+          primary
+            .filter((segment) => segment.dataset.setPieceRole === "body")
+            .every(
+              (segment) =>
+                segment
+                  .querySelector("[data-bridge-forest-framing]")
+                  ?.getAttribute("data-bridge-forest-ground") === "gorge-rim",
+            ),
+        ).toBe(true);
+      }
       rendered.unmount();
     }
   });
@@ -4110,6 +4169,11 @@ describe("TrainLayout", () => {
         '[data-set-piece-type="tunnel"][data-set-piece-layer="near"]',
       ),
     ];
+    const focus = trainWorldSetPieceFocus(
+      window.location.search,
+      "train-053-cascade",
+      1_280,
+    )!;
 
     expect(world).toHaveAttribute("data-motion", "reduced");
     expect(primary.map((segment) => segment.dataset.setPieceRole)).toEqual([
@@ -4122,6 +4186,21 @@ describe("TrainLayout", () => {
       "body",
       "exit",
     ]);
+    expect(trainTraversalActiveRole(focus, focus.journeyPosition - 600)).toBe(
+      "entry",
+    );
+    expect(trainTraversalActiveRole(focus, focus.journeyPosition)).toBe("body");
+    expect(trainTraversalActiveRole(focus, focus.journeyPosition + 600)).toBe(
+      "exit",
+    );
+    expect(
+      primary.map(
+        (segment) =>
+          segment.querySelector<HTMLElement>(
+            '[data-traversal-composition="tunnel"]',
+          )?.dataset.traversalActive,
+      ),
+    ).toEqual(["false", "true", "false"]);
     expect(
       primary.every(
         (segment) =>
@@ -4137,6 +4216,9 @@ describe("TrainLayout", () => {
           segment.querySelectorAll('[data-track-contact="17"]').length === 1,
       ),
     ).toBe(true);
+    expect(trainLayoutCss).toMatch(
+      /\.train-traversal-composition--tunnel\[data-traversal-active="false"\][\s\S]*?\.train-tunnel-opening,[\s\S]*?\.train-tunnel-portal\s*\{[\s\S]*?display:\s*none;/,
+    );
   });
 
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {

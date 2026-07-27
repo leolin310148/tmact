@@ -30,10 +30,21 @@ import {
   TRAIN_SCENERY_DEPTH_GRAMMAR,
   TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX,
   TRAIN_FOREST_MOUNTAIN_MIN_REPEAT_DISTANCE_PX,
+  trainCoastSceneryBeatForChunk,
+  trainForestMountainSceneryBeatForChunk,
   trainSceneryPlacementsForChunk,
+  trainTownIndustrialSceneryBeatForChunk,
   type TrainSceneryAsset,
 } from "./trainScenery";
 
+const TRAIN_LAYOUT_SOURCE = readFileSync(
+  resolve(process.cwd(), "src/components/TrainLayout.tsx"),
+  "utf8",
+);
+const TRAIN_LAYOUT_STYLES = readFileSync(
+  resolve(process.cwd(), "src/components/TrainLayout.css"),
+  "utf8",
+);
 const AUDIT_SEEDS = [
   "train-053-aurora",
   "train-053-cascade",
@@ -284,6 +295,91 @@ describe("train final visual convergence", () => {
     expect(repeatedPairs).toBeGreaterThan(500);
     for (const region of REGION_NAMES) {
       expect(regionCounts.get(region), region).toBeGreaterThan(100);
+    }
+  });
+
+  it("locks the observed TRAIN-054–060 region and traversal contracts across audit seeds", () => {
+    const materialStyles =
+      TRAIN_LAYOUT_STYLES.split(".train-terrain-base[data-terrain-material]")[1]
+        ?.split(".train-coast-composition")[0] ?? "";
+    expect(materialStyles).not.toContain("repeating-linear-gradient");
+    expect(TRAIN_LAYOUT_STYLES).toContain(
+      '.train-traversal-composition--tunnel[data-traversal-active="false"]',
+    );
+    expect(TRAIN_LAYOUT_STYLES).toMatch(
+      /\.train-bridge-crossing-void\s*\{[^}]*height:\s*68px/s,
+    );
+    expect(TRAIN_LAYOUT_SOURCE).toContain(
+      'data-bridge-forest-ground={',
+    );
+    expect(TRAIN_LAYOUT_SOURCE).toContain(
+      'data-coast-contact-medium="dry-land"',
+    );
+    expect(TRAIN_LAYOUT_SOURCE).toContain(
+      "data-built-fixture-pixel-density={",
+    );
+    expect(TRAIN_LAYOUT_SOURCE).toContain(
+      "data-station-negative-space={",
+    );
+
+    for (const seed of AUDIT_SEEDS) {
+      const forestRoles = new Set<string>();
+      const mountainRoles = new Set<string>();
+      const townScales = new Set<string>();
+      const industrialScales = new Set<string>();
+      const coastWaterKinds = new Set<string>();
+      const coastFixtures = new Set<string>();
+
+      for (let index = -1_200; index <= 1_200; index++) {
+        const chunk = generateRouteChunk(seed, index);
+        const naturalBeat = trainForestMountainSceneryBeatForChunk(chunk);
+        if (naturalBeat?.region === "forest") {
+          forestRoles.add(naturalBeat.role);
+        } else if (naturalBeat?.region === "mountain") {
+          mountainRoles.add(naturalBeat.role);
+        }
+
+        const builtBeat = trainTownIndustrialSceneryBeatForChunk(chunk);
+        if (builtBeat?.region === "town") {
+          townScales.add(builtBeat.scaleFamily);
+        } else if (builtBeat?.region === "industrial") {
+          industrialScales.add(builtBeat.scaleFamily);
+        }
+
+        const coastBeat = trainCoastSceneryBeatForChunk(chunk);
+        if (coastBeat) {
+          coastWaterKinds.add(coastBeat.waterKind);
+          coastBeat.fixtures.forEach((fixture) => coastFixtures.add(fixture));
+        }
+      }
+
+      expect(
+        forestRoles.has("forest-canopy-cluster"),
+        `${seed}/forest canopy`,
+      ).toBe(true);
+      expect(
+        forestRoles.has("forest-clearing"),
+        `${seed}/forest clearing`,
+      ).toBe(true);
+      expect(
+        mountainRoles.has("mountain-layered-ridge"),
+        `${seed}/mountain ridge`,
+      ).toBe(true);
+      expect(
+        mountainRoles.has("mountain-open-vista"),
+        `${seed}/mountain vista`,
+      ).toBe(true);
+      expect(townScales.size, `${seed}/town scale families`).toBeGreaterThan(2);
+      expect(
+        industrialScales.size,
+        `${seed}/industrial scale families`,
+      ).toBeGreaterThan(2);
+      expect(coastWaterKinds.size, `${seed}/coast water rhythm`).toBeGreaterThan(
+        4,
+      );
+      expect(coastFixtures.has("beach"), `${seed}/coast beach`).toBe(true);
+      expect(coastFixtures.has("rock-shelf"), `${seed}/coast shelf`).toBe(true);
+      expect(coastFixtures.has("pier"), `${seed}/coast pier`).toBe(true);
     }
   });
 

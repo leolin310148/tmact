@@ -371,9 +371,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-bridge-crossing-void {
   right: -1px;
-  bottom: 19px;
+  bottom: 18px;
   left: -1px;
-  height: 48px;
+  height: 68px;
   overflow: hidden;
   background:
     linear-gradient(
@@ -383,14 +383,25 @@ html[data-pane-switcher-layout="train"] .statusline {
           var(--train-palette-water),
           var(--train-palette-horizon-light) 42%
         )
-        0 5px,
-      var(--train-palette-water) 5px 19px,
+        0 7px,
+      var(--train-palette-water) 7px 31px,
       color-mix(
           in srgb,
           var(--train-palette-water),
-          var(--train-palette-control-surface) 28%
+          var(--train-palette-control-surface) 20%
         )
-        19px 100%
+        31px 100%
+    );
+  box-shadow:
+    inset 0 5px 0 color-mix(
+      in srgb,
+      var(--train-palette-horizon-light),
+      transparent 48%
+    ),
+    inset 0 -8px 0 color-mix(
+      in srgb,
+      var(--train-palette-water),
+      var(--train-palette-silhouette) 22%
     );
 }
 
@@ -435,9 +446,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-bridge-approach {
   right: -1px;
-  bottom: 19px;
+  bottom: 18px;
   left: -1px;
-  height: 48px;
+  height: 68px;
   background: color-mix(
     in srgb,
     var(--train-palette-near-surface),
@@ -530,9 +541,71 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-bridge-supports {
   right: -1px;
-  bottom: 19px;
+  bottom: 18px;
   left: -1px;
+  height: 58px;
+}
+
+.train-bridge-forest-framing {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.train-bridge-forest-framing img {
+  position: absolute;
+  bottom: 82px;
+  display: block;
+  width: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+  opacity: 1;
+  filter:
+    saturate(var(--train-time-scenery-saturation))
+    brightness(var(--train-time-scenery-brightness))
+    sepia(var(--train-time-scenery-warmth));
+}
+
+.train-bridge-forest-framing img[data-bridge-forest-detail="tree"] {
+  right: 9%;
+  height: 48px;
+}
+
+.train-bridge-forest-framing img[data-bridge-forest-detail="shrub"] {
+  right: 23%;
+  bottom: 80px;
+  height: 26px;
+}
+
+.train-set-piece--bridge.train-set-piece--body
+  .train-bridge-forest-framing
+  img[data-bridge-forest-detail="tree"] {
+  right: 12%;
+  bottom: 84px;
   height: 38px;
+}
+
+.train-set-piece--bridge.train-set-piece--body
+  .train-bridge-forest-framing
+  img[data-bridge-forest-detail="shrub"] {
+  right: 33%;
+  bottom: 82px;
+  height: 22px;
+}
+
+.train-set-piece--bridge.train-set-piece--exit
+  .train-bridge-forest-framing
+  img[data-bridge-forest-detail="tree"] {
+  right: auto;
+  left: 9%;
+}
+
+.train-set-piece--bridge.train-set-piece--exit
+  .train-bridge-forest-framing
+  img[data-bridge-forest-detail="shrub"] {
+  right: auto;
+  left: 23%;
 }
 
 .train-bridge-supports i {
@@ -540,7 +613,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 0;
   display: none;
   width: 10px;
-  height: 32px;
+  height: 50px;
   background: var(--train-palette-silhouette);
   clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
 }
@@ -565,7 +638,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   left: 58%;
   display: block;
   width: 18px;
-  height: 24px;
+  height: 36px;
 }
 
 .train-set-piece--bridge.train-set-piece--exit
@@ -574,7 +647,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: 58%;
   display: block;
   width: 18px;
-  height: 24px;
+  height: 36px;
 }
 
 .train-set-piece--bridge.train-set-piece--entry .train-bridge-span {
@@ -636,32 +709,78 @@ html[data-pane-switcher-layout="train"] .statusline {
       color-mix(
           in srgb,
           var(--train-palette-silhouette),
-          var(--train-palette-mountain-rock) 34%
+          var(--train-palette-mountain-rock) 18%
         )
-        0 8px,
+        0 7px,
+      var(--train-palette-near-surface) 7px 52px,
       color-mix(
           in srgb,
-          var(--train-palette-near-surface),
-          var(--train-palette-mountain-rock) 24%
+          var(--train-palette-mountain-rock),
+          var(--train-palette-silhouette) 62%
         )
-        8px 30px,
-      color-mix(
-          in srgb,
-          var(--train-palette-near-surface),
-          var(--train-palette-silhouette) 18%
-        )
-        30px 100%
+        52px 100%
     );
+  box-shadow:
+    inset 0 6px 0 color-mix(
+      in srgb,
+      var(--train-palette-mountain-rock),
+      var(--train-palette-foreground-contrast) 14%
+    ),
+    inset 0 -7px 0 var(--train-palette-silhouette);
+}
+
+.train-traversal-composition--tunnel[data-traversal-active="false"]
+  .train-tunnel-opening,
+.train-traversal-composition--tunnel[data-traversal-active="false"]
+  .train-tunnel-portal {
+  display: none;
 }
 
 .train-set-piece--bridge.train-set-piece--variant-1
+  .train-bridge-crossing-void
+  i {
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-silhouette) 38%
+  );
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--entry
+  .train-bridge-crossing-void
+  i:first-child,
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--exit
+  .train-bridge-crossing-void
+  i:last-child {
+  top: 5px;
+  bottom: 0;
+  width: 42%;
+  height: auto;
+  clip-path: polygon(0 0, 72% 8%, 88% 35%, 100% 100%, 0 100%);
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--entry
+  .train-bridge-crossing-void
+  i:first-child {
+  left: 0;
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--exit
+  .train-bridge-crossing-void
+  i:last-child {
+  right: 0;
+  left: auto;
+  transform: scaleX(-1);
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--body
   .train-bridge-crossing-void
   i {
   height: 4px;
   background: color-mix(
     in srgb,
     var(--train-palette-mountain-rock),
-    var(--train-palette-foreground-contrast) 12%
+    var(--train-palette-foreground-contrast) 18%
   );
 }
 
@@ -697,7 +816,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-bridge-supports
   i {
   width: 18px;
-  height: 22px;
+  height: 46px;
   background: color-mix(
     in srgb,
     var(--train-palette-mountain-rock),
@@ -712,7 +831,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--exit
   .train-bridge-supports
   i:last-child {
-  height: 22px;
+  height: 34px;
 }
 
 .train-bridge-track-edge {
@@ -783,10 +902,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-tunnel-opening {
-  right: 24%;
+  right: 0;
   bottom: 17px;
-  left: 0;
-  height: 84px;
+  left: 24%;
+  height: 76px;
   border-radius: 42% 42% 0 0;
   background:
     linear-gradient(
@@ -842,15 +961,15 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--tunnel.train-set-piece--exit .train-tunnel-opening {
-  right: 0;
-  left: 24%;
+  right: 24%;
+  left: 0;
   transform: scaleX(-1);
 }
 
 .train-set-piece--tunnel.train-set-piece--body .train-tunnel-opening {
   right: 3%;
   left: 3%;
-  height: 90px;
+  height: 78px;
   border-radius: 30% 30% 0 0;
   clip-path: polygon(
     0 100%,
@@ -865,10 +984,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-tunnel-portal {
-  right: 21%;
+  right: 0;
   bottom: 17px;
-  left: 0;
-  height: 90px;
+  left: 21%;
+  height: 82px;
   border: 8px solid
     color-mix(
       in srgb,
@@ -927,15 +1046,15 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-set-piece--tunnel.train-set-piece--exit .train-tunnel-portal {
-  right: 0;
-  left: 21%;
+  right: 21%;
+  left: 0;
   transform: scaleX(-1);
 }
 
 .train-set-piece--tunnel.train-set-piece--body .train-tunnel-portal {
   right: 2%;
   left: 2%;
-  height: 96px;
+  height: 84px;
   border-width: 6px 6px 0;
   border-radius: 30% 30% 0 0;
   clip-path: polygon(
@@ -980,32 +1099,32 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--tunnel.train-set-piece--variant-1
   .train-tunnel-opening {
-  right: 28%;
-  left: 0;
-  height: 82px;
+  right: 0;
+  left: 28%;
+  height: 74px;
   border-radius: 18% 18% 0 0;
   clip-path: polygon(0 100%, 0 40%, 12% 40%, 12% 23%, 25% 23%, 25% 10%, 75% 10%, 75% 23%, 88% 23%, 88% 40%, 100% 40%, 100% 100%);
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--exit
   .train-tunnel-opening {
-  right: 0;
-  left: 28%;
+  right: 28%;
+  left: 0;
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--body
   .train-tunnel-opening {
   right: 4%;
   left: 4%;
-  height: 88px;
+  height: 76px;
   border-radius: 14% 14% 0 0;
   clip-path: polygon(0 100%, 0 32%, 9% 32%, 9% 17%, 21% 17%, 21% 5%, 79% 5%, 79% 17%, 91% 17%, 91% 32%, 100% 32%, 100% 100%);
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1 .train-tunnel-portal {
-  right: 25%;
-  left: 0;
-  height: 88px;
+  right: 0;
+  left: 25%;
+  height: 80px;
   border-width: 8px;
   border-bottom: 0;
   border-radius: 14% 14% 0 0;
@@ -1014,15 +1133,15 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--exit
   .train-tunnel-portal {
-  right: 0;
-  left: 25%;
+  right: 25%;
+  left: 0;
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--body
   .train-tunnel-portal {
   right: 3%;
   left: 3%;
-  height: 94px;
+  height: 82px;
   border-width: 7px 7px 0;
   border-radius: 12% 12% 0 0;
   clip-path: polygon(0 100%, 0 29%, 9% 29%, 9% 14%, 21% 14%, 21% 0, 79% 0, 79% 14%, 91% 14%, 91% 29%, 100% 29%, 100% 100%);

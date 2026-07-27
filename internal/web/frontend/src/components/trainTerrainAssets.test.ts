@@ -291,13 +291,13 @@ describe("distant terrain, coast, and bridge asset kit", () => {
     const bridgeSupportsRule = trainLayoutCss.match(
       /\.train-bridge-supports\s*\{([^}]+)\}/,
     )?.[1];
-    expect(bridgeSupportsRule).toMatch(/bottom:\s*19px;/);
-    expect(bridgeSupportsRule).toMatch(/height:\s*38px;/);
+    expect(bridgeSupportsRule).toMatch(/bottom:\s*18px;/);
+    expect(bridgeSupportsRule).toMatch(/height:\s*58px;/);
     const bridgeCrossingRule = trainLayoutCss.match(
       /\.train-bridge-crossing-void\s*\{([^}]+)\}/,
     )?.[1];
-    expect(bridgeCrossingRule).toMatch(/bottom:\s*19px;/);
-    expect(bridgeCrossingRule).toMatch(/height:\s*48px;/);
+    expect(bridgeCrossingRule).toMatch(/bottom:\s*18px;/);
+    expect(bridgeCrossingRule).toMatch(/height:\s*68px;/);
     const bridgeTrackEdgeRule = trainLayoutCss.match(
       /\.train-bridge-track-edge\s*\{([^}]+)\}/,
     )?.[1];
