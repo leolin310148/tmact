@@ -185,7 +185,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   rectangle, detached portal, duplicated bore, or rail line outside the
   opening.
 
-- [ ] **TRAIN-059 — Rebuild bridge traversal as a crossing rather than a truss screen.**
+- [x] **TRAIN-059 — Rebuild bridge traversal as a crossing rather than a truss screen.**
   Establish a clear crossing subject beneath the rails—river, gorge, or
   lowered terrain—with approaches, deck, supports, and restrained truss or
   railing. Truss members must frame the train and remain local to the bridge;

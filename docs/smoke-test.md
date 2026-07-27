@@ -1199,6 +1199,56 @@ passed all 88 tests, the single-worker complete frontend suite passed all 469
 tests, the production TypeScript/Vite build passed, and repository-root
 `make test` passed.
 
+TRAIN-059 bridge traversal run 2026-07-27: used only the dedicated
+`tmact-train-workitems` borz profile and `127.0.0.1:5234`. Aurora bridge
+occurrence `2` supplied river pony-truss variant `0`; occurrence `0` supplied
+stone-parapet gorge variant `1`. Every retained route-position/viewport pair
+independently returned HTTP 200, matched the plain non-cache-busted
+`TrainLayout.tsx` Vite module to the new bridge ownership metadata, opened the
+exact URL, set the viewport after opening, hard reloaded, and asserted the
+actual inner dimensions plus the centred entry/body/exit role and variant.
+
+The measured `.train-layout` rectangles were `y=623.75`, height `149.25` at
+compact `390×844`; `y=572.921875`, height `184.078125` at desktop
+`1280×800`; and `y=672.921875`, height `184.078125` at ultrawide
+`2560×900`. Compact and desktop retained day/night train-hidden and
+train-visible entry/span/exit sequences for both variants. The required one
+ultrawide sequence retained variant `0` entry/span/exit in day with both
+visibility states. All 54 real-band crops were opened individually at original
+resolution in `/tmp/train-059-final/`; the labelled inspected matrix is
+committed as
+[`train-059-bridge-contact-sheet.png`](train-059-bridge-contact-sheet.png).
+
+Direct pixel inspection rejected the initial rebuild twice: the first stone
+variant was still a thick pale wall with supports crossing it, and the second
+still used the day control-surface token for a bright gorge. The retained
+result gives variant `0` a readable river beneath a low local pony truss and
+variant `1` a dark lowered gorge beneath a thin stone parapet and short piers.
+Entry and exit use sloped owned approaches; body segments carry the crossing,
+continuous deck, and supports. The primary midground layer is the only owner
+of crossing, deck, supports, and structure; the near supporting layer owns one
+low track-contact edge per segment and never paints a second bridge.
+
+Across the retained sequences, truss members stay in the lower bridge band and
+do not cover the mountain field or recreate terrain crosshatch. The compact
+exit crops show the train back on land after the bridge has moved beyond the
+narrow frame; their preceding entry/body crops preserve the complete crossing
+transition. Desktop and ultrawide exit crops retain the departing structure
+at the far side. No inspected crop shows a viewport-wide lattice, duplicated
+truss or deck, missing crossing subject, support above the bridge structure,
+or wheels floating above/below the rail/deck line. A desktop variant `1` exit
+window legitimately collision-excluded an incompatible station id while
+retaining all four bridge segments; the bridge id itself was never excluded.
+
+At default `24px/s`, a desktop sample advanced route position from
+`36491.589px` to `36507.232px` over 650ms (`15.643px`). The fixed consist
+remained at `x=0`, wheel rotation changed from `-112.670deg` to
+`-212.257deg`, and the live composition retained four primary plus four
+supporting segments with no browser errors. The focused bridge/terrain run
+passed all 93 tests, the single-worker complete frontend suite passed all 470
+tests, the production TypeScript/Vite build passed, and repository-root
+`make test` passed.
+
 ## Notes Template
 
 ```text

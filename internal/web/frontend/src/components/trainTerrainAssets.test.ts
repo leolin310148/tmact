@@ -288,9 +288,21 @@ describe("distant terrain, coast, and bridge asset kit", () => {
     expect(trainLayoutCss).toMatch(
       /\.train-bridge-deck\s*\{[\s\S]*?bottom:\s*14px;[\s\S]*?background:\s*var\(--train-palette-mid-surface\);/,
     );
-    expect(trainLayoutCss).toMatch(
-      /\.train-bridge-supports\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?height:\s*17px;/,
-    );
+    const bridgeSupportsRule = trainLayoutCss.match(
+      /\.train-bridge-supports\s*\{([^}]+)\}/,
+    )?.[1];
+    expect(bridgeSupportsRule).toMatch(/bottom:\s*19px;/);
+    expect(bridgeSupportsRule).toMatch(/height:\s*38px;/);
+    const bridgeCrossingRule = trainLayoutCss.match(
+      /\.train-bridge-crossing-void\s*\{([^}]+)\}/,
+    )?.[1];
+    expect(bridgeCrossingRule).toMatch(/bottom:\s*19px;/);
+    expect(bridgeCrossingRule).toMatch(/height:\s*48px;/);
+    const bridgeTrackEdgeRule = trainLayoutCss.match(
+      /\.train-bridge-track-edge\s*\{([^}]+)\}/,
+    )?.[1];
+    expect(bridgeTrackEdgeRule).toMatch(/bottom:\s*12px;/);
+    expect(bridgeTrackEdgeRule).toMatch(/height:\s*7px;/);
     expect(trainLayoutCss).toMatch(
       /\.train-coast-reveal-water\s*\{[\s\S]*?background:\s*var\(--train-palette-water\);/,
     );

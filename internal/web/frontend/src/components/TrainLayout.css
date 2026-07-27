@@ -360,6 +360,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-bridge-span,
 .train-bridge-deck,
 .train-bridge-supports,
+.train-bridge-track-edge,
 .train-tunnel-mountain-mass,
 .train-tunnel-opening,
 .train-tunnel-portal,
@@ -370,44 +371,101 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-bridge-crossing-void {
   right: -1px;
-  bottom: 0;
+  bottom: 19px;
   left: -1px;
-  height: 17px;
-  background: var(--train-palette-control-surface);
+  height: 48px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-horizon-light) 42%
+        )
+        0 5px,
+      var(--train-palette-water) 5px 19px,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-control-surface) 28%
+        )
+        19px 100%
+    );
+}
+
+.train-bridge-crossing-void i {
+  position: absolute;
+  display: block;
+  height: 3px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-foreground-contrast),
+    transparent 58%
+  );
+}
+
+.train-bridge-crossing-void i:first-child {
+  top: 8px;
+  left: 8%;
+  width: 27%;
+}
+
+.train-bridge-crossing-void i:nth-child(2) {
+  top: 21px;
+  left: 47%;
+  width: 34%;
+}
+
+.train-bridge-crossing-void i:last-child {
+  top: 35px;
+  left: 20%;
+  width: 17%;
+}
+
+.train-set-piece--bridge.train-set-piece--entry
+  .train-bridge-crossing-void {
+  clip-path: polygon(0 0, 64% 0, 64% 100%, 0 100%);
+}
+
+.train-set-piece--bridge.train-set-piece--exit
+  .train-bridge-crossing-void {
+  clip-path: polygon(36% 0, 100% 0, 100% 100%, 36% 100%);
 }
 
 .train-bridge-approach {
   right: -1px;
-  bottom: 0;
+  bottom: 19px;
   left: -1px;
-  height: 30px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      var(--train-palette-near-surface) 0 25px,
-      color-mix(
-          in srgb,
-          var(--train-palette-near-surface),
-          var(--train-palette-mid-surface) 28%
-        )
-        25px 29px
+  height: 48px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    var(--train-palette-mid-surface) 26%
+  );
+  box-shadow:
+    inset 0 5px 0 color-mix(
+      in srgb,
+      var(--train-palette-life-forest),
+      var(--train-palette-near-surface) 72%
+    ),
+    inset 0 10px 0 color-mix(
+      in srgb,
+      var(--train-palette-near-surface),
+      var(--train-palette-mid-surface) 38%
     );
-  clip-path: polygon(0 100%, 0 55%, 100% 0, 100% 100%);
+  clip-path: polygon(51% 100%, 58% 67%, 70% 38%, 84% 16%, 100% 0, 100% 100%);
 }
 
 .train-set-piece--bridge.train-set-piece--exit .train-bridge-approach {
   transform: scaleX(-1);
 }
 
-.train-set-piece--bridge.train-set-piece--body .train-bridge-approach {
-  display: none;
-}
-
 .train-bridge-span {
   right: -1px;
-  bottom: 20px;
+  bottom: 24px;
   left: -1px;
-  height: 70px;
+  height: 34px;
   color: var(--train-palette-silhouette);
 }
 
@@ -422,39 +480,41 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-bridge-upper-chord {
   top: 0;
-  height: 7px;
+  height: 4px;
   background: currentColor;
 }
 
 .train-bridge-lattice {
-  top: 7px;
-  bottom: 8px;
+  top: 4px;
+  bottom: 5px;
   background:
     linear-gradient(
-        34deg,
-        transparent 0 45%,
-        currentColor 46% 53%,
-        transparent 54%
+        32deg,
+        transparent 0 46%,
+        currentColor 47% 53%,
+        transparent 54% 100%
       )
-      var(--train-set-piece-phase) 0 / 72px 100%,
+      var(--train-set-piece-phase) 0 / 80px 100%,
     linear-gradient(
-        -34deg,
-        transparent 0 45%,
-        currentColor 46% 53%,
-        transparent 54%
+        -32deg,
+        transparent 0 46%,
+        currentColor 47% 53%,
+        transparent 54% 100%
       )
-      var(--train-set-piece-phase) 0 / 72px 100%,
-    repeating-linear-gradient(
+      var(--train-set-piece-phase) 0 / 80px 100%,
+    linear-gradient(
         90deg,
-        currentColor 0 5px,
-        transparent 5px 72px
+        currentColor 0 3px,
+        transparent 3px 76px,
+        currentColor 76px 80px
       )
-      var(--train-set-piece-phase) 0 / 72px 100%;
+      var(--train-set-piece-phase) 0 / 80px 100%;
+  background-repeat: repeat-x;
 }
 
 .train-bridge-deck-brace {
   bottom: 0;
-  height: 8px;
+  height: 5px;
   background: currentColor;
 }
 
@@ -463,117 +523,216 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 14px;
   left: -1px;
   height: 11px;
-  border-top: 4px solid var(--train-palette-silhouette);
-  border-bottom: 3px solid var(--train-palette-silhouette);
+  border-top: 3px solid var(--train-palette-silhouette);
+  border-bottom: 2px solid var(--train-palette-silhouette);
   background: var(--train-palette-mid-surface);
 }
 
 .train-bridge-supports {
   right: -1px;
-  bottom: 0;
+  bottom: 19px;
   left: -1px;
-  height: 17px;
+  height: 38px;
 }
 
 .train-bridge-supports i {
   position: absolute;
   bottom: 0;
-  display: block;
-  width: 13px;
-  height: 17px;
+  display: none;
+  width: 10px;
+  height: 32px;
   background: var(--train-palette-silhouette);
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
 }
 
-.train-bridge-supports i:first-child {
+.train-set-piece--bridge.train-set-piece--body
+  .train-bridge-supports
+  i:first-child {
+  display: block;
   left: 22%;
 }
 
-.train-bridge-supports i:last-child {
+.train-set-piece--bridge.train-set-piece--body
+  .train-bridge-supports
+  i:last-child {
+  display: block;
   right: 22%;
-}
-
-.train-set-piece--bridge.train-set-piece--entry .train-bridge-span {
-  clip-path: polygon(34% 100%, 34% 65%, 58% 18%, 100% 18%, 100% 100%);
-}
-
-.train-set-piece--bridge.train-set-piece--exit .train-bridge-span {
-  clip-path: polygon(0 100%, 0 18%, 42% 18%, 66% 65%, 66% 100%);
 }
 
 .train-set-piece--bridge.train-set-piece--entry
   .train-bridge-supports
-  i:first-child,
+  i:first-child {
+  left: 58%;
+  display: block;
+  width: 18px;
+  height: 24px;
+}
+
 .train-set-piece--bridge.train-set-piece--exit
   .train-bridge-supports
   i:last-child {
-  width: 24px;
+  right: 58%;
+  display: block;
+  width: 18px;
+  height: 24px;
+}
+
+.train-set-piece--bridge.train-set-piece--entry .train-bridge-span {
+  right: 38%;
+  height: 12px;
+}
+
+.train-set-piece--bridge.train-set-piece--exit .train-bridge-span {
+  left: 38%;
+  height: 12px;
+}
+
+.train-set-piece--bridge.train-set-piece--entry .train-bridge-lattice,
+.train-set-piece--bridge.train-set-piece--exit .train-bridge-lattice {
+  display: none;
+}
+
+.train-set-piece--bridge.train-set-piece--body .train-bridge-span {
+  right: 10px;
+  left: 10px;
 }
 
 .train-set-piece--bridge.train-set-piece--variant-1 .train-bridge-span {
-  bottom: 19px;
-  height: 82px;
-  color: var(--train-palette-mid-surface);
+  bottom: 24px;
+  height: 11px;
+  color: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-silhouette) 48%
+  );
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-silhouette) 46%
+  );
+  box-shadow: inset 0 -3px 0 var(--train-palette-silhouette);
 }
 
 .train-set-piece--bridge.train-set-piece--variant-1
   .train-bridge-upper-chord {
-  height: 10px;
-  clip-path: polygon(0 72%, 12% 45%, 28% 22%, 50% 8%, 72% 22%, 88% 45%, 100% 72%, 100% 100%, 0 100%);
+  height: 3px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-foreground-contrast) 14%
+  );
 }
 
 .train-set-piece--bridge.train-set-piece--variant-1
   .train-bridge-lattice {
-  top: 10px;
-  background:
-    linear-gradient(
-        25deg,
-        transparent 0 46%,
-        currentColor 47% 54%,
-        transparent 55%
-      )
-      var(--train-set-piece-phase) 0 / 96px 100%,
-    linear-gradient(
-        -25deg,
-        transparent 0 46%,
-        currentColor 47% 54%,
-        transparent 55%
-      )
-      var(--train-set-piece-phase) 0 / 96px 100%,
-    repeating-linear-gradient(
-        90deg,
-        currentColor 0 7px,
-        transparent 7px 96px
-      )
-      var(--train-set-piece-phase) 0 / 96px 100%;
-}
-
-.train-set-piece--bridge.train-set-piece--variant-1 .train-bridge-deck {
-  height: 13px;
-  background: color-mix(
-    in srgb,
-    var(--train-palette-mid-surface),
-    var(--train-palette-near-surface) 36%
-  );
-}
-
-.train-traversal-composition--near .train-bridge-span {
   display: none;
 }
 
-.train-traversal-composition--near .train-bridge-deck {
+.train-set-piece--bridge.train-set-piece--variant-1
+  .train-bridge-crossing-void {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-mountain-rock) 34%
+        )
+        0 8px,
+      color-mix(
+          in srgb,
+          var(--train-palette-near-surface),
+          var(--train-palette-mountain-rock) 24%
+        )
+        8px 30px,
+      color-mix(
+          in srgb,
+          var(--train-palette-near-surface),
+          var(--train-palette-silhouette) 18%
+        )
+        30px 100%
+    );
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1
+  .train-bridge-crossing-void
+  i {
+  height: 4px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-foreground-contrast) 12%
+  );
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1
+  .train-bridge-approach {
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-near-surface) 54%
+  );
+  box-shadow:
+    inset 0 5px 0 color-mix(
+      in srgb,
+      var(--train-palette-mountain-rock),
+      var(--train-palette-foreground-contrast) 12%
+    ),
+    inset 0 10px 0 color-mix(
+      in srgb,
+      var(--train-palette-mountain-rock),
+      var(--train-palette-silhouette) 34%
+    );
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1 .train-bridge-deck {
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-near-surface) 48%
+  );
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1
+  .train-bridge-supports
+  i {
+  width: 18px;
+  height: 22px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mountain-rock),
+    var(--train-palette-silhouette) 44%
+  );
+  clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+}
+
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--entry
+  .train-bridge-supports
+  i:first-child,
+.train-set-piece--bridge.train-set-piece--variant-1.train-set-piece--exit
+  .train-bridge-supports
+  i:last-child {
+  height: 22px;
+}
+
+.train-bridge-track-edge {
+  right: -1px;
   bottom: 12px;
-  height: 8px;
-  border-width: 3px 0;
+  left: -1px;
+  height: 7px;
+  border-top: 2px solid var(--train-palette-silhouette);
   background: var(--train-palette-near-surface);
 }
 
-.train-traversal-composition--near .train-bridge-approach {
-  height: 24px;
-  background: var(--train-palette-near-surface);
-}
-
-.train-traversal-composition--near .train-bridge-supports i {
-  background: var(--train-palette-near-surface);
+.train-layout-world[data-time-of-day="night"]
+  .train-set-piece--bridge.train-set-piece--variant-0
+  .train-bridge-crossing-void
+  i {
+  background: color-mix(
+    in srgb,
+    var(--train-palette-emissive),
+    transparent 72%
+  );
 }
 
 .train-tunnel-mountain-mass {

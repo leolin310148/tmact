@@ -1351,39 +1351,93 @@ function TrainTraversalComposition({
             : "trackside-contact"
           : undefined
       }
+      data-bridge-state={segment.type === "bridge" ? segment.role : undefined}
+      data-bridge-layer-responsibility={
+        segment.type === "bridge"
+          ? layer === "midground"
+            ? "crossing-deck-structure"
+            : "trackside-contact"
+          : undefined
+      }
+      data-bridge-crossing-subject={
+        segment.type === "bridge"
+          ? layer === "midground"
+            ? segment.visualVariant === 0
+              ? "river"
+              : "gorge"
+            : "none"
+          : undefined
+      }
+      data-bridge-single-owner={
+        segment.type === "bridge" ? "true" : undefined
+      }
       aria-hidden="true"
     >
       {segment.type === "bridge" ? (
         <>
-          <span
-            className="train-bridge-crossing-void"
-            data-bridge-geometry="crossing-void"
-          />
-          <span
-            className="train-bridge-approach"
-            data-bridge-geometry={`${segment.role}-approach`}
-            data-bridge-ground-owner={layer}
-          />
-          <span
-            className="train-bridge-span"
-            data-bridge-geometry="supported-span"
-          >
-            <i className="train-bridge-upper-chord" />
-            <i className="train-bridge-lattice" />
-            <i className="train-bridge-deck-brace" />
-          </span>
-          <span
-            className="train-bridge-deck"
-            data-bridge-geometry="track-deck"
-            data-track-contact="17"
-          />
-          <span
-            className="train-bridge-supports"
-            data-bridge-geometry="supports-below-track"
-          >
-            <i />
-            <i />
-          </span>
+          {layer === "midground" ? (
+            <>
+              <span
+                className="train-bridge-crossing-void"
+                data-bridge-geometry={`${segment.role}-crossing-void`}
+                data-bridge-geometry-owner={`${segment.id}:midground:crossing`}
+                data-bridge-crossing-medium={
+                  segment.visualVariant === 0 ? "river" : "gorge"
+                }
+                data-bridge-solid-surface="opaque"
+              >
+                <i data-bridge-crossing-detail="far-bank" />
+                <i data-bridge-crossing-detail="crossing-floor" />
+                <i data-bridge-crossing-detail="near-bank" />
+              </span>
+              {segment.role === "body" ? null : (
+                <span
+                  className="train-bridge-approach"
+                  data-bridge-geometry={`${segment.role}-approach`}
+                  data-bridge-geometry-owner={`${segment.id}:midground:${segment.role}-approach`}
+                  data-bridge-ground-owner="midground"
+                  data-bridge-solid-surface="opaque"
+                />
+              )}
+              <span
+                className="train-bridge-span"
+                data-bridge-geometry={`${segment.role}-${
+                  segment.visualVariant === 0
+                    ? "pony-truss"
+                    : "stone-parapet"
+                }`}
+                data-bridge-geometry-owner={`${segment.id}:midground:structure`}
+              >
+                <i className="train-bridge-upper-chord" />
+                <i className="train-bridge-lattice" />
+                <i className="train-bridge-deck-brace" />
+              </span>
+              <span
+                className="train-bridge-deck"
+                data-bridge-geometry="track-deck"
+                data-bridge-geometry-owner={`${segment.id}:midground:deck`}
+                data-bridge-deck-continuity={`${segment.role}:${segment.segmentOffset}`}
+                data-track-contact="17"
+              />
+              <span
+                className="train-bridge-supports"
+                data-bridge-geometry="supports-below-deck"
+                data-bridge-geometry-owner={`${segment.id}:midground:supports`}
+              >
+                <i data-bridge-support="left" />
+                <i data-bridge-support="centre" />
+                <i data-bridge-support="right" />
+              </span>
+            </>
+          ) : (
+            <span
+              className="train-bridge-track-edge"
+              data-bridge-geometry={`${segment.role}-track-edge`}
+              data-bridge-geometry-owner={`${segment.id}:near:track-edge`}
+              data-bridge-ground-owner="near"
+              data-track-contact="17"
+            />
+          )}
         </>
       ) : (
         <>

@@ -3592,17 +3592,19 @@ describe("TrainLayout", () => {
 
       if (type === "bridge") {
         expect(
-          primary.every((segment) =>
-            Boolean(segment.querySelector('[data-bridge-geometry="track-deck"]')),
+          primary.every(
+            (segment) =>
+              segment.querySelectorAll(
+                '[data-bridge-geometry="track-deck"]',
+              ).length === 1,
           ),
         ).toBe(true);
         expect(
-          primary.every((segment) =>
-            Boolean(
-              segment.querySelector(
-                '[data-bridge-geometry="supports-below-track"]',
-              ),
-            ),
+          primary.every(
+            (segment) =>
+              segment.querySelectorAll(
+                '[data-bridge-geometry="supports-below-deck"]',
+              ).length === 1,
           ),
         ).toBe(true);
         expect(
@@ -3616,6 +3618,84 @@ describe("TrainLayout", () => {
             ),
           ),
         ).toBe(true);
+        expect(
+          primary.filter(
+            (segment) => segment.dataset.setPieceRole === "body",
+          ).every(
+            (segment) =>
+              segment.querySelector("[data-bridge-ground-owner]") === null,
+          ),
+        ).toBe(true);
+        expect(
+          primary.every((segment) => {
+            const composition = segment.querySelector<HTMLElement>(
+              '[data-traversal-composition="bridge"]',
+            );
+            const crossing = segment.querySelector<HTMLElement>(
+              "[data-bridge-crossing-medium]",
+            );
+            const deck = segment.querySelector<HTMLElement>(
+              '[data-bridge-geometry="track-deck"]',
+            );
+            const supports = segment.querySelector<HTMLElement>(
+              '[data-bridge-geometry="supports-below-deck"]',
+            );
+            const structure = segment.querySelector<HTMLElement>(
+              `[data-bridge-geometry="${segment.dataset.setPieceRole}-${
+                variant === "0" ? "pony-truss" : "stone-parapet"
+              }"]`,
+            );
+            return (
+              composition?.dataset.bridgeLayerResponsibility ===
+                "crossing-deck-structure" &&
+              composition.dataset.bridgeCrossingSubject ===
+                (variant === "0" ? "river" : "gorge") &&
+              composition.dataset.bridgeSingleOwner === "true" &&
+              composition.dataset.bridgeState ===
+                segment.dataset.setPieceRole &&
+              crossing?.dataset.bridgeCrossingMedium ===
+                (variant === "0" ? "river" : "gorge") &&
+              crossing.dataset.bridgeSolidSurface === "opaque" &&
+              deck?.dataset.trackContact === "17" &&
+              deck.dataset.bridgeDeckContinuity ===
+                `${segment.dataset.setPieceRole}:${segment.dataset.setPieceSegment}` &&
+              supports !== null &&
+              structure !== null
+            );
+          }),
+        ).toBe(true);
+        expect(
+          supporting.every((segment) => {
+            const composition = segment.querySelector<HTMLElement>(
+              '[data-traversal-composition="bridge"]',
+            );
+            const geometry = [
+              ...segment.querySelectorAll<HTMLElement>(
+                "[data-bridge-geometry]",
+              ),
+            ];
+            return (
+              composition?.dataset.bridgeLayerResponsibility ===
+                "trackside-contact" &&
+              composition.dataset.bridgeCrossingSubject === "none" &&
+              composition.dataset.bridgeSingleOwner === "true" &&
+              geometry.length === 1 &&
+              geometry[0]?.dataset.bridgeGeometry ===
+                `${segment.dataset.setPieceRole}-track-edge` &&
+              geometry[0]?.dataset.trackContact === "17"
+            );
+          }),
+        ).toBe(true);
+        expect(
+          supporting.some((segment) =>
+            Boolean(
+              segment.querySelector(
+                ".train-bridge-crossing-void,.train-bridge-approach," +
+                  ".train-bridge-span,.train-bridge-deck,.train-bridge-supports",
+              ),
+            ),
+          ),
+        ).toBe(false);
       } else {
         expect(
           primary.every((segment) =>
@@ -3711,6 +3791,21 @@ describe("TrainLayout", () => {
 
     expect(trainLayoutCss).toContain(".train-bridge-crossing-void");
     expect(trainLayoutCss).toContain(".train-bridge-supports");
+    expect(trainLayoutCss).toContain(".train-bridge-track-edge");
+    const bridgeCss = trainLayoutCss.slice(
+      trainLayoutCss.indexOf(".train-bridge-crossing-void"),
+      trainLayoutCss.indexOf(".train-tunnel-mountain-mass {"),
+    );
+    expect(bridgeCss).not.toContain("repeating-linear-gradient");
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--body \.train-bridge-span\s*\{[\s\S]*?right:\s*10px;[\s\S]*?left:\s*10px;/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--variant-1\s+\.train-bridge-lattice\s*\{[\s\S]*?display:\s*none;/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*19px;[\s\S]*?height:\s*48px;/,
+    );
     expect(trainLayoutCss).toContain(".train-tunnel-mountain-mass");
     expect(trainLayoutCss).toContain(".train-tunnel-opening");
     expect(trainLayoutCss).toMatch(
@@ -3737,6 +3832,105 @@ describe("TrainLayout", () => {
     );
     expect(trainLayoutCss).not.toContain(".train-set-piece--bridge::after");
     expect(trainLayoutCss).not.toContain(".train-set-piece--tunnel::after");
+  });
+
+  it("focuses both bridge variants with one crossing owner and continuous rail contact", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1_280);
+    installAnimationFrame();
+    mockVisibility();
+    const seed = "train-053-aurora";
+    const proofs = new Map<
+      number,
+      { occurrence: number; search: string }
+    >();
+
+    for (let occurrence = 0; occurrence < 16; occurrence++) {
+      const search =
+        `?train-route-seed=${seed}&train-set-piece-focus=bridge` +
+        `&train-set-piece-occurrence=${occurrence}&train-reduced-motion=1`;
+      const focus = trainWorldSetPieceFocus(search, seed, 1_280);
+      if (focus) {
+        proofs.set(focus.visualVariant, { occurrence, search });
+      }
+      if (proofs.size === 2) break;
+    }
+
+    expect(new Set(proofs.keys())).toEqual(new Set([0, 1]));
+
+    for (const [variant, proof] of proofs) {
+      window.history.replaceState(null, "", `/${proof.search}`);
+      const rendered = render(
+        <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+      );
+      const world =
+        rendered.container.querySelector<HTMLElement>(".train-layout-world")!;
+      const focus = trainWorldSetPieceFocus(
+        window.location.search,
+        seed,
+        1_280,
+      )!;
+      const primary = [
+        ...rendered.container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-id="${focus.id}"][data-set-piece-layer="midground"]`,
+        ),
+      ];
+      const supporting = [
+        ...rendered.container.querySelectorAll<HTMLElement>(
+          `[data-set-piece-id="${focus.id}"][data-set-piece-layer="near"]`,
+        ),
+      ];
+
+      expect(world).toHaveAttribute("data-set-piece-focus-type", "bridge");
+      expect(world.dataset.setPieceCollisionExcludedIds).not.toContain(
+        focus.id,
+      );
+      expect(world).toHaveAttribute("data-set-piece-collision-exclusions", "0");
+      expect(primary.map((segment) => segment.dataset.setPieceRole)).toEqual([
+        "entry",
+        "body",
+        "body",
+        "exit",
+      ]);
+      expect(supporting.map((segment) => segment.dataset.setPieceRole)).toEqual([
+        "entry",
+        "body",
+        "body",
+        "exit",
+      ]);
+      expect(
+        primary.map(
+          (segment) =>
+            segment.querySelector<HTMLElement>(
+              '[data-bridge-geometry="track-deck"]',
+            )?.dataset.bridgeDeckContinuity,
+        ),
+      ).toEqual(["entry:0", "body:1", "body:2", "exit:3"]);
+      expect(
+        primary.every(
+          (segment) =>
+            segment.querySelectorAll("[data-bridge-crossing-medium]").length ===
+              1 &&
+            segment.querySelectorAll(
+              '[data-bridge-geometry="supports-below-deck"]',
+            ).length === 1,
+        ),
+      ).toBe(true);
+      expect(
+        supporting.every(
+          (segment) =>
+            segment.querySelectorAll("[data-bridge-geometry]").length === 1 &&
+            segment.querySelector<HTMLElement>("[data-bridge-geometry]")
+              ?.dataset.trackContact === "17",
+        ),
+      ).toBe(true);
+      expect(
+        primary[1]?.querySelector("[data-bridge-crossing-medium]"),
+      ).toHaveAttribute(
+        "data-bridge-crossing-medium",
+        variant === 0 ? "river" : "gorge",
+      );
+      rendered.unmount();
+    }
   });
 
   it("preserves tunnel portal, bore, and rail-contact geometry with reduced motion", () => {
