@@ -1113,6 +1113,52 @@ all 123 tests, the single-worker complete frontend suite passed all 468 tests,
 the production TypeScript/Vite build passed, and repository-root `make test`
 passed.
 
+TRAIN-057 coast grounding and reveal run 2026-07-27: used only the dedicated
+`tmact-train-workitems` borz profile and `127.0.0.1:5234`. For ordinary coast
+seed `train-053-aurora` at route position `128479` and focused coast-reveal
+seed `train-053-orchard`, occurrence `0`, every scene/viewport pair
+independently returned HTTP 200, matched the plain non-cache-busted
+`TrainLayout.tsx` Vite module to the current ownership metadata, opened the
+URL, set the viewport after opening, hard reloaded, and asserted the actual
+inner dimensions.
+
+The measured `.train-layout` rectangles were `y=660.75`, height `149.25` for
+the compact ordinary view and `y=623.75`, height `149.25` for compact focused
+reveal; desktop was `y=572.921875`, height `184.078125`; ultrawide was
+`y=672.921875`, height `184.078125`. Each day/night pair retained both a
+train-visible contact crop and a scenery-only crop. Scenery captures hid the
+live `.train-layout-inspection` tree plus debug/time controls, then restored
+every original inline style and verified no capture marker remained. All 24
+crops were opened individually at original resolution and remain in
+`/tmp/train057-final/`; the labelled inspected sheet is committed as
+[`train-057-coast-contact-sheet.png`](train-057-coast-contact-sheet.png).
+
+Direct pixel inspection found continuous water with opaque dry shoreline
+shelves under every visible cottage, lighthouse, post, pier, and vegetation
+asset; no building base terminates inside water. Boats and buoys use a
+separate waterline owner, and lighthouse reflection geometry remains clipped
+to that same water plane. The exact `128479` route includes its deterministic
+coast transition, so an additional ordinary coast interior at `130000` was
+inspected in day and night to expose the full dry-shelf contact rather than
+letting the fixed train or transition conceal it.
+
+The first compact focused-reveal capture exposed town fixtures inside chunks
+already marked `data-scenery-reserved="projected-set-piece"`. This was
+rejected: regional grounds, forest details, coast compositions, and built
+fixtures now all honor the same scenery reservation. Fresh compact, desktop,
+and ultrawide captures then showed the reveal as an enclosed-land-to-broad-
+water opening with zero reserved-fixture leakage, while far, midground, and
+near owned only water/horizon, shore framing, and track foreground
+respectively. Ordinary coast retained near-shore detail and was visibly
+distinct from the sparse focused reveal.
+
+At default `24px/s` speed, the focused reveal remained in full running motion
+and advanced route position from `128323.187px` to `128333.999px` over 450 ms
+(`10.812px`), with no leftover capture styles. The focused layout/scenery run
+passed all 123 tests, the single-worker complete frontend suite passed all 468
+tests, the production TypeScript/Vite build passed, and repository-root
+`make test` passed.
+
 ## Notes Template
 
 ```text

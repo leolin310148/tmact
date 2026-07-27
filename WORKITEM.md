@@ -148,7 +148,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   at compact, desktop, and ultrawide widths; reject floating bases, mixed art
   styles, or a line of disconnected dollhouses.
 
-- [ ] **TRAIN-057 — Rebuild coast grounding and make coast reveal genuinely distinct.**
+- [x] **TRAIN-057 — Rebuild coast grounding and make coast reveal genuinely distinct.**
   Keep continuous readable water, but establish dry shoreline shelves,
   embankments, piers, or harbour ground under every land-owned building and
   fixture. Only boats, buoys, reflections, and water cues may occupy water.

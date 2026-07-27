@@ -718,6 +718,7 @@ type TrainBuiltEnvironmentFixtureStyle = CSSProperties & {
 type TrainCoastFixtureStyle = CSSProperties & {
   "--train-coast-fixture-scale": number;
   "--train-coast-fixture-ground-height": string;
+  "--train-coast-waterline-height": string;
 };
 
 type TrainPaletteStyle = CSSProperties & {
@@ -1245,6 +1246,14 @@ function TrainCoastRevealComposition({
       data-coast-reveal-segment={segment.segmentOffset}
       data-coast-reveal-water-coverage={waterCoverage}
       data-coast-reveal-clearance="foreground-reserved"
+      data-coast-reveal-layer-role={
+        layer === "far"
+          ? "water-horizon"
+          : layer === "midground"
+            ? "shoreline-frame"
+            : "track-foreground"
+      }
+      data-coast-reveal-single-owner="true"
       aria-hidden="true"
     >
       {layer === "far" ? (
@@ -1252,6 +1261,8 @@ function TrainCoastRevealComposition({
           <span
             className="train-coast-reveal-water"
             data-coast-reveal-geometry="broad-water"
+            data-coast-reveal-geometry-owner={`${segment.id}:far:${segment.segmentOffset}`}
+            data-coast-contact-medium="water"
             data-water-owner={`${segment.id}:far`}
             data-water-surface="opaque"
           >
@@ -1262,13 +1273,16 @@ function TrainCoastRevealComposition({
           <span
             className="train-coast-reveal-horizon"
             data-coast-reveal-geometry="water-horizon"
+            data-coast-reveal-geometry-owner={`${segment.id}:far:${segment.segmentOffset}`}
           />
         </>
       ) : layer === "midground" ? (
         <span
           className="train-coast-reveal-shore"
           data-coast-reveal-geometry="shoreline-frame"
+          data-coast-reveal-geometry-owner={`${segment.id}:midground:${segment.segmentOffset}`}
           data-coast-reveal-surface="opaque"
+          data-coast-contact-medium="dry-land"
         >
           <i data-coast-reveal-shore-detail="rock-shelf" />
           <i data-coast-reveal-shore-detail="beach" />
@@ -1277,7 +1291,9 @@ function TrainCoastRevealComposition({
         <span
           className="train-coast-reveal-foreground"
           data-coast-reveal-geometry="foreground-opening"
+          data-coast-reveal-geometry-owner={`${segment.id}:near:${segment.segmentOffset}`}
           data-coast-reveal-surface="opaque"
+          data-coast-contact-medium="dry-land"
         >
           <i data-coast-reveal-foreground-detail="headland" />
           <i data-coast-reveal-foreground-detail="coastal-grass" />
@@ -1856,6 +1872,8 @@ const TRAIN_COAST_FIXTURE_POSITIONS = [
   [14, 43, 74],
 ] as const;
 
+const TRAIN_COAST_WATER_FIXTURES = new Set(["boat", "buoy"]);
+
 function coastWaterOwner(chunk: RouteChunk, layer: TrainParallaxLayerName) {
   return (
     `coast:${chunk.seedVersion}:${chunk.routeSeed}:` +
@@ -1872,7 +1890,7 @@ function TrainCoastComposition({
   beat: TrainCoastSceneryBeat;
   contour: TrainTerrainContour;
   chunk: RouteChunk;
-  layer: "far" | "midground";
+  layer: "midground";
 }) {
   const positions =
     TRAIN_COAST_FIXTURE_POSITIONS[beat.templateVariant] ??
@@ -1892,17 +1910,17 @@ function TrainCoastComposition({
       data-coast-transition-neighbor={beat.transitionNeighbor ?? undefined}
       data-coast-transition-family={beat.transitionFamily}
       data-coast-rhythm-variant={beat.templateVariant}
+      data-coast-layer-role="water-shore-fixtures"
+      data-coast-single-owner="midground"
       aria-hidden="true"
     >
       <span
-        className={[
-          "train-coast-water-plane",
-          `train-coast-water-plane--${layer}`,
-        ].join(" ")}
+        className="train-coast-water-plane train-coast-water-plane--midground"
         data-water-plane="continuous"
-        data-water-depth={layer}
+        data-water-depth="midground"
         data-water-owner={waterOwner}
         data-water-surface="owned"
+        data-coast-contact-medium="water"
         data-water-seam-left={contour.seamLeftHeightPx}
         data-water-seam-right={contour.seamRightHeightPx}
       >
@@ -1921,6 +1939,8 @@ function TrainCoastComposition({
         data-shore-owner={`${chunk.index}:${layer}`}
         data-shore-continuity={`${contour.seamLeftHeightPx}:${contour.seamRightHeightPx}`}
         data-shore-surface="opaque"
+        data-coast-contact-medium="dry-land"
+        data-coast-dry-ground="shore-shelf"
       />
       {layer === "midground" ? (
         <span
@@ -1930,12 +1950,16 @@ function TrainCoastComposition({
           {beat.fixtures.map((fixture, fixtureIndex) => {
             const xPercent = positions[fixtureIndex] ?? 50;
             const groundHeight = trainTerrainHeightAtPercent(contour, xPercent);
+            const waterFixture = TRAIN_COAST_WATER_FIXTURES.has(fixture);
+            const waterlineHeight =
+              47 + ((beat.templateVariant + fixtureIndex) % 3) * 3;
             const owner = `${chunk.index}:${fixtureIndex}:${fixture}`;
             const style: TrainCoastFixtureStyle = {
               left: `${xPercent}%`,
               "--train-coast-fixture-scale":
                 0.88 + ((beat.templateVariant + fixtureIndex) % 3) * 0.08,
               "--train-coast-fixture-ground-height": `${groundHeight}px`,
+              "--train-coast-waterline-height": `${waterlineHeight}px`,
             };
             return (
               <span
@@ -1946,11 +1970,15 @@ function TrainCoastComposition({
                 data-coast-fixture={fixture}
                 data-coast-fixture-owner={owner}
                 data-coast-fixture-surface="opaque"
+                data-coast-fixture-medium={
+                  waterFixture ? "water" : "dry-land"
+                }
                 data-coast-fixture-ground-height={groundHeight.toFixed(3)}
+                data-coast-fixture-waterline-height={
+                  waterFixture ? waterlineHeight : undefined
+                }
                 data-water-owner={
-                  fixture === "boat" || fixture === "buoy"
-                    ? waterOwner
-                    : undefined
+                  waterFixture ? coastWaterOwner(chunk, "midground") : undefined
                 }
                 style={style}
                 key={owner}
@@ -2277,10 +2305,23 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
           data-terrain-contour={terrainContour.points
             .map((point) => `${point.xPercent}:${point.heightPx}`)
             .join(",")}
+          data-coast-contact-medium={
+            chunk.region === "coast" && layer.name === "midground"
+              ? "dry-land"
+              : undefined
+          }
+          data-coast-dry-ground={
+            chunk.region === "coast" && layer.name === "midground"
+              ? "terrain-contour"
+              : undefined
+          }
           aria-hidden="true"
           style={terrainStyle}
         >
-          {builtEnvironmentBeat && layer.name === "midground" && !projection ? (
+          {builtEnvironmentBeat &&
+          layer.name === "midground" &&
+          !projection &&
+          !suppressScenery ? (
             <span
               className={[
                 "train-built-environment-ground",
@@ -2296,7 +2337,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       {regionalSceneryBeat?.region === "forest" &&
       terrainContour &&
       layer.name === "near" &&
-      !projection ? (
+      !projection &&
+      !suppressScenery ? (
         <TrainForestGroundDetails
           beat={regionalSceneryBeat}
           chunk={chunk}
@@ -2305,8 +2347,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       ) : null}
       {coastBeat &&
       terrainContour &&
-      (layer.name === "far" || layer.name === "midground") &&
-      !projection ? (
+      layer.name === "midground" &&
+      !projection &&
+      !suppressScenery ? (
         <TrainCoastComposition
           beat={coastBeat}
           contour={terrainContour}
@@ -2317,7 +2360,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       {builtEnvironmentBeat &&
       terrainContour &&
       layer.name === "midground" &&
-      !projection ? (
+      !projection &&
+      !suppressScenery ? (
         <TrainBuiltEnvironmentFixtures
           beat={builtEnvironmentBeat}
           contour={terrainContour}
@@ -2606,6 +2650,14 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
       ) : null}
       {sceneryPlacements.map((placement, ordinal) => {
         const { asset } = placement;
+        const coastLandOwned =
+          chunk.region === "coast" &&
+          layer.name !== "sky" &&
+          asset.category !== "cloud" &&
+          asset.category !== "coast";
+        const needsFoundation =
+          Boolean(asset.builtEnvironment) ||
+          (coastLandOwned && asset.category === "building");
         const sceneryContourHeight = terrainContour
           ? trainTerrainHeightAtPercent(
               terrainContour,
@@ -2643,6 +2695,8 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               : `${sceneryGroundHeight}px`,
           "--train-scenery-foundation-width": asset.builtEnvironment
             ? `${asset.builtEnvironment.foundationWidthPx}px`
+            : coastLandOwned && asset.category === "building"
+              ? `${asset.collisionWidth}px`
             : undefined,
           "--train-cloud-drift-start":
             placement.cloudDriftDistancePx === undefined
@@ -2669,7 +2723,7 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               : `${-placement.cloudDriftPhaseMs}ms`,
         };
         const sprites = [
-          ...(asset.builtEnvironment
+          ...(needsFoundation
             ? [
                 <span
                   className="train-scenery-foundation"
@@ -2686,6 +2740,12 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
                     3,
                   )}
                   data-built-foundation-error={anchorError?.toFixed(3)}
+                  data-coast-contact-medium={
+                    coastLandOwned ? "dry-land" : undefined
+                  }
+                  data-coast-foundation={
+                    coastLandOwned ? "opaque-shelf" : undefined
+                  }
                   style={sceneryStyle}
                   key={`foundation-${asset.id}-${ordinal}`}
                 />,
@@ -2731,6 +2791,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-transition={placement.regionalTransition}
             data-scenery-scale-family={placement.regionalScaleFamily}
             data-scenery-water-kind={placement.regionalWaterKind}
+            data-coast-contact-medium={
+              coastLandOwned ? "dry-land" : undefined
+            }
             data-scenery-set-piece={placement.setPiece?.type ?? "none"}
             data-scenery-set-piece-role={placement.setPiece?.role ?? "none"}
             data-scenery-set-piece-variant={

@@ -483,6 +483,16 @@ describe("TrainLayout", () => {
       expect(
         reservedChunk.querySelector("[data-scenery-asset]"),
       ).not.toBeInTheDocument();
+      expect(
+        reservedChunk.querySelector(
+          [
+            "[data-built-ground]",
+            "[data-built-fixture]",
+            "[data-coast-composition]",
+            ".train-forest-ground-details",
+          ].join(","),
+        ),
+      ).not.toBeInTheDocument();
     }
     expect(
       Number(world.dataset.projectedSetPieceSegments),
@@ -3357,6 +3367,39 @@ describe("TrainLayout", () => {
         const far = segments.filter(
           (segment) => segment.dataset.setPieceLayer === "far",
         );
+        const midground = segments.filter(
+          (segment) => segment.dataset.setPieceLayer === "midground",
+        );
+        const near = segments.filter(
+          (segment) => segment.dataset.setPieceLayer === "near",
+        );
+        expect(
+          far.every(
+            (segment) =>
+              segment.querySelector<HTMLElement>(
+                "[data-coast-reveal-composition]",
+              )?.dataset.coastRevealLayerRole === "water-horizon",
+          ),
+          key,
+        ).toBe(true);
+        expect(
+          midground.every(
+            (segment) =>
+              segment.querySelector<HTMLElement>(
+                "[data-coast-reveal-composition]",
+              )?.dataset.coastRevealLayerRole === "shoreline-frame",
+          ),
+          key,
+        ).toBe(true);
+        expect(
+          near.every(
+            (segment) =>
+              segment.querySelector<HTMLElement>(
+                "[data-coast-reveal-composition]",
+              )?.dataset.coastRevealLayerRole === "track-foreground",
+          ),
+          key,
+        ).toBe(true);
         expect(
           far.map(
             (segment) =>
@@ -3380,9 +3423,7 @@ describe("TrainLayout", () => {
           key,
         ).toBe(true);
         expect(
-          segments.filter(
-            (segment) => segment.dataset.setPieceLayer === "midground",
-          ).every(
+          midground.every(
             (segment) =>
               segment.querySelector(
                 "[data-coast-reveal-geometry='shoreline-frame']",
@@ -3391,9 +3432,7 @@ describe("TrainLayout", () => {
           key,
         ).toBe(true);
         expect(
-          segments.filter(
-            (segment) => segment.dataset.setPieceLayer === "near",
-          ).every(
+          near.every(
             (segment) =>
               segment.querySelector(
                 "[data-coast-reveal-geometry='foreground-opening']",
@@ -3401,6 +3440,30 @@ describe("TrainLayout", () => {
           ),
           key,
         ).toBe(true);
+        for (const segment of segments) {
+          const geometry = [
+            ...segment.querySelectorAll<HTMLElement>(
+              "[data-coast-reveal-geometry]",
+            ),
+          ];
+          const expectedGeometryCount =
+            segment.dataset.setPieceLayer === "far" ? 2 : 1;
+          expect(geometry, key).toHaveLength(expectedGeometryCount);
+          expect(
+            new Set(
+              geometry.map(
+                (candidate) => candidate.dataset.coastRevealGeometryOwner,
+              ),
+            ),
+            key,
+          ).toHaveProperty("size", 1);
+          expect(
+            segment.querySelector<HTMLElement>(
+              "[data-coast-reveal-composition]",
+            ),
+            key,
+          ).toHaveAttribute("data-coast-reveal-single-owner", "true");
+        }
       }
     }
   });
@@ -3915,7 +3978,7 @@ describe("TrainLayout", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("renders continuous owned coast water, opaque shore fixtures, and clipped reflections", () => {
+  it("gives ordinary coast one midground owner and grounds every land-owned fixture on opaque shore", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
     styles.textContent = trainLayoutCss;
@@ -3978,15 +4041,17 @@ describe("TrainLayout", () => {
         ".train-coast-shore-profile",
       ),
     ];
-    expect(farWater).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
+    expect(farWater).toHaveLength(0);
     expect(midWater).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
-    expect(shores).toHaveLength(TRAIN_REGION_CHUNK_LENGTH * 2);
-    expect(new Set(farWater.map((plane) => plane.dataset.waterOwner)).size).toBe(
-      TRAIN_REGION_CHUNK_LENGTH,
-    );
-    for (const plane of [...farWater, ...midWater]) {
+    expect(shores).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
+    expect(trainLayoutCss).not.toContain(".train-coast-water-plane--far");
+    expect(
+      new Set(midWater.map((plane) => plane.dataset.waterOwner)).size,
+    ).toBe(TRAIN_REGION_CHUNK_LENGTH);
+    for (const plane of midWater) {
       expect(plane).toHaveAttribute("data-water-plane", "continuous");
       expect(plane).toHaveAttribute("data-water-surface", "owned");
+      expect(plane).toHaveAttribute("data-coast-contact-medium", "water");
       expect(plane.dataset.waterSeamLeft).toMatch(/^\d+(?:\.\d+)?$/);
       expect(plane.dataset.waterSeamRight).toMatch(/^\d+(?:\.\d+)?$/);
       const cues = plane.querySelectorAll<HTMLElement>(
@@ -4002,7 +4067,24 @@ describe("TrainLayout", () => {
         /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/,
       );
       expect(shore).toHaveAttribute("data-shore-surface", "opaque");
+      expect(shore).toHaveAttribute(
+        "data-coast-contact-medium",
+        "dry-land",
+      );
     }
+    expect(
+      rendered.container.querySelectorAll(
+        '[data-coast-layer-role="water-shore-fixtures"]',
+      ),
+    ).toHaveLength(TRAIN_REGION_CHUNK_LENGTH);
+    rendered.container
+      .querySelectorAll<HTMLElement>("[data-coast-composition]")
+      .forEach((composition) =>
+        expect(composition).toHaveAttribute(
+          "data-coast-single-owner",
+          "midground",
+        ),
+      );
     const fixtures = rendered.container.querySelectorAll<HTMLElement>(
       "[data-coast-fixture]",
     );
@@ -4013,6 +4095,24 @@ describe("TrainLayout", () => {
         "opaque",
       ),
     );
+    fixtures.forEach((fixture) => {
+      const waterOwned = ["boat", "buoy"].includes(
+        fixture.dataset.coastFixture!,
+      );
+      expect(fixture).toHaveAttribute(
+        "data-coast-fixture-medium",
+        waterOwned ? "water" : "dry-land",
+      );
+      if (waterOwned) {
+        expect(fixture.dataset.waterOwner).toMatch(/:midground:water$/);
+        expect(fixture.dataset.coastFixtureWaterlineHeight).toMatch(/^\d+$/);
+      } else {
+        expect(fixture).not.toHaveAttribute("data-water-owner");
+        expect(Number(fixture.dataset.coastFixtureGroundHeight)).toBeGreaterThan(
+          0,
+        );
+      }
+    });
     expect(
       new Set(
         chunks.flatMap(
@@ -4058,6 +4158,25 @@ describe("TrainLayout", () => {
     const water = lighthouse.container.querySelector<HTMLElement>(
       ".train-coast-water-plane--midground",
     )!;
+    const lighthouseAsset = lighthouse.container.querySelector<HTMLElement>(
+      '[data-scenery-asset="landmark-coast-lighthouse"]',
+    )!;
+    const lighthouseFoundation =
+      lighthouse.container.querySelector<HTMLElement>(
+        `[data-built-foundation-owner="${lighthouseAsset.dataset.sceneryInstanceId}"]`,
+      )!;
+    expect(lighthouseAsset).toHaveAttribute(
+      "data-coast-contact-medium",
+      "dry-land",
+    );
+    expect(lighthouseFoundation).toHaveAttribute(
+      "data-coast-foundation",
+      "opaque-shelf",
+    );
+    expect(lighthouseFoundation).toHaveAttribute(
+      "data-coast-contact-medium",
+      "dry-land",
+    );
     const clip = lighthouse.container.querySelector<HTMLElement>(
       ".train-coast-reflection-clip",
     )!;
