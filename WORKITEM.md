@@ -130,7 +130,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   TRAIN-053 contact-sheet tiles; forest must read as forest at a glance, and
   neither region may recover the removed crosshatch as a new pattern.
 
-- [ ] **TRAIN-056 — Normalize town and industrial pixel scale, perspective, and grounding.**
+- [x] **TRAIN-056 — Normalize town and industrial pixel scale, perspective, and grounding.**
   Remove the collage effect in the town `1439` sample: do not mix crude
   flat CSS boxes beside highly detailed raster churches and rowhouses at
   incompatible pixel density or scale. Establish a small coherent building

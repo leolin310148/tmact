@@ -33,6 +33,7 @@ import {
   TRAIN_SCENERY_TERRAIN,
   TRAIN_SCENERY_VEGETATION,
   TRAIN_TOWN_INDUSTRIAL_MIN_REPEAT_DISTANCE_PX,
+  TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_BOUNDS,
   trainCloudPlacementsForChunk,
   trainCoastSceneryBeatForChunk,
   trainCoastTransitionFamilyForRegion,
@@ -42,6 +43,7 @@ import {
   trainSceneryPlacementsForChunk,
   trainSceneryAssetScale,
   trainSceneryScale,
+  trainTownIndustrialAssetScale,
   trainTownIndustrialSceneryBeatForChunk,
   type TrainRegionSceneryProfile,
 } from "./trainScenery";
@@ -1074,19 +1076,35 @@ describe("train scenery asset kit", () => {
             expect(placement.regionalTemplateVariant).toBe(
               beat.templateVariant,
             );
-            const [minimum, maximum] = placement.asset.safeScale;
-            const scaleUnit =
-              (placement.assetScale - minimum) / (maximum - minimum);
-            const expectedRange =
-              beat.scaleFamily === "small"
-                ? [0, 0.35]
-                : beat.scaleFamily === "medium"
-                  ? [0.28, 0.7]
-                  : beat.scaleFamily === "tall"
-                    ? [0.62, 1]
-                    : [0.12, 0.88];
-            expect(scaleUnit).toBeGreaterThanOrEqual(expectedRange[0]! - 1e-9);
-            expect(scaleUnit).toBeLessThanOrEqual(expectedRange[1]! + 1e-9);
+            if (placement.asset.builtEnvironment) {
+              const renderedModule =
+                placement.asset.builtEnvironment.referenceModuleHeightPx *
+                placement.assetScale;
+              const [minimumModule, maximumModule] =
+                TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_BOUNDS[
+                  beat.scaleFamily
+                ];
+              expect(renderedModule).toBeGreaterThanOrEqual(minimumModule);
+              expect(renderedModule).toBeLessThanOrEqual(maximumModule);
+            } else {
+              const [minimum, maximum] = placement.asset.safeScale;
+              const scaleUnit =
+                (placement.assetScale - minimum) / (maximum - minimum);
+              const expectedRange =
+                beat.scaleFamily === "small"
+                  ? [0, 0.35]
+                  : beat.scaleFamily === "medium"
+                    ? [0.28, 0.7]
+                    : beat.scaleFamily === "tall"
+                      ? [0.62, 1]
+                      : [0.12, 0.88];
+              expect(scaleUnit).toBeGreaterThanOrEqual(
+                expectedRange[0]! - 1e-9,
+              );
+              expect(scaleUnit).toBeLessThanOrEqual(
+                expectedRange[1]! + 1e-9,
+              );
+            }
           }
           idsByRole.set(beat.role, ids);
         }
@@ -1206,6 +1224,83 @@ describe("train scenery asset kit", () => {
         height: asset.height,
       });
       expect(asset.groundInsetPx).toBeLessThanOrEqual(3);
+      expect(asset.builtEnvironment).toMatchObject({
+        pixelDensity: "native-1x",
+        perspective: "shallow-three-quarter",
+      });
+      expect(asset.builtEnvironment!.referenceModuleHeightPx).toBeGreaterThan(
+        0,
+      );
+      expect(asset.builtEnvironment!.foundationWidthPx).toBeLessThanOrEqual(
+        asset.width,
+      );
+    }
+
+    const builtLandmarks = TRAIN_SCENERY_LANDMARKS.filter(
+      (asset) =>
+        asset.id === "landmark-town-church" ||
+        asset.id === "landmark-industrial-gantry",
+    );
+    expect(builtLandmarks).toHaveLength(2);
+    expect(
+      builtLandmarks.map((asset) => asset.builtEnvironment?.region),
+    ).toEqual(["town", "industrial"]);
+    for (const asset of builtLandmarks) {
+      expect(asset.builtEnvironment?.pixelDensity).toBe("native-1x");
+      expect(asset.builtEnvironment?.perspective).toBe(
+        "shallow-three-quarter",
+      );
+    }
+  });
+
+  it("keeps every raster building inside its human-scale module family", () => {
+    const assets = [
+      ...TRAIN_SCENERY_BUILDINGS,
+      ...TRAIN_SCENERY_LANDMARKS.filter((asset) => asset.builtEnvironment),
+    ];
+    const roles = [
+      "town-transition-lane",
+      "town-residential-block",
+      "town-commercial-main-street",
+      "town-yard-cluster",
+      "town-civic-square",
+      "industrial-transition-road",
+      "industrial-shed-district",
+      "industrial-tank-yard",
+      "industrial-stack-line",
+      "industrial-crane-yard",
+    ] as const;
+
+    for (const role of roles) {
+      let beat: ReturnType<
+        typeof trainTownIndustrialSceneryBeatForChunk
+      > = null;
+      for (let index = -3_000; index <= 3_000 && beat === null; index++) {
+        const candidate = trainTownIndustrialSceneryBeatForChunk(
+          generateRouteChunk("train-056-scale-family", index),
+        );
+        if (candidate?.role === role) beat = candidate;
+      }
+      expect(beat, role).not.toBeNull();
+      const [minimum, maximum] =
+        TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_BOUNDS[beat!.scaleFamily];
+      for (const asset of assets.filter(
+        (candidate) => candidate.builtEnvironment?.region === beat!.region,
+      )) {
+        for (let variant = 0; variant < 5; variant++) {
+          const renderedModule =
+            asset.builtEnvironment!.referenceModuleHeightPx *
+            trainTownIndustrialAssetScale(asset, variant, beat!);
+          expect(
+            renderedModule,
+            `${role}:${asset.id}:${variant}`,
+          ).toBeGreaterThanOrEqual(minimum);
+          expect(
+            renderedModule,
+            `${role}:${asset.id}:${variant}`,
+          ).toBeLessThanOrEqual(maximum);
+        }
+      }
     }
   });
 

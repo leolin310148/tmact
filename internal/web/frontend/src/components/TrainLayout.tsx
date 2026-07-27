@@ -71,6 +71,7 @@ import {
   trainForestMountainSceneryBeatForChunk,
   trainNightLifeForPlacement,
   trainSceneryPlacementsForChunk,
+  trainTownIndustrialAssetScale,
   trainTownIndustrialSceneryBeatForChunk,
   type TrainCoastSceneryBeat,
   type TrainForestMountainSceneryBeat,
@@ -693,6 +694,7 @@ type TrainWorldLayerStyle = CSSProperties & {
 type TrainSceneryAssetStyle = CSSProperties & {
   "--train-scenery-scale": number;
   "--train-scenery-ground-height"?: string;
+  "--train-scenery-foundation-width"?: string;
   "--train-cloud-drift-start"?: string;
   "--train-cloud-drift-end"?: string;
   "--train-cloud-drift-duration"?: string;
@@ -708,6 +710,9 @@ type TrainNightLifeStyle = CSSProperties & {
 type TrainBuiltEnvironmentFixtureStyle = CSSProperties & {
   "--train-built-fixture-scale": number;
   "--train-built-fixture-ground-height": string;
+  "--train-built-fixture-width"?: string;
+  "--train-built-fixture-height"?: string;
+  "--train-built-fixture-foundation-width"?: string;
 };
 
 type TrainCoastFixtureStyle = CSSProperties & {
@@ -1626,6 +1631,56 @@ const TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES =
     "gantry-crane",
   ]);
 
+const TRAIN_BUILT_ENVIRONMENT_RASTER_FIXTURES = {
+  "townhouse-block": [
+    "building-rowhouse",
+    "building-apartments",
+    "building-cottage",
+  ],
+  "shop-awning": ["building-rowhouse", "building-apartments"],
+  "industrial-shed": ["building-workshop", "building-warehouse"],
+  "gantry-crane": ["landmark-industrial-gantry"],
+} as const satisfies Partial<
+  Record<TrainTownIndustrialFixtureKind, readonly string[]>
+>;
+
+const TRAIN_BUILT_ENVIRONMENT_FIXTURE_COLLISION_WIDTHS = {
+  fence: 72,
+  "street-tree": 41,
+  "civic-clock": 20,
+  "yard-gate": 72,
+  "utility-pole": 41,
+  "vent-stack": 17,
+  "storage-tank": 57,
+  "furnace-stack": 21,
+  "gantry-crane": 88,
+  "service-pipe": 76,
+} as const satisfies Partial<Record<TrainTownIndustrialFixtureKind, number>>;
+
+function trainBuiltEnvironmentFixtureAsset(
+  fixture: TrainTownIndustrialFixtureKind,
+  beat: TrainTownIndustrialSceneryBeat,
+  chunkIndex: number,
+  fixtureIndex: number,
+): TrainSceneryAsset | null {
+  const pool =
+    TRAIN_BUILT_ENVIRONMENT_RASTER_FIXTURES[
+      fixture as keyof typeof TRAIN_BUILT_ENVIRONMENT_RASTER_FIXTURES
+    ];
+  if (!pool) return null;
+  const poolIndex =
+    ((chunkIndex + beat.templateVariant + fixtureIndex) % pool.length +
+      pool.length) %
+    pool.length;
+  const assetID = pool[poolIndex]!;
+  return (
+    [...TRAIN_SCENERY_BUILDINGS, ...TRAIN_SCENERY_LANDMARKS].find(
+      (candidate) => candidate.id === assetID,
+    ) ??
+    null
+  );
+}
+
 function TrainBuiltEnvironmentFixtures({
   beat,
   contour,
@@ -1652,13 +1707,42 @@ function TrainBuiltEnvironmentFixtures({
     >
       {beat.fixtures.map((fixture, fixtureIndex) => {
         const xPercent = positions[fixtureIndex] ?? 50;
-        const groundHeight = trainTerrainHeightAtPercent(contour, xPercent);
+        const contourHeight = trainTerrainHeightAtPercent(contour, xPercent);
+        const rasterAsset = trainBuiltEnvironmentFixtureAsset(
+          fixture,
+          beat,
+          chunkIndex,
+          fixtureIndex,
+        );
+        const fixtureScale = rasterAsset
+          ? trainTownIndustrialAssetScale(
+              rasterAsset,
+              beat.templateVariant + fixtureIndex,
+              beat,
+            ) * TRAIN_SCENERY_DEPTH_GRAMMAR.midground.scaleMultiplier
+          : 0.86 + ((beat.templateVariant + fixtureIndex) % 3) * 0.08;
+        const groundInset = (rasterAsset?.groundInsetPx ?? 0) * fixtureScale;
+        const groundHeight = contourHeight - groundInset;
+        const collisionWidth =
+          (rasterAsset?.collisionWidth ??
+            TRAIN_BUILT_ENVIRONMENT_FIXTURE_COLLISION_WIDTHS[
+              fixture as keyof typeof TRAIN_BUILT_ENVIRONMENT_FIXTURE_COLLISION_WIDTHS
+            ] ??
+            40) * fixtureScale;
         const owner = `${beat.region}:${chunkIndex}:${fixtureIndex}:${fixture}`;
         const style: TrainBuiltEnvironmentFixtureStyle = {
           left: `${xPercent}%`,
-          "--train-built-fixture-scale":
-            0.86 + ((beat.templateVariant + fixtureIndex) % 3) * 0.08,
+          "--train-built-fixture-scale": fixtureScale,
           "--train-built-fixture-ground-height": `${groundHeight}px`,
+          "--train-built-fixture-width": rasterAsset
+            ? `${rasterAsset.width}px`
+            : undefined,
+          "--train-built-fixture-height": rasterAsset
+            ? `${rasterAsset.height}px`
+            : undefined,
+          "--train-built-fixture-foundation-width": rasterAsset?.builtEnvironment
+            ? `${rasterAsset.builtEnvironment.foundationWidthPx}px`
+            : undefined,
         };
         return (
           <span
@@ -1670,10 +1754,87 @@ function TrainBuiltEnvironmentFixtures({
             data-built-fixture-owner={owner}
             data-built-fixture-surface="opaque"
             data-built-fixture-ground-height={groundHeight.toFixed(3)}
+            data-built-fixture-contour-height={contourHeight.toFixed(3)}
+            data-built-fixture-ground-inset={groundInset.toFixed(3)}
+            data-built-fixture-foundation-error={(
+              groundHeight +
+              groundInset -
+              contourHeight
+            ).toFixed(3)}
+            data-built-fixture-x-percent={xPercent}
+            data-built-fixture-collision-width={collisionWidth.toFixed(3)}
+            data-built-fixture-art={rasterAsset ? "raster" : "connector"}
+            data-built-fixture-asset={rasterAsset?.id}
+            data-built-fixture-pixel-density={
+              rasterAsset?.builtEnvironment?.pixelDensity
+            }
+            data-built-fixture-perspective={
+              rasterAsset?.builtEnvironment?.perspective
+            }
+            data-built-fixture-reference-module={
+              rasterAsset?.builtEnvironment?.referenceModuleHeightPx
+            }
             style={style}
             key={owner}
           >
-            {TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES.has(fixture) ? (
+            {rasterAsset ? (
+              <>
+                <span
+                  className="train-built-environment-raster-foundation"
+                  data-built-foundation-owner={owner}
+                  data-built-foundation-contact="contour"
+                />
+                <img
+                  className="train-built-environment-raster"
+                  src={rasterAsset.src}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  loading="lazy"
+                  decoding="async"
+                  width={rasterAsset.width}
+                  height={rasterAsset.height}
+                  data-built-raster-asset={rasterAsset.id}
+                  data-built-raster-pixel-density={
+                    rasterAsset.builtEnvironment?.pixelDensity
+                  }
+                />
+                {rasterAsset.emissive ? (
+                  <img
+                    className={[
+                      "train-emissive-overlay",
+                      "train-built-environment-raster-emissive",
+                    ].join(" ")}
+                    src={rasterAsset.emissive.src}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    loading="lazy"
+                    decoding="async"
+                    width={rasterAsset.emissive.width}
+                    height={rasterAsset.emissive.height}
+                    data-emissive="regional-fixture"
+                    data-emissive-owner={owner}
+                    data-emissive-region={beat.region}
+                    data-emissive-schedule="sunset-night"
+                  />
+                ) : TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES.has(fixture) ? (
+                  <span
+                    className="train-emissive-overlay train-built-environment-fixture-emissive"
+                    data-emissive="regional-fixture"
+                    data-emissive-owner={owner}
+                    data-emissive-region={beat.region}
+                    data-emissive-schedule="sunset-night"
+                  />
+                ) : null}
+                {fixture === "shop-awning" ? (
+                  <span
+                    className="train-built-environment-shop-awning"
+                    data-built-fixture-detail="shop-awning"
+                  />
+                ) : null}
+              </>
+            ) : TRAIN_BUILT_ENVIRONMENT_EMISSIVE_FIXTURES.has(fixture) ? (
               <span
                 className="train-emissive-overlay train-built-environment-fixture-emissive"
                 data-emissive="regional-fixture"
@@ -2480,6 +2641,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             sceneryGroundHeight === undefined
               ? undefined
               : `${sceneryGroundHeight}px`,
+          "--train-scenery-foundation-width": asset.builtEnvironment
+            ? `${asset.builtEnvironment.foundationWidthPx}px`
+            : undefined,
           "--train-cloud-drift-start":
             placement.cloudDriftDistancePx === undefined
               ? undefined
@@ -2505,6 +2669,28 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
               : `${-placement.cloudDriftPhaseMs}ms`,
         };
         const sprites = [
+          ...(asset.builtEnvironment
+            ? [
+                <span
+                  className="train-scenery-foundation"
+                  aria-hidden="true"
+                  data-built-foundation-owner={sceneryInstanceId}
+                  data-built-foundation-contact="contour"
+                  data-built-foundation-ground-height={
+                    sceneryGroundHeight?.toFixed(3)
+                  }
+                  data-built-foundation-contour-height={
+                    sceneryContourHeight?.toFixed(3)
+                  }
+                  data-built-foundation-inset={placement.groundInsetPx.toFixed(
+                    3,
+                  )}
+                  data-built-foundation-error={anchorError?.toFixed(3)}
+                  style={sceneryStyle}
+                  key={`foundation-${asset.id}-${ordinal}`}
+                />,
+              ]
+            : []),
           <img
             className={[
               "train-scenery-asset",
@@ -2528,6 +2714,16 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
             data-scenery-depth-scale={placement.depthScaleMultiplier.toFixed(3)}
             data-scenery-detail-budget={placement.detailBudget}
             data-scenery-day-night={asset.dayNightTreatment}
+            data-scenery-pixel-density={
+              asset.builtEnvironment?.pixelDensity
+            }
+            data-scenery-perspective={asset.builtEnvironment?.perspective}
+            data-scenery-reference-module={
+              asset.builtEnvironment?.referenceModuleHeightPx
+            }
+            data-scenery-foundation-width={
+              asset.builtEnvironment?.foundationWidthPx
+            }
             data-scenery-landmark={placement.landmark ? "true" : "false"}
             data-scenery-regional-role={placement.regionalRole}
             data-scenery-silhouette={placement.silhouetteFamily}

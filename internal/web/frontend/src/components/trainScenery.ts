@@ -69,6 +69,14 @@ export interface TrainSceneryEmissiveAsset {
   height: number;
 }
 
+export interface TrainBuiltEnvironmentAssetGrammar {
+  region: "town" | "industrial";
+  pixelDensity: "native-1x";
+  perspective: "shallow-three-quarter";
+  referenceModuleHeightPx: number;
+  foundationWidthPx: number;
+}
+
 export interface TrainSceneryAsset {
   id: string;
   fileName: string;
@@ -83,6 +91,7 @@ export interface TrainSceneryAsset {
   groundInsetPx: number;
   dayNightTreatment: TrainSceneryDayNightTreatment;
   emissive?: TrainSceneryEmissiveAsset;
+  builtEnvironment?: TrainBuiltEnvironmentAssetGrammar;
 }
 
 function asset(
@@ -335,6 +344,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 46,
     height: 92,
     safeScale: [0.65, 1],
+    builtEnvironment: {
+      region: "town",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 28,
+      foundationWidthPx: 40,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -354,6 +370,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 100,
     height: 28,
     safeScale: [0.75, 1.2],
+    builtEnvironment: {
+      region: "industrial",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 18,
+      foundationWidthPx: 90,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -373,6 +396,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 91,
     height: 92,
     safeScale: [0.6, 0.95],
+    builtEnvironment: {
+      region: "town",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 27,
+      foundationWidthPx: 83,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -393,6 +423,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     height: 79,
     safeScale: [0.65, 1],
     groundInsetPx: 3,
+    builtEnvironment: {
+      region: "town",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 30,
+      foundationWidthPx: 91,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -412,6 +449,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 99,
     height: 84,
     safeScale: [0.65, 1.05],
+    builtEnvironment: {
+      region: "industrial",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 30,
+      foundationWidthPx: 90,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -431,6 +475,13 @@ export const TRAIN_SCENERY_BUILDINGS = [
     width: 56,
     height: 100,
     safeScale: [0.55, 0.9],
+    builtEnvironment: {
+      region: "industrial",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 28,
+      foundationWidthPx: 48,
+    },
     dayNightTreatment: "emissive-windows",
     emissive: {
       kind: "windows",
@@ -483,6 +534,13 @@ export const TRAIN_SCENERY_LANDMARKS = [
     collisionWidth: 150,
     safeScale: [0.58, 0.78],
     groundInsetPx: 0,
+    builtEnvironment: {
+      region: "town",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 32,
+      foundationWidthPx: 148,
+    },
     dayNightTreatment: "solid-palette-grade",
   }),
   asset({
@@ -511,6 +569,13 @@ export const TRAIN_SCENERY_LANDMARKS = [
     collisionWidth: 184,
     safeScale: [0.6, 0.82],
     groundInsetPx: 0,
+    builtEnvironment: {
+      region: "industrial",
+      pixelDensity: "native-1x",
+      perspective: "shallow-three-quarter",
+      referenceModuleHeightPx: 24,
+      foundationWidthPx: 182,
+    },
     dayNightTreatment: "solid-palette-grade",
   }),
 ] as const satisfies readonly TrainSceneryAsset[];
@@ -975,6 +1040,23 @@ export type TrainTownIndustrialScaleFamily =
   | "medium"
   | "tall"
   | "mixed";
+
+export const TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_BOUNDS = {
+  small: [16, 20],
+  medium: [18, 22],
+  tall: [19, 23],
+  mixed: [18, 22],
+} as const satisfies Record<
+  TrainTownIndustrialScaleFamily,
+  readonly [minimum: number, maximum: number]
+>;
+
+const TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_TARGET = {
+  small: 18,
+  medium: 20,
+  tall: 21,
+  mixed: 19.5,
+} as const satisfies Record<TrainTownIndustrialScaleFamily, number>;
 
 export type TrainTownIndustrialGroundKind =
   | "lane"
@@ -3053,13 +3135,26 @@ function townIndustrialAssetPool(
   return fallback;
 }
 
-function townIndustrialAssetScale(
+export function trainTownIndustrialAssetScale(
   asset: TrainSceneryAsset,
   variant: number,
   beat: TrainTownIndustrialSceneryBeat,
 ): number {
   const normalizedVariant = positiveModulo(variant, 5) / 4;
   const [minimum, maximum] = asset.safeScale;
+  if (asset.builtEnvironment) {
+    const target =
+      TRAIN_TOWN_INDUSTRIAL_SCALE_FAMILY_MODULE_TARGET[beat.scaleFamily];
+    const variantMultiplier = 0.94 + normalizedVariant * 0.12;
+    return Math.max(
+      minimum,
+      Math.min(
+        maximum,
+        (target / asset.builtEnvironment.referenceModuleHeightPx) *
+          variantMultiplier,
+      ),
+    );
+  }
   const scaleUnit =
     beat.scaleFamily === "small"
       ? normalizedVariant * 0.35
@@ -3262,7 +3357,7 @@ function regionLayerPlan(
         trainRouteRandomUnit(`${chunkKey}:variant:0`) * 5,
       );
       const landmarkScale = builtEnvironmentBeat
-        ? townIndustrialAssetScale(
+        ? trainTownIndustrialAssetScale(
             landmarkAsset,
             landmarkVariant,
             builtEnvironmentBeat,
@@ -3365,7 +3460,7 @@ function regionLayerPlan(
         trainRouteRandomUnit(`${chunkKey}:variant:${ordinal}`) * 5,
       );
       const assetScale = builtEnvironmentBeat
-        ? townIndustrialAssetScale(asset, variant, builtEnvironmentBeat)
+        ? trainTownIndustrialAssetScale(asset, variant, builtEnvironmentBeat)
         : trainSceneryAssetScale(asset, variant);
       recentIDs.push(asset.id);
       recentIDs.splice(0, Math.max(0, recentIDs.length - rule.cooldownChunks));

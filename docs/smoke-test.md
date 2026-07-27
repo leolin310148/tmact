@@ -1060,6 +1060,59 @@ a focused 15-second timeout after the denser regional pools made its former
 5-second default intermittently expire; its route range and assertions are
 unchanged.
 
+TRAIN-056 town/industrial normalization run 2026-07-27: used the dedicated
+`tmact-train-workitems` borz profile against only `127.0.0.1:5234`. Every
+route/viewport pair independently returned HTTP 200, matched the plain
+non-cache-busted Vite source to the raster-fixture implementation, opened the
+proof URL, set the viewport after opening, hard reloaded, and asserted the
+actual inner dimensions. Town positions were `994/1439/2079px` at compact
+`390×844`, desktop `1280×800`, and ultrawide `2560×900`. The industrial
+comparison used the clear aurora crane/service district at `34417px` for
+compact and desktop and `35057px` ultrawide.
+
+Every day, sunset, and night capture temporarily hid
+`.train-layout-inspection`, `.train-world-debug-grid`, and
+`.train-time-toggle`, then removed the proof style and verified the live
+displays returned to `flex` and `grid` (the debug grid was absent outside
+debug mode). The measured `.train-layout` rectangles were `y=660.75`,
+height `149.25` compact; `y=572.921875`, height `184.078125` desktop; and
+`y=672.921875`, height `184.078125` ultrawide. The physical crops were
+therefore `390×150`, `1280×185`, and `2560×185`. All 18 crops were opened
+individually at original resolution and remain in
+`/private/tmp/train-056-final/`; the labelled inspected sheet is committed as
+[`train-056-town-industrial-contact-sheet.png`](train-056-town-industrial-contact-sheet.png).
+
+Direct inspection found that the crude CSS townhouse, shop, shed, and gantry
+boxes no longer sit beside the detailed raster church, rowhouse, cottage, or
+warehouse art. Building-shaped fixtures now reuse the same native-1x raster
+family, share a human-scale module and shallow-three-quarter perspective, and
+sit on explicit contour-owned foundations. Streets, yards, fences, utility
+corridors, stacks, tanks, and service pipes connect the structures while
+retaining deliberate gaps. Day captures contained no emissive overlays;
+sunset/night window masks and the industrial beacon stayed attached to their
+owners. The first compact industrial sample was rejected because it showed
+only a utility corridor, and a later night sample was rejected because the
+old gantry beacon coordinate floated above the raster; both were corrected
+and recaptured before acceptance.
+
+At ultrawide width, the compositor necessarily retains the previously known
+bridge at the left edge and station campus at the right edge of the industrial
+frame. A deterministic multi-seed search found no industrial ultrawide window
+without projected set pieces; candidates with fewer projections moved a
+station or town-edge composition across the centre and were visually worse.
+The edge defects remain visible and unmodified for TRAIN-059 and TRAIN-060
+rather than being hidden by proof CSS. The ordinary industrial grammar remains
+readable across the left/centre of the retained comparison, and its raster
+assets do not mix pixel density or float above their foundations.
+
+At the default `24px/s` cruise speed, a desktop sample advanced route position
+from `34448.647px` to `34469.448px` over 850 ms and midground position from
+`18946.756px` to `18958.196px`; the fixed consist remained at `x=0` and the
+bounded DOM stayed at 45 route chunks. The focused scenery/layout run passed
+all 123 tests, the single-worker complete frontend suite passed all 468 tests,
+the production TypeScript/Vite build passed, and repository-root `make test`
+passed.
+
 ## Notes Template
 
 ```text

@@ -2884,6 +2884,28 @@ describe("TrainLayout", () => {
         expect(Number(fixture.dataset.builtFixtureGroundHeight)).toBeGreaterThan(
           0,
         );
+        expect(fixture.dataset.builtFixtureOwner).toContain(
+          `:${fixture.closest<HTMLElement>("[data-route-chunk-index]")!.dataset.routeChunkIndex}:`,
+        );
+        expect(Number(fixture.dataset.builtFixtureFoundationError)).toBeCloseTo(
+          0,
+          3,
+        );
+        expect(Number(fixture.dataset.builtFixtureCollisionWidth)).toBeGreaterThan(
+          0,
+        );
+        if (fixture.dataset.builtFixtureArt === "raster") {
+          expect(fixture.dataset.builtFixturePixelDensity).toBe("native-1x");
+          expect(fixture.dataset.builtFixturePerspective).toBe(
+            TRAIN_WORLD_TRACK_PERSPECTIVE,
+          );
+          expect(
+            fixture.querySelector("[data-built-raster-asset]"),
+          ).toHaveAttribute("data-built-raster-pixel-density", "native-1x");
+          expect(
+            fixture.querySelector("[data-built-foundation-contact='contour']"),
+          ).not.toBeNull();
+        }
         const overlay = fixture.querySelector<HTMLElement>(
           "[data-emissive='regional-fixture']",
         );
@@ -2896,6 +2918,26 @@ describe("TrainLayout", () => {
             "sunset-night",
           );
         }
+      }
+      const orderedFixtures = [...fixtures].sort(
+        (left, right) =>
+          Number(left.dataset.builtFixtureXPercent) -
+          Number(right.dataset.builtFixtureXPercent),
+      );
+      for (let index = 1; index < orderedFixtures.length; index++) {
+        const left = orderedFixtures[index - 1]!;
+        const right = orderedFixtures[index]!;
+        const centerDistance =
+          ((Number(right.dataset.builtFixtureXPercent) -
+            Number(left.dataset.builtFixtureXPercent)) /
+            100) *
+          320;
+        const requiredDistance =
+          (Number(left.dataset.builtFixtureCollisionWidth) +
+            Number(right.dataset.builtFixtureCollisionWidth)) /
+            2 +
+          12;
+        expect(centerDistance).toBeGreaterThanOrEqual(requiredDistance);
       }
     }
 
@@ -2921,6 +2963,64 @@ describe("TrainLayout", () => {
         "utility-pole",
       ]),
     );
+    const rasterFixtures = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        "[data-built-fixture-art='raster']",
+      ),
+    ];
+    expect(
+      new Set(rasterFixtures.map((fixture) => fixture.dataset.builtFixture)),
+    ).toEqual(
+      new Set([
+        "townhouse-block",
+        "shop-awning",
+        "industrial-shed",
+        "gantry-crane",
+      ]),
+    );
+    const rasterAssetIDs = rasterFixtures.map(
+      (fixture) => fixture.dataset.builtFixtureAsset!,
+    );
+    expect(
+      rasterAssetIDs.every((assetID) =>
+        [
+          "building-rowhouse",
+          "building-apartments",
+          "building-cottage",
+          "building-workshop",
+          "building-warehouse",
+          "landmark-industrial-gantry",
+        ].includes(assetID),
+      ),
+    ).toBe(true);
+    expect(
+      rasterAssetIDs.some(
+        (assetID) =>
+          assetID === "building-rowhouse" ||
+          assetID === "building-apartments" ||
+          assetID === "building-cottage",
+      ),
+    ).toBe(true);
+    expect(
+      rasterAssetIDs.some(
+        (assetID) =>
+          assetID === "building-workshop" ||
+          assetID === "building-warehouse",
+      ),
+    ).toBe(true);
+    const sceneryFoundations = [
+      ...rendered.container.querySelectorAll<HTMLElement>(
+        ".train-scenery-foundation",
+      ),
+    ];
+    expect(sceneryFoundations.length).toBeGreaterThan(0);
+    for (const foundation of sceneryFoundations) {
+      expect(foundation.dataset.builtFoundationContact).toBe("contour");
+      expect(Number(foundation.dataset.builtFoundationError)).toBeCloseTo(0, 3);
+      expect(Number(foundation.dataset.builtFoundationGroundHeight)).toBeGreaterThan(
+        0,
+      );
+    }
     const overlays = [
       ...rendered.container.querySelectorAll<HTMLElement>(
         "[data-emissive='regional-fixture']",
@@ -2953,13 +3053,20 @@ describe("TrainLayout", () => {
       ".train-built-environment-fixture--storage-tank",
     );
     expect(trainLayoutCss).toContain(
-      ".train-built-environment-fixture--townhouse-block",
+      '.train-built-environment-fixture[data-built-fixture-art="raster"]',
     );
-    expect(trainLayoutCss).toContain(
-      ".train-built-environment-fixture--industrial-shed",
+    expect(trainLayoutCss).toContain(".train-built-environment-raster");
+    expect(trainLayoutCss).not.toContain(
+      ".train-built-environment-fixture--townhouse-block {",
     );
-    expect(trainLayoutCss).toContain(
-      ".train-built-environment-fixture--gantry-crane",
+    expect(trainLayoutCss).not.toContain(
+      ".train-built-environment-fixture--industrial-shed {",
+    );
+    expect(trainLayoutCss).not.toContain(
+      ".train-built-environment-fixture--shop-awning {",
+    );
+    expect(trainLayoutCss).not.toContain(
+      ".train-built-environment-fixture--gantry-crane {",
     );
   });
 
@@ -4117,6 +4224,10 @@ describe("TrainLayout", () => {
       if (overlay.tagName === "IMG") {
         if (overlay.dataset.emissive === "town-edge-windows") {
           expect(overlay).toHaveClass("train-town-edge-building-emissive");
+        } else if (overlay.dataset.emissive === "regional-fixture") {
+          expect(overlay).toHaveClass(
+            "train-built-environment-raster-emissive",
+          );
         } else {
           expect(overlay).toHaveClass("train-scenery-emissive-mask");
           expect(overlay).toHaveAttribute("data-emissive", "building-windows");
