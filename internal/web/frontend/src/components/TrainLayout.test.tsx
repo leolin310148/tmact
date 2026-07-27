@@ -2143,7 +2143,7 @@ describe("TrainLayout", () => {
       expect(getComputedStyle(terrain).opacity).toBe("1");
       expect(getComputedStyle(terrain).pointerEvents).toBe("none");
       expect(getComputedStyle(terrain).clipPath).toContain("polygon(");
-      expect(getComputedStyle(terrain).backgroundImage).not.toBe("none");
+      expect(getComputedStyle(terrain).backgroundImage).toBe("none");
       expect(getComputedStyle(terrain).backgroundColor).not.toBe(
         "transparent",
       );
@@ -2238,6 +2238,127 @@ describe("TrainLayout", () => {
     }
     expect(terrainCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
     expect(terrainCss).not.toMatch(/opacity:\s*0(?:\D|$)|transform:|animation:/);
+  });
+
+  it("keeps terrain materials opaque while confining sparse accents to owned pixel marks", () => {
+    const styles = document.createElement("style");
+    styles.dataset.trainLayoutTestStyles = "true";
+    styles.textContent = trainLayoutCss;
+    document.head.append(styles);
+
+    const materials = Object.values(TRAIN_TERRAIN_REGION_MATERIALS);
+    const materialTokens = new Map([
+      ["forest-soil", "--train-palette-forest-soil"],
+      ["mountain-rock", "--train-palette-mountain-rock"],
+      ["town-ground", "--train-palette-life-town"],
+      ["coast-shore", "--train-palette-mid-surface"],
+      ["industrial-fill", "--train-palette-life-industrial"],
+    ]);
+    const commonAccentRule = trainLayoutCss.match(
+      /\.train-terrain-base\[data-terrain-material\]::before\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(commonAccentRule).toMatch(/position:\s*absolute;/);
+    expect(commonAccentRule).toMatch(/content:\s*"";/);
+    expect(commonAccentRule).toMatch(/pointer-events:\s*none;/);
+
+    for (const material of materials) {
+      const escapedMaterial = material.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const baseRule = trainLayoutCss.match(
+        new RegExp(
+          `\\.train-terrain-base\\[data-terrain-material="${escapedMaterial}"\\]\\s*\\{([^}]*)\\}`,
+        ),
+      )?.[1];
+      const accentRule = trainLayoutCss.match(
+        new RegExp(
+          `\\.train-terrain-base\\[data-terrain-material="${escapedMaterial}"\\]::before\\s*\\{([^}]*)\\}`,
+        ),
+      )?.[1];
+      expect(baseRule, `${material}:base`).toBeDefined();
+      expect(accentRule, `${material}:accent`).toBeDefined();
+      expect(baseRule).toContain("background-color:");
+      expect(baseRule).toContain(materialTokens.get(material));
+      expect(baseRule).not.toMatch(
+        /background-image|(?:repeating-)?linear-gradient|radial-gradient/,
+      );
+      expect(accentRule).toMatch(/left:\s*calc\(/);
+      expect(accentRule).toMatch(/bottom:\s*\d+px;/);
+      expect(accentRule).toMatch(/background-color:\s*currentColor;/);
+      expect(accentRule).toMatch(/box-shadow:/);
+      expect(accentRule).not.toMatch(/gradient|repeat|opacity|transparent/);
+
+      const width = Number.parseInt(
+        accentRule!.match(/width:\s*(\d+)px;/)?.[1] ?? "999",
+        10,
+      );
+      const height = Number.parseInt(
+        accentRule!.match(/height:\s*(\d+)px;/)?.[1] ?? "999",
+        10,
+      );
+      expect(width, `${material}:width`).toBeLessThanOrEqual(31);
+      expect(height, `${material}:height`).toBeLessThanOrEqual(4);
+    }
+
+    const representatives = new Map<
+      string,
+      ReturnType<typeof generateRouteChunk>
+    >();
+    for (let index = -500; index <= 500 && representatives.size < 5; index++) {
+      const chunk = generateRouteChunk("train-054-material-contract", index);
+      representatives.set(
+        TRAIN_TERRAIN_REGION_MATERIALS[chunk.region],
+        chunk,
+      );
+    }
+    expect(new Set(representatives.keys())).toEqual(new Set(materials));
+
+    const midground = TRAIN_PARALLAX_LAYERS.find(
+      (layer) => layer.name === "midground",
+    )!;
+    const { container } = render(
+      <div className="train-layout-world" data-time-of-day="day">
+        {[...representatives.entries()].map(([material, chunk]) => (
+          <TrainRouteChunk
+            chunk={chunk}
+            layer={midground}
+            includeSetPieces={false}
+            key={material}
+          />
+        ))}
+      </div>,
+    );
+    const terrain = [
+      ...container.querySelectorAll<HTMLElement>(".train-terrain-base"),
+    ];
+    expect(terrain).toHaveLength(materials.length);
+    for (const element of terrain) {
+      const material = element.dataset.terrainMaterial!;
+      const chunk = representatives.get(material)!;
+      const rightNeighbour = generateRouteChunk(
+        chunk.routeSeed,
+        chunk.index - 1,
+        chunk.seedVersion,
+      );
+      const contour = trainTerrainContourForChunk(chunk, "midground");
+      expect(element).toHaveAttribute("data-terrain-owner", "chunk-contour");
+      expect(element.dataset.terrainRegion).toBe(chunk.region);
+      expect(material).toBe(TRAIN_TERRAIN_REGION_MATERIALS[chunk.region]);
+      expect(getComputedStyle(element).opacity).toBe("1");
+      expect(getComputedStyle(element).backgroundColor).not.toBe("transparent");
+      expect(contour.seamRightHeightPx).toBe(
+        trainTerrainContourForChunk(rightNeighbour, "midground")
+          .seamLeftHeightPx,
+      );
+    }
+
+    for (const mode of ["day", "sunset", "night"] as const) {
+      const order = trainPaletteLuminanceOrder(mode);
+      expect(order.farSurface, `${mode}:far-mid`).toBeGreaterThan(
+        order.midSurface,
+      );
+      expect(order.midSurface, `${mode}:mid-near`).toBeGreaterThan(
+        order.nearSurface,
+      );
+    }
   });
 
   it("builds both town-edge variants as opaque road-and-yard density gradients", () => {

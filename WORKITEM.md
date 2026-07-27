@@ -91,7 +91,7 @@ the measured current rectangle rather than hard-coding that coordinate.
 
 ## Queue
 
-- [ ] **TRAIN-054 — Remove terrain crosshatch wallpaper and restore restrained materials.**
+- [x] **TRAIN-054 — Remove terrain crosshatch wallpaper and restore restrained materials.**
   Remove the full-chunk diagonal and orthogonal
   `repeating-linear-gradient` stacks from the five
   `.train-terrain-base[data-terrain-material]` selectors. Replace them with

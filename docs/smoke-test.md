@@ -970,6 +970,52 @@ layout run passed all 92 tests. The complete frontend suite passed all 465
 tests, the production TypeScript/Vite build passed, and repository-root
 `make test` passed.
 
+TRAIN-054 terrain-material cleanup run 2026-07-27: used the dedicated
+`tmact-train-workitems` borz profile against only `127.0.0.1:5234`. Before
+each route/viewport capture, the run confirmed HTTP 200, matched the plain
+non-cache-busted `/src/components/TrainLayout.css` module to the new sparse
+forest pixel marks, opened the exact proof URL, set the viewport, hard
+reloaded, and asserted the actual `window.innerWidth` and
+`window.innerHeight`. A live pane seat was selected before evidence capture.
+Every scenery-only capture temporarily hid `.train-layout-inspection`,
+`.train-world-debug-grid`, and `.train-time-toggle`, then removed the proof
+style and verified their displays had returned to `flex`, `block`, and
+`grid`.
+
+Desktop day/night evidence used aurora forest `7199`, town `1439`, coast
+`128479`, and the previous ordinary-mountain position `25119` at
+`1280×800`. The hidden-train `.train-layout` rectangle measured
+`y=572.921875`, height `184.078125`; each source image was cropped to the
+185 physical pixels intersecting that exact band. Compact forest/town
+day/night evidence reused `7199/1439` at an asserted `390×844`; its measured
+rectangle was `y=623.75`, height `149.25`, cropped to the 150 intersecting
+physical pixels. The twelve cropped source images remain in
+`/private/tmp/train-054-terrain/`, and the labelled inspected contact sheet is
+committed as
+[`train-054-terrain-materials-contact-sheet.png`](train-054-terrain-materials-contact-sheet.png).
+
+Every retained crop was opened individually at original resolution. The
+forest soil, mountain rock, town ground, coast shore, and industrial fill
+owners now read as opaque contour surfaces with sparse, bounded grass/leaf,
+strata, seam, broken-shore, or engineered pixel marks; none retains a
+terrain-owned fence, scaffold, diamond grid, or full-surface stripe. The
+aurora `7199` frame also contains the known bridge lattice and the `25119`
+frame contains the known tunnel bore. DOM inspection confirmed both are
+non-terrain set-piece architecture while every visible `.train-terrain-base`
+reported `background-image: none`; they were deliberately preserved for
+TRAIN-059 and TRAIN-058 rather than hidden or changed in this material-only
+item.
+
+At default cruise speed, a desktop sample advanced route and near-layer
+positions together from `1440.601px` to `1460.598px` over an 800 ms sample
+while retaining 52 bounded terrain owners. `borz errors --json` was empty;
+console output contained only Vite connection and React development
+messages. The focused layout suite passed all 87 tests. The complete frontend
+suite passed all 466 tests with one worker after the default parallel run
+twice put the pre-existing long-route scenery test just over its 5 second
+timeout; production TypeScript/Vite build and repository-root `make test`
+both passed.
+
 ## Notes Template
 
 ```text

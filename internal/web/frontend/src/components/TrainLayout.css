@@ -2180,7 +2180,6 @@ html[data-pane-switcher-layout="train"] .statusline {
   overflow: hidden;
   opacity: 1;
   background-color: var(--train-terrain-surface);
-  background-position-x: var(--train-terrain-material-phase);
   clip-path: polygon(
     0 calc(100% - var(--train-terrain-point-0)),
     11% calc(100% - var(--train-terrain-point-1)),
@@ -2198,34 +2197,43 @@ html[data-pane-switcher-layout="train"] .statusline {
   transition: background-color 450ms ease;
 }
 
+.train-terrain-base[data-terrain-material]::before {
+  position: absolute;
+  display: block;
+  content: "";
+  pointer-events: none;
+}
+
 .train-terrain-base[data-terrain-material="forest-soil"] {
   background-color: color-mix(
     in srgb,
     var(--train-terrain-surface),
     var(--train-palette-forest-soil) 28%
   );
-  background-image:
-    repeating-linear-gradient(
-      157deg,
-      transparent 0 13px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 28%) 13px 16px,
-      transparent 16px 31px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 29px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 47%) 29px 34px,
-      transparent 34px 59px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 20%) 0 4px,
-      transparent 4px 100%
-    );
-  background-size:
-    auto,
-    auto,
-    100% 100%;
+}
+
+.train-terrain-base[data-terrain-material="forest-soil"]::before {
+  bottom: 11px;
+  left: calc(18% + var(--train-terrain-material-phase));
+  width: 7px;
+  height: 3px;
+  color: color-mix(
+    in srgb,
+    var(--train-terrain-detail),
+    var(--train-palette-life-forest) 42%
+  );
+  background-color: currentColor;
+  box-shadow:
+    11px -4px currentColor,
+    19px 1px currentColor,
+    54px -7px currentColor,
+    61px -3px currentColor,
+    108px 2px currentColor,
+    146px -5px currentColor,
+    154px -1px currentColor,
+    211px -8px currentColor,
+    238px 1px currentColor,
+    276px -4px currentColor;
 }
 
 .train-terrain-base[data-terrain-material="mountain-rock"] {
@@ -2234,47 +2242,53 @@ html[data-pane-switcher-layout="train"] .statusline {
     var(--train-terrain-surface),
     var(--train-palette-mountain-rock) 34%
   );
-  background-image:
-    repeating-linear-gradient(
-      123deg,
-      transparent 0 14px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 14%) 14px 19px,
-      transparent 19px 36px
-    ),
-    repeating-linear-gradient(
-      57deg,
-      transparent 0 25px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 38%) 25px 29px,
-      transparent 29px 51px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 17px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 17px 20px,
-      transparent 20px 39px
-    );
+}
+
+.train-terrain-base[data-terrain-material="mountain-rock"]::before {
+  bottom: 18px;
+  left: calc(29% + var(--train-terrain-material-phase));
+  width: 27px;
+  height: 3px;
+  color: color-mix(
+    in srgb,
+    var(--train-terrain-detail),
+    var(--train-palette-mountain-rock) 38%
+  );
+  background-color: currentColor;
+  box-shadow:
+    38px -11px currentColor,
+    79px 6px currentColor,
+    116px -18px currentColor,
+    164px -5px currentColor,
+    207px 8px currentColor,
+    244px -14px currentColor;
 }
 
 .train-terrain-base[data-terrain-material="town-ground"] {
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 9px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 38%) 9px 12px,
-      transparent 12px 23px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 37px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 45%) 37px 41px,
-      transparent 41px 71px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 15px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 62%) 15px 17px,
-      transparent 17px 32px
-    );
+  background-color: color-mix(
+    in srgb,
+    var(--train-terrain-surface),
+    var(--train-palette-life-town) 8%
+  );
+}
+
+.train-terrain-base[data-terrain-material="town-ground"]::before {
+  bottom: 12px;
+  left: calc(21% + var(--train-terrain-material-phase));
+  width: 31px;
+  height: 3px;
+  color: color-mix(
+    in srgb,
+    var(--train-terrain-detail),
+    var(--train-terrain-surface) 36%
+  );
+  background-color: currentColor;
+  box-shadow:
+    47px 0 currentColor,
+    92px -6px currentColor,
+    151px 1px currentColor,
+    201px -4px currentColor,
+    258px 0 currentColor;
 }
 
 .train-terrain-base[data-terrain-material="coast-shore"] {
@@ -2283,54 +2297,55 @@ html[data-pane-switcher-layout="train"] .statusline {
     var(--train-terrain-surface),
     var(--train-palette-mid-surface) 24%
   );
-  background-image:
-    linear-gradient(
-      174deg,
-      transparent 0 42%,
-      color-mix(
-          in srgb,
-          var(--train-terrain-detail),
-          var(--train-palette-silhouette) 42%
-        )
-        43% 48%,
-      transparent 49% 100%
-    ),
-    repeating-linear-gradient(
-      91deg,
-      transparent 0 31px,
-      color-mix(
-          in srgb,
-          var(--train-terrain-detail),
-          var(--train-palette-near-surface) 52%
-        )
-        31px 37px,
-      transparent 37px 67px
-    );
-  background-size:
-    97px 43px,
-    auto;
+}
+
+.train-terrain-base[data-terrain-material="coast-shore"]::before {
+  bottom: 9px;
+  left: calc(15% + var(--train-terrain-material-phase));
+  width: 13px;
+  height: 4px;
+  color: color-mix(
+    in srgb,
+    var(--train-terrain-detail),
+    var(--train-palette-near-surface) 48%
+  );
+  background-color: currentColor;
+  box-shadow:
+    18px -3px currentColor,
+    55px -10px currentColor,
+    96px 1px currentColor,
+    109px -2px currentColor,
+    158px -7px currentColor,
+    207px 0 currentColor,
+    259px -5px currentColor,
+    278px -2px currentColor;
 }
 
 .train-terrain-base[data-terrain-material="industrial-fill"] {
-  background-image:
-    repeating-linear-gradient(
-      143deg,
-      transparent 0 8px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 20%) 8px 13px,
-      transparent 13px 25px
-    ),
-    repeating-linear-gradient(
-      37deg,
-      transparent 0 17px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 42%) 17px 21px,
-      transparent 21px 39px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 43px,
-      color-mix(in srgb, var(--train-terrain-detail), transparent 55%) 43px 47px,
-      transparent 47px 79px
-    );
+  background-color: color-mix(
+    in srgb,
+    var(--train-terrain-surface),
+    var(--train-palette-life-industrial) 9%
+  );
+}
+
+.train-terrain-base[data-terrain-material="industrial-fill"]::before {
+  bottom: 14px;
+  left: calc(24% + var(--train-terrain-material-phase));
+  width: 22px;
+  height: 3px;
+  color: color-mix(
+    in srgb,
+    var(--train-terrain-detail),
+    var(--train-palette-life-industrial) 31%
+  );
+  background-color: currentColor;
+  box-shadow:
+    43px -5px currentColor,
+    91px 2px currentColor,
+    139px -8px currentColor,
+    194px 0 currentColor,
+    247px -4px currentColor;
 }
 
 .train-coast-composition {
