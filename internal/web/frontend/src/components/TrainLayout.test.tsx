@@ -3962,6 +3962,15 @@ describe("TrainLayout", () => {
       /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*68px;/,
     );
     expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--entry[\s\S]*?\.train-bridge-crossing-void\s*\{[\s\S]*?clip-path:\s*polygon\(0 28%, 44% 28%, 64% 100%, 0 100%\);/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--exit[\s\S]*?\.train-bridge-crossing-void\s*\{[\s\S]*?clip-path:\s*polygon\(36% 100%, 56% 28%, 100% 28%, 100% 100%\);/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-bridge-approach\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*48px;[\s\S]*?clip-path:\s*polygon\(38% 100%, 50% 75%, 64% 50%, 82% 25%, 100% 0, 100% 100%\);/,
+    );
+    expect(bridgeCss).toMatch(
       /\.train-set-piece--bridge\.train-set-piece--variant-1\.train-set-piece--entry[\s\S]*?\.train-bridge-crossing-void[\s\S]*?i:first-child,[\s\S]*?i:last-child\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?width:\s*42%;/,
     );
     expect(bridgeCss).toMatch(

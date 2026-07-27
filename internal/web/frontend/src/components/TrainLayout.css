@@ -436,19 +436,19 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--bridge.train-set-piece--entry
   .train-bridge-crossing-void {
-  clip-path: polygon(0 0, 64% 0, 64% 100%, 0 100%);
+  clip-path: polygon(0 28%, 44% 28%, 64% 100%, 0 100%);
 }
 
 .train-set-piece--bridge.train-set-piece--exit
   .train-bridge-crossing-void {
-  clip-path: polygon(36% 0, 100% 0, 100% 100%, 36% 100%);
+  clip-path: polygon(36% 100%, 56% 28%, 100% 28%, 100% 100%);
 }
 
 .train-bridge-approach {
   right: -1px;
   bottom: 18px;
   left: -1px;
-  height: 68px;
+  height: 48px;
   background: color-mix(
     in srgb,
     var(--train-palette-near-surface),
@@ -465,7 +465,7 @@ html[data-pane-switcher-layout="train"] .statusline {
       var(--train-palette-near-surface),
       var(--train-palette-mid-surface) 38%
     );
-  clip-path: polygon(51% 100%, 58% 67%, 70% 38%, 84% 16%, 100% 0, 100% 100%);
+  clip-path: polygon(38% 100%, 50% 75%, 64% 50%, 82% 25%, 100% 0, 100% 100%);
 }
 
 .train-set-piece--bridge.train-set-piece--exit .train-bridge-approach {
