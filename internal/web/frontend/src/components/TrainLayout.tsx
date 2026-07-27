@@ -20,15 +20,15 @@ import {
 import { createPortal } from "react-dom";
 import { onPointerDownNoBlur } from "../lib/dom";
 import type { PaneStatus } from "../types/server";
-import carriageUrl from "../assets/train-theme/sprites/train-carriage-empty-v2.png";
-import locomotiveUrl from "../assets/train-theme/sprites/train-locomotive.png";
-import emptySeatUrl from "../assets/train-theme/sprites/characters/train-seat-empty-v2.png";
-import occupiedSeat01Url from "../assets/train-theme/sprites/characters/train-seat-person-01-v2.png";
-import occupiedSeat02Url from "../assets/train-theme/sprites/characters/train-seat-person-02-v2.png";
-import occupiedSeat03Url from "../assets/train-theme/sprites/characters/train-seat-person-03-v2.png";
-import occupiedSeat04Url from "../assets/train-theme/sprites/characters/train-seat-person-04-v2.png";
-import occupiedSeat05Url from "../assets/train-theme/sprites/characters/train-seat-person-05-v2.png";
-import occupiedSeat06Url from "../assets/train-theme/sprites/characters/train-seat-person-06-v2.png";
+import carriageUrl from "../assets/train-theme/sprites/train-carriage-empty-v2.webp";
+import locomotiveUrl from "../assets/train-theme/sprites/train-locomotive.webp";
+import emptySeatUrl from "../assets/train-theme/sprites/characters/train-seat-empty-v2.webp";
+import occupiedSeat01Url from "../assets/train-theme/sprites/characters/train-seat-person-01-v2.webp";
+import occupiedSeat02Url from "../assets/train-theme/sprites/characters/train-seat-person-02-v2.webp";
+import occupiedSeat03Url from "../assets/train-theme/sprites/characters/train-seat-person-03-v2.webp";
+import occupiedSeat04Url from "../assets/train-theme/sprites/characters/train-seat-person-04-v2.webp";
+import occupiedSeat05Url from "../assets/train-theme/sprites/characters/train-seat-person-05-v2.webp";
+import occupiedSeat06Url from "../assets/train-theme/sprites/characters/train-seat-person-06-v2.webp";
 import {
   paneListItems,
   panePeer,
@@ -2454,6 +2454,9 @@ export const TrainRouteChunk = memo(function TrainRouteChunk({
           data-terrain-material={terrainContour.material}
           data-terrain-transition-material={
             terrainContour.transitionMaterial ?? undefined
+          }
+          data-terrain-detail-policy={
+            projection ? "set-piece-contour-only" : "regional-material"
           }
           data-terrain-envelope={`${TRAIN_TERRAIN_LAYER_ENVELOPES[terrainContour.layer].minimumHeightPx}:${TRAIN_TERRAIN_LAYER_ENVELOPES[terrainContour.layer].maximumHeightPx}`}
           data-terrain-seam-left={terrainContour.seamLeftHeightPx}

@@ -495,6 +495,16 @@ describe("TrainLayout", () => {
         ),
       ).not.toBeInTheDocument();
     }
+    for (const projectedChunk of container.querySelectorAll<HTMLElement>(
+      '.train-set-piece-projection-segment[data-scenery-reserved="projected-set-piece"]',
+    )) {
+      expect(
+        projectedChunk.querySelector(":scope > .train-terrain-base"),
+      ).toHaveAttribute(
+        "data-terrain-detail-policy",
+        "set-piece-contour-only",
+      );
+    }
     expect(
       Number(world.dataset.projectedSetPieceSegments),
     ).toBeLessThanOrEqual(48);
@@ -1157,11 +1167,11 @@ describe("TrainLayout", () => {
     }
 
     expect(
-      getComputedStyle(transitions[0]!).clipPath.replaceAll(" ", ""),
-    ).toContain("100%0,100%100%");
+      getComputedStyle(transitions[0]!).clipPath.replace(/\s/g, ""),
+    ).toContain("polygon(00,64%0,64%33%");
     expect(
-      getComputedStyle(transitions[5]!).clipPath.replaceAll(" ", ""),
-    ).toContain("polygon(00,62%0");
+      getComputedStyle(transitions[5]!).clipPath.replace(/\s/g, ""),
+    ).toContain("polygon(0100%,16%100%,16%66%");
     expect(
       architectures[2]!.querySelector("[data-station-asset='windows']"),
     ).toBeInTheDocument();
@@ -1495,6 +1505,18 @@ describe("TrainLayout", () => {
     );
     expect(trainLayoutCss).toMatch(
       /\.train-station-transition--exit\s*\{\s*clip-path:\s*polygon\(/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-transition--entry\s*\{[\s\S]*?64%\s+0,[\s\S]*?64%\s+33%,[\s\S]*?74%\s+33%,[\s\S]*?74%\s+66%,[\s\S]*?84%\s+66%,[\s\S]*?84%\s+100%/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-station-transition--exit\s*\{[\s\S]*?16%\s+100%,[\s\S]*?16%\s+66%,[\s\S]*?26%\s+66%,[\s\S]*?26%\s+33%,[\s\S]*?36%\s+33%,[\s\S]*?36%\s+0/,
+    );
+    expect(trainLayoutCss).not.toContain(
+      "clip-path: polygon(0 0, 62% 0, 84% 100%",
+    );
+    expect(trainLayoutCss).not.toContain(
+      "clip-path: polygon(0 100%, 16% 100%, 38% 0",
     );
     expect(trainLayoutCss).not.toMatch(
       /\.train-set-piece--station\.train-set-piece--(?:entry|exit)\s*\{[^}]*clip-path:/,
@@ -2296,6 +2318,10 @@ describe("TrainLayout", () => {
     expect(terrainBases).toHaveLength(chunks.length);
     for (const terrain of terrainBases) {
       expect(terrain).toHaveAttribute("data-terrain-owner", "chunk-contour");
+      expect(terrain).toHaveAttribute(
+        "data-terrain-detail-policy",
+        "regional-material",
+      );
       expect(terrain.dataset.terrainMaterial).toBe(
         TRAIN_TERRAIN_REGION_MATERIALS[
           terrain.dataset
@@ -2409,6 +2435,15 @@ describe("TrainLayout", () => {
     }
     expect(terrainCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
     expect(terrainCss).not.toMatch(/opacity:\s*0(?:\D|$)|transform:|animation:/);
+  });
+
+  it("keeps projected set-piece terrain contour-only without detached regional blocks", () => {
+    const projectionDetailRule = trainLayoutCss.match(
+      /\.train-set-piece-projection-segment\s*>\s*\.train-terrain-base\[data-terrain-detail-policy="set-piece-contour-only"\]::before,\s*\.train-set-piece-projection-segment\s*>\s*\.train-terrain-base\[data-terrain-detail-policy="set-piece-contour-only"\]::after\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(projectionDetailRule).toMatch(/display:\s*none;/);
+    expect(projectionDetailRule).not.toMatch(/opacity|filter|mask/);
   });
 
   it("keeps terrain materials opaque while confining sparse accents to owned pixel marks", () => {

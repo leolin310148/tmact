@@ -2322,11 +2322,31 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-station-transition--entry {
-  clip-path: polygon(0 100%, 16% 100%, 38% 0, 100% 0, 100% 100%);
+  clip-path: polygon(
+    0 0,
+    64% 0,
+    64% 33%,
+    74% 33%,
+    74% 66%,
+    84% 66%,
+    84% 100%,
+    100% 100%,
+    0 100%
+  );
 }
 
 .train-station-transition--exit {
-  clip-path: polygon(0 0, 62% 0, 84% 100%, 100% 100%, 0 100%);
+  clip-path: polygon(
+    0 100%,
+    16% 100%,
+    16% 66%,
+    26% 66%,
+    26% 33%,
+    36% 33%,
+    36% 0,
+    100% 0,
+    100% 100%
+  );
 }
 
 .train-station-signal {
@@ -3832,6 +3852,13 @@ html[data-pane-switcher-layout="train"] .statusline {
     100% 100%,
     0 100%
   );
+}
+
+.train-set-piece-projection-segment
+  > .train-terrain-base[data-terrain-detail-policy="set-piece-contour-only"]::before,
+.train-set-piece-projection-segment
+  > .train-terrain-base[data-terrain-detail-policy="set-piece-contour-only"]::after {
+  display: none;
 }
 
 .train-parallax-chunk--variant-1 .train-terrain-base {
