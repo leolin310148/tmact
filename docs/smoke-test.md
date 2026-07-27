@@ -1159,6 +1159,46 @@ passed all 123 tests, the single-worker complete frontend suite passed all 468
 tests, the production TypeScript/Vite build passed, and repository-root
 `make test` passed.
 
+TRAIN-058 tunnel traversal run 2026-07-27: used only the dedicated
+`tmact-train-workitems` borz profile and `127.0.0.1:5234`. The cascade tunnel
+occurrences `0/1` supplied stepped-arch variant `1` and round-arch variant `0`.
+For every entry/body/exit and palette/viewport pair, the run independently
+returned HTTP 200, matched the plain non-cache-busted `TrainLayout.tsx` Vite
+module to the current tunnel ownership source, opened the exact route-position
+URL, set the viewport after opening, hard reloaded, and asserted the actual
+inner dimensions plus the centred DOM role and variant.
+
+The measured `.train-layout` rectangles were `y=623.75`, height `149.25` at
+compact `390×844`; `y=572.921875`, height `184.078125` at desktop `1280×800`;
+and `y=672.921875`, height `184.078125` at ultrawide `2560×900`. Entry/body/
+exit positions used the variant focus centre minus `581.818px`, at centre,
+and plus `581.818px`. Compact and desktop retained day/night train-hidden and
+train-visible sequences for both variants; ultrawide retained one day
+train-hidden/train-visible sequence per variant. The resulting 60 real-band
+crops were inspected at native resolution through ten entry/body/exit sequence
+strips in `/tmp/train-058-final/`. The labelled committed matrix is
+[`train-058-tunnel-contact-sheet.png`](train-058-tunnel-contact-sheet.png).
+
+Direct pixel inspection rejected the initial implementation because the body
+still read as a broad dark face and its lining blended into the mountain.
+The retained result instead shows one continuous rail-aligned passage with
+opaque enclosing rock, visible crown and side lining, bounded bore shading,
+a readable floor, and low trackside shoulders. The primary midground layer
+owns the rock, portal, and one bore per segment; the supporting near layer owns
+only rail-contact geometry and never paints a second opening. Round and stepped
+silhouettes remain visibly distinct in day and night. No retained crop shows a
+flat viewport-wide black rectangle, detached portal, duplicate side bore, or
+rail line below the opening; the fixed consist remains bright and readable.
+
+At default `24px/s`, a desktop sample advanced route position by `15.573px`
+over 650ms while the fixed consist stayed at `x=0`. The live focused
+composition contained three primary and three supporting segments, exactly
+three primary openings, zero supporting openings, zero collision exclusions,
+and no browser errors or leftover capture style. The focused TrainLayout run
+passed all 88 tests, the single-worker complete frontend suite passed all 469
+tests, the production TypeScript/Vite build passed, and repository-root
+`make test` passed.
+
 ## Notes Template
 
 ```text

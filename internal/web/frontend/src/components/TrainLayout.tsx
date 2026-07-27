@@ -1335,6 +1335,22 @@ function TrainTraversalComposition({
       data-traversal-variant={segment.visualVariant}
       data-traversal-segment={segment.segmentOffset}
       data-traversal-track-contact="17"
+      data-traversal-geometry-owner={`${segment.id}:${layer}:${segment.segmentOffset}`}
+      data-tunnel-state={segment.type === "tunnel" ? segment.role : undefined}
+      data-tunnel-opening-count={
+        segment.type === "tunnel"
+          ? layer === "midground"
+            ? "1"
+            : "0"
+          : undefined
+      }
+      data-tunnel-layer-responsibility={
+        segment.type === "tunnel"
+          ? layer === "midground"
+            ? "rock-portal-bore"
+            : "trackside-contact"
+          : undefined
+      }
       aria-hidden="true"
     >
       {segment.type === "bridge" ? (
@@ -1371,34 +1387,56 @@ function TrainTraversalComposition({
         </>
       ) : (
         <>
-          <span
-            className="train-tunnel-mountain-mass"
-            data-tunnel-geometry="enclosing-mountain"
-            data-tunnel-solid-surface="opaque"
-          />
-          <span
-            className="train-tunnel-cutting"
-            data-tunnel-geometry={`${segment.role}-cutting`}
-            data-tunnel-ground-owner={layer}
-          />
-          <span
-            className="train-tunnel-opening"
-            data-tunnel-geometry="dark-opening"
-            data-track-contact="17"
-          />
-          <span
-            className="train-tunnel-portal"
-            data-tunnel-geometry={
-              segment.role === "body" ? "passage-lining" : "portal-frame"
-            }
-            data-tunnel-portal-visible={
-              segment.role === "body" ? "passage" : "portal"
-            }
-          >
-            <i />
-            <i />
-            <i />
-          </span>
+          {layer === "midground" ? (
+            <>
+              <span
+                className="train-tunnel-mountain-mass"
+                data-tunnel-geometry="enclosing-mountain"
+                data-tunnel-geometry-owner={`${segment.id}:midground:rock`}
+                data-tunnel-solid-surface="opaque"
+              >
+                <i data-tunnel-rock-detail="upper-facet" />
+                <i data-tunnel-rock-detail="lower-strata" />
+              </span>
+              <span
+                className="train-tunnel-opening"
+                data-tunnel-geometry={`${segment.role}-bore`}
+                data-tunnel-opening-owner={`${segment.id}:midground:${segment.segmentOffset}`}
+                data-tunnel-bore-continuity="rail-passage"
+                data-track-contact="17"
+              />
+              <span
+                className="train-tunnel-portal"
+                data-tunnel-geometry={
+                  segment.role === "body"
+                    ? "bore-lining"
+                    : `${segment.role}-portal-frame`
+                }
+                data-tunnel-portal-visible={
+                  segment.role === "body" ? "passage" : "portal"
+                }
+                data-tunnel-portal-silhouette={
+                  segment.visualVariant === 0 ? "round-arch" : "stepped-arch"
+                }
+                data-track-contact="17"
+              >
+                <i data-tunnel-lining-rib="left" />
+                <i data-tunnel-lining-rib="crown" />
+                <i data-tunnel-lining-rib="right" />
+              </span>
+            </>
+          ) : (
+            <span
+              className="train-tunnel-track-edge"
+              data-tunnel-geometry={`${segment.role}-track-edge`}
+              data-tunnel-geometry-owner={`${segment.id}:near:track-edge`}
+              data-tunnel-ground-owner="near"
+              data-track-contact="17"
+            >
+              <i />
+              <i />
+            </span>
+          )}
         </>
       )}
     </span>

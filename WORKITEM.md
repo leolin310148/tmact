@@ -167,7 +167,7 @@ the measured current rectangle rather than hard-coding that coordinate.
   ultrawide widths. Reject any building whose base visually terminates inside
   water.
 
-- [ ] **TRAIN-058 — Rebuild tunnel traversal around a real rail-aligned portal and bore.**
+- [x] **TRAIN-058 — Rebuild tunnel traversal around a real rail-aligned portal and bore.**
   Replace the current three-piece giant black rectangle. Entry and exit must
   each present one coherent portal embedded in rock; the body may darken the
   scene as the train passes inside, but must retain rock lining, rail/deck

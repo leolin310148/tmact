@@ -361,9 +361,9 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-bridge-deck,
 .train-bridge-supports,
 .train-tunnel-mountain-mass,
-.train-tunnel-cutting,
 .train-tunnel-opening,
-.train-tunnel-portal {
+.train-tunnel-portal,
+.train-tunnel-track-edge {
   position: absolute;
   display: block;
 }
@@ -581,24 +581,41 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 17px;
   left: -1px;
   height: 126px;
-  background:
-    repeating-linear-gradient(
-      12deg,
-      var(--train-palette-silhouette) 0 19px,
-      color-mix(
-          in srgb,
-          var(--train-palette-silhouette),
-          var(--train-palette-mid-surface) 24%
-        )
-        19px 25px,
-      var(--train-palette-silhouette) 25px 47px
-    );
+  overflow: hidden;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-silhouette),
+    var(--train-palette-mid-surface) 18%
+  );
   clip-path: polygon(0 100%, 0 64%, 9% 42%, 20% 23%, 33% 10%, 49% 2%, 68% 8%, 84% 24%, 100% 37%, 100% 100%);
+}
+
+.train-tunnel-mountain-mass i {
+  position: absolute;
+  display: block;
+  background: var(--train-palette-mid-surface);
+}
+
+.train-tunnel-mountain-mass i:first-child {
+  top: 26px;
+  left: 15%;
+  width: 78px;
+  height: 18px;
+  clip-path: polygon(0 35%, 72% 0, 100% 62%, 32% 100%);
+}
+
+.train-tunnel-mountain-mass i:last-child {
+  right: 9%;
+  bottom: 22px;
+  width: 96px;
+  height: 15px;
+  clip-path: polygon(0 40%, 38% 0, 100% 28%, 84% 100%, 24% 78%);
 }
 
 .train-set-piece--tunnel.train-set-piece--body
   .train-tunnel-mountain-mass {
-  clip-path: polygon(0 100%, 0 17%, 16% 7%, 36% 12%, 52% 2%, 72% 9%, 88% 4%, 100% 14%, 100% 100%);
+  height: 136px;
+  clip-path: polygon(0 100%, 0 20%, 14% 9%, 32% 13%, 50% 3%, 69% 11%, 86% 6%, 100% 18%, 100% 100%);
 }
 
 .train-set-piece--tunnel.train-set-piece--exit
@@ -606,94 +623,194 @@ html[data-pane-switcher-layout="train"] .statusline {
   transform: scaleX(-1);
 }
 
-.train-tunnel-cutting {
-  right: -1px;
-  bottom: 17px;
-  left: -1px;
-  height: 54px;
-  background: var(--train-palette-near-surface);
-  clip-path: polygon(0 100%, 0 72%, 26% 48%, 39% 100%, 61% 100%, 74% 48%, 100% 72%, 100% 100%);
-}
-
-.train-set-piece--tunnel.train-set-piece--body .train-tunnel-cutting {
-  clip-path: polygon(0 100%, 0 86%, 100% 86%, 100% 100%);
-}
-
 .train-tunnel-opening {
-  right: 13%;
+  right: 24%;
   bottom: 17px;
-  left: 13%;
-  height: 82px;
-  border-radius: 46% 46% 0 0;
-  background: color-mix(
-    in srgb,
-    var(--train-palette-silhouette),
-    #02070d 78%
+  left: 0;
+  height: 84px;
+  border-radius: 42% 42% 0 0;
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--train-palette-silhouette), #14222a 22%),
+      color-mix(in srgb, var(--train-palette-silhouette), #02070d 76%) 72%
+    );
+  clip-path: polygon(
+    0 100%,
+    0 58%,
+    6% 34%,
+    17% 14%,
+    32% 3%,
+    68% 3%,
+    83% 14%,
+    94% 34%,
+    100% 58%,
+    100% 100%
   );
 }
 
+.train-tunnel-opening::before,
+.train-tunnel-opening::after {
+  position: absolute;
+  display: block;
+  content: "";
+}
+
+.train-tunnel-opening::before {
+  top: 32%;
+  left: 17%;
+  width: 31%;
+  height: 5px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    #02070d 58%
+  );
+  box-shadow: 72px 18px 0
+    color-mix(in srgb, var(--train-palette-mid-surface), #02070d 68%);
+}
+
+.train-tunnel-opening::after {
+  right: 8%;
+  bottom: 0;
+  left: 8%;
+  height: 7px;
+  background: color-mix(
+    in srgb,
+    var(--train-palette-near-surface),
+    #02070d 48%
+  );
+}
+
+.train-set-piece--tunnel.train-set-piece--exit .train-tunnel-opening {
+  right: 0;
+  left: 24%;
+  transform: scaleX(-1);
+}
+
 .train-set-piece--tunnel.train-set-piece--body .train-tunnel-opening {
-  right: -1px;
-  left: -1px;
-  height: 94px;
-  border-radius: 0;
+  right: 3%;
+  left: 3%;
+  height: 90px;
+  border-radius: 30% 30% 0 0;
+  clip-path: polygon(
+    0 100%,
+    0 38%,
+    8% 18%,
+    22% 5%,
+    78% 5%,
+    92% 18%,
+    100% 38%,
+    100% 100%
+  );
 }
 
 .train-tunnel-portal {
-  right: 10%;
+  right: 21%;
   bottom: 17px;
-  left: 10%;
-  height: 88px;
-  border: 9px solid var(--train-palette-mid-surface);
+  left: 0;
+  height: 90px;
+  border: 8px solid
+    color-mix(
+      in srgb,
+      var(--train-palette-mid-surface),
+      var(--train-palette-horizon-light) 24%
+    );
   border-bottom: 0;
-  border-radius: 46% 46% 0 0;
+  border-radius: 42% 42% 0 0;
+  clip-path: polygon(
+    0 100%,
+    0 55%,
+    6% 31%,
+    17% 12%,
+    32% 0,
+    68% 0,
+    83% 12%,
+    94% 31%,
+    100% 55%,
+    100% 100%
+  );
 }
 
 .train-tunnel-portal i {
   position: absolute;
-  top: -9px;
   display: block;
-  width: 8px;
-  height: 22px;
-  background: var(--train-palette-silhouette);
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-horizon-light) 18%
+  );
 }
 
-.train-tunnel-portal i:first-child {
-  left: 18%;
-  transform: rotate(-25deg);
+.train-tunnel-portal i[data-tunnel-lining-rib="left"] {
+  top: 24%;
+  bottom: 0;
+  left: 14%;
+  width: 7px;
+  transform: rotate(-5deg);
+  transform-origin: bottom;
 }
 
-.train-tunnel-portal i:nth-child(2) {
-  left: calc(50% - 4px);
+.train-tunnel-portal i[data-tunnel-lining-rib="crown"] {
+  top: 13%;
+  left: 34%;
+  width: 32%;
+  height: 6px;
 }
 
-.train-tunnel-portal i:last-child {
-  right: 18%;
-  transform: rotate(25deg);
+.train-tunnel-portal i[data-tunnel-lining-rib="right"] {
+  top: 24%;
+  right: 14%;
+  bottom: 0;
+  width: 7px;
+  transform: rotate(5deg);
+  transform-origin: bottom;
+}
+
+.train-set-piece--tunnel.train-set-piece--exit .train-tunnel-portal {
+  right: 0;
+  left: 21%;
+  transform: scaleX(-1);
 }
 
 .train-set-piece--tunnel.train-set-piece--body .train-tunnel-portal {
-  right: -1px;
-  left: -1px;
-  height: 100px;
-  border-width: 7px 0 0;
-  border-radius: 0;
+  right: 2%;
+  left: 2%;
+  height: 96px;
+  border-width: 6px 6px 0;
+  border-radius: 30% 30% 0 0;
+  clip-path: polygon(
+    0 100%,
+    0 36%,
+    8% 16%,
+    22% 0,
+    78% 0,
+    92% 16%,
+    100% 36%,
+    100% 100%
+  );
+}
+
+.train-set-piece--tunnel.train-set-piece--body
+  .train-tunnel-portal
+  i[data-tunnel-lining-rib="left"] {
+  left: 20%;
+}
+
+.train-set-piece--tunnel.train-set-piece--body
+  .train-tunnel-portal
+  i[data-tunnel-lining-rib="right"] {
+  right: 20%;
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1
   .train-tunnel-mountain-mass {
   height: 138px;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      color-mix(
-          in srgb,
-          var(--train-palette-mid-surface),
-          var(--train-palette-silhouette) 42%
-        )
-        0 8px,
-      var(--train-palette-silhouette) 8px 12px
-    );
+  background: color-mix(
+    in srgb,
+    var(--train-palette-mid-surface),
+    var(--train-palette-silhouette) 58%
+  );
   clip-path: polygon(0 100%, 0 70%, 8% 70%, 8% 52%, 17% 52%, 17% 35%, 29% 18%, 45% 7%, 63% 3%, 82% 15%, 100% 31%, 100% 100%);
 }
 
@@ -704,52 +821,93 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--tunnel.train-set-piece--variant-1
   .train-tunnel-opening {
-  right: 18%;
-  left: 18%;
-  height: 76px;
-  border-radius: 0;
+  right: 28%;
+  left: 0;
+  height: 82px;
+  border-radius: 18% 18% 0 0;
   clip-path: polygon(0 100%, 0 40%, 12% 40%, 12% 23%, 25% 23%, 25% 10%, 75% 10%, 75% 23%, 88% 23%, 88% 40%, 100% 40%, 100% 100%);
+}
+
+.train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--exit
+  .train-tunnel-opening {
+  right: 0;
+  left: 28%;
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--body
   .train-tunnel-opening {
-  right: -1px;
-  left: -1px;
-  height: 91px;
-  clip-path: none;
+  right: 4%;
+  left: 4%;
+  height: 88px;
+  border-radius: 14% 14% 0 0;
+  clip-path: polygon(0 100%, 0 32%, 9% 32%, 9% 17%, 21% 17%, 21% 5%, 79% 5%, 79% 17%, 91% 17%, 91% 32%, 100% 32%, 100% 100%);
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1 .train-tunnel-portal {
-  right: 15%;
-  left: 15%;
-  height: 82px;
+  right: 25%;
+  left: 0;
+  height: 88px;
   border-width: 8px;
   border-bottom: 0;
-  border-radius: 0;
+  border-radius: 14% 14% 0 0;
   clip-path: polygon(0 100%, 0 35%, 10% 35%, 10% 18%, 23% 18%, 23% 4%, 77% 4%, 77% 18%, 90% 18%, 90% 35%, 100% 35%, 100% 100%);
+}
+
+.train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--exit
+  .train-tunnel-portal {
+  right: 0;
+  left: 25%;
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--body
   .train-tunnel-portal {
+  right: 3%;
+  left: 3%;
+  height: 94px;
+  border-width: 7px 7px 0;
+  border-radius: 12% 12% 0 0;
+  clip-path: polygon(0 100%, 0 29%, 9% 29%, 9% 14%, 21% 14%, 21% 0, 79% 0, 79% 14%, 91% 14%, 91% 29%, 100% 29%, 100% 100%);
+}
+
+.train-tunnel-track-edge {
   right: -1px;
+  bottom: 17px;
   left: -1px;
-  height: 97px;
-  border-width: 8px 0 0;
-  clip-path: none;
+  height: 38px;
 }
 
-.train-traversal-composition--near .train-tunnel-mountain-mass,
-.train-traversal-composition--near .train-tunnel-opening {
-  display: none;
-}
-
-.train-traversal-composition--near .train-tunnel-cutting {
-  height: 62px;
+.train-tunnel-track-edge i {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  width: 23%;
+  height: 34px;
   background: var(--train-palette-near-surface);
 }
 
-.train-traversal-composition--near .train-tunnel-portal {
-  border-color: var(--train-palette-near-surface);
+.train-tunnel-track-edge i:first-child {
+  left: 0;
+  clip-path: polygon(0 100%, 0 48%, 34% 22%, 72% 35%, 100% 100%);
+}
+
+.train-tunnel-track-edge i:last-child {
+  right: 0;
+  clip-path: polygon(0 100%, 28% 35%, 68% 20%, 100% 48%, 100% 100%);
+}
+
+.train-set-piece--tunnel.train-set-piece--body .train-tunnel-track-edge i {
+  width: 10%;
+  height: 12px;
+}
+
+.train-set-piece--tunnel.train-set-piece--entry
+  .train-tunnel-track-edge
+  i:first-child,
+.train-set-piece--tunnel.train-set-piece--exit
+  .train-tunnel-track-edge
+  i:last-child {
+  width: 8%;
+  height: 20px;
 }
 
 .train-set-piece--coast-reveal,

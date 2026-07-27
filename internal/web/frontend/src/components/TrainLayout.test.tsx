@@ -516,6 +516,12 @@ describe("TrainLayout", () => {
       },
       {
         search:
+          "/?train-route-seed=train-053-cascade&train-set-piece-focus=tunnel" +
+          "&train-set-piece-occurrence=0&train-reduced-motion=1",
+        type: "tunnel",
+      },
+      {
+        search:
           "/?train-route-seed=train-053-summit&train-set-piece-focus=station" +
           "&train-set-piece-occurrence=0&train-reduced-motion=1",
         type: "station",
@@ -3578,6 +3584,10 @@ describe("TrainLayout", () => {
           segment.dataset.setPieceLayer,
         );
         expect(composition).toHaveAttribute("data-traversal-track-contact", "17");
+        expect(composition).toHaveAttribute(
+          "data-traversal-geometry-owner",
+          `${segment.dataset.setPieceId}:${segment.dataset.setPieceLayer}:${segment.dataset.setPieceSegment}`,
+        );
       }
 
       if (type === "bridge") {
@@ -3618,9 +3628,7 @@ describe("TrainLayout", () => {
         ).toBe(true);
         expect(
           primary.every((segment) =>
-            Boolean(
-              segment.querySelector('[data-tunnel-geometry="dark-opening"]'),
-            ),
+            segment.querySelectorAll("[data-tunnel-opening-owner]").length === 1,
           ),
         ).toBe(true);
         expect(
@@ -3629,9 +3637,75 @@ describe("TrainLayout", () => {
           ).every((segment) =>
             segment
               .querySelector('[data-tunnel-portal-visible="portal"]')
-              ?.getAttribute("data-tunnel-geometry") === "portal-frame",
+              ?.getAttribute("data-tunnel-geometry") ===
+            `${segment.dataset.setPieceRole}-portal-frame`,
           ),
         ).toBe(true);
+        expect(
+          primary
+            .filter((segment) => segment.dataset.setPieceRole === "body")
+            .every(
+              (segment) =>
+                segment
+                  .querySelector('[data-tunnel-portal-visible="passage"]')
+                  ?.getAttribute("data-tunnel-geometry") === "bore-lining",
+            ),
+        ).toBe(true);
+        expect(
+          primary.every((segment) => {
+            const composition = segment.querySelector<HTMLElement>(
+              '[data-traversal-composition="tunnel"]',
+            );
+            const opening = segment.querySelector<HTMLElement>(
+              "[data-tunnel-opening-owner]",
+            );
+            const portal = segment.querySelector<HTMLElement>(
+              "[data-tunnel-portal-silhouette]",
+            );
+            return (
+              composition?.dataset.tunnelLayerResponsibility ===
+                "rock-portal-bore" &&
+              composition.dataset.tunnelOpeningCount === "1" &&
+              composition.dataset.tunnelState ===
+                segment.dataset.setPieceRole &&
+              opening?.dataset.trackContact === "17" &&
+              opening.dataset.tunnelBoreContinuity === "rail-passage" &&
+              portal?.dataset.trackContact === "17" &&
+              portal.dataset.tunnelPortalSilhouette ===
+                (variant === "0" ? "round-arch" : "stepped-arch")
+            );
+          }),
+        ).toBe(true);
+        expect(
+          supporting.every((segment) => {
+            const composition = segment.querySelector<HTMLElement>(
+              '[data-traversal-composition="tunnel"]',
+            );
+            const geometry = [
+              ...segment.querySelectorAll<HTMLElement>(
+                "[data-tunnel-geometry]",
+              ),
+            ];
+            return (
+              composition?.dataset.tunnelLayerResponsibility ===
+                "trackside-contact" &&
+              composition.dataset.tunnelOpeningCount === "0" &&
+              geometry.length === 1 &&
+              geometry[0]?.dataset.tunnelGeometry ===
+                `${segment.dataset.setPieceRole}-track-edge` &&
+              geometry[0]?.dataset.trackContact === "17"
+            );
+          }),
+        ).toBe(true);
+        expect(
+          supporting.some((segment) =>
+            Boolean(
+              segment.querySelector(
+                ".train-tunnel-mountain-mass,.train-tunnel-opening,.train-tunnel-portal",
+              ),
+            ),
+          ),
+        ).toBe(false);
       }
     }
 
@@ -3640,10 +3714,81 @@ describe("TrainLayout", () => {
     expect(trainLayoutCss).toContain(".train-tunnel-mountain-mass");
     expect(trainLayoutCss).toContain(".train-tunnel-opening");
     expect(trainLayoutCss).toMatch(
-      /\.train-tunnel-opening\s*\{[\s\S]*?#02070d 78%/,
+      /\.train-tunnel-opening\s*\{[\s\S]*?#02070d 76%/,
+    );
+    const bodyOpeningRule = trainLayoutCss.match(
+      /\.train-set-piece--tunnel\.train-set-piece--body \.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    const steppedBodyOpeningRule = trainLayoutCss.match(
+      /\.train-set-piece--tunnel\.train-set-piece--variant-1\.train-set-piece--body\s+\.train-tunnel-opening\s*\{([^}]+)\}/,
+    )?.[1];
+    expect(bodyOpeningRule).toBeDefined();
+    expect(bodyOpeningRule).toMatch(/right:\s*3%;[\s\S]*left:\s*3%;/);
+    expect(bodyOpeningRule).toMatch(/border-radius:\s*30% 30% 0 0;/);
+    expect(steppedBodyOpeningRule).toBeDefined();
+    expect(steppedBodyOpeningRule).toMatch(/right:\s*4%;[\s\S]*left:\s*4%;/);
+    expect(steppedBodyOpeningRule).toMatch(/border-radius:\s*14% 14% 0 0;/);
+    expect(bodyOpeningRule).not.toMatch(/(?:right|left):\s*-1px/);
+    expect(steppedBodyOpeningRule).not.toMatch(/(?:right|left):\s*-1px/);
+    expect(bodyOpeningRule).not.toMatch(/border-radius:\s*0/);
+    expect(steppedBodyOpeningRule).not.toMatch(/border-radius:\s*0/);
+    expect(trainLayoutCss).not.toMatch(
+      /\.train-set-piece--tunnel[\s\S]*?\.train-tunnel-opening\s*\{[^}]*clip-path:\s*none/,
     );
     expect(trainLayoutCss).not.toContain(".train-set-piece--bridge::after");
     expect(trainLayoutCss).not.toContain(".train-set-piece--tunnel::after");
+  });
+
+  it("preserves tunnel portal, bore, and rail-contact geometry with reduced motion", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?train-route-seed=train-053-cascade&train-set-piece-focus=tunnel" +
+        "&train-set-piece-occurrence=0&train-reduced-motion=1",
+    );
+    mockReducedMotion();
+
+    const { container } = render(
+      <TrainLayout panes={[]} selected={null} onSelect={vi.fn()} />,
+    );
+    const world = container.querySelector<HTMLElement>(".train-layout-world")!;
+    const primary = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-set-piece-type="tunnel"][data-set-piece-layer="midground"]',
+      ),
+    ];
+    const supporting = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-set-piece-type="tunnel"][data-set-piece-layer="near"]',
+      ),
+    ];
+
+    expect(world).toHaveAttribute("data-motion", "reduced");
+    expect(primary.map((segment) => segment.dataset.setPieceRole)).toEqual([
+      "entry",
+      "body",
+      "exit",
+    ]);
+    expect(supporting.map((segment) => segment.dataset.setPieceRole)).toEqual([
+      "entry",
+      "body",
+      "exit",
+    ]);
+    expect(
+      primary.every(
+        (segment) =>
+          segment.querySelectorAll("[data-tunnel-opening-owner]").length === 1 &&
+          segment.querySelectorAll("[data-tunnel-portal-silhouette]").length ===
+            1,
+      ),
+    ).toBe(true);
+    expect(
+      supporting.every(
+        (segment) =>
+          segment.querySelectorAll("[data-tunnel-opening-owner]").length === 0 &&
+          segment.querySelectorAll('[data-track-contact="17"]').length === 1,
+      ),
+    ).toBe(true);
   });
 
   it("overlaps adjacent chunks to hide fractional-pixel seams", () => {
