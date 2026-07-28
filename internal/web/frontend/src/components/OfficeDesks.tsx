@@ -25,17 +25,17 @@ import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
 import { clockSceneMode, nextSceneMode, type SceneMode } from "./sceneTime";
 import type { PaneStatus } from "../types/server";
 import "./OfficeDesks.css";
-import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.png";
-import pendantUrl from "../assets/pixel-agents/decor/pendant_light.png";
-import workDeskUrl from "../assets/pixel-agents/furniture/DESK/work_desk_thin_legs.png";
-import chairBackUrl from "../assets/pixel-agents/furniture/CHAIR/aeron_chair_back.png";
-import computerUrl from "../assets/pixel-agents/furniture/PC/macbook_setup.png";
-import character0Url from "../assets/pixel-agents/characters/char_0.png";
-import character1Url from "../assets/pixel-agents/characters/char_1.png";
-import character2Url from "../assets/pixel-agents/characters/char_2.png";
-import character3Url from "../assets/pixel-agents/characters/char_3.png";
-import character4Url from "../assets/pixel-agents/characters/char_4.png";
-import character5Url from "../assets/pixel-agents/characters/char_5.png";
+import floorLampUrl from "../assets/pixel-agents/decor/floor_lamp.webp";
+import pendantUrl from "../assets/pixel-agents/decor/pendant_light.webp";
+import workDeskUrl from "../assets/pixel-agents/furniture/DESK/work_desk_thin_legs.webp";
+import chairBackUrl from "../assets/pixel-agents/furniture/CHAIR/aeron_chair_back.webp";
+import computerUrl from "../assets/pixel-agents/furniture/PC/macbook_setup.webp";
+import character0Url from "../assets/pixel-agents/characters/char_0.webp";
+import character1Url from "../assets/pixel-agents/characters/char_1.webp";
+import character2Url from "../assets/pixel-agents/characters/char_2.webp";
+import character3Url from "../assets/pixel-agents/characters/char_3.webp";
+import character4Url from "../assets/pixel-agents/characters/char_4.webp";
+import character5Url from "../assets/pixel-agents/characters/char_5.webp";
 import {
   RUNTIME_ICON,
   paneListItems,
