@@ -92,13 +92,21 @@ func (s *Server) localClosedSession(name string) (statusd.ClosedSession, bool) {
 // Requests without browser origin metadata remain supported for local API
 // clients and configured server-to-server peer proxying.
 func requireSessionMutationRequest(w http.ResponseWriter, r *http.Request) bool {
-	switch site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); site {
+	site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	switch site {
 	case "", "none", "same-origin":
 	default:
 		writeJSONError(w, http.StatusForbidden, "cross-site session mutation rejected")
 		return false
 	}
-	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && !requestOriginMatches(origin, r) {
+	// A same-origin browser request may reach statusd through a reverse proxy
+	// whose upstream Host differs from the public Origin (for example
+	// https://vibe.example -> http://127.0.0.1:7890). Sec-Fetch-Site is a
+	// forbidden browser header computed before proxying, so its explicit
+	// same-origin value is the authoritative signal in that case. Clients
+	// without Fetch Metadata keep the stricter direct Origin/Host comparison.
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" &&
+		site != "same-origin" && !requestOriginMatches(origin, r) {
 		writeJSONError(w, http.StatusForbidden, "cross-origin session mutation rejected")
 		return false
 	}

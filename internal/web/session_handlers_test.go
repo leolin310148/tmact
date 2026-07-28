@@ -253,6 +253,37 @@ func TestSessionMutationsRejectCrossSiteAndSafelistedBodies(t *testing.T) {
 	}
 }
 
+func TestSessionMutationAcceptsSameOriginBrowserBehindReverseProxy(t *testing.T) {
+	var killed string
+	s := &Server{
+		Store: sessionTestStore(t, map[string]statusd.SessionStatus{
+			"work": {Session: "work"},
+		}),
+		KillSession: func(name string) error {
+			killed = name
+			return nil
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"http://127.0.0.1:7890/api/session/kill",
+		strings.NewReader(`{"session":"work"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://vibe.example")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	rec := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if killed != "work" {
+		t.Fatalf("killed = %q, want work", killed)
+	}
+}
+
 func TestSessionMutationsProxyConfiguredPeer(t *testing.T) {
 	remoteLog := statusd.NewClosedSessionLog("", 10)
 	remoteLog.Record(statusd.ClosedSession{Session: "old", CWD: "/remote", ClosedAt: time.Now()})
