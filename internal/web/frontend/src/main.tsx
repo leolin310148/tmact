@@ -27,6 +27,18 @@ const splitView =
 // narrow column triggers. Set before mount so the first paint is correct.
 if (inSplitSlot) {
   document.documentElement.dataset.splitSlot = "1";
+  // Tell the shell when this column takes the keyboard. It cannot detect this
+  // itself once focus is already inside some iframe: moving slot 1 → slot 2
+  // fires no event in the parent (it blurred on the first hop), so its
+  // active-slot highlight would stay on slot 1 forever.
+  window.addEventListener("focus", () => {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({ tmact: "slot-focus" }, window.location.origin);
+    } catch {
+      /* shell on another origin — it isn't listening anyway */
+    }
+  });
 }
 
 const rootEl = document.getElementById("root");

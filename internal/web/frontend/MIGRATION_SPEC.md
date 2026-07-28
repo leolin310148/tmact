@@ -429,6 +429,13 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 34. `sendDirect` folds armed Ctrl into a single `C-<letter>` message; `ctrlArmed` auto-disarms after one key.
 35. Soft-keyboard `input` event relays `direct.value` then clears it (overlay stays invisible).
 36. `compositionend` sends `{t:"text",s:e.data}`.
+36a. **Post-migration divergence (intentional):** the overlay is no longer
+    invisible *while an IME composes*. `compositionstart` adds `.composing`
+    (visible box, accent border, caret) so a bopomofo/pinyin buffer is not typed
+    into a void; `compositionend`/`blur` remove it and clear the value. The
+    overlay is also anchored to a bottom strip instead of `inset: 0`, so the OS
+    candidate window pops up next to the input bar rather than the pane's
+    top-left corner. Relay behavior (items 33–37) is unchanged.
 37. Direct paste: image → upload + `sendDirect({t:"text",s:path+" "})` (trailing space); else text relay.
 
 **Hotkeys**

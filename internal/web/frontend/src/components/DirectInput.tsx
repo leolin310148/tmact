@@ -29,7 +29,11 @@
 //                          (isComposing || keyCode===229); translateKey →
 //                          preventDefault + sendDirect.
 //     onDirectComposition ← compositionend: sendDirect({t:"text",s:e.data});
-//                            direct.value = "".
+//                            direct.value = ""; drop .composing.
+//     onDirectCompositionStart ← compositionstart: add .composing so the IME
+//                            buffer is visible (spec §6 item 36a — the overlay
+//                            is invisible EXCEPT while composing).
+//     onDirectBlur      ← blur: drop .composing + any uncommitted buffer.
 //     onDirectPaste     ← paste: image → upload + sendDirect(path+" ");
 //                          else text relay. preventDefault inside.
 //     onDirectInput     ← input: soft-keyboard relay (read value, clear, send).
@@ -53,6 +57,11 @@ interface DirectInputProps {
   onDirectKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
   /** compositionend → sendDirect({t:"text",s:e.data}) then clear value. */
   onDirectComposition: (e: CompositionEvent<HTMLTextAreaElement>) => void;
+  /** compositionstart → reveal the textarea (.composing) so the IME buffer is
+   *  visible; nothing reaches the pane until compositionend. */
+  onDirectCompositionStart: () => void;
+  /** blur → drop .composing and any uncommitted buffer. */
+  onDirectBlur: () => void;
   /** paste → image upload (sendDirect path+" ") or text relay. */
   onDirectPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
   /** input → soft-keyboard relay (read value, clear, sendDirect text). */
@@ -65,6 +74,8 @@ export default function DirectInput({
   selectionMode,
   onDirectKeyDown,
   onDirectComposition,
+  onDirectCompositionStart,
+  onDirectBlur,
   onDirectPaste,
   onDirectInput,
 }: DirectInputProps) {
@@ -90,10 +101,16 @@ export default function DirectInput({
         autoCapitalize="off"
         autoComplete="off"
         onKeyDown={onDirectKeyDown}
+        onCompositionStart={onDirectCompositionStart}
         onCompositionEnd={onDirectComposition}
+        onBlur={onDirectBlur}
         onPaste={onDirectPaste}
         onInput={onDirectInput}
       />
+      {/* Shown by CSS only while #direct-input carries .composing. */}
+      <span className="ime-hint" aria-hidden="true">
+        組字中 · Enter 送出
+      </span>
       <span id="direct-input-description" hidden>
         {description}
       </span>

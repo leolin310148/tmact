@@ -94,8 +94,12 @@ const SHELL_CSS = `
   }
   .slot { position: relative; min-width: 0; min-height: 0; background: var(--bg, #0e1116); }
   .slot iframe { display: block; width: 100%; height: 100%; border: 0; }
-  /* Active-slot indicator: an inset top edge in the accent color. The overlay
-     must not intercept clicks headed for the iframe. */
+  /* Active-slot indicator: an inset top edge in the accent color. Deliberately
+     NOT a frame around the whole column — a frame reads as "this pane list and
+     input bar are highlighted too", when the thing that owns the keyboard is the
+     terminal inside. The app draws its own ring around just the pane text when
+     direct mode is on; this edge only marks the column. The overlay must not
+     intercept clicks headed for the iframe. */
   .slot::after {
     content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
     background: transparent; pointer-events: none;
@@ -225,6 +229,25 @@ export function initSplitShell(rootEl: HTMLElement): void {
     setMenuOpen(false);
     // activeElement updates after the blur event settles.
     setTimeout(markActive, 0);
+  });
+
+  // The blur path above only fires on the FIRST hop out of the shell. Going
+  // slot 1 → slot 2 moves focus between two iframes while the parent window is
+  // already blurred, so nothing fires here and the highlight would stay stuck on
+  // slot 1. Each slot document therefore announces its own focus (main.tsx); we
+  // trust the message only by matching its source window against a live iframe,
+  // never by a slot index in the payload.
+  window.addEventListener("message", (e: MessageEvent) => {
+    if (e.origin !== window.location.origin) return;
+    if (!e.data || (e.data as { tmact?: string }).tmact !== "slot-focus") return;
+    const active = Array.from(grid.children).find(
+      (slot) => slot.querySelector("iframe")?.contentWindow === e.source,
+    );
+    if (!active) return;
+    setMenuOpen(false);
+    for (const slot of grid.children) {
+      slot.classList.toggle("active", slot === active);
+    }
   });
 
   let initial = 2;

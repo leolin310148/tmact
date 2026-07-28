@@ -538,11 +538,31 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
   // Computed during render so the presentational shells stay in step with focus
   // and selection state (app.js read document.activeElement live in renderMode).
+  // `document.activeElement` stays on #direct-input even after the window (or,
+  // in split view, this slot's iframe) loses focus — so activeElement alone
+  // would leave every slot the user has ever typed in wearing the direct ring.
+  // hasFocus() is the part that is actually per-document: it is false while the
+  // focus lives in another iframe or another window, which is exactly when
+  // keystrokes stop reaching this pane.
   const directMode =
     !!state.selected &&
     !state.selectionMode &&
     typeof document !== "undefined" &&
+    document.hasFocus() &&
     document.activeElement === directRef.current;
+
+  // hasFocus() changes without firing anything on the textarea (focus moving
+  // between iframes blurs the window, not the element), so re-render on the
+  // window-level transitions to keep the ring honest.
+  useEffect(() => {
+    const sync = () => renderLocal();
+    window.addEventListener("focus", sync);
+    window.addEventListener("blur", sync);
+    return () => {
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("blur", sync);
+    };
+  }, [renderLocal]);
 
   // #content-wrap class toggles — imperative, so .upload-ready (owned by
   // syncQuickDock) is never clobbered. Mirrors renderMode's wrap.classList.toggle.
@@ -595,6 +615,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       }
       if (sendBtnRef.current) sendBtnRef.current.disabled = true;
       if (directRef.current) {
+        directRef.current.classList.remove("composing");
         directRef.current.value = "";
         directRef.current.disabled = true;
         directRef.current.blur();
@@ -940,13 +961,35 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
     [state, renderMode, sendDirect],
   );
 
+  // #direct-input renders transparent text, so a composing IME (bopomofo,
+  // pinyin, kana) would leave the user typing into a void: nothing reaches the
+  // pane until compositionend. Reveal the textarea for the duration of the
+  // composition (CSS .composing) and hide it again once it commits or the field
+  // loses focus.
+  const onDirectCompositionStart = useCallback(() => {
+    directRef.current?.classList.add("composing");
+  }, []);
+
   const onDirectComposition = useCallback(
     (e: ReactCompositionEvent<HTMLTextAreaElement>) => {
       if (e.data) sendDirect({ t: "text", s: e.data });
-      if (directRef.current) directRef.current.value = "";
+      if (directRef.current) {
+        directRef.current.classList.remove("composing");
+        directRef.current.value = "";
+      }
     },
     [sendDirect],
   );
+
+  // Blur can arrive mid-composition (pane switch, selection mode, split-slot
+  // change). Drop the box and the uncommitted buffer with it — that text was
+  // never relayed, so it must not reappear on the next focus.
+  const onDirectBlur = useCallback(() => {
+    const direct = directRef.current;
+    if (!direct) return;
+    direct.classList.remove("composing");
+    direct.value = "";
+  }, []);
 
   const onDirectPaste = useCallback(
     (e: ReactClipboardEvent<HTMLTextAreaElement>) => {
@@ -1155,6 +1198,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
             selectionMode={state.selectionMode}
             onDirectKeyDown={onDirectKeyDown}
             onDirectComposition={onDirectComposition}
+            onDirectCompositionStart={onDirectCompositionStart}
+            onDirectBlur={onDirectBlur}
             onDirectPaste={onDirectPaste}
             onDirectInput={onDirectInput}
           />

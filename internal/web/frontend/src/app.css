@@ -385,9 +385,48 @@
     max-width: 100%;
     display: flex;
   }
+  /* Direct mode is a LIVE surface — every keystroke lands in the terminal — so
+     the ring has to be unmistakable at a glance. In split view three panes share
+     the screen and only one owns the keyboard, so a hairline is not enough: a
+     solid accent ring, a bright flash when focus arrives, then a slow breathe so
+     the focused pane keeps signalling itself. Sits under the FAB column
+     (z-index 30) but over the pane text. */
   .content-wrap.direct::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    box-shadow: inset 0 0 0 0.5px rgba(121, 192, 255, 0.2);
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 24;
+    box-shadow:
+      inset 0 0 0 2px rgba(121, 192, 255, 0.75),
+      inset 0 0 14px rgba(121, 192, 255, 0.2);
+    animation:
+      direct-focus-in 0.8s ease-out,
+      direct-breathe 2.6s ease-in-out 0.8s infinite;
+  }
+  @keyframes direct-focus-in {
+    0% {
+      box-shadow:
+        inset 0 0 0 3px rgba(121, 192, 255, 1),
+        inset 0 0 44px rgba(121, 192, 255, 0.5);
+    }
+    100% {
+      box-shadow:
+        inset 0 0 0 2px rgba(121, 192, 255, 0.75),
+        inset 0 0 14px rgba(121, 192, 255, 0.2);
+    }
+  }
+  @keyframes direct-breathe {
+    0%, 100% {
+      box-shadow:
+        inset 0 0 0 2px rgba(121, 192, 255, 0.5),
+        inset 0 0 10px rgba(121, 192, 255, 0.12);
+    }
+    50% {
+      box-shadow:
+        inset 0 0 0 2px rgba(121, 192, 255, 0.95),
+        inset 0 0 22px rgba(121, 192, 255, 0.32);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Keep the ring, drop the pulsing. */
+    .content-wrap.direct::after { animation: none; }
   }
   /* Agent usage overlay: semi-transparent, top-right, never blocks the pane
      (pointer-events: none). One semi-transparent bubble holding a grid so the
@@ -565,16 +604,45 @@
     text-underline-offset: 2px;
   }
   .tui-link:hover { text-decoration-color: var(--direct); }
-  /* Invisible overlay textarea: holds focus for direct mode and IME, but lets
-     mouse scroll/selection fall through to the <pre> behind it. */
+  /* Invisible focus sink: holds focus for direct mode and IME, but lets mouse
+     scroll/selection fall through to the <pre> behind it (pointer-events: none).
+     It is anchored to a short strip at the BOTTOM of the pane rather than
+     covering it, because the OS IME candidate window follows this element's
+     caret — parking the caret next to the input bar puts the ㄅㄆㄇ candidate
+     list where the eye already is, instead of the pane's top-left corner. */
   #direct-input {
-    position: absolute; inset: 0;
-    margin: 0; border: 0; padding: 12px 16px;
+    position: absolute; left: 10px; right: 58px; bottom: 10px;
+    height: 2.2em; z-index: 26;
+    margin: 0; border: 1px solid transparent; border-radius: 6px;
+    padding: 2px 8px;
     font: 12.5px/1.5 var(--mono);
     background: transparent; color: transparent; caret-color: transparent;
     resize: none; outline: none; opacity: 0;
     pointer-events: none; overflow: hidden;
   }
+  /* While the IME is composing, the buffer MUST be visible: nothing is relayed
+     to the pane until compositionend, so an invisible ㄅㄆㄇ buffer reads as a
+     frozen terminal. App toggles .composing from the composition events. */
+  #direct-input.composing {
+    opacity: 1;
+    background: rgba(14, 17, 22, 0.96);
+    border-color: var(--direct);
+    color: var(--fg); caret-color: var(--direct);
+    box-shadow: 0 0 0 1px rgba(121, 192, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.55);
+    /* A long phrase wraps past the one-line box; scrolling keeps the caret
+       (and therefore the syllable being typed) visible instead of clipping it. */
+    overflow-y: auto;
+  }
+  /* Label above the composing box, so the state is named, not just shown. */
+  .ime-hint {
+    display: none;
+    position: absolute; left: 12px; bottom: calc(10px + 2.2em + 3px); z-index: 27;
+    padding: 1px 6px; border-radius: 4px;
+    background: rgba(14, 17, 22, 0.96); border: 1px solid var(--direct);
+    color: var(--direct); font: 9px/1.5 var(--mono);
+    pointer-events: none; white-space: nowrap;
+  }
+  #direct-input.composing ~ .ime-hint { display: block; }
   .empty { margin: auto; color: var(--fg-dim); font-size: 13px; text-align: center; }
 
   /* Bottom padding lifts the input clear of the iOS home indicator on PWA —
