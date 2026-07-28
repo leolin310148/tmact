@@ -4,6 +4,7 @@ import "./app.css";
 import { initFrontendLogging } from "./lib/frontendLog";
 import { initSplitShell, wasSplitActive } from "./split";
 import { isMobile } from "./lib/dom";
+import { inSplitSlot } from "./lib/slot";
 
 // ?view=split mounts the desktop split shell instead of the app. A ?slot=N
 // wins over it (a slot iframe must always render the app — never a nested
@@ -21,6 +22,13 @@ const splitView =
 // several hooks own imperative resources (WebSocket, MediaRecorder, timers) via
 // refs; StrictMode's dev-only double effect mount would open them twice. We keep
 // dev behavior identical to production for faithful parity testing.
+// Slot documents get a root attribute so app.css can keep desktop behaviors
+// (e.g. the draft box in direct mode) despite the phone-width breakpoint the
+// narrow column triggers. Set before mount so the first paint is correct.
+if (inSplitSlot) {
+  document.documentElement.dataset.splitSlot = "1";
+}
+
 const rootEl = document.getElementById("root");
 if (rootEl) {
   initFrontendLogging();

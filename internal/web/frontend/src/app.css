@@ -1737,6 +1737,10 @@
        the way, so collapse it. On desktop the draft box stays put so a prompt
        can still be composed there even while direct mode is active. */
     .input-bar.direct .input-row { display: none; }
+    /* Split-view slots hit this phone breakpoint by column width, but they are
+       desktop-driven (hardware keyboard, no soft-keyboard crowding) — keep the
+       draft box visible in direct mode like the desktop layout does. */
+    html[data-split-slot] .input-bar.direct .input-row { display: flex; }
     /* No horizontal scroll on phones — wrap chips onto a few short lines. */
     .chips { flex-wrap: wrap; overflow-x: visible; gap: 3px; min-width: 0; }
     .chip { flex: 0 1 auto; padding: 3px 6px; font-size: 10px; gap: 4px; }

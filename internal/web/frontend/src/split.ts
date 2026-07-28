@@ -14,6 +14,10 @@
 // a display:none iframe would keep its WebSocket + capture loop alive on the
 // server for no visible benefit.
 
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import UsagePanel from "./components/UsagePanel";
+
 const COLS_KEY = "tmact.split.cols";
 const MAX_COLS = 3;
 
@@ -51,7 +55,16 @@ const SHELL_CSS = `
     padding: 1px 8px; cursor: pointer;
   }
   #split-cols button.sel { color: var(--fg, #c9d1d9); border-color: var(--accent, #4493f8); }
-  #split-exit { margin-left: auto; }
+  #split-usage { margin-left: auto; }
+  /* The shared usage panel sits IN the bar (slots suppress their own copies),
+     so the floating-overlay styling from app.css is flattened to static flow —
+     no absolute positioning, bubble chrome, or transparency. */
+  #split-bar .usage-panel {
+    position: static; pointer-events: auto; opacity: 1;
+    background: transparent; border: 0; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+    padding: 0; max-width: none;
+  }
   #split-grid {
     flex: 1; display: grid; min-height: 0;
     grid-template-columns: repeat(var(--cols, 2), 1fr); gap: 1px;
@@ -88,6 +101,7 @@ export function initSplitShell(rootEl: HTMLElement): void {
         <button data-cols="2" type="button">2</button>
         <button data-cols="3" type="button">3</button>
       </div>
+      <div id="split-usage"></div>
       <button id="split-exit" type="button" aria-label="exit split view">✕</button>
     </header>
     <main id="split-grid"></main>
@@ -95,6 +109,11 @@ export function initSplitShell(rootEl: HTMLElement): void {
 
   const grid = rootEl.querySelector<HTMLElement>("#split-grid");
   if (!grid) return;
+
+  // One shared agent-usage panel for the whole split view (slots suppress
+  // theirs) — a small React island; the rest of the shell stays plain DOM.
+  const usageHost = rootEl.querySelector<HTMLElement>("#split-usage");
+  if (usageHost) createRoot(usageHost).render(createElement(UsagePanel));
   const colButtons = Array.from(
     rootEl.querySelectorAll<HTMLButtonElement>("#split-cols button"),
   );

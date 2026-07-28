@@ -103,7 +103,7 @@ import { useHotkeys } from "../hooks/useHotkeys";
 import { useViewport } from "../hooks/useViewport";
 import { useInputHistory } from "../hooks/useInputHistory";
 import { useDownloadList } from "../hooks/useDownloadList";
-import { SELECTED_KEY } from "../lib/slot";
+import { SELECTED_KEY, inSplitSlot } from "../lib/slot";
 
 // Initial scrollback render cap. The server captures up to wsCaptureLines (2000)
 // lines, but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every
@@ -1128,7 +1128,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         {/* #content-wrap — uncontrolled className base; .direct/.selection-mode/
             .upload-ready toggled imperatively (layout effect + useQuick). */}
         <div className="content-wrap" id="content-wrap" ref={contentWrapRef}>
-          <UsagePanel />
+          {/* In a split slot the shell bar shows one shared usage panel;
+              per-slot copies would cover pane text in every narrow column. */}
+          {!inSplitSlot && <UsagePanel />}
           <ContentPane
             paneID={state.selected}
             text={pc.text}

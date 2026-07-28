@@ -17,3 +17,9 @@ const slot = (() => {
 export const SELECTED_KEY = slot
   ? `tmact.selectedPane.${slot}`
   : "tmact.selectedPane";
+
+// True when this document is one pane slot inside the split shell. Slot
+// instances skip per-instance chrome the shell shows once for everyone
+// (currently the agent-usage overlay, which would otherwise cover pane text
+// in every narrow column).
+export const inSplitSlot = slot !== "";
