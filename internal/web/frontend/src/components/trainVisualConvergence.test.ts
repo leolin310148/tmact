@@ -307,7 +307,7 @@ describe("train final visual convergence", () => {
       '.train-traversal-composition--tunnel[data-traversal-active="false"]',
     );
     expect(TRAIN_LAYOUT_STYLES).toMatch(
-      /\.train-bridge-crossing-void\s*\{[^}]*height:\s*68px/s,
+      /\.train-bridge-crossing-void\s*\{[^}]*height:\s*36px/s,
     );
     expect(TRAIN_LAYOUT_SOURCE).toContain(
       'data-bridge-forest-ground={',

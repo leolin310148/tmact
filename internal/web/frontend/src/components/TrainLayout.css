@@ -373,9 +373,21 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: -1px;
   bottom: 18px;
   left: -1px;
-  height: 68px;
+  height: 36px;
   overflow: hidden;
   background:
+    linear-gradient(
+      174deg,
+      transparent 0 46%,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-horizon-light) 32%
+        )
+        47% 50%,
+      transparent 51% 100%
+    )
+      0 0 / 72px 20px repeat,
     linear-gradient(
       to bottom,
       color-mix(
@@ -383,14 +395,14 @@ html[data-pane-switcher-layout="train"] .statusline {
           var(--train-palette-water),
           var(--train-palette-horizon-light) 42%
         )
-        0 7px,
-      var(--train-palette-water) 7px 31px,
+        0 4px,
+      var(--train-palette-water) 4px 22px,
       color-mix(
           in srgb,
           var(--train-palette-water),
           var(--train-palette-control-surface) 20%
         )
-        31px 100%
+        22px 100%
     );
   box-shadow:
     inset 0 5px 0 color-mix(
@@ -403,6 +415,22 @@ html[data-pane-switcher-layout="train"] .statusline {
       var(--train-palette-water),
       var(--train-palette-silhouette) 22%
     );
+}
+
+.train-set-piece--bridge.train-set-piece--body
+  .train-bridge-crossing-void {
+  clip-path: polygon(
+    0 24%,
+    12% 10%,
+    27% 22%,
+    43% 7%,
+    59% 20%,
+    75% 9%,
+    89% 21%,
+    100% 24%,
+    100% 100%,
+    0 100%
+  );
 }
 
 .train-bridge-crossing-void i {
@@ -429,7 +457,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-bridge-crossing-void i:last-child {
-  top: 35px;
+  top: 29px;
   left: 20%;
   width: 17%;
 }
@@ -448,7 +476,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: -1px;
   bottom: 18px;
   left: -1px;
-  height: 48px;
+  height: 36px;
   background: color-mix(
     in srgb,
     var(--train-palette-near-surface),
@@ -709,16 +737,21 @@ html[data-pane-switcher-layout="train"] .statusline {
       color-mix(
           in srgb,
           var(--train-palette-silhouette),
-          var(--train-palette-mountain-rock) 18%
+          var(--train-palette-mountain-rock) 20%
         )
-        0 7px,
-      var(--train-palette-near-surface) 7px 52px,
+        0 4px,
       color-mix(
           in srgb,
-          var(--train-palette-mountain-rock),
-          var(--train-palette-silhouette) 62%
+          var(--train-palette-silhouette),
+          var(--train-palette-near-surface) 34%
         )
-        52px 100%
+        4px 23px,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-control-surface) 38%
+        )
+        23px 100%
     );
   box-shadow:
     inset 0 6px 0 color-mix(
@@ -788,8 +821,8 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-bridge-approach {
   background: color-mix(
     in srgb,
-    var(--train-palette-mountain-rock),
-    var(--train-palette-near-surface) 54%
+    var(--train-palette-near-surface),
+    var(--train-palette-mountain-rock) 18%
   );
   box-shadow:
     inset 0 5px 0 color-mix(
@@ -819,8 +852,8 @@ html[data-pane-switcher-layout="train"] .statusline {
   height: 46px;
   background: color-mix(
     in srgb,
-    var(--train-palette-mountain-rock),
-    var(--train-palette-silhouette) 44%
+    var(--train-palette-silhouette),
+    var(--train-palette-mountain-rock) 18%
   );
   clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
 }
@@ -858,13 +891,30 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: -1px;
   bottom: 17px;
   left: -1px;
-  height: 126px;
+  height: 104px;
   overflow: hidden;
-  background: color-mix(
-    in srgb,
-    var(--train-palette-silhouette),
-    var(--train-palette-mid-surface) 18%
-  );
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-mid-surface) 25%
+        )
+        0,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-mid-surface) 18%
+        )
+        48%,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-control-surface) 24%
+        )
+        100%
+    );
   clip-path: polygon(0 100%, 0 64%, 9% 42%, 20% 23%, 33% 10%, 49% 2%, 68% 8%, 84% 24%, 100% 37%, 100% 100%);
 }
 
@@ -892,8 +942,18 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--tunnel.train-set-piece--body
   .train-tunnel-mountain-mass {
-  height: 136px;
-  clip-path: polygon(0 100%, 0 20%, 14% 9%, 32% 13%, 50% 3%, 69% 11%, 86% 6%, 100% 18%, 100% 100%);
+  height: 104px;
+  clip-path: polygon(
+    0 100%,
+    0 44%,
+    12% 28%,
+    28% 34%,
+    46% 18%,
+    65% 32%,
+    82% 24%,
+    100% 40%,
+    100% 100%
+  );
 }
 
 .train-set-piece--tunnel.train-set-piece--exit
@@ -1083,18 +1143,51 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-set-piece--tunnel.train-set-piece--variant-1
   .train-tunnel-mountain-mass {
-  height: 138px;
-  background: color-mix(
-    in srgb,
-    var(--train-palette-mid-surface),
-    var(--train-palette-silhouette) 58%
-  );
+  height: 108px;
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-palette-mid-surface),
+          var(--train-palette-mountain-rock) 24%
+        )
+        0,
+      color-mix(
+          in srgb,
+          var(--train-palette-mid-surface),
+          var(--train-palette-silhouette) 44%
+        )
+        50%,
+      color-mix(
+          in srgb,
+          var(--train-palette-silhouette),
+          var(--train-palette-control-surface) 21%
+        )
+        100%
+    );
   clip-path: polygon(0 100%, 0 70%, 8% 70%, 8% 52%, 17% 52%, 17% 35%, 29% 18%, 45% 7%, 63% 3%, 82% 15%, 100% 31%, 100% 100%);
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1.train-set-piece--body
   .train-tunnel-mountain-mass {
-  clip-path: polygon(0 100%, 0 20%, 11% 20%, 11% 10%, 31% 10%, 31% 5%, 57% 5%, 57% 12%, 79% 12%, 79% 7%, 100% 7%, 100% 100%);
+  height: 104px;
+  clip-path: polygon(
+    0 100%,
+    0 44%,
+    10% 44%,
+    10% 32%,
+    24% 32%,
+    24% 20%,
+    42% 20%,
+    42% 12%,
+    60% 12%,
+    60% 20%,
+    78% 20%,
+    78% 30%,
+    100% 30%,
+    100% 100%
+  );
 }
 
 .train-set-piece--tunnel.train-set-piece--variant-1
@@ -1222,9 +1315,39 @@ html[data-pane-switcher-layout="train"] .statusline {
   right: -1px;
   bottom: 17px;
   left: -1px;
-  height: 82px;
+  height: 58px;
   overflow: hidden;
-  background: var(--train-palette-water);
+  background:
+    repeating-linear-gradient(
+      174deg,
+      transparent 0 14px,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-horizon-light) 30%
+        )
+        15px 17px,
+      transparent 18px 36px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-haze) 14%
+        )
+        0,
+      var(--train-palette-water) 46%,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-silhouette) 24%
+        )
+        100%
+    );
+  background-size:
+    138px 100%,
+    100% 100%;
 }
 
 .train-coast-reveal-water i {
@@ -1248,13 +1371,13 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-coast-reveal-water i[data-coast-water-depth="middle"] {
-  top: 37px;
+  top: 28px;
   right: 34%;
   left: 13%;
 }
 
 .train-coast-reveal-water i[data-coast-water-depth="near"] {
-  top: 64px;
+  top: 47px;
   right: 9%;
   left: 43%;
   height: 4px;
@@ -1262,7 +1385,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-coast-reveal-horizon {
   right: -1px;
-  bottom: 97px;
+  bottom: 73px;
   left: -1px;
   height: 3px;
   background: color-mix(
@@ -2870,18 +2993,36 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-coast-water-plane--midground {
-  height: 112px;
-  background-image: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--train-palette-water), var(--train-palette-haze) 24%),
-    var(--train-palette-water) 52%,
-    color-mix(
-      in srgb,
-      var(--train-palette-water),
-      var(--train-palette-silhouette) 30%
-    )
-  );
-  background-size: 100% 100%;
+  height: 58px;
+  background-image:
+    repeating-linear-gradient(
+      174deg,
+      transparent 0 15px,
+      color-mix(
+          in srgb,
+          var(--train-palette-water),
+          var(--train-palette-horizon-light) 28%
+        )
+        16px 18px,
+      transparent 19px 38px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(
+        in srgb,
+        var(--train-palette-water),
+        var(--train-palette-haze) 18%
+      ),
+      var(--train-palette-water) 47%,
+      color-mix(
+        in srgb,
+        var(--train-palette-water),
+        var(--train-palette-silhouette) 30%
+      )
+    );
+  background-size:
+    142px 100%,
+    100% 100%;
 }
 
 .train-coast-water-cue {
@@ -2920,13 +3061,13 @@ html[data-pane-switcher-layout="train"] .statusline {
 }
 
 .train-coast-water-plane--midground .train-coast-water-cue--1 {
-  top: 36px;
+  top: 29px;
   left: 55%;
   width: 29%;
 }
 
 .train-coast-water-plane--midground .train-coast-water-cue--2 {
-  top: 81px;
+  top: 47px;
   left: 31%;
   width: 15%;
 }
@@ -2956,7 +3097,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-coast-composition--midground .train-coast-shore-profile {
   bottom: 0;
-  height: 76px;
+  height: 38px;
   background: var(--train-coast-shore-color);
   clip-path: polygon(
     0 38%,
@@ -2974,7 +3115,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-coast-composition--broad-water.train-coast-composition--midground
   .train-coast-shore-profile {
-  height: 43px;
+  height: 24px;
   clip-path: polygon(
     0 61%,
     18% 48%,
@@ -2989,7 +3130,7 @@ html[data-pane-switcher-layout="train"] .statusline {
 
 .train-coast-composition--working-harbour.train-coast-composition--midground
   .train-coast-shore-profile {
-  height: 72px;
+  height: 34px;
   clip-path: polygon(
     0 34%,
     19% 29%,
@@ -3159,7 +3300,7 @@ html[data-pane-switcher-layout="train"] .statusline {
   bottom: 0;
   left: 2%;
   display: block;
-  height: 32px;
+  height: 20px;
   overflow: hidden;
   pointer-events: none;
   opacity: 1;
@@ -3167,6 +3308,17 @@ html[data-pane-switcher-layout="train"] .statusline {
     in srgb,
     var(--train-terrain-surface),
     var(--train-palette-near-surface) 22%
+  );
+  clip-path: polygon(
+    0 28%,
+    14% 16%,
+    31% 24%,
+    48% 12%,
+    66% 22%,
+    83% 15%,
+    100% 26%,
+    100% 100%,
+    0 100%
   );
   image-rendering: pixelated;
 }
@@ -3189,14 +3341,14 @@ html[data-pane-switcher-layout="train"] .statusline {
           var(--train-terrain-surface),
           var(--train-palette-foreground-contrast) 12%
         )
-        0 8px,
+        0 5px,
       color-mix(
           in srgb,
           var(--train-terrain-surface),
           var(--train-palette-near-surface) 32%
         )
-        8px 22px,
-      var(--train-terrain-surface) 22px 100%
+        5px 15px,
+      var(--train-terrain-surface) 15px 100%
     );
 }
 
@@ -3258,14 +3410,14 @@ html[data-pane-switcher-layout="train"] .statusline {
           var(--train-terrain-surface),
           var(--train-palette-foreground-contrast) 9%
         )
-        0 7px,
+        0 5px,
       color-mix(
           in srgb,
           var(--train-terrain-surface),
           var(--train-palette-near-surface) 38%
         )
-        7px 24px,
-      var(--train-terrain-surface) 24px 100%
+        5px 16px,
+      var(--train-terrain-surface) 16px 100%
     );
 }
 
@@ -3720,31 +3872,27 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-undergrowth"]
   .train-terrain-base::after {
   position: absolute;
-  right: 4%;
+  right: 7%;
   bottom: 0;
-  left: 3%;
-  height: 22px;
+  width: 46%;
+  height: 14px;
   content: "";
   background:
     linear-gradient(
       135deg,
-      transparent 0 7px,
-      var(--train-terrain-detail) 7px 13px,
-      transparent 13px 19px
+      transparent 0 6px,
+      var(--train-terrain-detail) 6px 10px,
+      transparent 10px 16px
     )
-    0 100% / 31px 18px repeat-x,
-    var(--train-terrain-surface);
+    0 100% / 27px 14px repeat-x;
   clip-path: polygon(
-    0 70%,
-    8% 38%,
-    17% 62%,
-    27% 24%,
-    38% 58%,
-    51% 31%,
-    63% 68%,
-    76% 27%,
-    88% 55%,
-    100% 35%,
+    0 76%,
+    14% 42%,
+    29% 68%,
+    45% 27%,
+    62% 64%,
+    79% 36%,
+    100% 70%,
     100% 100%,
     0 100%
   );
@@ -3753,10 +3901,10 @@ html[data-pane-switcher-layout="train"] .statusline {
 .train-parallax-chunk--midground[data-regional-scenery-role="forest-stream"]
   .train-terrain-base::after {
   position: absolute;
-  right: 7%;
+  right: 11%;
   bottom: 3px;
-  left: 6%;
-  height: 19px;
+  width: 52%;
+  height: 10px;
   content: "";
   background:
     repeating-linear-gradient(
@@ -3794,41 +3942,32 @@ html[data-pane-switcher-layout="train"] .statusline {
   .train-terrain-base::after {
   position: absolute;
   bottom: 0;
-  left: 18%;
-  width: 64%;
-  height: 58%;
+  left: 29%;
+  width: 38%;
+  height: 4px;
   content: "";
-  background:
-    repeating-linear-gradient(
-      93deg,
-      var(--train-terrain-detail) 0 4px,
-      var(--train-terrain-surface) 4px 15px,
-      color-mix(
-          in srgb,
-          var(--train-terrain-surface),
-          var(--train-terrain-detail) 28%
-        )
-        15px 21px
-    );
-  clip-path: polygon(
-    4% 25%,
-    23% 8%,
-    46% 18%,
-    63% 0,
-    84% 13%,
-    100% 6%,
-    96% 100%,
-    0 100%
+  background: var(--train-terrain-detail);
+  box-shadow:
+    19px -9px 0 -1px color-mix(
+      in srgb,
+      var(--train-terrain-detail),
+      var(--train-terrain-surface) 28%
+    ),
+    61px -17px 0 -1px var(--train-terrain-detail),
+    104px -7px 0 -1px color-mix(
+      in srgb,
+      var(--train-terrain-detail),
+      var(--train-terrain-surface) 38%
   );
 }
 
 .train-parallax-chunk--midground[data-regional-scenery-role="mountain-rock-field"]
   .train-terrain-base::after {
   position: absolute;
-  right: 7%;
+  right: 9%;
   bottom: 1px;
-  left: 5%;
-  height: 25px;
+  width: 48%;
+  height: 13px;
   content: "";
   background:
     linear-gradient(

@@ -297,14 +297,14 @@ describe("distant terrain, coast, and bridge asset kit", () => {
       /\.train-bridge-crossing-void\s*\{([^}]+)\}/,
     )?.[1];
     expect(bridgeCrossingRule).toMatch(/bottom:\s*18px;/);
-    expect(bridgeCrossingRule).toMatch(/height:\s*68px;/);
+    expect(bridgeCrossingRule).toMatch(/height:\s*36px;/);
     const bridgeTrackEdgeRule = trainLayoutCss.match(
       /\.train-bridge-track-edge\s*\{([^}]+)\}/,
     )?.[1];
     expect(bridgeTrackEdgeRule).toMatch(/bottom:\s*12px;/);
     expect(bridgeTrackEdgeRule).toMatch(/height:\s*7px;/);
     expect(trainLayoutCss).toMatch(
-      /\.train-coast-reveal-water\s*\{[\s\S]*?background:\s*var\(--train-palette-water\);/,
+      /\.train-coast-reveal-water\s*\{[\s\S]*?height:\s*58px;[\s\S]*?linear-gradient\([\s\S]*?var\(--train-palette-water\)[\s\S]*?\);/,
     );
   });
 

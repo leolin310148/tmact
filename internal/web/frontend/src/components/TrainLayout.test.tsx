@@ -2446,6 +2446,33 @@ describe("TrainLayout", () => {
     expect(projectionDetailRule).not.toMatch(/opacity|filter|mask/);
   });
 
+  it("bounds region-owned surfaces instead of painting viewport-scale slabs", () => {
+    expect(trainLayoutCss).toMatch(
+      /\.train-built-environment-ground\s*\{[^}]*height:\s*20px;[^}]*clip-path:\s*polygon\(/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-coast-water-plane--midground\s*\{[^}]*height:\s*58px;/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-coast-composition--midground \.train-coast-shore-profile\s*\{[^}]*height:\s*38px;/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-coast-composition--broad-water\.train-coast-composition--midground\s+\.train-coast-shore-profile\s*\{[^}]*height:\s*24px;/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-tunnel-mountain-mass\s*\{[^}]*height:\s*104px;/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /\.train-set-piece--tunnel\.train-set-piece--body\s+\.train-tunnel-mountain-mass\s*\{[^}]*height:\s*104px;[^}]*clip-path:\s*polygon\(/s,
+    );
+    expect(trainLayoutCss).toMatch(
+      /data-regional-scenery-role="forest-canopy-cluster"[\s\S]*?\.train-terrain-base::after\s*\{[^}]*width:\s*46%;[^}]*height:\s*14px;/,
+    );
+    expect(trainLayoutCss).toMatch(
+      /data-regional-scenery-role="mountain-cliff"[\s\S]*?\.train-terrain-base::after\s*\{[^}]*width:\s*38%;[^}]*height:\s*4px;[^}]*box-shadow:/,
+    );
+  });
+
   it("keeps terrain materials opaque while confining sparse accents to owned pixel marks", () => {
     const styles = document.createElement("style");
     styles.dataset.trainLayoutTestStyles = "true";
@@ -3994,7 +4021,10 @@ describe("TrainLayout", () => {
       /\.train-set-piece--bridge\.train-set-piece--variant-1\s+\.train-bridge-lattice\s*\{[\s\S]*?display:\s*none;/,
     );
     expect(bridgeCss).toMatch(
-      /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*68px;/,
+      /\.train-bridge-crossing-void\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*36px;/,
+    );
+    expect(bridgeCss).toMatch(
+      /\.train-set-piece--bridge\.train-set-piece--body[\s\S]*?\.train-bridge-crossing-void\s*\{[\s\S]*?clip-path:\s*polygon\([\s\S]*?0 24%,[\s\S]*?43% 7%,[\s\S]*?100% 24%,[\s\S]*?100% 100%,[\s\S]*?0 100%/,
     );
     expect(bridgeCss).toMatch(
       /\.train-set-piece--bridge\.train-set-piece--entry[\s\S]*?\.train-bridge-crossing-void\s*\{[\s\S]*?clip-path:\s*polygon\(0 28%, 44% 28%, 64% 100%, 0 100%\);/,
@@ -4003,7 +4033,7 @@ describe("TrainLayout", () => {
       /\.train-set-piece--bridge\.train-set-piece--exit[\s\S]*?\.train-bridge-crossing-void\s*\{[\s\S]*?clip-path:\s*polygon\(36% 100%, 56% 28%, 100% 28%, 100% 100%\);/,
     );
     expect(bridgeCss).toMatch(
-      /\.train-bridge-approach\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*48px;[\s\S]*?clip-path:\s*polygon\(38% 100%, 50% 75%, 64% 50%, 82% 25%, 100% 0, 100% 100%\);/,
+      /\.train-bridge-approach\s*\{[\s\S]*?bottom:\s*18px;[\s\S]*?height:\s*36px;[\s\S]*?clip-path:\s*polygon\(38% 100%, 50% 75%, 64% 50%, 82% 25%, 100% 0, 100% 100%\);/,
     );
     expect(bridgeCss).toMatch(
       /\.train-set-piece--bridge\.train-set-piece--variant-1\.train-set-piece--entry[\s\S]*?\.train-bridge-crossing-void[\s\S]*?i:first-child,[\s\S]*?i:last-child\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?width:\s*42%;/,
