@@ -51,19 +51,35 @@ const SHELL_CSS = `
     padding: 4px 10px; background: transparent;
     pointer-events: none;
   }
-  #split-title {
-    color: var(--fg-dim, #8b949e);
-    background: rgba(14,17,22,0.82); border-radius: 4px; padding: 2px 6px;
-  }
-  #split-cols { display: flex; gap: 4px; }
-  #split-bar button {
+  /* One compact control: the split-mode menu button + its dropdown. */
+  #split-menu-wrap { position: relative; }
+  #split-menu-btn {
     font: inherit; color: var(--fg-dim, #8b949e);
     background: rgba(14,17,22,0.82);
     border: 1px solid var(--border, #2a313c); border-radius: 4px;
     padding: 1px 8px; cursor: pointer;
     pointer-events: auto;
   }
-  #split-cols button.sel { color: var(--fg, #c9d1d9); border-color: var(--accent, #4493f8); }
+  #split-menu-btn.open { color: var(--fg, #c9d1d9); border-color: var(--accent, #4493f8); }
+  #split-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; min-width: 140px;
+    display: none; flex-direction: column;
+    background: var(--panel, #161b22);
+    border: 1px solid var(--border, #2a313c); border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    padding: 4px; pointer-events: auto;
+  }
+  #split-menu.open { display: flex; }
+  #split-menu button {
+    font: inherit; color: var(--fg, #c9d1d9); background: transparent;
+    border: 0; border-radius: 4px; padding: 5px 8px; cursor: pointer;
+    text-align: left;
+  }
+  #split-menu button:hover { background: var(--panel-2, #1c2330); }
+  #split-menu button.sel { color: var(--accent, #4493f8); }
+  #split-menu .split-menu-sep {
+    height: 1px; margin: 4px 2px; background: var(--border, #2a313c);
+  }
   #split-usage { margin-left: auto; }
   /* The shared usage panel keeps its app.css floating-bubble chrome
      (semi-transparent, pointer-events none); only anchor it into the bar's
@@ -99,14 +115,18 @@ export function initSplitShell(rootEl: HTMLElement): void {
 
   rootEl.innerHTML = `
     <header id="split-bar">
-      <span id="split-title">tmact split</span>
-      <div id="split-cols" role="group" aria-label="columns">
-        <button data-cols="1" type="button">1</button>
-        <button data-cols="2" type="button">2</button>
-        <button data-cols="3" type="button">3</button>
+      <div id="split-menu-wrap">
+        <button id="split-menu-btn" type="button" aria-haspopup="menu"
+                aria-expanded="false" title="split view">⊞ 2</button>
+        <div id="split-menu" role="menu" aria-label="split view">
+          <button data-cols="1" type="button" role="menuitemradio">1 column</button>
+          <button data-cols="2" type="button" role="menuitemradio">2 columns</button>
+          <button data-cols="3" type="button" role="menuitemradio">3 columns</button>
+          <div class="split-menu-sep" aria-hidden="true"></div>
+          <button id="split-exit" type="button" role="menuitem">Exit split view</button>
+        </div>
       </div>
       <div id="split-usage"></div>
-      <button id="split-exit" type="button" aria-label="exit split view">✕</button>
     </header>
     <main id="split-grid"></main>
   `;
@@ -118,9 +138,28 @@ export function initSplitShell(rootEl: HTMLElement): void {
   // theirs) — a small React island; the rest of the shell stays plain DOM.
   const usageHost = rootEl.querySelector<HTMLElement>("#split-usage");
   if (usageHost) createRoot(usageHost).render(createElement(UsagePanel));
+
+  const menuWrap = rootEl.querySelector<HTMLElement>("#split-menu-wrap");
+  const menuBtn = rootEl.querySelector<HTMLButtonElement>("#split-menu-btn");
+  const menu = rootEl.querySelector<HTMLElement>("#split-menu");
   const colButtons = Array.from(
-    rootEl.querySelectorAll<HTMLButtonElement>("#split-cols button"),
+    rootEl.querySelectorAll<HTMLButtonElement>("#split-menu button[data-cols]"),
   );
+
+  const setMenuOpen = (open: boolean): void => {
+    menu?.classList.toggle("open", open);
+    menuBtn?.classList.toggle("open", open);
+    menuBtn?.setAttribute("aria-expanded", String(open));
+  };
+  menuBtn?.addEventListener("click", () => {
+    setMenuOpen(!menu?.classList.contains("open"));
+  });
+  // Outside click closes the menu. Clicks landing INSIDE an iframe never
+  // reach this document — the window `blur` handler below covers those.
+  document.addEventListener("click", (e) => {
+    if (e.target instanceof Node && menuWrap?.contains(e.target)) return;
+    setMenuOpen(false);
+  });
 
   const makeSlot = (n: number): HTMLElement => {
     const slot = document.createElement("div");
@@ -140,8 +179,11 @@ export function initSplitShell(rootEl: HTMLElement): void {
     for (let i = slots.length; i < want; i++) grid.appendChild(makeSlot(i + 1));
     for (let i = slots.length - 1; i >= want; i--) slots[i]?.remove();
     for (const b of colButtons) {
-      b.classList.toggle("sel", Number(b.dataset.cols) === want);
+      const sel = Number(b.dataset.cols) === want;
+      b.classList.toggle("sel", sel);
+      b.setAttribute("aria-checked", String(sel));
     }
+    if (menuBtn) menuBtn.textContent = `⊞ ${want}`;
     try {
       localStorage.setItem(COLS_KEY, String(want));
     } catch {
@@ -150,7 +192,10 @@ export function initSplitShell(rootEl: HTMLElement): void {
   };
 
   for (const b of colButtons) {
-    b.addEventListener("click", () => applyCols(Number(b.dataset.cols)));
+    b.addEventListener("click", () => {
+      applyCols(Number(b.dataset.cols));
+      setMenuOpen(false);
+    });
   }
   rootEl.querySelector("#split-exit")?.addEventListener("click", () => {
     try {
@@ -173,6 +218,9 @@ export function initSplitShell(rootEl: HTMLElement): void {
     }
   };
   window.addEventListener("blur", () => {
+    // Focus moved into an iframe: update the active highlight and close the
+    // menu (its outside-click handler can't see clicks inside iframes).
+    setMenuOpen(false);
     // activeElement updates after the blur event settles.
     setTimeout(markActive, 0);
   });
