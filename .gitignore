@@ -17,3 +17,7 @@ bin/
 internal/web/static/*
 !internal/web/static/.gitkeep
 internal/web/frontend/node_modules/
+# npx run from the repo root drops a node_modules/.vite cache here. Untracked
+# files count as modified for Go's vcs stamp, so leaving it unignored brands
+# every build "-dirty" and makes an installed binary look unversioned.
+/node_modules/
