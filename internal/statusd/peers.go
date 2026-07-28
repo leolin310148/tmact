@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,17 @@ type PeerFetcher struct {
 	timeout  time.Duration
 	client   *http.Client
 	now      func() time.Time
+
+	// LocalIdle supplies this side's local human idle time; when set (and
+	// reporting ok) each fetch carries it in the HumanIdleHeader so the peer
+	// knows a human is active here. RecordRemoteIdle ingests the peer's
+	// human_idle_seconds from fetched snapshots. Idle + IdleInterval slow
+	// the polling itself down while the whole federation is idle. All four
+	// must be set before Start.
+	LocalIdle        func() (time.Duration, bool)
+	RecordRemoteIdle func(time.Duration)
+	Idle             func() bool
+	IdleInterval     time.Duration
 
 	mu    sync.RWMutex
 	state map[string]PeerSnapshot
@@ -85,16 +97,27 @@ func (f *PeerFetcher) Start(ctx context.Context) {
 func (f *PeerFetcher) runPeer(ctx context.Context, p Peer) {
 	// Fire one immediately so the first merged snapshot has data.
 	f.fetchOnce(ctx, p)
-	t := time.NewTicker(f.interval)
-	defer t.Stop()
 	for {
+		t := time.NewTimer(f.currentInterval())
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return
 		case <-t.C:
 			f.fetchOnce(ctx, p)
 		}
 	}
+}
+
+// currentInterval slows polling to IdleInterval while the daemon reports the
+// federation idle. The fetch is also the activity propagation channel, so it
+// never slows below IdleInterval — a returning human is re-announced to peers
+// within one idle tick.
+func (f *PeerFetcher) currentInterval() time.Duration {
+	if f.Idle != nil && f.IdleInterval > f.interval && f.Idle() {
+		return f.IdleInterval
+	}
+	return f.interval
 }
 
 func (f *PeerFetcher) fetchOnce(ctx context.Context, p Peer) {
@@ -105,6 +128,11 @@ func (f *PeerFetcher) fetchOnce(ctx context.Context, p Peer) {
 	if err != nil {
 		f.storeError(p.Name, err)
 		return
+	}
+	if f.LocalIdle != nil {
+		if idle, ok := f.LocalIdle(); ok {
+			req.Header.Set(HumanIdleHeader, strconv.FormatFloat(idle.Seconds(), 'f', 3, 64))
+		}
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -120,6 +148,9 @@ func (f *PeerFetcher) fetchOnce(ctx context.Context, p Peer) {
 	if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
 		f.storeError(p.Name, fmt.Errorf("decode %s: %w", p.Name, err))
 		return
+	}
+	if f.RecordRemoteIdle != nil && snap.HumanIdleSeconds != nil && *snap.HumanIdleSeconds >= 0 {
+		f.RecordRemoteIdle(time.Duration(*snap.HumanIdleSeconds * float64(time.Second)))
 	}
 	f.store(p.Name, PeerSnapshot{Snapshot: snap, FetchedAt: f.now(), Reachable: true})
 }

@@ -189,6 +189,12 @@ func runStatusdStart(args []string) error {
 		WebPushVAPIDSubject:      fileCfg.WebPushVAPIDSubject,
 		WebPushSubscriptionsPath: fileCfg.WebPushSubscriptionsPath,
 	}
+	// Adaptive idle pacing: the daemon reads the web tracker's clock each
+	// tick, wakes early on fresh web activity, and ingests the human-idle
+	// header fetching hubs attach to /api/snapshot requests.
+	daemon.SetWebActivity(server.HumanLastActivity)
+	server.OnHumanActivity = daemon.NoteHumanActivity
+	server.RecordPeerHumanIdle = daemon.RecordFederatedActivity
 	go func() {
 		if err := server.Serve(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "statusd server stopped: %v\n", err)
@@ -215,6 +221,16 @@ func applyFileConfig(cfg *statusd.Config, webAddr *string, file statusd.FileConf
 	if !set["interval"] {
 		if d := file.IntervalDuration(); d > 0 {
 			cfg.Interval = d
+		}
+	}
+	if !set["idle-interval"] {
+		if d := file.IdleIntervalDuration(); d != 0 {
+			cfg.IdleInterval = d
+		}
+	}
+	if !set["idle-after"] {
+		if d := file.IdleAfterDuration(); d > 0 {
+			cfg.IdleAfter = d
 		}
 	}
 	if !set["socket-path"] && file.SocketPath != "" {
@@ -398,6 +414,8 @@ type statusdFlagValues struct {
 func statusdFlags(fs *flag.FlagSet) *statusdFlagValues {
 	values := &statusdFlagValues{Config: statusd.Config{TmuxOptions: true, SessionSave: true, SessionRestore: true}}
 	fs.DurationVar(&values.Config.Interval, "interval", statusd.DefaultInterval, "scan interval")
+	fs.DurationVar(&values.Config.IdleInterval, "idle-interval", statusd.DefaultIdleInterval, "scan interval while no human is active (values <= --interval disable idle pacing)")
+	fs.DurationVar(&values.Config.IdleAfter, "idle-after", statusd.DefaultIdleAfter, "how long without human activity before idle pacing kicks in")
 	fs.StringVar(&values.Config.SocketPath, "socket-path", statusd.DefaultSocketPath, "daemon IPC unix socket")
 	fs.StringVar(&values.Config.LogPath, "log-path", "", "optional JSONL daemon log path")
 	fs.BoolVar(&values.Config.TmuxOptions, "tmux-options", true, "write @ai-* tmux options")
@@ -434,6 +452,9 @@ func (v *statusdFlagValues) config() statusd.Config {
 func validateStatusdConfig(cfg statusd.Config) error {
 	if cfg.Interval <= 0 {
 		return errors.New("--interval must be positive")
+	}
+	if cfg.IdleAfter <= 0 {
+		return errors.New("--idle-after must be positive")
 	}
 	if cfg.CaptureLines <= 0 {
 		return errors.New("--capture-lines must be positive")

@@ -139,6 +139,8 @@ func agentCommandHelpCatalog() []commandHelp {
 func statusdHelpFlags() []helpFlag {
 	return []helpFlag{
 		{Name: "--interval", Value: "DURATION", Description: "scan interval"},
+		{Name: "--idle-interval", Value: "DURATION", Description: "scan interval while no human is active (values <= --interval disable idle pacing)"},
+		{Name: "--idle-after", Value: "DURATION", Description: "how long without human activity before idle pacing kicks in"},
 		{Name: "--socket-path", Value: "PATH", Description: "daemon IPC unix socket"},
 		{Name: "--log-path", Value: "PATH", Description: "optional JSONL daemon log path"},
 		{Name: "--tmux-options", Description: "write @ai-* tmux options"},

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -188,6 +189,14 @@ type Server struct {
 	paneDiff paneDiffCache
 	// pushMu serializes reads/writes to the subscription JSON file.
 	pushMu sync.Mutex
+
+	// OnHumanActivity, when set, is called after every recorded human web-UI
+	// action so the statusd daemon can leave idle pacing immediately.
+	OnHumanActivity func()
+	// RecordPeerHumanIdle ingests the HumanIdleHeader a fetching hub sends
+	// with /api/snapshot requests (its local human idle time), so a headless
+	// peer learns a human is active elsewhere in the federation.
+	RecordPeerHumanIdle func(time.Duration)
 
 	// humanActivity remembers the last human web-UI action (pane switch or
 	// input) for /api/human-active.
@@ -590,6 +599,13 @@ func (s *Server) listeners() ([]net.Listener, error) {
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	if s.RecordPeerHumanIdle != nil {
+		if raw := r.Header.Get(statusd.HumanIdleHeader); raw != "" {
+			if seconds, err := strconv.ParseFloat(raw, 64); err == nil && seconds >= 0 {
+				s.RecordPeerHumanIdle(time.Duration(seconds * float64(time.Second)))
+			}
+		}
+	}
 	if s.Store == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "snapshot store not configured")
 		return

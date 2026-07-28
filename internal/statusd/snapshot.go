@@ -27,6 +27,11 @@ type Snapshot struct {
 	GeneratedBy  string                   `json:"generated_by"`
 	IntervalMS   int64                    `json:"interval_ms"`
 	StaleAfterMS int64                    `json:"stale_after_ms"`
+	// HumanIdleSeconds is how long ago this daemon last saw a *local* human
+	// action (web UI or attached tmux client); absent when none has been
+	// seen. Deliberately excludes peer-reported activity so federation
+	// cannot echo two hubs awake forever.
+	HumanIdleSeconds *float64 `json:"human_idle_seconds,omitempty"`
 	Summary      Summary                  `json:"summary"`
 	Sessions     map[string]SessionStatus `json:"sessions"`
 	Panes        map[string]PaneStatus    `json:"panes"`

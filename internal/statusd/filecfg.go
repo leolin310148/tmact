@@ -20,8 +20,15 @@ const (
 // fields let us tell "absent" from "explicit zero" so CLI flags can override
 // only the keys the user actually set.
 type FileConfig struct {
-	WebAddr                  string           `json:"web_addr,omitempty"`
-	Interval                 string           `json:"interval,omitempty"`
+	WebAddr  string `json:"web_addr,omitempty"`
+	Interval string `json:"interval,omitempty"`
+	// IdleInterval is the slow scan cadence used while no human has been
+	// active for IdleAfter (web UI, attached tmux client, or a peer's
+	// report). A value at or below interval disables idle pacing.
+	IdleInterval string `json:"idle_interval,omitempty"`
+	// IdleAfter is how long without human activity before idle pacing
+	// kicks in.
+	IdleAfter                string           `json:"idle_after,omitempty"`
 	SocketPath               string           `json:"socket_path,omitempty"`
 	LogPath                  string           `json:"log_path,omitempty"`
 	TmuxOptions              *bool            `json:"tmux_options,omitempty"`
@@ -85,6 +92,8 @@ func DefaultFileConfig() FileConfig {
 	return FileConfig{
 		WebAddr:                  DefaultWebAddr,
 		Interval:                 DefaultFileInterval.String(),
+		IdleInterval:             DefaultIdleInterval.String(),
+		IdleAfter:                DefaultIdleAfter.String(),
 		SocketPath:               DefaultSocketPath,
 		TmuxOptions:              &t,
 		PaneCols:                 &cols,
@@ -123,6 +132,20 @@ func LoadFileConfig(path string) (FileConfig, error) {
 	if cfg.Interval != "" {
 		if _, err := time.ParseDuration(cfg.Interval); err != nil {
 			return FileConfig{}, fmt.Errorf("parse %s: invalid interval %q: %w", path, cfg.Interval, err)
+		}
+	}
+	if cfg.IdleInterval != "" {
+		if _, err := time.ParseDuration(cfg.IdleInterval); err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid idle_interval %q: %w", path, cfg.IdleInterval, err)
+		}
+	}
+	if cfg.IdleAfter != "" {
+		d, err := time.ParseDuration(cfg.IdleAfter)
+		if err != nil {
+			return FileConfig{}, fmt.Errorf("parse %s: invalid idle_after %q: %w", path, cfg.IdleAfter, err)
+		}
+		if d <= 0 {
+			return FileConfig{}, fmt.Errorf("parse %s: idle_after must be positive", path)
 		}
 	}
 	if cfg.SessionSaveInterval != "" {
@@ -245,6 +268,30 @@ func LoadOrCreateFileConfig(path string) (FileConfig, bool, error) {
 		return FileConfig{}, false, writeErr
 	}
 	return seed, true, nil
+}
+
+// IdleIntervalDuration returns the parsed idle scan interval, or zero if unset.
+func (c FileConfig) IdleIntervalDuration() time.Duration {
+	if c.IdleInterval == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.IdleInterval)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+// IdleAfterDuration returns the parsed idle threshold, or zero if unset.
+func (c FileConfig) IdleAfterDuration() time.Duration {
+	if c.IdleAfter == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.IdleAfter)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // IntervalDuration returns the parsed interval, or zero if unset.

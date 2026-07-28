@@ -272,3 +272,74 @@ func keys[V any](m map[string]V) []string {
 	}
 	return out
 }
+
+func TestPeerFetcherPiggybacksHumanIdle(t *testing.T) {
+	idleSeconds := 42.5
+	remote := Snapshot{
+		Version:          1,
+		Sessions:         map[string]SessionStatus{"r": {Session: "r"}},
+		Panes:            map[string]PaneStatus{"r:0.0": {Target: "r:0.0", Session: "r"}},
+		HumanIdleSeconds: &idleSeconds,
+	}
+	headers := make(chan string, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case headers <- r.Header.Get(HumanIdleHeader):
+		default:
+		}
+		_ = json.NewEncoder(w).Encode(remote)
+	}))
+	defer srv.Close()
+
+	recorded := make(chan time.Duration, 16)
+	f := NewPeerFetcher([]Peer{{Name: "remote", URL: srv.URL}}, 10*time.Millisecond, time.Second)
+	f.LocalIdle = func() (time.Duration, bool) { return 90 * time.Second, true }
+	f.RecordRemoteIdle = func(d time.Duration) {
+		select {
+		case recorded <- d:
+		default:
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.Start(ctx)
+
+	select {
+	case h := <-headers:
+		if h != "90.000" {
+			t.Fatalf("%s header = %q, want 90.000", HumanIdleHeader, h)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("peer never received a fetch")
+	}
+	select {
+	case d := <-recorded:
+		if d != 42500*time.Millisecond {
+			t.Fatalf("recorded remote idle = %v, want 42.5s", d)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("remote human_idle_seconds never recorded")
+	}
+}
+
+func TestPeerFetcherIdlePacing(t *testing.T) {
+	f := NewPeerFetcher([]Peer{{Name: "r", URL: "http://unused"}}, time.Second, time.Second)
+	f.IdleInterval = 5 * time.Second
+
+	if got := f.currentInterval(); got != time.Second {
+		t.Fatalf("interval without Idle hook = %v, want 1s", got)
+	}
+	idle := false
+	f.Idle = func() bool { return idle }
+	if got := f.currentInterval(); got != time.Second {
+		t.Fatalf("interval while active = %v, want 1s", got)
+	}
+	idle = true
+	if got := f.currentInterval(); got != 5*time.Second {
+		t.Fatalf("interval while idle = %v, want 5s", got)
+	}
+	f.IdleInterval = 500 * time.Millisecond
+	if got := f.currentInterval(); got != time.Second {
+		t.Fatalf("idle interval below fast interval = %v, want clamp to 1s", got)
+	}
+}

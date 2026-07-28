@@ -290,3 +290,41 @@ func TestLoadFileConfig_MissingFileReportsNotExist(t *testing.T) {
 		t.Fatalf("err = %v, want os.ErrNotExist", err)
 	}
 }
+
+func TestLoadFileConfig_IdlePacing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "statusd.json")
+	body := `{"idle_interval": "8s", "idle_after": "20m"}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("LoadFileConfig: %v", err)
+	}
+	if d := cfg.IdleIntervalDuration(); d != 8*time.Second {
+		t.Errorf("IdleInterval = %v, want 8s", d)
+	}
+	if d := cfg.IdleAfterDuration(); d != 20*time.Minute {
+		t.Errorf("IdleAfter = %v, want 20m", d)
+	}
+	// Unset → zero so the statusd defaults apply.
+	if d := (FileConfig{}).IdleIntervalDuration(); d != 0 {
+		t.Errorf("unset IdleInterval = %v, want 0", d)
+	}
+
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte(`{"idle_interval": "nope"}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadFileConfig(bad); err == nil {
+		t.Fatal("expected error for invalid idle_interval")
+	}
+	negative := filepath.Join(dir, "negative.json")
+	if err := os.WriteFile(negative, []byte(`{"idle_after": "-5m"}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadFileConfig(negative); err == nil {
+		t.Fatal("expected error for non-positive idle_after")
+	}
+}

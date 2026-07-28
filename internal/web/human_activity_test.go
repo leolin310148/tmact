@@ -116,3 +116,47 @@ func TestAutomationPaneInputIsNotHumanActivity(t *testing.T) {
 		t.Fatalf("automation input marked human active: %+v", status)
 	}
 }
+
+func TestRecordHumanActivityFiresCallbackAndAccessor(t *testing.T) {
+	now := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	fired := 0
+	server := &Server{humanNow: func() time.Time { return now }}
+	server.OnHumanActivity = func() { fired++ }
+
+	if _, ok := server.HumanLastActivity(); ok {
+		t.Fatal("HumanLastActivity ok = true before any activity")
+	}
+	server.recordHumanActivity()
+	if fired != 1 {
+		t.Fatalf("OnHumanActivity fired %d times, want 1", fired)
+	}
+	last, ok := server.HumanLastActivity()
+	if !ok || !last.Equal(now) {
+		t.Fatalf("HumanLastActivity = %v ok=%t, want %v true", last, ok, now)
+	}
+}
+
+func TestSnapshotRequestRecordsPeerHumanIdle(t *testing.T) {
+	recorded := make([]time.Duration, 0, 2)
+	server := &Server{RecordPeerHumanIdle: func(d time.Duration) { recorded = append(recorded, d) }}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/snapshot", nil)
+	req.Header.Set("X-Tmact-Human-Idle", "12.500")
+	server.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	if len(recorded) != 1 || recorded[0] != 12500*time.Millisecond {
+		t.Fatalf("recorded = %v, want [12.5s]", recorded)
+	}
+
+	// Absent or malformed headers record nothing; peer idle time is not
+	// human activity on this side either way.
+	server.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/snapshot", nil))
+	bad := httptest.NewRequest(http.MethodGet, "/api/snapshot", nil)
+	bad.Header.Set("X-Tmact-Human-Idle", "-5")
+	server.Handler().ServeHTTP(httptest.NewRecorder(), bad)
+	if len(recorded) != 1 {
+		t.Fatalf("recorded = %v after bad/absent headers, want unchanged", recorded)
+	}
+	if _, status := getHumanActive(t, server, ""); status.Active {
+		t.Fatalf("peer idle header marked this side's human active: %+v", status)
+	}
+}

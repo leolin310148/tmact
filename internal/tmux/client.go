@@ -877,6 +877,28 @@ func ListWindowSizes() ([]WindowSize, error) {
 	return sizes, nil
 }
 
+// ListClientActivity returns the last-input-activity time of every attached
+// tmux client. An empty slice means no client is attached; a missing tmux
+// server surfaces as an error the caller may treat as "no clients".
+func ListClientActivity() ([]time.Time, error) {
+	out, err := outputTmux("list-clients", "-F", "#{client_activity}")
+	if err != nil {
+		return nil, err
+	}
+	var activity []time.Time
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		epoch, err := strconv.ParseInt(line, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid client_activity %q: %w", line, err)
+		}
+		activity = append(activity, time.Unix(epoch, 0))
+	}
+	return activity, nil
+}
+
 func SetSessionOption(session string, key string, value string) error {
 	if session == "" {
 		return fmt.Errorf("session cannot be empty")

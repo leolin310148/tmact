@@ -24,7 +24,14 @@ const (
 )
 
 type Config struct {
-	Interval           time.Duration
+	Interval time.Duration
+	// IdleInterval is the slow scan cadence used while no human has been
+	// active (locally or federation-wide) for IdleAfter. Values at or below
+	// Interval keep the loop at the fast cadence permanently.
+	IdleInterval time.Duration
+	// IdleAfter is how long without any human signal before the daemon
+	// switches from Interval to IdleInterval.
+	IdleAfter          time.Duration
 	SocketPath         string
 	LogPath            string
 	TmuxOptions        bool
@@ -81,7 +88,10 @@ type Config struct {
 	// sweep; default to the live tmux helpers.
 	ListWindowSizes  func() ([]tmux.WindowSize, error)
 	ResizeWindow     func(target string, cols, rows int) error
-	ListSessionState func() ([]tmux.SessionStatePane, error)
+	// ListClientActivity returns attached tmux clients' last-input times for
+	// the human-activity clock; defaults to tmux.ListClientActivity.
+	ListClientActivity func() ([]time.Time, error)
+	ListSessionState   func() ([]tmux.SessionStatePane, error)
 	RestoreClient    tmux.RestoreClient
 	HomeDir          func() (string, error)
 	DirExists        func(string) bool
@@ -91,6 +101,12 @@ type Config struct {
 func (c Config) withDefaults() Config {
 	if c.Interval <= 0 {
 		c.Interval = DefaultInterval
+	}
+	if c.IdleInterval == 0 {
+		c.IdleInterval = DefaultIdleInterval
+	}
+	if c.IdleAfter <= 0 {
+		c.IdleAfter = DefaultIdleAfter
 	}
 	if c.SocketPath == "" {
 		c.SocketPath = DefaultSocketPath
@@ -149,6 +165,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.ClosedSessionsMax <= 0 {
 		c.ClosedSessionsMax = DefaultClosedSessionsMax
+	}
+	if c.ListClientActivity == nil {
+		c.ListClientActivity = tmux.ListClientActivity
 	}
 	if c.ListSessionState == nil {
 		c.ListSessionState = tmux.ListSessionState

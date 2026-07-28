@@ -22,6 +22,12 @@ type Daemon struct {
 	sessions        SessionPersistence
 	nextSessionSave time.Time
 
+	// activity feeds the adaptive scan interval; webActivity is the injected
+	// web-UI tracker clock and wake nudges the Start loop out of a slow tick.
+	activity    humanActivity
+	webActivity func() (time.Time, bool)
+	wake        chan struct{}
+
 	closed *ClosedSessionLog
 	// prevSessions is the last poll's local session set (name → reopen info)
 	// used to detect sessions that disappeared; nil until the first poll so a
@@ -37,6 +43,7 @@ func NewDaemon(cfg Config) *Daemon {
 		store:       NewStore(),
 		optionCache: NewTmuxOptionCache(),
 		hooks:       shellhook.NewStore(),
+		wake:        make(chan struct{}, 1),
 		sessions: SessionPersistence{
 			Store: SessionSnapshotStore{
 				Dir:       cfg.SessionSnapshotDir,
@@ -53,6 +60,14 @@ func NewDaemon(cfg Config) *Daemon {
 	if len(cfg.Peers) > 0 {
 		d.peers = NewPeerFetcher(cfg.Peers, cfg.PeerInterval, cfg.PeerTimeout)
 		d.peers.SetLogger(cfg.Logf)
+		// Piggyback human activity on the existing snapshot polling: the
+		// request header carries our local activity out, the response body
+		// carries the peer's back, and the poll itself slows down when the
+		// whole federation is idle.
+		d.peers.LocalIdle = d.LocalHumanIdle
+		d.peers.RecordRemoteIdle = d.RecordFederatedActivity
+		d.peers.Idle = func() bool { return !d.humanActive(d.cfg.Now()) }
+		d.peers.IdleInterval = d.cfg.IdleInterval
 	}
 	return d
 }
@@ -147,6 +162,7 @@ func sessionCWD(snapshot Snapshot, sess SessionStatus) string {
 }
 
 func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
+	d.refreshLocalActivity(d.cfg.Now())
 	hookStates := d.hooks.States()
 	forceCapturePaneIDs := make(map[string]bool)
 	for paneID, state := range hookStates {
@@ -155,6 +171,7 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 		}
 	}
 	snapshot, scanErr := buildSnapshot(ctx, d.cfg, d.mem, forceCapturePaneIDs)
+	d.stampActivity(&snapshot)
 	if scanErr != nil {
 		if d.cfg.LogPath != "" {
 			_ = appendLog(d.cfg.LogPath, snapshot)
@@ -213,13 +230,33 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.trackClosedSessions(snapshot, scanErr)
 		d.maybeSaveSessions()
 
-		timer := time.NewTimer(d.cfg.Interval)
+		timer := time.NewTimer(d.effectiveInterval(d.cfg.Now()))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
+		case <-d.wake:
+			// A human just became active somewhere; rescan now instead of
+			// waiting out the remainder of an idle-paced sleep.
+			timer.Stop()
 		}
+	}
+}
+
+// stampActivity records the adaptive-pacing metadata on a freshly built
+// snapshot: the actual current cadence, a stale threshold that keeps pace
+// with it, and the local-only human idle time peers ingest on fetch.
+func (d *Daemon) stampActivity(snapshot *Snapshot) {
+	now := d.cfg.Now()
+	interval := d.effectiveInterval(now)
+	snapshot.IntervalMS = interval.Milliseconds()
+	if scaled := 2 * interval; scaled > d.cfg.StaleAfter {
+		snapshot.StaleAfterMS = scaled.Milliseconds()
+	}
+	if idle, ok := d.LocalHumanIdle(); ok {
+		seconds := idle.Seconds()
+		snapshot.HumanIdleSeconds = &seconds
 	}
 }
 

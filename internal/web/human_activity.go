@@ -48,6 +48,17 @@ func (t *humanActivityTracker) lastSeen() time.Time {
 // sends on pane switches.
 func (s *Server) recordHumanActivity() {
 	s.humanActivity.record(s.humanNowFn()())
+	if s.OnHumanActivity != nil {
+		s.OnHumanActivity()
+	}
+}
+
+// HumanLastActivity exposes the tracker clock for the statusd daemon's
+// adaptive scan interval: the last human web-UI action, ok=false when none
+// has been seen since the daemon started.
+func (s *Server) HumanLastActivity() (time.Time, bool) {
+	last := s.humanActivity.lastSeen()
+	return last, !last.IsZero()
 }
 
 func (s *Server) humanNowFn() func() time.Time {
