@@ -42,29 +42,33 @@ const SHELL_CSS = `
     font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
   }
   #root { display: contents; }
+  /* The bar is a transparent overlay, not a flow row — the grid gets the full
+     viewport height. pointer-events pass through everywhere except the actual
+     controls, so the iframes' top edge stays clickable. */
   #split-bar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 4px 10px; background: var(--panel, #161b22);
-    border-bottom: 1px solid var(--border, #2a313c); flex: none;
+    position: absolute; inset: 0 0 auto 0; z-index: 30;
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 4px 10px; background: transparent;
+    pointer-events: none;
   }
-  #split-title { color: var(--fg-dim, #8b949e); }
+  #split-title {
+    color: var(--fg-dim, #8b949e);
+    background: rgba(14,17,22,0.82); border-radius: 4px; padding: 2px 6px;
+  }
   #split-cols { display: flex; gap: 4px; }
   #split-bar button {
-    font: inherit; color: var(--fg-dim, #8b949e); background: transparent;
+    font: inherit; color: var(--fg-dim, #8b949e);
+    background: rgba(14,17,22,0.82);
     border: 1px solid var(--border, #2a313c); border-radius: 4px;
     padding: 1px 8px; cursor: pointer;
+    pointer-events: auto;
   }
   #split-cols button.sel { color: var(--fg, #c9d1d9); border-color: var(--accent, #4493f8); }
   #split-usage { margin-left: auto; }
-  /* The shared usage panel sits IN the bar (slots suppress their own copies),
-     so the floating-overlay styling from app.css is flattened to static flow —
-     no absolute positioning, bubble chrome, or transparency. */
-  #split-bar .usage-panel {
-    position: static; pointer-events: auto; opacity: 1;
-    background: transparent; border: 0; box-shadow: none;
-    -webkit-backdrop-filter: none; backdrop-filter: none;
-    padding: 0; max-width: none;
-  }
+  /* The shared usage panel keeps its app.css floating-bubble chrome
+     (semi-transparent, pointer-events none); only anchor it into the bar's
+     flex flow instead of absolute top-right. */
+  #split-bar .usage-panel { position: static; }
   #split-grid {
     flex: 1; display: grid; min-height: 0;
     grid-template-columns: repeat(var(--cols, 2), 1fr); gap: 1px;
