@@ -84,6 +84,12 @@ type Server struct {
 	// RunCommand opens a shell window in the target pane's tmux session and
 	// executes the selected command there.
 	RunCommand func(target, command string) error
+	// RunCommandCaptured executes a command outside tmux in the target pane's
+	// cwd and returns bounded combined output for the web result dialog.
+	RunCommandCaptured func(target, command string, maxOutput int) (tmux.CommandResult, error)
+	// RunCommandInNewSession creates a new tmux session for a command and
+	// returns its session name and pane id so the web UI can switch to it.
+	RunCommandInNewSession func(target, command string) (session, pane string, err error)
 	// KillSession kills one exact tmux session (the overflow menu's exit
 	// button); defaults to tmux.KillSession.
 	KillSession func(session string) error
@@ -188,6 +194,9 @@ type Server struct {
 	humanActivity humanActivityTracker
 	// humanNow overrides the activity clock in tests; nil means time.Now.
 	humanNow func() time.Time
+
+	// commandJobs retains recent background-command results for modal polling.
+	commandJobs commandJobStore
 }
 
 // lookupPeer returns the peer config for name, or false when none matches.
@@ -348,6 +357,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/session/kill", s.handleSessionKill)
 	mux.HandleFunc("/api/session/reopen", s.handleSessionReopen)
 	mux.HandleFunc("/api/sessions/closed", s.handleSessionsClosed)
+	mux.HandleFunc("/api/command", s.handleCommand)
 	mux.HandleFunc("/api/hook-event", s.handleHookEvent)
 	mux.HandleFunc("/api/hook-state", s.handleHookState)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)

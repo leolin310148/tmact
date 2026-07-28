@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logFrontend } from "../lib/frontendLog";
-import { fetchSnapshot, subscribeSnapshot } from "./client";
+import {
+  fetchSnapshot,
+  loadCommandJob,
+  startBackgroundCommand,
+  startTmuxCommand,
+  subscribeSnapshot,
+} from "./client";
 
 vi.mock("../lib/frontendLog", () => ({
   logFrontend: vi.fn(),
@@ -74,5 +80,55 @@ describe("api client logging", () => {
     expect(logFrontend).toHaveBeenCalledWith("warn", "snapshot_stream", "stream closed");
     expect(onSnapshot).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalled();
+  });
+
+  it("routes federated commands to the peer with a local pane id", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          pane_id: "%12",
+          session: "work-run",
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startTmuxCommand("mini@%7", "make test");
+    await startBackgroundCommand("mini@%7", "make test");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/command?peer=mini",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ pane: "%7", command: "make test", mode: "tmux" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/command?peer=mini",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ pane: "%7", command: "make test", mode: "background" }),
+      }),
+    );
+  });
+
+  it("polls a command job on its originating peer", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ job: { id: "abc", status: "running" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loadCommandJob("abc", "mini");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/command?id=abc&peer=mini",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 });

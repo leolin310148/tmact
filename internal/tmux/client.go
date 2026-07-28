@@ -3,14 +3,25 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// CommandResult is the captured result of a shell command executed outside
+// tmux, but in a pane's current directory and with that tmux server's default
+// shell.
+type CommandResult struct {
+	Output    string
+	ExitCode  int
+	Truncated bool
+}
 
 type Layout struct {
 	Sessions map[string]bool
@@ -196,6 +207,165 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 		args = append(args, shellJoin(command))
 	}
 	return runTmux(args...)
+}
+
+// RunCommandCaptured executes command outside tmux in target's current
+// directory, using the tmux server's default shell. Output is capped so a
+// command cannot grow statusd's memory without bound.
+func RunCommandCaptured(target string, command string, maxOutput int) (CommandResult, error) {
+	if strings.TrimSpace(target) == "" {
+		return CommandResult{}, fmt.Errorf("target cannot be empty")
+	}
+	if strings.TrimSpace(command) == "" {
+		return CommandResult{}, fmt.Errorf("command cannot be empty")
+	}
+	if maxOutput <= 0 {
+		return CommandResult{}, fmt.Errorf("max output must be positive")
+	}
+
+	location, err := outputTmux("display-message", "-p", "-t", target, "#{pane_current_path}\t#{default-shell}")
+	if err != nil {
+		return CommandResult{}, err
+	}
+	parts := strings.SplitN(strings.TrimSuffix(location, "\n"), "\t", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+		return CommandResult{}, fmt.Errorf("tmux returned an invalid command location for %q", target)
+	}
+
+	cmd := exec.Command(parts[1], "-lc", command)
+	if parts[0] != "" {
+		cmd.Dir = parts[0]
+	}
+	output := &limitedCommandOutput{max: maxOutput}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	err = cmd.Run()
+	result := CommandResult{
+		Output:    output.String(),
+		ExitCode:  0,
+		Truncated: output.truncated,
+	}
+	if err == nil {
+		return result, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+		return result, nil
+	}
+	result.ExitCode = -1
+	return result, err
+}
+
+type limitedCommandOutput struct {
+	mu        sync.Mutex
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (w *limitedCommandOutput) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	originalLen := len(p)
+	remaining := w.max - w.buf.Len()
+	if remaining <= 0 {
+		w.truncated = true
+		return originalLen, nil
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+		w.truncated = true
+	}
+	_, _ = w.buf.Write(p)
+	return originalLen, nil
+}
+
+func (w *limitedCommandOutput) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// RunCommandInNewSession creates a new, detached tmux session beside target,
+// starts a plain shell in the target pane's cwd, and pastes command into it.
+// It returns the new session and pane id so a UI can switch to it immediately.
+func RunCommandInNewSession(target string, command string) (string, string, error) {
+	if strings.TrimSpace(target) == "" {
+		return "", "", fmt.Errorf("target cannot be empty")
+	}
+	if strings.TrimSpace(command) == "" {
+		return "", "", fmt.Errorf("command cannot be empty")
+	}
+
+	location, err := outputTmux("display-message", "-p", "-t", target, "#{session_name}\t#{pane_current_path}")
+	if err != nil {
+		return "", "", err
+	}
+	parts := strings.SplitN(strings.TrimSuffix(location, "\n"), "\t", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return "", "", fmt.Errorf("tmux returned an invalid session location for %q", target)
+	}
+	layout, err := ListLayout()
+	if err != nil {
+		return "", "", err
+	}
+	session := availableCommandSessionName(parts[0], layout.Sessions)
+	args := []string{
+		"new-session", "-d", "-P", "-F", "#{pane_id}",
+		"-s", session, "-n", "command",
+	}
+	if parts[1] != "" {
+		args = append(args, "-c", parts[1])
+	}
+	pane, err := outputTmux(args...)
+	if err != nil {
+		return "", "", err
+	}
+	pane = strings.TrimSpace(pane)
+	if pane == "" {
+		_ = runTmux("kill-session", "-t", exactSessionTarget(session))
+		return "", "", fmt.Errorf("tmux new-session returned no pane id")
+	}
+	if err := PasteText(pane, command, true); err != nil {
+		_ = runTmux("kill-session", "-t", exactSessionTarget(session))
+		return "", "", err
+	}
+	return session, pane, nil
+}
+
+func availableCommandSessionName(source string, sessions map[string]bool) string {
+	base := sanitizeCommandSessionName(source) + "-run"
+	if !sessions[base] {
+		return base
+	}
+	for n := 2; ; n++ {
+		candidate := base + "-" + strconv.Itoa(n)
+		if !sessions[candidate] {
+			return candidate
+		}
+	}
+}
+
+func sanitizeCommandSessionName(name string) string {
+	name = strings.TrimSpace(name)
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	clean := strings.Trim(b.String(), "-")
+	if clean == "" {
+		return "command"
+	}
+	if len(clean) > 48 {
+		clean = strings.TrimRight(clean[:48], "-")
+	}
+	return clean
 }
 
 // RunCommandInSession runs command in the fixed "command" window belonging to

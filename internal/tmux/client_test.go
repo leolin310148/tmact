@@ -87,6 +87,29 @@ func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	}
 }
 
+func TestLimitedCommandOutputCapsCapturedBytes(t *testing.T) {
+	output := &limitedCommandOutput{max: 5}
+	if n, err := output.Write([]byte("abcdefgh")); err != nil || n != 8 {
+		t.Fatalf("Write = (%d, %v), want (8, nil)", n, err)
+	}
+	if got := output.String(); got != "abcde" {
+		t.Fatalf("output = %q, want %q", got, "abcde")
+	}
+	if !output.truncated {
+		t.Fatal("expected truncated output")
+	}
+}
+
+func TestAvailableCommandSessionName(t *testing.T) {
+	sessions := map[string]bool{"work-run": true, "work-run-2": true}
+	if got := availableCommandSessionName("work", sessions); got != "work-run-3" {
+		t.Fatalf("name = %q, want work-run-3", got)
+	}
+	if got := availableCommandSessionName("team.alpha", nil); got != "team-alpha-run" {
+		t.Fatalf("sanitized name = %q, want team-alpha-run", got)
+	}
+}
+
 func TestReusableCommandPaneChoosesActivePaneFromNewestWindow(t *testing.T) {
 	panes := []Pane{
 		{WindowIndex: 1, WindowName: "command", PaneID: "%1", Active: true},

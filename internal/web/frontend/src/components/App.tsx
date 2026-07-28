@@ -1174,11 +1174,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           <CopyLineBar
             cwd={pc.cwd}
             peer={pc.peer}
-            onRunCommand={(command) => {
-              if (wsSend({ t: "run", s: command })) return true;
-              showInputError("not connected — try again");
-              return false;
-            }}
+            paneID={state.selected}
+            onSelectPane={callbacks.selectPane}
+            onError={showInputError}
           />
         </div>
       </div>

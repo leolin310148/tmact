@@ -23,9 +23,17 @@
 // classList.toggle) via refs, and copyFlashUntil / the flash timer are refs
 // (module-scoped mutable state in the original — never React state).
 
-import { useEffect, useRef } from "react";
-import type { RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { onPointerDownNoBlur } from "../lib/dom";
+import {
+  loadCommandJob,
+  fetchSnapshot,
+  startBackgroundCommand,
+  startTmuxCommand,
+} from "../api/client";
+import type { CommandJob } from "../api/client";
+import CommandResultDialog from "./CommandResultDialog";
 
 const FLASH_MS = 900;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
@@ -119,15 +127,49 @@ function paneSelectionText(): string {
 export interface CopyLineBarProps {
   cwd?: string | null;
   peer?: string | null;
-  onRunCommand?: (command: string) => boolean;
+  paneID?: string | null;
+  onSelectPane?: (paneID: string) => void;
+  onError?: (message: string) => void;
+  startBackground?: typeof startBackgroundCommand;
+  loadJob?: typeof loadCommandJob;
+  startTmux?: typeof startTmuxCommand;
+  waitForPane?: (paneID: string) => Promise<void>;
 }
 
-export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProps) {
+async function waitForPaneSnapshot(paneID: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      const snapshot = await fetchSnapshot();
+      if (Object.values(snapshot.panes || {}).some((pane) => pane.pane_id === paneID)) return;
+    } catch {
+      // The normal snapshot stream may still be reconnecting; retry briefly.
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 200));
+  }
+}
+
+export default function CopyLineBar({
+  cwd,
+  peer,
+  paneID,
+  onSelectPane,
+  onError,
+  startBackground = startBackgroundCommand,
+  loadJob = loadCommandJob,
+  startTmux = startTmuxCommand,
+  waitForPane = waitForPaneSnapshot,
+}: CopyLineBarProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
   const joinRef = useRef<HTMLButtonElement | null>(null);
   const spaceRef = useRef<HTMLButtonElement | null>(null);
   const downloadRef = useRef<HTMLAnchorElement | null>(null);
   const runRef = useRef<HTMLButtonElement | null>(null);
+  const runMenuCommandRef = useRef("");
+  const runMenuOpenRef = useRef(false);
+  const commandJobPeerRef = useRef<string | undefined>(undefined);
+  const commandRequestRef = useRef(0);
+  const [runMenuOpen, setRunMenuOpen] = useState(false);
+  const [commandJob, setCommandJob] = useState<CommandJob | null>(null);
   const copyFlashUntil = useRef(0);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,7 +186,10 @@ export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProp
       if (downloadPath) downloadRef.current.href = buildFileDownloadHref(downloadPath, cwd, peer);
       else downloadRef.current.removeAttribute("href");
     }
-    const has = selection.trim().length > 0 || Date.now() < copyFlashUntil.current;
+    const has =
+      selection.trim().length > 0 ||
+      Date.now() < copyFlashUntil.current ||
+      runMenuOpenRef.current;
     bar.classList.toggle("visible", has);
     bar.setAttribute("aria-hidden", has ? "false" : "true");
   };
@@ -161,6 +206,71 @@ export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProp
       if (flashTimer.current) clearTimeout(flashTimer.current);
     };
   }, [cwd, peer]);
+
+  useEffect(() => {
+    if (!runMenuOpen) return;
+    const close = (): void => {
+      runMenuOpenRef.current = false;
+      setRunMenuOpen(false);
+      syncCopyLineBar.current();
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [runMenuOpen]);
+
+  useEffect(() => {
+    if (!commandJob?.id || commandJob.status !== "running") return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async (): Promise<void> => {
+      try {
+        const { res, data } = await loadJob(commandJob.id, commandJobPeerRef.current);
+        if (stopped) return;
+        if (!res.ok || !data.job) {
+          const finished = new Date().toISOString();
+          setCommandJob((current) =>
+            current
+              ? {
+                  ...current,
+                  status: "finished",
+                  error: data.error || `HTTP ${res.status}`,
+                  exit_code: -1,
+                  finished_at: finished,
+                }
+              : null,
+          );
+          return;
+        }
+        setCommandJob(data.job);
+        if (data.job.status === "running") timer = setTimeout(poll, 350);
+      } catch (error) {
+        if (stopped) return;
+        setCommandJob((current) =>
+          current
+            ? {
+                ...current,
+                status: "finished",
+                error: error instanceof Error ? error.message : String(error),
+                exit_code: -1,
+                finished_at: new Date().toISOString(),
+              }
+            : null,
+        );
+      }
+    };
+    timer = setTimeout(poll, 250);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [commandJob?.id, commandJob?.status, loadJob]);
 
   const run = (btnRef: RefObject<HTMLButtonElement | null>, transform: (t: string) => string) =>
     async (): Promise<void> => {
@@ -182,20 +292,85 @@ export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProp
       }, FLASH_MS);
     };
 
-  const runCommand = (): void => {
+  const selectedCommand = (): string => joinGlue(paneSelectionText());
+
+  const runCommand = async (): Promise<void> => {
+    const command = selectedCommand();
+    if (!command || !paneID) return;
+    const request = ++commandRequestRef.current;
+    commandJobPeerRef.current = paneID.includes("@")
+      ? paneID.slice(0, paneID.lastIndexOf("@"))
+      : undefined;
+    setCommandJob({
+      id: "",
+      status: "running",
+      command,
+      started_at: new Date().toISOString(),
+    });
+    try {
+      const { res, data } = await startBackground(paneID, command);
+      if (request !== commandRequestRef.current) return;
+      if (!res.ok || !data.job) {
+        setCommandJob((current) =>
+          current
+            ? {
+                ...current,
+                status: "finished",
+                error: data.error || `HTTP ${res.status}`,
+                exit_code: -1,
+                finished_at: new Date().toISOString(),
+              }
+            : null,
+        );
+        return;
+      }
+      setCommandJob(data.job);
+    } catch (error) {
+      if (request !== commandRequestRef.current) return;
+      setCommandJob((current) =>
+        current
+          ? {
+              ...current,
+              status: "finished",
+              error: error instanceof Error ? error.message : String(error),
+              exit_code: -1,
+              finished_at: new Date().toISOString(),
+            }
+          : null,
+      );
+    }
+  };
+
+  const toggleRunMenu = (event: ReactMouseEvent): void => {
+    event.stopPropagation();
     const text = paneSelectionText();
-    if (!text || !onRunCommand) return;
-    if (!onRunCommand(joinGlue(text))) return;
-    copyFlashUntil.current = Date.now() + FLASH_MS;
-    joinRef.current?.classList.remove("copied");
-    spaceRef.current?.classList.remove("copied");
-    runRef.current?.classList.add("copied");
+    if (text) runMenuCommandRef.current = joinGlue(text);
+    if (!runMenuCommandRef.current) return;
+    const next = !runMenuOpenRef.current;
+    runMenuOpenRef.current = next;
+    setRunMenuOpen(next);
     syncCopyLineBar.current();
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => {
-      runRef.current?.classList.remove("copied");
-      syncCopyLineBar.current();
-    }, FLASH_MS);
+  };
+
+  const runInTmux = async (event: ReactMouseEvent): Promise<void> => {
+    event.stopPropagation();
+    const command = runMenuCommandRef.current;
+    runMenuOpenRef.current = false;
+    setRunMenuOpen(false);
+    syncCopyLineBar.current();
+    if (!command || !paneID) return;
+    try {
+      const { res, data } = await startTmux(paneID, command);
+      if (!res.ok || !data.pane_id) {
+        onError?.(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      const nextPane = peer ? `${peer}@${data.pane_id}` : data.pane_id;
+      await waitForPane(nextPane);
+      onSelectPane?.(nextPane);
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -236,17 +411,46 @@ export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProp
       >
         接空白
       </button>
-      <button
-        className="copyline-btn alt"
-        id="copyline-run"
-        type="button"
-        title="在目前 tmux session 的新 shell window 執行選取的指令"
-        ref={runRef}
-        onPointerDown={onPointerDownNoBlur}
-        onClick={runCommand}
-      >
-        Run command
-      </button>
+      <div className="copyline-run-group">
+        <button
+          className="copyline-btn alt copyline-run-main"
+          id="copyline-run"
+          type="button"
+          title="在背景執行選取的指令並顯示輸出"
+          ref={runRef}
+          onPointerDown={onPointerDownNoBlur}
+          onClick={() => void runCommand()}
+        >
+          Run command
+        </button>
+        <button
+          className="copyline-btn alt copyline-run-arrow"
+          id="copyline-run-arrow"
+          type="button"
+          title="更多執行方式"
+          aria-label="more command run options"
+          aria-haspopup="menu"
+          aria-expanded={runMenuOpen}
+          onPointerDown={onPointerDownNoBlur}
+          onClick={toggleRunMenu}
+        >
+          <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+            <path d="M2 4l4 4 4-4z" />
+          </svg>
+        </button>
+        {runMenuOpen ? (
+          <div className="copyline-run-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              role="menuitem"
+              onPointerDown={onPointerDownNoBlur}
+              onClick={(event) => void runInTmux(event)}
+            >
+              Run in tmux session
+            </button>
+          </div>
+        ) : null}
+      </div>
       <a
         className="copyline-btn alt"
         id="copyline-download"
@@ -271,6 +475,13 @@ export default function CopyLineBar({ cwd, peer, onRunCommand }: CopyLineBarProp
         </svg>
         <span>下載</span>
       </a>
+      <CommandResultDialog
+        job={commandJob}
+        onClose={() => {
+          commandRequestRef.current += 1;
+          setCommandJob(null);
+        }}
+      />
     </div>
   );
 }

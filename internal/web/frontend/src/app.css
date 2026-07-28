@@ -1449,6 +1449,114 @@
   .copyline-btn.copied {
     background: var(--green); border-color: var(--green); color: #06210f;
   }
+  .copyline-run-group {
+    position: relative;
+    display: inline-flex;
+  }
+  .copyline-run-main {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .copyline-btn.copyline-run-arrow {
+    min-width: 30px;
+    padding: 8px 9px;
+    border-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .copyline-btn.copyline-run-arrow svg {
+    width: 12px;
+    height: 12px;
+  }
+  .copyline-run-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 7px);
+    z-index: 33;
+    min-width: 190px;
+    padding: 5px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  }
+  .copyline-run-menu button {
+    width: 100%;
+    padding: 9px 10px;
+    background: transparent;
+    color: var(--fg);
+    border: 0;
+    border-radius: 5px;
+    font: 12px/1.2 var(--mono);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .copyline-run-menu button:hover,
+  .copyline-run-menu button:focus-visible {
+    background: var(--panel-2);
+    outline: none;
+  }
+
+  /* Background command result. The command runs server-side as a retained job,
+     so dismissing this modal never stops the process. */
+  .command-result-overlay {
+    position: fixed; inset: 0; z-index: 70;
+    display: flex; align-items: center; justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top, 0px))
+             calc(16px + env(safe-area-inset-right, 0px))
+             calc(16px + env(safe-area-inset-bottom, 0px))
+             calc(16px + env(safe-area-inset-left, 0px));
+    background: rgba(8,10,14,0.82);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .command-result-card {
+    max-width: 760px;
+    height: min(680px, 100%);
+  }
+  .command-result-command {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    overflow: hidden;
+    color: var(--fg);
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    font: 12px/1.45 var(--mono);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .command-result-status {
+    flex: 0 0 auto;
+    padding: 8px 14px 0;
+    color: var(--green);
+    font: 11px/1.4 var(--mono);
+  }
+  .command-result-status.failed,
+  .command-result-error {
+    color: var(--red);
+  }
+  .command-result-output {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 10px 14px 14px;
+    overflow: auto;
+    padding: 12px;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font: 12px/1.5 var(--mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .command-result-truncated,
+  .command-result-error {
+    flex: 0 0 auto;
+    padding: 0 14px 12px;
+    font: 11px/1.4 var(--mono);
+  }
+  .command-result-truncated { color: var(--amber); }
 
   /* Selection-mode download list — the upload FAB turns into a download button
      while selection mode is on; pressing it scans the pane buffer for file

@@ -237,6 +237,60 @@ export function reopenSession(
   });
 }
 
+export interface CommandJob {
+  id: string;
+  status: "running" | "finished";
+  command: string;
+  output?: string;
+  exit_code?: number;
+  error?: string;
+  truncated?: boolean;
+  started_at: string;
+  finished_at?: string;
+}
+
+function commandTarget(paneID: string): { pane: string; peer?: string } {
+  const split = paneID.lastIndexOf("@");
+  if (split < 0) return { pane: paneID };
+  return {
+    peer: paneID.slice(0, split),
+    pane: paneID.slice(split + 1),
+  };
+}
+
+export function startBackgroundCommand(
+  paneID: string,
+  command: string,
+): Promise<JsonResponse<{ job?: CommandJob; error?: string }>> {
+  const target = commandTarget(paneID);
+  return jsonResponse("/api/command" + peerQuery(target.peer), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pane: target.pane, command, mode: "background" }),
+  });
+}
+
+export function loadCommandJob(
+  id: string,
+  peer?: string,
+): Promise<JsonResponse<{ job?: CommandJob; error?: string }>> {
+  const query = new URLSearchParams({ id });
+  if (peer) query.set("peer", peer);
+  return jsonResponse("/api/command?" + query.toString(), { cache: "no-store" });
+}
+
+export function startTmuxCommand(
+  paneID: string,
+  command: string,
+): Promise<JsonResponse<{ pane_id?: string; session?: string; error?: string }>> {
+  const target = commandTarget(paneID);
+  return jsonResponse("/api/command" + peerQuery(target.peer), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pane: target.pane, command, mode: "tmux" }),
+  });
+}
+
 export function loadSTTConfig(): Promise<JsonResponse<STTSettings>> {
   return jsonResponse("/api/settings/stt", { cache: "no-store" });
 }
