@@ -2,7 +2,7 @@
 // ?view=split (and no ?slot). Same "/" document as the normal app, so the PWA
 // service worker, manifest scope, and installed standalone mode all keep
 // working; the shell is reached from Settings → "Open split view" and left via
-// the ✕ button (both plain same-origin navigations).
+// the split menu's Exit entry (both plain same-origin navigations).
 //
 // The shell embeds the normal app in 1–3 side-by-side iframes, each with
 // ?slot=N so its pane selection persists independently (lib/slot.ts). Each
@@ -47,12 +47,12 @@ const SHELL_CSS = `
      controls, so the iframes' top edge stays clickable. */
   #split-bar {
     position: absolute; inset: 0 0 auto 0; z-index: 30;
-    display: flex; align-items: flex-start; gap: 12px;
+    display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px;
     padding: 4px 10px; background: transparent;
     pointer-events: none;
   }
   /* One compact control: the split-mode menu button + its dropdown. */
-  #split-menu-wrap { position: relative; }
+  #split-menu-wrap { position: relative; flex: none; }
   #split-menu-btn {
     font: inherit; color: var(--fg-dim, #8b949e);
     background: rgba(14,17,22,0.82);
@@ -62,7 +62,7 @@ const SHELL_CSS = `
   }
   #split-menu-btn.open { color: var(--fg, #c9d1d9); border-color: var(--accent, #4493f8); }
   #split-menu {
-    position: absolute; top: calc(100% + 4px); left: 0; min-width: 140px;
+    position: absolute; top: calc(100% + 4px); right: 0; min-width: 140px;
     display: none; flex-direction: column;
     background: var(--panel, #161b22);
     border: 1px solid var(--border, #2a313c); border-radius: 6px;
@@ -80,11 +80,13 @@ const SHELL_CSS = `
   #split-menu .split-menu-sep {
     height: 1px; margin: 4px 2px; background: var(--border, #2a313c);
   }
-  #split-usage { margin-left: auto; }
+  #split-usage { flex: none; }
   /* The shared usage panel keeps its app.css floating-bubble chrome
      (semi-transparent, pointer-events none); only anchor it into the bar's
-     flex flow instead of absolute top-right. */
-  #split-bar .usage-panel { position: static; }
+     flex flow instead of absolute top-right. flex:none + max-width:none undo
+     flex-item squeezing — app.css's max-width:80% resolves against this
+     content-sized host and used to wrap the grid cells. */
+  #split-bar .usage-panel { position: static; flex: none; max-width: none; }
   #split-grid {
     flex: 1; display: grid; min-height: 0;
     grid-template-columns: repeat(var(--cols, 2), 1fr); gap: 1px;
@@ -115,6 +117,7 @@ export function initSplitShell(rootEl: HTMLElement): void {
 
   rootEl.innerHTML = `
     <header id="split-bar">
+      <div id="split-usage"></div>
       <div id="split-menu-wrap">
         <button id="split-menu-btn" type="button" aria-haspopup="menu"
                 aria-expanded="false" title="split view">⊞ 2</button>
@@ -126,7 +129,6 @@ export function initSplitShell(rootEl: HTMLElement): void {
           <button id="split-exit" type="button" role="menuitem">Exit split view</button>
         </div>
       </div>
-      <div id="split-usage"></div>
     </header>
     <main id="split-grid"></main>
   `;
