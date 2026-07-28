@@ -32,6 +32,7 @@ import { fetchSnapshot, subscribeSnapshot } from "../api/client";
 import { logFrontend } from "../lib/frontendLog";
 import { useAppState } from "../store/AppStateContext";
 import type { PaneStatus, Snapshot } from "../types/server";
+import { SELECTED_KEY } from "../lib/slot";
 
 // Polling keeps the original cadence. Snapshot freshness prefers the daemon's
 // advertised threshold and falls back for older servers that omit it.
@@ -42,10 +43,10 @@ const DEFAULT_STALE_MS = 10000;
 // as no interruption at all, so the pane WS is never needlessly reconnected.
 const VIS_HIDE_GRACE_MS = 600;
 
-// localStorage key for the last-selected pane — verbatim from app.js
-// (`SELECTED_KEY`). Reads tolerate malformed/absent values exactly as the
-// original (try/catch → null fallback).
-const SELECTED_KEY = "tmact.selectedPane";
+// The persisted-selection localStorage key (SELECTED_KEY) comes from
+// lib/slot.ts: the original app.js key, namespaced per split-view slot.
+// Reads tolerate malformed/absent values exactly as the original
+// (try/catch → null fallback).
 
 /**
  * Shape of the persisted selection blob (`localStorage["tmact.selectedPane"]`).

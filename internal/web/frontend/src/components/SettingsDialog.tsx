@@ -32,6 +32,7 @@ import type {
 } from "react";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { isMobile } from "../lib/dom";
 
 export interface SettingsDialogProps {
   /** The useSettings handle App created (visibility + refs + handlers). */
@@ -327,6 +328,22 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               <option value="train">Train layout</option>
             </select>
           </label>
+          {typeof window.matchMedia === "function" && !isMobile() && window === window.top && (
+            <div className="settings-field">
+              <span>Split view</span>
+              <div className="settings-actions">
+                <button
+                  id="split-view-open"
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/?view=split";
+                  }}
+                >
+                  Open split view
+                </button>
+              </div>
+            </div>
+          )}
           <label className="settings-field" htmlFor="voice-device">
             <span>Microphone</span>
             <select

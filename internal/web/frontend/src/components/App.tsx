@@ -103,9 +103,7 @@ import { useHotkeys } from "../hooks/useHotkeys";
 import { useViewport } from "../hooks/useViewport";
 import { useInputHistory } from "../hooks/useInputHistory";
 import { useDownloadList } from "../hooks/useDownloadList";
-
-// Persisted-selection localStorage key — verbatim from app.js (SELECTED_KEY).
-const SELECTED_KEY = "tmact.selectedPane";
+import { SELECTED_KEY } from "../lib/slot";
 
 // Initial scrollback render cap. The server captures up to wsCaptureLines (2000)
 // lines, but ContentPane rebuilds the WHOLE pre#content (ANSI→HTML for every
