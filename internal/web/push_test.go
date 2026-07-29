@@ -2,9 +2,11 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,16 +146,16 @@ func TestNormalizeWebPushTopic(t *testing.T) {
 	}{
 		{name: "raw pane tag", tag: "claude-%60", paneID: "%60", want: "claude-pane-60"},
 		{name: "encoded pane tag", tag: "claude-%2560", paneID: "%60", want: "claude-pane-60"},
-		{name: "missing tag", tag: "", paneID: "%60", want: "tmact-pane-60"},
+		{name: "missing tag", tag: "", paneID: "%60", want: "tmact-pane-60_"},
 		{name: "encoded pane id", tag: "claude-%2560", paneID: "%2560", want: "claude-pane-60"},
-		{name: "federated pane tag", tag: "claude-peer-a@%60", paneID: "peer-a@%60", want: "claude-peer-a-pane-60"},
-		{name: "legacy federated pane tag", tag: "claude-%60", paneID: "peer-a@%60", want: "claude-peer-a-pane-60"},
-		{name: "encoded federated pane id", tag: "claude-peer-a%40%2560", paneID: "peer-a%40%2560", want: "claude-peer-a-pane-60"},
+		{name: "federated pane tag", tag: "claude-peer-a@%60", paneID: "peer-a@%60", want: "claude-peer-a-pane-60_"},
+		{name: "legacy federated pane tag", tag: "claude-%60", paneID: "peer-a@%60", want: "claude-peer-a-pane-60_"},
+		{name: "encoded federated pane id", tag: "claude-peer-a%40%2560", paneID: "peer-a%40%2560", want: "claude-peer-a-pane-60_"},
 		{name: "missing federated tag", tag: "", paneID: "peer-a@%60", want: "tmact-peer-a-pane-60"},
 		{name: "federated tag without pane", tag: "done", paneID: "peer-a@%60", want: "peer-a-pane-60-done"},
 		{name: "invalid peer name", tag: "claude-%60", paneID: "peer/a@%60", want: ""},
 		{name: "invalid pane", tag: "claude-%xx", paneID: "%xx", want: ""},
-		{name: "url-safe only", tag: "repo.done:%60/abc", paneID: "%60", want: "repo-done-pane-60-abc"},
+		{name: "url-safe only", tag: "repo.done:%60/abc", paneID: "%60", want: "repo-done-pane-60-abc_"},
 		{name: "max 32 bytes", tag: "claude-%60-abcdefghijklmnopqrstuvwxyz", paneID: "%60", want: "claude-pane-60-abcdefghijklmnopq"},
 	}
 	for _, tt := range tests {
@@ -165,6 +167,46 @@ func TestNormalizeWebPushTopic(t *testing.T) {
 				t.Fatalf("test want is too long: %q", tt.want)
 			}
 		})
+	}
+}
+
+func TestSanitizeWebPushTopicBase64Length(t *testing.T) {
+	// Apple base64url-decodes the Topic header, so no output length may be
+	// ≡ 1 (mod 4). Sweep every input length up to well past the cap.
+	for n := 1; n <= 2*maxWebPushTopicBytes; n++ {
+		tag := strings.Repeat("a", n)
+		got := sanitizeWebPushTopic(tag)
+		if len(got)%4 == 1 {
+			t.Fatalf("sanitizeWebPushTopic(len %d) = %q: length %d ≡ 1 (mod 4), Apple rejects with 400", n, got, len(got))
+		}
+		if len(got) > maxWebPushTopicBytes {
+			t.Fatalf("sanitizeWebPushTopic(len %d) = %q: length %d exceeds max %d", n, got, len(got), maxWebPushTopicBytes)
+		}
+	}
+	// The two-digit-pane case that failed in production: 13 bytes pads to 14.
+	if got := sanitizeWebPushTopic("agent-pane-36"); got != "agent-pane-36_" {
+		t.Fatalf("sanitizeWebPushTopic(agent-pane-36) = %q, want agent-pane-36_", got)
+	}
+}
+
+func TestNormalizeWebPushTopicDistinctPanes(t *testing.T) {
+	// Padding must never be replaced by truncation: distinct pane ids must
+	// keep distinct topics, or one pane's notifications replace another's.
+	seen := make(map[string]string)
+	for i := 0; i < 200; i++ {
+		// Encoded form so ids like %25 aren't re-decoded to a bare "%".
+		paneID := fmt.Sprintf("%%%d", i)
+		topic := normalizeWebPushTopic("", url.QueryEscape(paneID))
+		if topic == "" {
+			t.Fatalf("normalizeWebPushTopic(%q) = empty", paneID)
+		}
+		if len(topic)%4 == 1 {
+			t.Fatalf("pane %s topic %q: length %d ≡ 1 (mod 4)", paneID, topic, len(topic))
+		}
+		if prev, ok := seen[topic]; ok {
+			t.Fatalf("panes %s and %s collide on topic %q", prev, paneID, topic)
+		}
+		seen[topic] = paneID
 	}
 }
 

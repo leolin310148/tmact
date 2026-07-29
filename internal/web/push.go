@@ -21,6 +21,7 @@ const (
 	defaultWebPushSubject = "mailto:tmact@localhost"
 	maxPushRequestBytes   = 64 << 10
 	maxWebPushTopicBytes  = 32
+	maxPushErrorBodyBytes = 4 << 10
 )
 
 type webpushHTTPClient = webpush.HTTPClient
@@ -167,14 +168,20 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 			Urgency:         webpush.UrgencyHigh,
 		})
 		cancel()
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
 		if err != nil {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
 			failed++
 			s.logf("send web push to %s: %v", endpoint, err)
 			continue
 		}
+		var errBody string
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxPushErrorBodyBytes))
+			errBody = strings.TrimSpace(string(body))
+		}
+		_ = resp.Body.Close()
 		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 			failed++
 			expired = append(expired, endpoint)
@@ -182,7 +189,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			failed++
-			s.logf("send web push to %s: status %d", endpoint, resp.StatusCode)
+			s.logf("send web push to %s: status %d body %q", endpoint, resp.StatusCode, errBody)
 			continue
 		}
 		sent++
@@ -266,6 +273,16 @@ func sanitizeWebPushTopic(tag string) string {
 	}
 	if len(topic) > maxWebPushTopicBytes {
 		topic = topic[:maxWebPushTopicBytes]
+	}
+	// Apple's Web Push service base64url-decodes the Topic header, and no
+	// valid base64 string has length ≡ 1 (mod 4) — such topics get a 400 and
+	// the notification is silently dropped. Pad rather than truncate:
+	// dropping the last character would collapse distinct pane topics (e.g.
+	// agent-pane-1 and agent-pane-9 both become agent-pane-), so one pane's
+	// notifications would replace another's. maxWebPushTopicBytes is a
+	// multiple of 4, so padding never exceeds it.
+	if len(topic)%4 == 1 {
+		topic += "_"
 	}
 	return topic
 }
