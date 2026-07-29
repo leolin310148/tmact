@@ -383,8 +383,8 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
 
           <div className="settings-section">Quick buttons</div>
           <div className="settings-note">
-            Phone-only — tap the bolt at a pane's bottom-right corner. Each button types its text
-            and presses Enter. The group matching the pane's runtime is shown alongside Common.
+            Tap the bolt at a pane's bottom-right corner. Each configured button types its text
+            and presses Enter. Built-in panel actions appear in a separate section.
           </div>
           <div id="qb-editor">{quickEditor}</div>
 

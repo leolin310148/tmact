@@ -320,6 +320,8 @@ export type InputMsg =
   | { t: "run"; s: string } // run command in a shell window in this tmux session
   | { t: "key"; k: string } // single allowlisted tmux key
   | { t: "clear" } // clear pane + scrollback
+  | { t: "fork" } // open a detached window in this session and cwd
+  | { t: "close" } // close this window; closes the session when it is the last one
   | { t: "resize" }; // legacy, silently ignored
 
 /**
@@ -336,4 +338,5 @@ export type InputMsg =
  */
 export type OutMsg =
   | { t: "patch"; from?: number; lines?: string[]; q?: Question | null }
+  | { t: "forked"; pane: string }
   | { t: "error"; s: string };

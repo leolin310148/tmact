@@ -209,6 +209,56 @@ func NewWindow(session string, window string, cwd string, command []string) erro
 	return runTmux(args...)
 }
 
+// ForkWindow opens a second, detached window in target's tmux session using
+// the target pane's current working directory. Keeping the new window detached
+// avoids switching any attached tmux client away from what its user is doing.
+// The new pane id lets the web UI switch to it once it appears in a snapshot.
+func ForkWindow(target string) (string, error) {
+	if strings.TrimSpace(target) == "" {
+		return "", fmt.Errorf("target cannot be empty")
+	}
+
+	location, err := outputTmux("display-message", "-p", "-t", target, "#{session_name}\t#{pane_current_path}")
+	if err != nil {
+		return "", err
+	}
+	args, err := forkWindowArgs(target, location)
+	if err != nil {
+		return "", err
+	}
+	pane, err := outputTmux(args...)
+	if err != nil {
+		return "", err
+	}
+	pane = strings.TrimSpace(pane)
+	if pane == "" {
+		return "", fmt.Errorf("tmux new-window returned no pane id")
+	}
+	return pane, nil
+}
+
+func forkWindowArgs(target, location string) ([]string, error) {
+	parts := strings.SplitN(strings.TrimSuffix(location, "\n"), "\t", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return nil, fmt.Errorf("tmux returned an invalid session location for %q", target)
+	}
+
+	args := []string{"new-window", "-d", "-P", "-F", "#{pane_id}", "-t", parts[0] + ":"}
+	if parts[1] != "" {
+		args = append(args, "-c", parts[1])
+	}
+	return args, nil
+}
+
+// CloseWindow removes the tmux window containing target. If it is the owning
+// session's final window, tmux removes that session as well.
+func CloseWindow(target string) error {
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("target cannot be empty")
+	}
+	return runTmux("kill-window", "-t", target)
+}
+
 // RunCommandCaptured executes command outside tmux in target's current
 // directory, using the tmux server's default shell. Output is capped so a
 // command cannot grow statusd's memory without bound.

@@ -1,9 +1,10 @@
-// Quick-input buttons (phone-only FAB) — 1:1 behavioral port of
+// Quick-input buttons and pane actions — available on every viewport.
 // static/js/quick.js's `createQuick({...})` factory.
 //
 // One bottom-right FAB whose menu sends pre-canned commands ("/compact",
-// "/clear", custom) into the selected pane. Config lives in localStorage and is
-// edited from the settings panel.
+// "/clear", custom) into the selected pane and exposes built-in clear/fork
+// actions. Quick-button config lives in localStorage and is edited from the
+// settings panel.
 //
 // PARITY MODEL (ARCHITECTURE.md §1, §3):
 //   The original kept `quickConfig` as a module-scoped object mutated BY
@@ -16,7 +17,7 @@
 //
 //   `syncQuickDock` and `closeQuickMenu`/`openQuickMenu` toggle classes /
 //   `disabled` on elements that live across several components (`#qb-dock`,
-//   `#upload-btn`, `#selection-btn`, `#clear-pane-btn`, `#content-wrap`,
+//   `#upload-btn`, `#selection-btn`, `#content-wrap`,
 //   `#qb-backdrop`). The original did this with `$()` (getElementById); we keep
 //   the SAME imperative DOM writes (via getElementById) so the cross-component
 //   coordination matches byte-for-behavior and we don't depend on components we
@@ -114,6 +115,12 @@ export interface UseQuickReturn {
   applicableQuick: () => QuickEntry[];
   /** Click a quick button: send + close menu, or keep open + showInputError. */
   onQuickButtonClick: (entry: QuickEntry) => void;
+  /** Clear the selected pane and its tmux scrollback. */
+  onClearPanel: () => void;
+  /** Open another tmux window in the selected pane's session and cwd. */
+  onForkWindow: () => void;
+  /** Close the selected tmux window (and its session when it is the last). */
+  onCloseWindow: () => void;
   /** Live config (mutated by reference); QuickEditor edits its entries in place. */
   quickConfig: QuickConfig;
   /** Persist `quickConfig` to localStorage (verbatim guard). */
@@ -269,35 +276,53 @@ export function useQuick(deps: UseQuickDeps): UseQuickReturn {
     [wsSend, showInputError, closeQuickMenu],
   );
 
+  const sendPaneAction = useCallback(
+    (message: InputMsg) => {
+      if (!wsSend(message)) {
+        showInputError("not connected — try again");
+        return;
+      }
+      closeQuickMenu();
+    },
+    [wsSend, showInputError, closeQuickMenu],
+  );
+
+  const onClearPanel = useCallback(() => {
+    sendPaneAction({ t: "clear" });
+  }, [sendPaneAction]);
+
+  const onForkWindow = useCallback(() => {
+    sendPaneAction({ t: "fork" });
+  }, [sendPaneAction]);
+
+  const onCloseWindow = useCallback(() => {
+    sendPaneAction({ t: "close" });
+  }, [sendPaneAction]);
+
   // syncQuickDock reveals the FAB once a pane is selected and hides it (closing
   // any open menu) when none is. Imperative DOM writes via getElementById,
   // verbatim from quick.js (the original used `$()`); the upload/selection/
-  // clear-pane buttons and content-wrap live in other components but are owned
-  // here exactly as the original did.
+  // buttons and content-wrap live in other components but are owned here
+  // exactly as the original did.
   const syncQuickDock = useCallback(() => {
     const dock = document.getElementById("qb-dock");
     const uploadBtn = document.getElementById("upload-btn") as HTMLButtonElement | null;
     const selectionBtn = document.getElementById("selection-btn") as HTMLButtonElement | null;
-    const clearPaneBtn = document.getElementById("clear-pane-btn") as HTMLButtonElement | null;
     const wrap = document.getElementById("content-wrap");
     if (state.selected) {
       dock?.classList.add("ready");
       uploadBtn?.classList.add("ready");
       selectionBtn?.classList.add("ready");
-      clearPaneBtn?.classList.add("ready");
       wrap?.classList.add("upload-ready");
       if (uploadBtn) uploadBtn.disabled = upload.busy;
       if (selectionBtn) selectionBtn.disabled = false;
-      if (clearPaneBtn) clearPaneBtn.disabled = false;
     } else {
       dock?.classList.remove("ready");
       uploadBtn?.classList.remove("ready");
       selectionBtn?.classList.remove("ready");
-      clearPaneBtn?.classList.remove("ready");
       wrap?.classList.remove("upload-ready");
       if (uploadBtn) uploadBtn.disabled = true;
       if (selectionBtn) selectionBtn.disabled = true;
-      if (clearPaneBtn) clearPaneBtn.disabled = true;
       closeQuickMenu(false);
     }
     syncSelectionButton();
@@ -371,6 +396,9 @@ export function useQuick(deps: UseQuickDeps): UseQuickReturn {
     toggleQuickMenu,
     applicableQuick,
     onQuickButtonClick,
+    onClearPanel,
+    onForkWindow,
+    onCloseWindow,
     quickConfig: quickConfigRef.current,
     saveQuickConfig,
     addQuickRow,

@@ -1,10 +1,10 @@
-// The small content-wrap action buttons (help / settings / upload / selection / clear)
+// The small content-wrap action buttons (help / settings / upload / selection)
 // plus the hidden file input. 1:1 markup port of the buttons in
 // static/index.html that app.js / quick.js / help.js wire by id.
 //
 // These buttons keep IDENTICAL ids/classes/SVG so app.css applies and so App's
 // imperative sync code (syncQuickDock toggling `.ready`/`disabled` on
-// #upload-btn/#selection-btn/#clear-pane-btn, selectPane enabling #upload-btn)
+// #upload-btn/#selection-btn, selectPane enabling #upload-btn)
 // can still reach them via getElementById. React must NOT own their
 // disabled/aria-pressed state — App mutates them imperatively, exactly as the
 // original did.
@@ -24,7 +24,7 @@
 // aria-pressed is likewise a DOM attribute App mutates (syncSelectionButton); we
 // seed its initial value here.
 //
-// onPointerDownNoBlur audit (ARCHITECTURE.md §6): selection / clear-pane / help
+// onPointerDownNoBlur audit (ARCHITECTURE.md §6): selection / help
 // get pointerdown preventDefault; #upload-btn does NOT (app.js wires no
 // preventDefault on upload-btn). The help button's click also stopPropagation()s
 // before toggling, matching help.js.
@@ -36,8 +36,6 @@ export interface UploadControlsProps {
   onUpload: () => void;
   /** #selection-btn click → toggleSelectionMode. */
   onSelection: () => void;
-  /** #clear-pane-btn click → clearPaneOutput. */
-  onClear: () => void;
   /** #help-btn click → toggleHelp (preceded by stopPropagation, per help.js). */
   onHelp: () => void;
   /** #gear-btn click → open settings. */
@@ -57,7 +55,6 @@ export interface UploadControlsProps {
 export function UploadControls({
   onUpload,
   onSelection,
-  onClear,
   onHelp,
   onSettings,
   onFiles,
@@ -157,29 +154,6 @@ export function UploadControls({
           <path d="M9 4v16" />
           <path d="M15 4v16" />
           <path d="M4 20h16" />
-        </svg>
-      </button>
-      <button
-        className="clear-pane-btn"
-        id="clear-pane-btn"
-        type="button"
-        title="clear pane"
-        aria-label="clear pane"
-        onPointerDown={onPointerDownNoBlur}
-        onClick={onClear}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m7 21-4-4 9.5-9.5 4 4L7 21Z" />
-          <path d="m15 5 4 4" />
-          <path d="M11 21h10" />
         </svg>
       </button>
       <input

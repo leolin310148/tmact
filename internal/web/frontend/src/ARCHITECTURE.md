@@ -256,7 +256,12 @@ by `bump()` rather than imperative DOM rebuilds), `applySnapshot`,
   direct mode + `{ t: "key", k: "Enter" }`.
 - Direct keystrokes: `translateKey(e)` from `lib/keymap` (already ported).
 - Helper key bar: `{ t: "key", k }`; sticky Ctrl folds next text key to `C-<letter>`.
-- Clear pane (Cmd+K / Ctrl+L / clear button): `{ t: "clear" }`.
+- Clear pane (Cmd+K / Ctrl+L / lightning menu): `{ t: "clear" }`.
+- Fork window (lightning menu): `{ t: "fork" }`; server replies
+  `{ t: "forked", pane }`, then the UI selects that pane once snapshot discovery
+  confirms it.
+- Close window (lightning menu): `{ t: "close" }`; tmux also closes the session
+  when that was its final window.
 - File upload result relay: `{ t: "text", s: paths.join(" ") + " " }` (trailing space).
 - Image paste (draft): path inserted via `placeInDraft`. Image paste (direct):
   `sendDirect({ t: "text", s: path + " " })` (trailing space).
@@ -292,11 +297,11 @@ the originals (seed defaults / fall back to `{}`/`null`).
 
 (`onPointerDownNoBlur` calls `e.preventDefault()`; from `lib/dom.ts`.)
 
-- `#draft-clear`, `#send-btn`, `#record-btn`, `#clear-pane-btn`, `#selection-btn`
+- `#draft-clear`, `#send-btn`, `#record-btn`, `#selection-btn`
 - `#upload-btn` (it has a click handler; original adds preventDefault on the
   group — match the original; if the original did not add it to upload-btn,
   do NOT add it — see app.js: upload-btn has NO pointerdown preventDefault. Only
-  send/record/clear-pane/selection do. Audit per-button against app.js lines
+  send/record/selection do. Audit per-button against app.js lines
   709–712 and the option/keybar/quick/help/copyline handlers.)
 - Option-bar buttons (`#option-bar button`) — `pointerdown` preventDefault.
 - Key-bar buttons + `#key-toggle` (`buildKeyBar`).
@@ -309,7 +314,7 @@ the originals (seed defaults / fall back to `{}`/`null`).
 is load-bearing for the mobile soft keyboard (spec §6 item 30). Re-derive each
 component's set from its original module — do NOT blanket-apply to every button.
 In app.js `wireInput`: only `draft-clear`, `send-btn`, `record-btn`,
-`clear-pane-btn`, `selection-btn` get it (NOT `upload-btn`). Option bar, key bar,
+`selection-btn` get it (NOT `upload-btn`). Option bar, key bar,
 quick, help, copyline each add their own in their modules.
 
 ---
@@ -351,8 +356,8 @@ then `markImagePaths(pre, cwd, peer)` then auto-scroll. In React:
 Element ids referenced by the original (and thus by ports): `root`, `chips`,
 `conn-status`, `option-bar`, `mode-indicator`, `mode-text`,
 `input-error`, `input-bar`, `content-wrap`, `content`, `direct-input`, `draft`,
-`draft-wrap`, `draft-clear`, `send-btn`, `record-btn`, `clear-pane-btn`,
-`upload-btn`, `selection-btn`, `file-upload`, `rec-overlay`, `rec-stop`,
+`draft-wrap`, `draft-clear`, `send-btn`, `record-btn`, `upload-btn`,
+`selection-btn`, `file-upload`, `rec-overlay`, `rec-stop`,
 `rec-send`, `rec-cancel`, `rec-label`, `rec-timer`, `key-area`, `key-bar`,
 `key-toggle`, `ctrl-key`, `qb-dock`, `qb-fab`, `qb-menu`, `qb-backdrop`,
 `qb-editor`, `gear-btn`, `settings-overlay`, `settings-close`, `font-range`,

@@ -261,14 +261,6 @@ function buildHelpTips(state: { selected: string | null }): HelpTip[] {
       skip: () => isMobile(),
     },
     {
-      targetId: "clear-pane-btn",
-      key: "⌘K / Ctrl+L",
-      desc: "Clear the pane and tmux scrollback",
-      tone: "clear",
-      place: "above-right",
-      skip: () => !state.selected,
-    },
-    {
       targetId: "content",
       key: "Click pane",
       desc: "Direct mode — your keystrokes go straight to tmux",
@@ -279,7 +271,7 @@ function buildHelpTips(state: { selected: string | null }): HelpTip[] {
     {
       targetId: "qb-fab",
       key: "Tap ⚡",
-      desc: "Quick prompts — configurable in Settings",
+      desc: "Quick prompts and pane actions",
       tone: "quick",
     },
     {

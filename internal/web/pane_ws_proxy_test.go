@@ -111,6 +111,56 @@ func TestRemotePaneWSPullsDiffAndPostsInput(t *testing.T) {
 	}
 }
 
+func TestRemotePaneWSReturnsFederatedForkPane(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/pane/diff":
+			writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", Lines: []string{"ready"}, Cursor: "c1"})
+		case "/api/pane/input":
+			writeJSON(w, http.StatusOK, struct {
+				OK   bool   `json:"ok"`
+				Pane string `json:"pane"`
+			}{OK: true, Pane: "%9"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	local := httptest.NewServer((&Server{
+		Peers: []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+	}).Handler())
+	defer local.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane=remote@%257", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+
+	var initial outMsg
+	if err := wsjson.Read(ctx, c, &initial); err != nil {
+		t.Fatal(err)
+	}
+	if err := wsjson.Write(ctx, c, inputMsg{T: "fork"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var message outMsg
+		if err := wsjson.Read(ctx, c, &message); err != nil {
+			t.Fatal(err)
+		}
+		if message.T == "forked" {
+			if message.Pane != "remote@%9" {
+				t.Fatalf("fork pane = %q, want remote@%%9", message.Pane)
+			}
+			break
+		}
+	}
+}
+
 func TestRemotePaneWSNoDuplicatePatchOnUnchanged(t *testing.T) {
 	var calls int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

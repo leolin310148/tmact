@@ -128,7 +128,7 @@ describe("QuickDock", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("announces and focuses the empty state when opened", async () => {
+  it("keeps built-in actions available when there are no configured quick buttons", async () => {
     const user = userEvent.setup();
     mount({ entries: [] });
 
@@ -138,7 +138,26 @@ describe("QuickDock", () => {
     expect(status).toHaveTextContent("No quick buttons for this pane");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveAttribute("aria-atomic", "true");
-    expect(status).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Clear panel" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Fork" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Clear panel", { t: "clear" }],
+    ["Fork", { t: "fork" }],
+    ["Close", { t: "close" }],
+  ] as const)("sends the built-in %s action and closes the popup", async (label, message) => {
+    const user = userEvent.setup();
+    const wsSend = vi.fn(() => true);
+    mount({ wsSend });
+    const trigger = screen.getByRole("button", { name: "quick input" });
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: label }));
+
+    expect(wsSend).toHaveBeenCalledWith(message);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
   it("closes on pane changes and does not leave focus in a hidden popup", async () => {

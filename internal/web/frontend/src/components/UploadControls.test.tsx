@@ -1,6 +1,6 @@
 // Regression coverage for the "right-side buttons do nothing" bug.
 //
-// The upload / selection / clear-pane buttons are enabled IMPERATIVELY by App
+// The upload / selection buttons are enabled IMPERATIVELY by App
 // (syncQuickDock / syncSelectionButton / selectPane write `el.disabled = false`
 // on the DOM node), NOT through a React `disabled` prop. That is deliberate —
 // but it means the JSX must NOT carry a static `disabled` literal. React's
@@ -24,7 +24,6 @@ function renderControls(selectionMode = false) {
   const handlers = {
     onUpload: vi.fn(),
     onSelection: vi.fn(),
-    onClear: vi.fn(),
     onHelp: vi.fn(),
     onSettings: vi.fn(),
     onFiles: vi.fn(),
@@ -37,7 +36,6 @@ function renderControls(selectionMode = false) {
 const ACTION_BUTTONS = [
   ["upload-btn", "onUpload"],
   ["selection-btn", "onSelection"],
-  ["clear-pane-btn", "onClear"],
 ] as const;
 
 describe("UploadControls", () => {

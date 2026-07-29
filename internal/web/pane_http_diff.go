@@ -117,12 +117,16 @@ func (s *Server) handlePaneInput(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("origin") != "automation" {
 		s.recordHumanActivity()
 	}
-	if err := s.applyInput(pane, m); err != nil {
+	result, err := s.applyInputWithResult(pane, m)
+	if err != nil {
 		s.logf("pane input apply error pane=%s type=%s err=%v", pane, m.T, err)
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, struct {
+		OK   bool   `json:"ok"`
+		Pane string `json:"pane,omitempty"`
+	}{OK: true, Pane: result.Pane})
 }
 
 func (c *paneDiffCache) diff(pane, requestCursor string, next []string, nextCursor string) (from int, tail []string, unchanged bool) {
@@ -217,9 +221,13 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 			// Input bound for a peer pane is still a human acting in this
 			// server's web UI.
 			s.recordHumanActivity()
-			if err := s.postPeerPaneInput(ctx, peer, pane, m); err != nil {
+			newPane, err := s.postPeerPaneInput(ctx, peer, pane, m)
+			if err != nil {
 				_ = write(outMsg{T: "error", S: err.Error()})
 				continue
+			}
+			if newPane != "" {
+				_ = write(outMsg{T: "forked", Pane: peer.Name + "@" + newPane})
 			}
 			select {
 			case inputSent <- struct{}{}:
@@ -373,20 +381,20 @@ func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, c
 	}
 }
 
-func (s *Server) postPeerPaneInput(ctx context.Context, peer statusd.Peer, pane string, m inputMsg) error {
+func (s *Server) postPeerPaneInput(ctx context.Context, peer statusd.Peer, pane string, m inputMsg) (string, error) {
 	upstream, err := peerPaneURL(peer.URL, "/api/pane/input", pane)
 	if err != nil {
-		return fmt.Errorf("invalid peer URL %q: %v", peer.URL, err)
+		return "", fmt.Errorf("invalid peer URL %q: %v", peer.URL, err)
 	}
 	var body bytes.Buffer
 	if err := json.NewEncoder(&body).Encode(m); err != nil {
-		return err
+		return "", err
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, peerRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, upstream, &body)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	started := time.Now()
@@ -396,7 +404,7 @@ func (s *Server) postPeerPaneInput(ctx context.Context, peer statusd.Peer, pane 
 		if ctx.Err() == nil {
 			s.logf("peer input error peer=%s pane=%s type=%s duration=%s err=%v", peer.Name, pane, m.T, elapsed.Round(time.Millisecond), err)
 		}
-		return fmt.Errorf("peer %s input request failed: %v", peer.Name, err)
+		return "", fmt.Errorf("peer %s input request failed: %v", peer.Name, err)
 	}
 	defer resp.Body.Close()
 	if elapsed >= peerSlowRequest {
@@ -405,11 +413,15 @@ func (s *Server) postPeerPaneInput(ctx context.Context, peer statusd.Peer, pane 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		s.logf("peer input bad status peer=%s pane=%s type=%s status=%d duration=%s", peer.Name, pane, m.T, resp.StatusCode, elapsed.Round(time.Millisecond))
 		if resp.StatusCode == http.StatusNotFound {
-			return fmt.Errorf("peer %s does not support /api/pane/input; please update the peer tmact", peer.Name)
+			return "", fmt.Errorf("peer %s does not support /api/pane/input; please update the peer tmact", peer.Name)
 		}
-		return fmt.Errorf("peer %s input returned HTTP %d", peer.Name, resp.StatusCode)
+		return "", fmt.Errorf("peer %s input returned HTTP %d", peer.Name, resp.StatusCode)
 	}
-	return nil
+	var result inputResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("peer %s input response invalid: %v", peer.Name, err)
+	}
+	return result.Pane, nil
 }
 
 func peerPaneURL(base, path, pane string) (string, error) {

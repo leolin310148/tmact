@@ -34,6 +34,7 @@ function callbacks(overrides: Partial<PaneStreamCallbacks> = {}): PaneStreamCall
     getSelectedPane: vi.fn(() => "%12"),
     onPatch: vi.fn(),
     onQuestion: vi.fn(),
+    onForked: vi.fn(),
     onError: vi.fn(),
     onStatus: vi.fn(),
     ...overrides,
@@ -115,5 +116,20 @@ describe("usePaneStream logging", () => {
 
     act(() => currentSocket?.onopen?.());
     expect(onStatus).toHaveBeenLastCalledWith("open");
+  });
+
+  it("reports the newly-created pane id from a fork response", () => {
+    const onForked = vi.fn();
+    const { result } = renderHook(() => usePaneStream(callbacks({ onForked })));
+
+    act(() => {
+      result.current.open("%12");
+    });
+    const ws = FakeWebSocket.instances[0];
+    act(() => {
+      ws?.onmessage?.({ data: `{"t":"forked","pane":"%19"}` } as MessageEvent);
+    });
+
+    expect(onForked).toHaveBeenCalledWith("%19");
   });
 });

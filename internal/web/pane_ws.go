@@ -28,9 +28,13 @@ var paneIDPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`)
 // statusd daemon enforces a fixed tmux window size so the scrollback grid
 // stays consistent across devices, and the browser does the visual wrap.
 type inputMsg struct {
-	T string `json:"t"`           // "text", "send", "run", "key", "clear" (or legacy "resize", ignored)
+	T string `json:"t"`           // "text", "send", "run", "key", "clear", "fork", "close" (or legacy "resize", ignored)
 	S string `json:"s,omitempty"` // literal text for "text"/"send"/"run"
 	K string `json:"k,omitempty"` // tmux key name for "key"
+}
+
+type inputResult struct {
+	Pane string `json:"pane,omitempty"`
 }
 
 // outMsg is a server-to-client WebSocket message.
@@ -43,6 +47,7 @@ type inputMsg struct {
 type outMsg struct {
 	T     string   `json:"t"`
 	S     string   `json:"s,omitempty"`
+	Pane  string   `json:"pane,omitempty"`
 	From  int      `json:"from,omitempty"`
 	Lines []string `json:"lines,omitempty"`
 	// Q is the interactive menu the pane is waiting on, when one is detected.
@@ -121,8 +126,11 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			// WS input frames only come from a browser, so they count as
 			// human activity even when the message itself is rejected.
 			s.recordHumanActivity()
-			if err := s.applyInput(pane, m); err != nil {
+			result, err := s.applyInputWithResult(pane, m)
+			if err != nil {
 				_ = write(outMsg{T: "error", S: err.Error()})
+			} else if result.Pane != "" {
+				_ = write(outMsg{T: "forked", Pane: result.Pane})
 			}
 		}
 	}()
@@ -205,35 +213,45 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 // from a browser, while /api/pane/input also serves tmact's own automation
 // (loops, dispatch) acting on peer panes.
 func (s *Server) applyInput(target string, m inputMsg) error {
+	_, err := s.applyInputWithResult(target, m)
+	return err
+}
+
+func (s *Server) applyInputWithResult(target string, m inputMsg) (inputResult, error) {
 	switch m.T {
 	case "text":
 		if m.S == "" {
-			return nil
+			return inputResult{}, nil
 		}
-		return s.sendText()(target, m.S, false)
+		return inputResult{}, s.sendText()(target, m.S, false)
 	case "send":
 		if m.S == "" {
-			return nil
+			return inputResult{}, nil
 		}
-		return s.sendText()(target, m.S, true)
+		return inputResult{}, s.sendText()(target, m.S, true)
 	case "run":
 		if strings.TrimSpace(m.S) == "" {
-			return nil
+			return inputResult{}, nil
 		}
-		return s.runCommand()(target, m.S)
+		return inputResult{}, s.runCommand()(target, m.S)
 	case "key":
 		if !keyAllowed(m.K) {
-			return fmt.Errorf("key not allowed: %q", m.K)
+			return inputResult{}, fmt.Errorf("key not allowed: %q", m.K)
 		}
-		return s.sendKey()(target, m.K)
+		return inputResult{}, s.sendKey()(target, m.K)
 	case "clear":
-		return s.clearPane()(target)
+		return inputResult{}, s.clearPane()(target)
+	case "fork":
+		pane, err := s.forkWindow()(target)
+		return inputResult{Pane: pane}, err
+	case "close":
+		return inputResult{}, s.closeWindow()(target)
 	case "resize":
 		// Tolerated for backwards compatibility — older browser bundles still
 		// send this on connect. statusd owns window sizing now.
-		return nil
+		return inputResult{}, nil
 	default:
-		return fmt.Errorf("unknown message type: %q", m.T)
+		return inputResult{}, fmt.Errorf("unknown message type: %q", m.T)
 	}
 }
 

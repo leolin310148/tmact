@@ -153,6 +153,38 @@ func TestPaneInputValidatesAndAppliesInput(t *testing.T) {
 	}
 }
 
+func TestPaneInputReturnsForkedPane(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		ForkWindow: func(target string) (string, error) {
+			if target != "%7" {
+				t.Fatalf("target = %q, want %%7", target)
+			}
+			return "%8", nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(
+		srv.URL+"/api/pane/input?pane=%257",
+		"application/json",
+		bytes.NewBufferString(`{"t":"fork"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var result inputResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Pane != "%8" {
+		t.Fatalf("fork pane = %q, want %%8", result.Pane)
+	}
+}
+
 func TestPaneInputRejectsInvalidPaneAndKey(t *testing.T) {
 	srv := httptest.NewServer((&Server{}).Handler())
 	defer srv.Close()

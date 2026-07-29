@@ -82,6 +82,12 @@ type Server struct {
 	SendKey func(target, key string) error
 	// ClearPane clears the visible pane and its tmux scrollback history.
 	ClearPane func(target string) error
+	// ForkWindow opens a detached window in the target pane's tmux session,
+	// preserving the pane's current working directory, and returns its pane id.
+	ForkWindow func(target string) (pane string, err error)
+	// CloseWindow closes the tmux window containing the target pane. Closing the
+	// final window also closes its tmux session.
+	CloseWindow func(target string) error
 	// RunCommand opens a shell window in the target pane's tmux session and
 	// executes the selected command there.
 	RunCommand func(target, command string) error
@@ -271,6 +277,20 @@ func (s *Server) clearPane() func(string) error {
 		return s.ClearPane
 	}
 	return tmux.ClearPane
+}
+
+func (s *Server) forkWindow() func(string) (string, error) {
+	if s.ForkWindow != nil {
+		return s.ForkWindow
+	}
+	return tmux.ForkWindow
+}
+
+func (s *Server) closeWindow() func(string) error {
+	if s.CloseWindow != nil {
+		return s.CloseWindow
+	}
+	return tmux.CloseWindow
 }
 
 func (s *Server) runCommand() func(string, string) error {

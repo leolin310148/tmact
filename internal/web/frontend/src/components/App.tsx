@@ -166,6 +166,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   const modeTextRef = useRef("");
   const inputErrorRef = useRef("");
   const questionRef = useRef<Question | null>(null);
+  const pendingPaneSelectionRef = useRef<string | null>(null);
+  const selectPaneRef = useRef<(paneID: string) => void>(() => {});
 
   // ContentPane text+opts (the "setContent" surface — §7). Held in a ref + bump so
   // ContentPane's layout effect rewrites pre#content.innerHTML imperatively.
@@ -404,6 +406,15 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       );
     },
     onQuestion: renderOptions,
+    onForked: (paneID) => {
+      if (!paneID) return;
+      if (findPaneIn(state.snapshot, paneID)) {
+        selectPaneRef.current(paneID);
+        return;
+      }
+      pendingPaneSelectionRef.current = paneID;
+      setInputStatus("Forked — switching…");
+    },
     onError: showInputError,
     onStatus: (s: ConnState) => {
       // ConnStatus combines this pane-stream lifecycle with snapshot freshness.
@@ -706,6 +717,15 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       closeDownloadList,
     ],
   );
+  selectPaneRef.current = selectPane;
+
+  useEffect(() => {
+    const pending = pendingPaneSelectionRef.current;
+    if (!pending || !findPaneIn(state.snapshot, pending)) return;
+    pendingPaneSelectionRef.current = null;
+    setInputStatus("");
+    selectPane(pending);
+  }, [state.snapshot, selectPane, setInputStatus]);
 
   const handlePaneIntent = useCallback(
     (rawPaneID: unknown): boolean => {
@@ -1208,7 +1228,6 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
           <UploadControls
             onUpload={openFileUploadPicker}
             onSelection={toggleSelectionMode}
-            onClear={clearPaneOutput}
             onHelp={help.toggle}
             onSettings={openSettings}
             onFiles={onFiles}

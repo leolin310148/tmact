@@ -8,6 +8,7 @@
 // `ws !== sock` close guard — matches byte-for-behavior.
 //
 // callbacks.onPatch(from, lines, question) — patch from the server
+// callbacks.onForked(pane)                 — newly-created fork pane id
 // callbacks.onError(msg)                   — server-side error text
 // callbacks.onQuestion(q)                  — cleared (q=null) on close
 // callbacks.onStatus(state)                — "connecting" | "open" | "reconnecting" | "closed"
@@ -39,6 +40,8 @@ export interface PaneStreamCallbacks {
   onPatch: (from: number, lines: string[], question: Question | null) => void;
   /** Question payload; called with `null` on close to clear the option bar. */
   onQuestion: (q: Question | null) => void;
+  /** A fork completed; the pane becomes selectable after snapshot discovery. */
+  onForked: (paneID: string) => void;
   /** Server-side error text; does NOT close the socket. */
   onError: (msg: string) => void;
   /** Connection lifecycle for the fixed conn-status overlay. */
@@ -167,6 +170,8 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
             Array.isArray(m.lines) ? m.lines : [],
             m.q ?? null,
           );
+        } else if (m.t === "forked") {
+          cbRef.current.onForked(m.pane);
         } else if (m.t === "error") {
           logFrontend("error", "pane_ws", "server error frame", {
             pane: paneID,

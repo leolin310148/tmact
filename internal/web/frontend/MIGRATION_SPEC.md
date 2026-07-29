@@ -21,7 +21,9 @@
 - Direct keystroke-passthrough mode (invisible `#direct-input` overlay): `translateKey` mapping, sticky Ctrl arming, IME/composition handling, soft-keyboard `input` relay, meta-key blocking, paste handling.
 - Keyboard hotkeys (desktop only): Option+`1…0`/`q…p` (layout-independent via `KeyboardEvent.code`) to select chips; Cmd+K / Ctrl+L to clear pane output.
 - On-screen helper key bar (mobile): Esc, ^C, Tab, ⇧Tab, Ctrl-toggle (sticky), arrows, Home/End/PgUp/PgDn; single-row clipping with expand toggle.
-- Quick-button FAB (phone): configurable per-runtime quick-send buttons, settings editor, `localStorage["tmact.quickButtons"]`.
+- Quick-button FAB (all viewports): configurable per-runtime quick-send buttons,
+  built-in clear/fork/close actions, settings editor,
+  `localStorage["tmact.quickButtons"]`.
 - Selection mode: preserve text selection in `#content` for copy; copy-line bar (join-glue / join-space) with clipboard + `execCommand` fallback and 900 ms flash.
 - Image long-press preview (mobile 550 ms / desktop Cmd+click) → `/api/image` lightbox.
 - Option/quick-answer bar from detected pane questions.
@@ -176,6 +178,8 @@ type InputMsg =
   | { t: "send";  s: string }   // paste text + Enter (empty s ignored)
   | { t: "key";   k: string }   // single allowlisted tmux key
   | { t: "clear" }              // clear pane + scrollback
+  | { t: "fork" }               // new window in the same session + cwd
+  | { t: "close" }              // close this window (and final-window session)
   | { t: "resize" };            // legacy, silently ignored
 ```
 Allowed `k`: `Enter, BSpace, Tab, BTab, Escape, Up, Down, Left, Right, Home, End, PageUp, PageDown, Delete, Space`, or `C-a`…`C-z` (lowercase only; `C-C`, `C-1`, `M-x` rejected). Disallowed → server sends an error outMsg (does NOT close).
@@ -420,7 +424,7 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 27. `autoGrowDraft`: set `height:auto`, read `scrollHeight`+borders, clamp to 200 px, set `overflowY`.
 28. Ctrl/Cmd+Enter sends `{t:"send",s}` and clears draft + `state.drafts[selected]`; Shift+Enter sends `{t:"text",s:"\n"}`; empty Enter (non-selection-mode) sends `{t:"key",k:"Enter"}` and switches to direct mode.
 29. IME guard: `e.isComposing` and `keyCode===229` skip keydown relay.
-30. `pointerdown` `preventDefault` on send/record/upload/selection/clear/draft-clear/FAB/option/copyline buttons keeps soft keyboard up (every one matters).
+30. `pointerdown` `preventDefault` on send/record/upload/selection/draft-clear/FAB/quick-menu/option/copyline buttons keeps soft keyboard up (every one matters).
 31. Image paste in draft inserts server path via `placeInDraft`; normal text paste falls through to textarea default.
 32. Draft placeholder responsive: mobile vs desktop text.
 
@@ -462,7 +466,11 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 **Quick buttons**
 51. `applicableQuick` = `common` + `RUNTIME_GROUP[runtime]` (claude/codex/shell), entries with empty text dropped; unknown runtime → common only.
 52. Button click → `wsSend({t:"send",s:text})`; on success closes menu; on failure shows `"not connected — try again"` and keeps menu open.
-53. FAB `.ready` when selected; `.open` toggles menu + backdrop; Escape closes only if open; backdrop click (`e.target===backdrop`) closes.
+53. FAB `.ready` when selected on every viewport; `.open` toggles menu +
+backdrop; Escape closes only if open; backdrop click
+(`e.target===backdrop`) closes. The menu separates configured shortcuts from
+built-in Clear panel / Fork / Close actions. Fork always creates another window
+in the same cwd and switches after its pane appears in a snapshot.
 54. Editor (`#qb-editor`) groups common/claude/codex/shell; live `localStorage["tmact.quickButtons"]` save + menu re-render per keystroke; add/delete rows.
 55. Config seeded from `QB_DEFAULT` on first run / invalid JSON; all 4 groups always present.
 

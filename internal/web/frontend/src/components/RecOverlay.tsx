@@ -14,8 +14,8 @@
 //
 //   The original wired #rec-stop / #rec-send / #rec-cancel click handlers in
 //   app.js's `wireInput` (NOT in voice.js), and gave NONE of them a `pointerdown`
-//   preventDefault (only draft-clear/send-btn/record-btn/clear-pane-btn/
-//   selection-btn got that — see ARCHITECTURE.md §6). So these three buttons use
+//   preventDefault (only draft-clear/send-btn/record-btn/selection-btn got
+//   that — see ARCHITECTURE.md §6). So these three buttons use
 //   plain onClick and intentionally OMIT onPointerDownNoBlur.
 
 export interface RecOverlayProps {

@@ -12,11 +12,11 @@
 // wireInput).
 //
 // BUTTON pointerdown audit (ARCHITECTURE §6, app.js wireInput lines 709–712):
-//   In wireInput, only #draft-clear, #send-btn, #record-btn, #clear-pane-btn,
+//   In wireInput, only #draft-clear, #send-btn, #record-btn,
 //   and #selection-btn get `pointerdown` preventDefault — NOT #upload-btn.
 //   Here in the input-row that means #send-btn and #record-btn use
 //   onPointerDownNoBlur (#draft-clear is handled inside the Draft unit;
-//   #clear-pane-btn/#selection-btn live in ContentWrap, not here).
+//   #selection-btn lives in ContentWrap, not here).
 //
 // PARITY MODEL:
 //   #record-btn and #send-btn were plain DOM nodes the original mutated by

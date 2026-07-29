@@ -151,7 +151,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 	}
 	// Control element ids the original shell shipped (JSX id="..." → string lit).
 	for _, want := range []string{
-		"record-btn", "rec-send", "upload-btn", "selection-btn", "clear-pane-btn",
+		"record-btn", "rec-send", "upload-btn", "selection-btn",
 		"file-upload", "gear-btn", "settings-overlay", "running-effect", "build-time",
 		"qb-fab", "help-btn", "conn-status", "option-bar", "direct-input", "copyline-run",
 	} {
@@ -178,7 +178,7 @@ func TestBundledStyleHasRuntimeClasses(t *testing.T) {
 		".agent-icon", "runtime-claude", "runtime-codex", "runtime-gemini",
 		"agent-shine", "agent-rainbow", "--pane-font",
 		"--tmact-vvh", ".image-preview", ".markdown-preview", ".image-path", ".markdown-path", ".selection-btn",
-		".clear-pane-btn", ".effect-preview",
+		".qb-divider", ".effect-preview",
 	} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("bundled stylesheet missing %q", want)

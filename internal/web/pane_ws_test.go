@@ -122,6 +122,38 @@ func TestApplyInputClearPane(t *testing.T) {
 	}
 }
 
+func TestApplyInputForkWindow(t *testing.T) {
+	var gotTarget string
+	s := &Server{ForkWindow: func(target string) (string, error) {
+		gotTarget = target
+		return "%8", nil
+	}}
+	result, err := s.applyInputWithResult("%7", inputMsg{T: "fork"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotTarget != "%7" {
+		t.Fatalf("ForkWindow got %q, want %%7", gotTarget)
+	}
+	if result.Pane != "%8" {
+		t.Fatalf("fork pane = %q, want %%8", result.Pane)
+	}
+}
+
+func TestApplyInputCloseWindow(t *testing.T) {
+	var gotTarget string
+	s := &Server{CloseWindow: func(target string) error {
+		gotTarget = target
+		return nil
+	}}
+	if err := s.applyInput("%7", inputMsg{T: "close"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotTarget != "%7" {
+		t.Fatalf("CloseWindow got %q, want %%7", gotTarget)
+	}
+}
+
 func TestApplyInputResizeIgnored(t *testing.T) {
 	// statusd owns the tmux window size; the server tolerates legacy "resize"
 	// frames from older browser bundles but must not act on them.

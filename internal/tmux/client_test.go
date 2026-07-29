@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -84,6 +85,28 @@ func TestShellJoinQuotesEveryArgument(t *testing.T) {
 	want := "'/tmp/tmact test' 'loop' 'it'\\''s.yaml' ''"
 	if got != want {
 		t.Fatalf("shellJoin = %q want %q", got, want)
+	}
+}
+
+func TestForkWindowArgsPreserveSessionAndCWD(t *testing.T) {
+	got, err := forkWindowArgs("%7", "work\t/tmp/project with spaces\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"new-window", "-d", "-P", "-F", "#{pane_id}",
+		"-t", "work:", "-c", "/tmp/project with spaces",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("forkWindowArgs = %#v, want %#v", got, want)
+	}
+}
+
+func TestForkWindowArgsRejectInvalidLocation(t *testing.T) {
+	for _, location := range []string{"", "\t/tmp/project", "work"} {
+		if _, err := forkWindowArgs("%7", location); err == nil {
+			t.Fatalf("expected error for location %q", location)
+		}
 	}
 }
 

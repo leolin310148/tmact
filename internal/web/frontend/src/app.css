@@ -1335,13 +1335,10 @@
   }
   #voice-device-refresh:active { background: var(--border); }
 
-  /* Quick-input FAB — a configurable cluster of one-tap shortcuts pinned to
-     the pane's bottom-right corner. Phone-only, like the option bar: the dock
-     is revealed once a pane is selected, and tapping the bolt lifts a menu of
-     user-defined buttons over a dimmed pane. Each button types its text into
-     the pane and presses Enter. Buttons are grouped — a Common group shown
-     everywhere plus one matching the pane's detected runtime (claude / codex /
-     shell); the config lives in localStorage, edited from the settings panel. */
+  /* Quick-input FAB — a configurable cluster of one-tap shortcuts and built-in
+     pane actions pinned to the pane's bottom-right corner on every viewport.
+     The dock is revealed once a pane is selected, and tapping the bolt lifts a
+     sectioned menu over a dimmed pane. */
   .qb-backdrop {
     display: none;
     position: absolute; inset: 0; z-index: 25;
@@ -1353,11 +1350,20 @@
     position: absolute; right: 12px; bottom: 12px; z-index: 30;
     flex-direction: column; align-items: flex-end; gap: 8px;
   }
+  .qb-dock.ready { display: flex; }
+  .qb-backdrop.open { display: block; }
   .qb-menu {
     display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     max-height: 60vh; overflow-y: auto;
   }
   .qb-dock:not(.open) .qb-menu { display: none; }
+  .qb-section {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  }
+  .qb-divider {
+    width: 100%; height: 1px; margin: 2px 0;
+    background: var(--border);
+  }
   .qb-menu button {
     max-width: 78vw;
     background: var(--panel-2); color: var(--fg);
@@ -1403,9 +1409,9 @@
   .qb-dock:not(.open) .qb-ic-close { display: none; }
   .qb-dock.open .qb-ic-open { display: none; }
 
-  .upload-btn, .selection-btn, .clear-pane-btn {
+  .upload-btn, .selection-btn {
     display: none;
-    position: absolute; right: 12px; bottom: 12px; z-index: 30;
+    position: absolute; right: 12px; bottom: 60px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
     align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
@@ -1420,21 +1426,15 @@
     user-select: none;
     touch-action: manipulation;
   }
-  .upload-btn svg, .selection-btn svg, .clear-pane-btn svg { width: 16px; height: 16px; display: block; }
+  .upload-btn svg, .selection-btn svg { width: 16px; height: 16px; display: block; }
   .upload-btn:hover, .upload-btn:active,
-  .selection-btn:hover, .selection-btn:active,
-  .clear-pane-btn:hover, .clear-pane-btn:active { opacity: 1; }
-  .upload-btn:disabled, .selection-btn:disabled, .clear-pane-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .upload-btn.ready, .selection-btn.ready, .clear-pane-btn.ready { display: flex; }
+  .selection-btn:hover, .selection-btn:active { opacity: 1; }
+  .upload-btn:disabled, .selection-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .upload-btn.ready, .selection-btn.ready { display: flex; }
   .selection-btn {
-    bottom: 108px;
+    bottom: 156px;
     color: var(--amber);
     border-color: var(--amber);
-  }
-  .clear-pane-btn {
-    bottom: 156px;
-    color: var(--fg-dim);
-    border-color: var(--fg-dim);
   }
   .selection-btn.active {
     opacity: 1;
@@ -1455,10 +1455,10 @@
      right-side FAB column, directly below the selection-mode toggle (both are
      view toggles). Hidden until a pane is selected (.ready), highlighted while
      markdown view is on (.active). bottom offsets sit in the upload/selection/
-     clear stack — see the two breakpoints below. */
+     action stack — see the breakpoint below. */
   .markdown-btn {
     display: none;
-    position: absolute; right: 12px; bottom: 60px; z-index: 30;
+    position: absolute; right: 12px; bottom: 108px; z-index: 30;
     width: 34px; height: 34px; padding: 0;
     align-items: center; justify-content: center;
     border-radius: 50%; cursor: pointer;
@@ -1789,17 +1789,13 @@
       --pane-switcher-scene-scale: 1.36;
     }
     .key-area { display: flex; }
-    /* The quick-input FAB is a phone-only convenience — reveal it here only. */
-    .qb-dock.ready { display: flex; }
     .upload-btn { bottom: 60px; }
     .markdown-btn { bottom: 108px; }
     .selection-btn { bottom: 156px; }
-    .clear-pane-btn { bottom: 204px; }
-    .gear-btn { bottom: 252px; }
-    .help-btn { bottom: 300px; }
-    .content-wrap.upload-ready .gear-btn { bottom: 252px; }
-    .content-wrap.upload-ready .help-btn { bottom: 300px; }
-    .qb-backdrop.open { display: block; }
+    .gear-btn { bottom: 204px; }
+    .help-btn { bottom: 252px; }
+    .content-wrap.upload-ready .gear-btn { bottom: 204px; }
+    .content-wrap.upload-ready .help-btn { bottom: 252px; }
     /* On a phone, direct mode types straight into the pane and the helper-key
        bar already covers the control keys — the draft box would only get in
        the way, so collapse it. On desktop the draft box stays put so a prompt

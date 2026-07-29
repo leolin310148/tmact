@@ -1,4 +1,4 @@
-// QuickDock — phone-only quick-input FAB, its pop-up menu, and the backdrop.
+// QuickDock — quick-input/action FAB, its pop-up menu, and the backdrop.
 // 1:1 behavioral port of the FAB/menu/backdrop portion of static/js/quick.js
 // (`renderQuickMenu`, `openQuickMenu`/`closeQuickMenu`, `wireQuick`'s FAB +
 // backdrop wiring) and the markup in static/index.html.
@@ -41,6 +41,9 @@ export function QuickDock({ quick }: QuickDockProps) {
     applicableQuick,
     toggleQuickMenu,
     onQuickButtonClick,
+    onClearPanel,
+    onForkWindow,
+    onCloseWindow,
     closeQuickMenu,
   } = quick;
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -56,9 +59,9 @@ export function QuickDock({ quick }: QuickDockProps) {
   // Empty menus focus their status message so it is announced immediately.
   useLayoutEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      const target = menuRef.current?.querySelector<HTMLElement>(
-        "button:not([disabled]), .qb-empty",
-      );
+      const target =
+        menuRef.current?.querySelector<HTMLElement>("button:not([disabled])") ??
+        menuRef.current?.querySelector<HTMLElement>(".qb-empty");
       target?.focus({ preventScroll: true });
     }
     wasOpenRef.current = isOpen;
@@ -90,31 +93,39 @@ export function QuickDock({ quick }: QuickDockProps) {
           aria-labelledby="qb-fab"
           aria-hidden={!isOpen}
         >
-          {items.length === 0 ? (
-            <div
-              className="qb-empty"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              tabIndex={-1}
-            >
-              No quick buttons for this pane — add some in Settings.
-            </div>
-          ) : (
-            items.map((it, i) => (
-              <button
-                // index key: the menu is fully rebuilt per render (like the
-                // original textContent="" + rebuild), so index is stable enough.
-                key={i}
-                type="button"
-                title={it.text}
-                onPointerDown={onPointerDownNoBlur}
-                onClick={() => onQuickButtonClick(it)}
-              >
-                {it.label || it.text}
-              </button>
-            ))
-          )}
+          <div className="qb-section" role="group" aria-label="Quick buttons">
+            {items.length === 0 ? (
+              <div className="qb-empty" role="status" aria-live="polite" aria-atomic="true">
+                No quick buttons for this pane.
+              </div>
+            ) : (
+              items.map((it, i) => (
+                <button
+                  // index key: the menu is fully rebuilt per render (like the
+                  // original textContent="" + rebuild), so index is stable enough.
+                  key={i}
+                  type="button"
+                  title={it.text}
+                  onPointerDown={onPointerDownNoBlur}
+                  onClick={() => onQuickButtonClick(it)}
+                >
+                  {it.label || it.text}
+                </button>
+              ))
+            )}
+          </div>
+          <div className="qb-divider" aria-hidden="true"></div>
+          <div className="qb-section qb-actions" role="group" aria-label="Panel actions">
+            <button type="button" onPointerDown={onPointerDownNoBlur} onClick={onClearPanel}>
+              Clear panel
+            </button>
+            <button type="button" onPointerDown={onPointerDownNoBlur} onClick={onForkWindow}>
+              Fork
+            </button>
+            <button type="button" onPointerDown={onPointerDownNoBlur} onClick={onCloseWindow}>
+              Close
+            </button>
+          </div>
         </div>
         <button
           className="qb-fab"
