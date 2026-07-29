@@ -32,6 +32,15 @@ Common commands:
   operator explicitly requests SSH.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the browser UI.
+- `tmact feedback "message" --category ux|bug|feature|docs|perf --command NAME`
+  appends local usage feedback to `~/.tmact/feedback.jsonl`.
+
+## Feedback
+
+Whenever tmact gets in your way (a confusing command, missing flag, unparseable
+output, or unhelpful error), record it in the moment with
+`tmact feedback "<what was awkward + what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
+The entry stays local and is never uploaded.
 
 ## Web Interface
 

@@ -79,6 +79,7 @@ func buildLLMInstructions() llmInstructions {
 			"Resolve targets explicitly. Numeric targets such as `-t 0` come from the latest `tmact ls` cache.",
 			"Preview side-effecting commands first. `send`, `session create`, `session close`, `session reopen`, `session resume`, `broadcast`, `panels ensure`, `workflow`, and `dispatch-work` are dry-run or planning-oriented until `--execute` is supplied.",
 			"Use `tmact detect` or `tmact inspect` to distinguish idle, running, and asking panes before sending input.",
+			"When tmact gets in your way—a confusing command, missing flag, unparseable output, or unhelpful error—record it immediately with `tmact feedback MESSAGE --category ux|bug|feature|docs|perf --command COMMAND`. Feedback stays in ~/.tmact/feedback.jsonl and is never uploaded.",
 			"Prefer JSON output for automation and quote prompt/text arguments exactly.",
 		},
 		SafeDefaults: []string{
@@ -94,7 +95,7 @@ func buildLLMInstructions() llmInstructions {
 		},
 		JSONTips: []string{
 			"`commands --json` and `help ... --json` are stable discovery surfaces for tools.",
-			"`ls --json`, `capture --json`, `wait --json`, `session closed --json`, `log search --json`, `log stats --json`, `log doctor --json`, `inspect --json`, `statusd read --json`, `usage --json`, and workflow status/report commands are preferred for machine parsing.",
+			"`ls --json`, `capture --json`, `wait --json`, `session closed --json`, `log search --json`, `log stats --json`, `log doctor --json`, `inspect --json`, `statusd read --json`, `usage --json`, `feedback list --json`, and workflow status/report commands are preferred for machine parsing.",
 			"Side-effect previews still return enough metadata to audit targets before adding `--execute`.",
 			"Use `tmact help loop --json` for the complete loop lifecycle contract and `tmact help loop start --json` for start-specific flags and idempotency semantics.",
 			"Use `tmact help workflow --json` for the revision-aware DAG lifecycle and durable report/resolve contract.",

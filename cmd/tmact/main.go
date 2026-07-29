@@ -186,6 +186,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runLLM(args[1:])
+	case "feedback":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runFeedback(args[1:])
 	case "help":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")

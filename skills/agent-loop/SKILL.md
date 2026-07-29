@@ -1,6 +1,6 @@
 ---
 name: agent-loop
-description: Run an implement→review convergence loop between two agents in tmux via `tmact dispatch-work`, iterating until the reviewer approves or a round limit is hit. Use when the user wants agents to iterate on each other's work unattended. Trigger on "claude apply codex review", "loop 直到", "review 完 dispatch 回去", "跑到 codex 說可以", "收斂", "impl/review loop", "互相 review 到過", and "派工迴圈".
+description: Run a multi-round implement→review convergence loop between two agents in tmux via `tmact dispatch-work`, iterating until the reviewer approves or a round limit is hit. Use specifically when the user wants an implementer and reviewer to iterate on each other's work unattended. Trigger on "claude apply codex review", "loop 直到", "review 完 dispatch 回去", "跑到 codex 說可以", "收斂", "impl/review loop", "互相 review 到過", and "派工迴圈". Do not use for generic one-off delegation, scheduled single-pane automation, or context handoff; use `tmact-dispatch`, `tmact-loop`, or `handoff` respectively.
 ---
 
 # agent-loop
@@ -14,6 +14,13 @@ monitoring, peer behavior, and safety.
 
 Default to at most five rounds unless the user specifies another limit. Stop
 immediately when the reviewer approves.
+
+## CLI feedback
+
+When a tmact command is confusing, lacks a needed flag, produces unparseable
+output, or returns an unhelpful error, immediately record it with
+`tmact feedback "<what was awkward and what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
+Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ## Setup
 

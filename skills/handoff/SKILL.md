@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Package the current session's state into a self-contained handoff brief and dispatch it to a fresh agent in a new tmux session via `tmact dispatch-work`, so work continues with clean context. Use when context is getting large, when switching to a new phase or repo, or when the user wants another agent to take over. Trigger on "context 太大", "換手", "接手", "開新 session 繼續", "讓另一個 agent 接續", "hand off", "交接", and "派到新 session 做下一步".
+description: Package the current session's state into a self-contained handoff brief and dispatch it to a fresh agent in a new tmux session via `tmact dispatch-work`, so work continues with clean context. Use specifically when context is getting large, when switching to a new phase or repo, or when the user wants another agent to take over with the current state preserved. Trigger on "context 太大", "換手", "接手", "開新 session 繼續", "讓另一個 agent 接續", "hand off", "交接", and "派到新 session 做下一步". Do not use for ordinary one-off delegation without a context-transfer requirement; use `tmact-dispatch` instead.
 ---
 
 # handoff
@@ -8,6 +8,13 @@ description: Package the current session's state into a self-contained handoff b
 Write a self-contained brief for a fresh agent, then dispatch it by following
 the `tmact-dispatch` skill. Prefer finishing the current atomic step before a
 handoff; transferring mid-investigation loses state that cannot be written down.
+
+## CLI feedback
+
+When a tmact command is confusing, lacks a needed flag, produces unparseable
+output, or returns an unhelpful error, immediately record it with
+`tmact feedback "<what was awkward and what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
+Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ## Write the brief
 

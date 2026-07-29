@@ -294,6 +294,30 @@ func paneUtilityCommandHelpCatalog() []commandHelp {
 			Examples: []string{"tmact commands", "tmact commands --json", "tmact help loop --json"},
 		},
 		{
+			Command:     "feedback",
+			Summary:     "Record local usage feedback for tmact maintainers to review later.",
+			Usage:       []string{"tmact feedback MESSAGE [--category ux|bug|feature|docs|perf] [--command COMMAND] [--json]", "tmact feedback add MESSAGE [flags]", "tmact feedback list [--limit N] [--json]", "tmact feedback path [--json]"},
+			Subcommands: []string{"add", "list", "path"},
+			Flags: []helpFlag{
+				{Name: "--category", Value: "CATEGORY", Description: "feedback kind: ux, bug, feature, docs, or perf; default ux"},
+				{Name: "--command", Value: "COMMAND", Description: "tmact command the feedback is about"},
+				{Name: "--limit", Value: "N", Description: "for list, show the newest N entries oldest first; default 50"},
+				{Name: "--json", Description: "print machine-readable output"},
+			},
+			Examples: []string{
+				`tmact feedback "inspect output does not explain the asking state" --category ux --command inspect`,
+				`tmact feedback --category feature "want wait to support peer targets" --command wait`,
+				"tmact feedback list --limit 10",
+				"tmact feedback path",
+			},
+			Safety: []string{"Entries stay on this machine in a user-private JSONL file and are never uploaded."},
+			Notes: []string{
+				"Intended for agents: record feedback immediately when a tmact command is confusing, lacks a useful flag, or returns an unhelpful error.",
+				"Entries append to ~/.tmact/feedback.jsonl with time, tmact version, category, command, and message only; cwd, prompts, pane output, and environment variables are not captured.",
+				"Use the explicit add subcommand when the message itself starts with a subcommand word such as list, path, add, or help.",
+			},
+		},
+		{
 			Command: "version",
 			Summary: "Print the tmact build version, including VCS revision when built from Git.",
 			Usage:   []string{"tmact version [--json]", "tmact -v | --version"},

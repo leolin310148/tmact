@@ -69,6 +69,8 @@ Usage:
   tmact help [command] [--json]
   tmact commands [--json]
   tmact llm instructions [--json]
+  tmact feedback MESSAGE [--category ux|bug|feature|docs|perf] [--command COMMAND]
+  tmact feedback list [--limit 50]
   tmact version [--json]
 
 Commands:
@@ -99,6 +101,7 @@ Commands:
   trust-folder  dry-run or accept one exact-directory Claude/Codex trust prompt
   commands      print the command catalog for humans, tools, and LLMs
   llm           print LLM-facing operating instructions
+  feedback      record local usage feedback for later maintainer review
   version       print the tmact build version
 
 Safety:

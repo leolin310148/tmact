@@ -50,6 +50,28 @@ Use the CLI when you want scriptable tmux control:
   reach the daemon over the local IPC socket only.
 - `tmact commands --json` exposes command metadata for tooling, and
   `tmact llm instructions` prints an LLM-facing operating guide.
+- `tmact feedback` lets agents append local UX notes, bugs, feature ideas,
+  documentation gaps, and performance observations for later maintainer review.
+
+### Agent feedback
+
+When tmact gets in an agent's way, record the issue while the context is still
+fresh:
+
+```sh
+tmact feedback "inspect output does not explain the asking state" --category ux --command inspect
+tmact feedback --category feature "want wait to support peer targets" --command wait
+tmact feedback list --limit 10
+tmact feedback path
+```
+
+Categories are `ux` (the default), `bug`, `feature`, `docs`, and `perf`. Flags
+may appear before or after the message. Entries append to
+`~/.tmact/feedback.jsonl` as JSONL with time, tmact version, category, command,
+and message. The directory and file are user-private; tmact does not upload
+feedback or automatically include cwd, prompts, pane output, or environment
+variables. `tmact feedback list` shows the newest 50 entries oldest first; add
+`--json` for machine-readable output.
 
 ### Incremental pane capture
 

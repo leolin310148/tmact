@@ -1,6 +1,6 @@
 ---
 name: tmact-dispatch
-description: Delegate work to a fresh AI agent in a separate local or peer tmux session and working directory with `tmact dispatch-work` or the explicit local `tmact ask`/`tmact reply` protocol. Use when the user wants to dispatch, delegate, or fan out work; get a definitive answer from another agent session; open an agent in another folder or repo; run codex/claude/gemini in the background; monitor a dispatched session; or send follow-up input. Trigger on "dispatch", "delegate to another agent", "ask another agent", "open an agent in a folder", "run codex/claude on a repo", "派工", "問另一個 agent", "在另一個 session/資料夾跑 agent", "並行跑一個 agent", and "background agent".
+description: Delegate one-off work to a fresh AI agent in a separate local or peer tmux session and working directory with `tmact dispatch-work` or the explicit local `tmact ask`/`tmact reply` protocol. Use when the user wants to dispatch, delegate, or fan out work; get a definitive answer from another agent session; open an agent in another folder or repo; run codex/claude/gemini in the background; monitor a dispatched session; or send follow-up input. Trigger on "dispatch", "delegate to another agent", "ask another agent", "open an agent in a folder", "run codex/claude on a repo", "派工", "問另一個 agent", "在另一個 session/資料夾跑 agent", "並行跑一個 agent", and "background agent". Do not use for recurring schedules, multi-round implement/review convergence, or context handoffs; use `tmact-loop`, `agent-loop`, or `handoff` respectively.
 ---
 
 # tmact-dispatch
@@ -26,6 +26,13 @@ Skip repeated environment inventory when this succeeds. If any flag,
 agent/model allowlist, peer support, or safety behavior is uncertain, run
 `tmact help dispatch-work --json`; the installed CLI is authoritative.
 For explicit result delivery, also inspect `tmact help ask --json`.
+
+## CLI feedback
+
+When a tmact command is confusing, lacks a needed flag, produces unparseable
+output, or returns an unhelpful error, immediately record it with
+`tmact feedback "<what was awkward and what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
+Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ## Plan the dispatch
 

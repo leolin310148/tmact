@@ -1,6 +1,6 @@
 ---
 name: tmact-loop
-description: Create, validate, start, list, observe, pause, resume, restart, and stop safe single-pane automation loops with `tmact loop`. Use when the user wants recurring or scheduled prompts/actions in an existing tmux agent pane, an unattended maintenance or work-item queue loop, a quota-aware loop, or lifecycle management for a loop YAML. Trigger on "tmact loop", "automation loop", "scheduled agent loop", "recurring prompt", "one work item per loop", "quota-aware loop", "背景迴圈", "定時派 prompt", "自動化 loop", and "跑一個 loop".
+description: Create, validate, start, list, observe, pause, resume, restart, and stop safe recurring or scheduled single-pane automation loops with `tmact loop`. Use when the user wants repeated prompts/actions in an existing tmux agent pane, an unattended maintenance or work-item queue loop, a quota-aware loop, or lifecycle management for a loop YAML. Trigger on "tmact loop", "automation loop", "scheduled agent loop", "recurring prompt", "one work item per loop", "quota-aware loop", "背景迴圈", "定時派 prompt", "自動化 loop", and "跑一個 loop". Do not use for one-off delegation or multi-agent implement/review convergence; use `tmact-dispatch` or `agent-loop` respectively.
 ---
 
 # tmact-loop
@@ -42,6 +42,13 @@ Prefer a repository-local config and log under `.tmact/`. Managed runs register
 their runtime directory machine-wide, so normal lifecycle commands do not need
 to repeat a custom `--run-dir`. Use `--run-dir` only when a command must be
 strictly scoped to one metadata directory.
+
+## CLI feedback
+
+When a tmact command is confusing, lacks a needed flag, produces unparseable
+output, or returns an unhelpful error, immediately record it with
+`tmact feedback "<what was awkward and what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
+Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ## Create the config
 
