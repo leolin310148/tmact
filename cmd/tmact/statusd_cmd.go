@@ -195,6 +195,10 @@ func runStatusdStart(args []string) error {
 	daemon.SetWebActivity(server.HumanLastActivity)
 	server.OnHumanActivity = daemon.NoteHumanActivity
 	server.RecordPeerHumanIdle = daemon.RecordFederatedActivity
+	if cfg.IdleInterval > cfg.Interval {
+		server.HumanActive = daemon.HumanActive
+		server.IdlePaneCaptureInterval = cfg.IdleInterval
+	}
 	go func() {
 		if err := server.Serve(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "statusd server stopped: %v\n", err)

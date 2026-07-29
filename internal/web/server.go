@@ -193,6 +193,11 @@ type Server struct {
 	// OnHumanActivity, when set, is called after every recorded human web-UI
 	// action so the statusd daemon can leave idle pacing immediately.
 	OnHumanActivity func()
+	// HumanActive exposes the statusd daemon's aggregate human-activity state
+	// to live pane streams. IdlePaneCaptureInterval is their slow cadence;
+	// leaving HumanActive nil preserves the fixed 200ms legacy behavior.
+	HumanActive             func() bool
+	IdlePaneCaptureInterval time.Duration
 	// RecordPeerHumanIdle ingests the HumanIdleHeader a fetching hub sends
 	// with /api/snapshot requests (its local human idle time), so a headless
 	// peer learns a human is active elsewhere in the federation.
@@ -201,6 +206,9 @@ type Server struct {
 	// humanActivity remembers the last human web-UI action (pane switch or
 	// input) for /api/human-active.
 	humanActivity humanActivityTracker
+	// humanActivitySubs wakes every live pane stream when any web-UI action
+	// makes the shared human-active state fresh again.
+	humanActivitySubs humanActivitySubscribers
 	// humanNow overrides the activity clock in tests; nil means time.Now.
 	humanNow func() time.Time
 

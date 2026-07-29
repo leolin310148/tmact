@@ -117,18 +117,28 @@ func TestNoteHumanActivityWakesOnlyWhenIdle(t *testing.T) {
 	d := activityTestDaemon(&now)
 
 	d.NoteHumanActivity()
+	if !d.HumanActive() {
+		t.Fatal("HumanActive = false immediately after NoteHumanActivity")
+	}
+	if idle, ok := d.LocalHumanIdle(); !ok || idle != 0 {
+		t.Fatalf("LocalHumanIdle = %v ok=%t, want 0 true", idle, ok)
+	}
 	select {
 	case <-d.wake:
 	default:
 		t.Fatal("expected wake nudge while idle")
 	}
 
-	d.activity.recordLocal(now)
 	d.NoteHumanActivity()
 	select {
 	case <-d.wake:
 		t.Fatal("unexpected wake nudge while active")
 	default:
+	}
+
+	now = now.Add(DefaultIdleAfter + time.Second)
+	if d.HumanActive() {
+		t.Fatal("HumanActive = true after idle threshold elapsed")
 	}
 }
 

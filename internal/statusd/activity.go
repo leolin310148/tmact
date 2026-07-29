@@ -134,12 +134,23 @@ func (d *Daemon) RecordFederatedActivity(idle time.Duration) {
 
 // NoteHumanActivity is the web server's low-latency nudge: called right after
 // it records a local human action so an idle-paced daemon rescans immediately
-// instead of waiting out a slow tick. The action itself is picked up from the
-// web tracker on that rescan.
+// instead of waiting out a slow tick. Record it synchronously as well so other
+// adaptive consumers (notably live pane streams) see the active state before
+// that rescan completes.
 func (d *Daemon) NoteHumanActivity() {
-	if !d.humanActive(d.cfg.Now()) {
+	now := d.cfg.Now()
+	wasActive := d.humanActive(now)
+	d.activity.recordLocal(now)
+	if !wasActive {
 		d.Wake()
 	}
+}
+
+// HumanActive reports whether the daemon currently has a fresh local or
+// federated human signal. It lets statusd-owned live capture paths share the
+// same activity decision as the main scan loop.
+func (d *Daemon) HumanActive() bool {
+	return d.humanActive(d.cfg.Now())
 }
 
 // Wake nudges the Start loop to skip the remainder of the current sleep.

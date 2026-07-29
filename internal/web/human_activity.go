@@ -29,6 +29,12 @@ type humanActivityTracker struct {
 	last time.Time
 }
 
+type humanActivitySubscribers struct {
+	mu   sync.Mutex
+	next uint64
+	subs map[uint64]chan struct{}
+}
+
 func (t *humanActivityTracker) record(now time.Time) {
 	t.mu.Lock()
 	t.last = now
@@ -50,6 +56,53 @@ func (s *Server) recordHumanActivity() {
 	s.humanActivity.record(s.humanNowFn()())
 	if s.OnHumanActivity != nil {
 		s.OnHumanActivity()
+	}
+	s.humanActivitySubs.notify()
+}
+
+func (s *Server) subscribeHumanActivity() (<-chan struct{}, func()) {
+	return s.humanActivitySubs.subscribe()
+}
+
+func (s *Server) paneCaptureInterval(activeInterval time.Duration) time.Duration {
+	if activeInterval <= 0 {
+		activeInterval = wsCaptureInterval
+	}
+	if s.HumanActive == nil || s.HumanActive() {
+		return activeInterval
+	}
+	if s.IdlePaneCaptureInterval > activeInterval {
+		return s.IdlePaneCaptureInterval
+	}
+	return activeInterval
+}
+
+func (s *humanActivitySubscribers) subscribe() (<-chan struct{}, func()) {
+	s.mu.Lock()
+	if s.subs == nil {
+		s.subs = make(map[uint64]chan struct{})
+	}
+	s.next++
+	id := s.next
+	ch := make(chan struct{}, 1)
+	s.subs[id] = ch
+	s.mu.Unlock()
+
+	return ch, func() {
+		s.mu.Lock()
+		delete(s.subs, id)
+		s.mu.Unlock()
+	}
+}
+
+func (s *humanActivitySubscribers) notify() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ch := range s.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
 	}
 }
 

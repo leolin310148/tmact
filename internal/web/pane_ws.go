@@ -107,6 +107,8 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 		defer writeCancel()
 		return wsjson.Write(writeCtx, conn, m)
 	}
+	humanWake, unsubscribeHumanActivity := s.subscribeHumanActivity()
+	defer unsubscribeHumanActivity()
 
 	// Reader goroutine: relay browser input into the pane.
 	go func() {
@@ -124,10 +126,6 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-
-	// Main loop: stream pane output to the browser.
-	ticker := time.NewTicker(wsCaptureInterval)
-	defer ticker.Stop()
 
 	last := ""
 	var lastLines []string
@@ -164,14 +162,40 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	if !push() {
 		return
 	}
+
+	// Main loop: stream quickly while a human is active, then share the
+	// daemon's idle cadence instead of capturing the selected pane at 5 Hz
+	// all night. Any web-UI action wakes every connected stream immediately.
+	currentInterval := s.paneCaptureInterval(wsCaptureInterval)
+	timer := time.NewTimer(currentInterval)
+	defer timer.Stop()
+	resetTimer := func(delay time.Duration) {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(delay)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-humanWake:
+			// Only preempt a slow idle wait. Repeated keypress activity
+			// while already fast must not keep pushing the next capture
+			// 200ms into the future like a debounce.
+			if currentInterval > wsCaptureInterval {
+				currentInterval = wsCaptureInterval
+				resetTimer(currentInterval)
+			}
+		case <-timer.C:
 			if !push() {
 				return
 			}
+			currentInterval = s.paneCaptureInterval(wsCaptureInterval)
+			timer.Reset(currentInterval)
 		}
 	}
 }

@@ -173,6 +173,8 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	humanWake, unsubscribeHumanActivity := s.subscribeHumanActivity()
+	defer unsubscribeHumanActivity()
 
 	var writeMu sync.Mutex
 	write := func(m outMsg) error {
@@ -226,31 +228,57 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 		}
 	}()
 
-	s.pollPeerPaneDiff(ctx, peer, pane, write, inputSent)
+	s.pollPeerPaneDiff(ctx, peer, pane, write, inputSent, humanWake)
 }
 
-func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane string, write func(outMsg) error, inputSent <-chan struct{}) {
+func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane string, write func(outMsg) error, inputSent, humanWake <-chan struct{}) {
 	cursor := ""
 	delay := time.Duration(0)
 	unchanged := 0
 	errBackoff := 500 * time.Millisecond
 	for {
 		if delay > 0 {
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-inputSent:
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
+			waitDelay := s.paneCaptureInterval(delay)
+			timer := time.NewTimer(waitDelay)
+			restart := false
+			waiting := true
+			for waiting {
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-inputSent:
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
 					}
+					delay = 200 * time.Millisecond
+					restart = true
+					waiting = false
+				case <-humanWake:
+					// A general activity event only needs to preempt an
+					// idle-extended wait. While already fast, keep the
+					// existing deadline so repeated activity cannot
+					// debounce polling indefinitely.
+					if waitDelay > delay {
+						if !timer.Stop() {
+							select {
+							case <-timer.C:
+							default:
+							}
+						}
+						delay = 200 * time.Millisecond
+						restart = true
+						waiting = false
+					}
+				case <-timer.C:
+					waiting = false
 				}
-				delay = 200 * time.Millisecond
+			}
+			if restart {
 				continue
-			case <-timer.C:
 			}
 		}
 

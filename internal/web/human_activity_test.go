@@ -136,6 +136,58 @@ func TestRecordHumanActivityFiresCallbackAndAccessor(t *testing.T) {
 	}
 }
 
+func TestPaneCaptureIntervalFollowsSharedHumanActivity(t *testing.T) {
+	active := false
+	server := &Server{
+		HumanActive:             func() bool { return active },
+		IdlePaneCaptureInterval: 5 * time.Second,
+	}
+
+	if got := server.paneCaptureInterval(200 * time.Millisecond); got != 5*time.Second {
+		t.Fatalf("idle capture interval = %v, want 5s", got)
+	}
+	active = true
+	if got := server.paneCaptureInterval(200 * time.Millisecond); got != 200*time.Millisecond {
+		t.Fatalf("active capture interval = %v, want 200ms", got)
+	}
+
+	// A disabled or too-small idle interval must never speed capture up.
+	active = false
+	server.IdlePaneCaptureInterval = 100 * time.Millisecond
+	if got := server.paneCaptureInterval(200 * time.Millisecond); got != 200*time.Millisecond {
+		t.Fatalf("clamped capture interval = %v, want 200ms", got)
+	}
+}
+
+func TestRecordHumanActivityWakesAllPaneSubscribers(t *testing.T) {
+	server := &Server{}
+	first, unsubscribeFirst := server.subscribeHumanActivity()
+	second, unsubscribeSecond := server.subscribeHumanActivity()
+	defer unsubscribeSecond()
+
+	server.recordHumanActivity()
+	for name, wake := range map[string]<-chan struct{}{"first": first, "second": second} {
+		select {
+		case <-wake:
+		default:
+			t.Fatalf("%s pane subscriber was not woken", name)
+		}
+	}
+
+	unsubscribeFirst()
+	server.recordHumanActivity()
+	select {
+	case <-first:
+		t.Fatal("unsubscribed pane subscriber was woken")
+	default:
+	}
+	select {
+	case <-second:
+	default:
+		t.Fatal("remaining pane subscriber was not woken")
+	}
+}
+
 func TestSnapshotRequestRecordsPeerHumanIdle(t *testing.T) {
 	recorded := make([]time.Duration, 0, 2)
 	server := &Server{RecordPeerHumanIdle: func(d time.Duration) { recorded = append(recorded, d) }}

@@ -2,8 +2,11 @@ package web
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,6 +168,50 @@ func TestPaneWSStreamsContent(t *testing.T) {
 	}
 	if m.T != "patch" || m.From != 0 || strings.Join(m.Lines, "\n") != "pane body" {
 		t.Fatalf("got %+v, want patch from=0 lines=[pane body]", m)
+	}
+}
+
+func TestPaneWSIdleCaptureWakesOnHumanActivity(t *testing.T) {
+	var active atomic.Bool
+	var captures atomic.Int32
+	server := &Server{
+		HumanActive:             active.Load,
+		IdlePaneCaptureInterval: time.Second,
+		CapturePane: func(string, int) (string, error) {
+			n := captures.Add(1)
+			return fmt.Sprintf("capture %d", n), nil
+		},
+	}
+	server.OnHumanActivity = func() { active.Store(true) }
+	srv := httptest.NewServer(server.Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var first outMsg
+	if err := wsjson.Read(ctx, c, &first); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(450 * time.Millisecond)
+	if got := captures.Load(); got != 1 {
+		t.Fatalf("captures while idle = %d, want only the initial capture", got)
+	}
+
+	resp, err := http.Post(srv.URL+"/api/human-activity", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("human activity status = %d, want 200", resp.StatusCode)
+	}
+
+	deadline := time.Now().Add(700 * time.Millisecond)
+	for captures.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := captures.Load(); got < 2 {
+		t.Fatalf("captures after human activity = %d, want a fast resumed capture", got)
 	}
 }
 
