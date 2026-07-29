@@ -47,7 +47,7 @@ const SHELL_CSS = `
      controls, so the iframes' top edge stays clickable. */
   #split-bar {
     position: absolute; inset: 0 0 auto 0; z-index: 30;
-    display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
     padding: 4px 10px; background: transparent;
     pointer-events: none;
   }
