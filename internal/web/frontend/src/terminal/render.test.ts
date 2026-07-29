@@ -390,15 +390,15 @@ describe("extractRulerTables", () => {
       "                                                                                              僅供換行用",
       "────────────────────────────────────────────  ─────────────────────────────────────────────  ─────────────────────────────────────────────",
       " APP 測試範例                                  demo_port component hooks unit tests Stage     這是虛構案例，供 wrap；偏測試覆蓋，約 12",
-      "                                               2a batch 4-6、scenario gaps、error path、      commits",
-      "                                               review fixes",
+      "                                               2a batch 4-6、scenario gaps、error path、      checks!",
+      "                                               review notes",
     ].join("\n");
 
     const html = render(text);
     expect(html).toContain('<table class="tui-table">');
     expect(html).toContain("<th>主題</th>");
     expect(html).toContain("大型 UI feature，48 files，這是純虛構範例A\n僅供換行用");
-    expect(html).toContain("demo_port component hooks unit tests Stage\n3b batch 1-3");
+    expect(html).toContain("demo_port component hooks unit tests Stage\n2a batch 4-6");
   });
 
   it("does not fold a standalone horizontal rule", () => {
