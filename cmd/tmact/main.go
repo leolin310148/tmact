@@ -156,6 +156,16 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runDispatch(args[1:])
+	case "ask":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runAsk(args[1:])
+	case "reply":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runReply(args[1:])
 	case "trust-folder":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")

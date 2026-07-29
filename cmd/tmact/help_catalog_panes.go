@@ -145,6 +145,67 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 		},
 		{
+			Command: "ask",
+			Summary: "Dispatch work to a local agent session and wait for an explicit question-id reply.",
+			Usage: []string{
+				"tmact ask SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
+				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini", Required: true},
+				{Name: "--model", Value: "MODEL", Description: dispatchModelHelp()},
+				{Name: "--prompt", Value: "TEXT", Description: "question or task sent to the answering agent", Required: true},
+				{Name: "--timeout", Value: "DURATION", Description: "max wait for an explicit reply after dispatch; default 30m"},
+				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the answering agent to become ready"},
+				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
+				{Name: "--trust-folder", Description: "opt in to exact-directory Claude/Codex workspace trust"},
+				{Name: "--store-dir", Value: "DIR", Description: "shared local mailbox directory; default is a user-private temporary runtime directory"},
+				{Name: "--execute", Description: "actually dispatch and wait; default is dry-run"},
+				{Name: "--json", Description: "print the question ID, dispatch report, and reply as JSON"},
+			},
+			Examples: []string{
+				`tmact ask investigation --dir . --agent codex --prompt "find the root cause"`,
+				`tmact ask implementation --dir ~/proj --agent claude --prompt "implement and test the fix" --timeout 1h --execute --json`,
+			},
+			Safety: []string{
+				"Without --execute this prints the dispatch and reply protocol plan without creating a mailbox or touching tmux.",
+				"Reply delivery uses a private one-shot local mailbox; it never injects keys into the waiting asker's pane.",
+				"Permission and approval prompts remain human blockers; --trust-folder is limited to exact-directory Claude/Codex trust.",
+			},
+			Notes: []string{
+				"`ask` wraps local dispatch-work and appends an instruction requiring the answerer to call `tmact reply` with a random capability ID.",
+				"The ask process blocks until that explicit reply, timeout, interrupt, or dispatch failure. It does not infer success from pane state or agent exit code.",
+				"Requests persist only routing metadata in a user-private temporary runtime directory; the original prompt is not copied into the mailbox. Question directories and files use 0700/0600 modes and the default directory owner is verified.",
+				"Use --store-dir only when both local sessions can access the exact same directory. Peer dispatch is not supported by ask.",
+			},
+		},
+		{
+			Command: "reply",
+			Summary: "Return a one-shot answer to the local asker waiting on a question ID.",
+			Usage: []string{
+				"tmact reply QUESTION_ID --text TEXT [--store-dir DIR] [--json]",
+				"tmact reply QUESTION_ID --file PATH [--store-dir DIR] [--json]",
+			},
+			Flags: []helpFlag{
+				{Name: "--text", Value: "TEXT", Description: "reply text; mutually exclusive with --file"},
+				{Name: "--file", Value: "PATH", Description: "read a multiline reply from a file; mutually exclusive with --text"},
+				{Name: "--store-dir", Value: "DIR", Description: "mailbox directory supplied by ask; default is a user-private temporary runtime directory"},
+				{Name: "--json", Description: "print the accepted reply metadata as JSON"},
+			},
+			Examples: []string{
+				`tmact reply q_abcdefghijklmnopqrstuvwxyz --text "root cause found; tests pass"`,
+				`tmact reply q_abcdefghijklmnopqrstuvwxyz --file /tmp/final-answer.txt`,
+			},
+			Safety: []string{
+				"A question ID accepts exactly one reply; duplicate, late, expired, canceled, unknown, and malformed IDs are rejected.",
+				"`reply` writes only to the ask mailbox and never sends tmux keys.",
+			},
+			Notes: []string{
+				"The random question ID is a local capability. Use only the ID and optional --store-dir supplied in the dispatched prompt.",
+				"Reply text is limited to 1 MiB.",
+			},
+		},
+		{
 			Command: "trust-folder",
 			Summary: "Inspect or accept one exact-directory Claude/Codex workspace-trust prompt.",
 			Usage:   []string{"tmact trust-folder --target TARGET --dir DIR --agent claude|codex [--timeout 30s] [--execute] [--json]"},

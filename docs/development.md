@@ -41,6 +41,7 @@ internal/panestatus/          # pane snapshot + status rollup
 internal/statusd/             # status daemon and snapshot generation
 internal/runmeta/             # metadata for long-running loops/workflows
 internal/foldertrust/         # exact-directory Claude/Codex trust handling
+internal/askreply/             # explicit one-shot local agent request/reply mailbox
 internal/agents/              # agents.yaml config consumers
 internal/loop/                # single-pane scheduled action loop
 internal/workflow/            # generic revision-aware DAG workflow engine

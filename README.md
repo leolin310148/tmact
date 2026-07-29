@@ -34,6 +34,9 @@ Use the CLI when you want scriptable tmux control:
 - `tmact dispatch-work` creates or reuses a tmux session, launches an agent CLI,
   sends it a prompt, and can explicitly handle exact-directory Claude/Codex
   workspace trust.
+- `tmact ask` wraps a local dispatch in an explicit request/reply protocol;
+  the answering agent calls `tmact reply QUESTION_ID`, and the waiting `ask`
+  process receives that answer without scraping pane output.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
 - `tmact hook init zsh|bash|fish` prints an opt-in shell snippet whose
@@ -217,6 +220,46 @@ untrusted output rather than proof that the task succeeded. Post-dispatch
 waiting is currently local-only, so `--peer --wait` is rejected explicitly.
 The `--wait-timeout` wall-clock deadline also covers the final result capture,
 so a stalled tmux read cannot extend a dispatch wait indefinitely.
+
+### Explicit agent request/reply
+
+Use `tmact ask` when the caller needs a definitive answer from work delegated
+to another local agent session:
+
+```sh
+tmact ask investigation --dir ~/work/repo --agent codex \
+  --prompt "find the root cause and recommend a fix" \
+  --timeout 30m --execute --json
+```
+
+`ask` creates a random question ID, dispatches the prompt with a required reply
+protocol, and blocks until the answering agent runs the command included in
+that prompt, for example:
+
+```sh
+tmact reply q_abcdefghijklmnopqrstuvwxyz \
+  --text "root cause found; focused tests pass"
+```
+
+For a multiline answer, the answerer can use `--file PATH` instead of
+`--text`. A question accepts exactly one reply. Unknown, malformed, duplicate,
+expired, canceled, and late replies are rejected.
+
+The exchange uses a user-private mailbox below the system temporary runtime
+directory by default (for example `$TMPDIR/tmact-501/asks`). tmact verifies
+ownership and `0700` directory modes; request and reply files use `0600`. This
+location lets sandboxed agents exchange replies without requesting
+home-directory write access. Only routing metadata is stored in the request;
+the original prompt is not copied into the mailbox. The waiting `ask` receives
+the reply through its own stdout, so `reply` never has to inject keystrokes into
+a busy asker pane.
+Timeout and interrupt finalize the request and return non-zero. `ask` is
+currently local-only; `--store-dir` is available when both local sessions need
+an explicitly shared mailbox path.
+
+Unlike `dispatch-work --wait`, this protocol does not infer completion from an
+input-ready pane or agent exit code. Without `--execute`, `ask` is a dry run:
+it prints the dispatch/reply plan without creating a mailbox or touching tmux.
 
 For a pane created by another tool, inspect first (dry-run), then execute:
 

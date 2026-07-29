@@ -58,6 +58,16 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "wall-clock deadline", "--wait-settle DURATION", "--result-lines N", "local-only", "not proof"},
 		},
 		{
+			name: "ask",
+			args: []string{"ask", "--help"},
+			want: []string{"explicit question-id reply", "--timeout DURATION", "--store-dir DIR", "--execute", "one-shot local mailbox", "does not infer success", "Peer dispatch is not supported"},
+		},
+		{
+			name: "reply",
+			args: []string{"reply", "--help"},
+			want: []string{"one-shot answer", "--text TEXT", "--file PATH", "--store-dir DIR", "duplicate", "never sends tmux keys", "1 MiB"},
+		},
+		{
 			name: "capture",
 			args: []string{"capture", "--help"},
 			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "--after CURSOR", "canonical target", "reset=true", "Peer targets are explicitly unsupported", "untrusted data"},

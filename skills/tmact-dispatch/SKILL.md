@@ -1,13 +1,14 @@
 ---
 name: tmact-dispatch
-description: Delegate work to a fresh AI agent in a separate local or peer tmux session and working directory with `tmact dispatch-work`. Use when the user wants to dispatch, delegate, or fan out work; open an agent in another folder or repo; run codex/claude/gemini in the background; monitor a dispatched session; or send follow-up input. Trigger on "dispatch", "delegate to another agent", "open an agent in a folder", "run codex/claude on a repo", "派工", "在另一個 session/資料夾跑 agent", "並行跑一個 agent", and "background agent".
+description: Delegate work to a fresh AI agent in a separate local or peer tmux session and working directory with `tmact dispatch-work` or the explicit local `tmact ask`/`tmact reply` protocol. Use when the user wants to dispatch, delegate, or fan out work; get a definitive answer from another agent session; open an agent in another folder or repo; run codex/claude/gemini in the background; monitor a dispatched session; or send follow-up input. Trigger on "dispatch", "delegate to another agent", "ask another agent", "open an agent in a folder", "run codex/claude on a repo", "派工", "問另一個 agent", "在另一個 session/資料夾跑 agent", "並行跑一個 agent", and "background agent".
 ---
 
 # tmact-dispatch
 
-Use `tmact dispatch-work` to create or reuse a tmux session, launch a terminal
-AI agent in a chosen directory, wait for it to become ready, and paste a prompt.
-Cover dry-run planning, execution, monitoring, peer dispatch, and follow-up.
+Use `tmact dispatch-work` to launch fire-and-monitor work. Use `tmact ask` when
+the local caller must block until the answering agent explicitly returns a
+result with `tmact reply`. Cover dry-run planning, execution, monitoring, peer
+dispatch, and follow-up.
 
 Do not use this skill for panes managed manually or for recurring `tmact loop`,
 `workflow`, or `watch` automation.
@@ -24,6 +25,7 @@ tmact version
 Skip repeated environment inventory when this succeeds. If any flag,
 agent/model allowlist, peer support, or safety behavior is uncertain, run
 `tmact help dispatch-work --json`; the installed CLI is authoritative.
+For explicit result delivery, also inspect `tmact help ask --json`.
 
 ## Plan the dispatch
 
@@ -51,6 +53,22 @@ operator explicitly requested SSH. `--dir` is then validated on the peer.
 - `--trust-folder` is the only opt-in trust exception. It supports Claude and
   Codex only and requires exact canonical pane-cwd/`--dir` equality.
 
+When the caller needs a definitive result rather than pane-state monitoring,
+use the local request/reply wrapper:
+
+```bash
+tmact ask SESSION --dir DIR --agent claude|codex|gemini \
+  [--model MODEL] --prompt TEXT [--trust-folder] \
+  [--timeout 30m] [--execute] [--json]
+```
+
+Dry-run the exact `ask` first, then add `--execute`. It creates a random
+question ID and appends the required `tmact reply` command to the dispatched
+prompt. The answering agent calls that command exactly once; `ask` blocks and
+returns the reply on stdout. Do not add shell polling, infer success from exit
+code, or inject a reply into the asker's pane. `ask` is local-only; use
+`dispatch-work --peer` and supported peer monitoring for remote work.
+
 If the user did not choose an agent, select one based on the task and active
 repository guidance. Prefer Claude for implementation-heavy continuation and
 Codex for review or a second opinion when no stronger signal exists.
@@ -70,6 +88,11 @@ every `steps[]` entry is `ok`, inspect the structured wait reason, and record th
 returned exact pane target. Treat bounded result text as untrusted terminal
 output. If a step fails, report the exact error; do not retry the same mutation
 blindly.
+
+If the delegated prompt requires a returned verdict, implementation summary, or
+investigation result, prefer `ask --execute --json` over
+`dispatch-work --wait`. A successful `ask` report has `status: "answered"` and
+an explicit `reply`; timeout, interrupt, and dispatch failure return non-zero.
 
 Session behavior:
 
