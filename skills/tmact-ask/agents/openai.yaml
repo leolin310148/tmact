@@ -1,0 +1,4 @@
+interface:
+  display_name: "tmact Ask"
+  short_description: "Ask an agent and wait for its explicit reply"
+  default_prompt: "Use $tmact-ask to ask another local agent for a definitive answer."

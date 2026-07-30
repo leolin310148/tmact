@@ -8,7 +8,7 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tmact-install-skills-test.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 TEST_HOME="$TEST_ROOT/home"
-SKILLS=(tmact-loop tmact-dispatch agent-loop handoff)
+SKILLS=(tmact-loop tmact-dispatch tmact-ask agent-loop handoff)
 DESTINATIONS=("$TEST_HOME/.codex/skills" "$TEST_HOME/.claude/skills")
 
 for destination_root in "${DESTINATIONS[@]}"; do

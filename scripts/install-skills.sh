@@ -50,7 +50,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SKILLS=(tmact-loop tmact-dispatch agent-loop handoff)
+SKILLS=(tmact-loop tmact-dispatch tmact-ask agent-loop handoff)
 DESTINATIONS=("$HOME/.codex/skills" "$HOME/.claude/skills")
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FAILED=0
