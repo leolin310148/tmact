@@ -120,8 +120,13 @@ func (f *PeerFetcher) currentInterval() time.Duration {
 	return f.interval
 }
 
+// PeerSnapshotURL returns the /api/snapshot endpoint for a peer base URL.
+func PeerSnapshotURL(base string) string {
+	return strings.TrimRight(base, "/") + "/api/snapshot"
+}
+
 func (f *PeerFetcher) fetchOnce(ctx context.Context, p Peer) {
-	url := strings.TrimRight(p.URL, "/") + "/api/snapshot"
+	url := PeerSnapshotURL(p.URL)
 	reqCtx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)

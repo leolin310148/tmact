@@ -5,12 +5,20 @@ func paneCommandHelpCatalog() []commandHelp {
 		{
 			Command: "ls",
 			Summary: "List tmux panes and refresh the numbered target cache used by -t.",
-			Usage:   []string{"tmact ls [--json]"},
+			Usage:   []string{"tmact ls [--json]", "tmact ls --peer NAME [--json]"},
 			Flags: []helpFlag{
 				{Name: "--json", Description: "print JSON output"},
+				{Name: "--peer", Value: "NAME", Description: "list panes on the named statusd dispatch_peer instead of locally"},
+				{Name: "--config", Value: "PATH", Description: "statusd config file containing dispatch_peers"},
 			},
-			Examples: []string{"tmact ls", "tmact ls --json"},
-			Notes:    []string{"Run this before using a numeric target such as -t 0."},
+			Examples: []string{"tmact ls", "tmact ls --json", "tmact ls --peer peer-a"},
+			Notes: []string{
+				"Run this before using a numeric target such as -t 0.",
+				"--peer is a read-only on-demand fetch of that peer's snapshot; nothing is merged locally and no polling starts.",
+				"--peer lists only panes local to that peer, not panes it merged from its own peers.",
+				"Peer targets are returned peer-qualified (NAME@%7) so they are never mistaken for a local pane id.",
+				"Use --peer before dispatch-work --peer to confirm an existing session name; dispatch matches session names exactly.",
+			},
 		},
 		{
 			Command: "send",

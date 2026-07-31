@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
@@ -42,16 +45,31 @@ func runList(args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	jsonOutput := fs.Bool("json", false, "print JSON output")
+	peerName := fs.String("peer", "", "list panes on the named statusd dispatch_peer instead of locally")
+	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file containing dispatch_peers")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	panes, err := listAllTmuxPanes()
-	if err != nil {
-		return err
+	var rows []listPaneRow
+	if *peerName != "" {
+		peer, err := resolvePeerConfig(*peerName, *configPath)
+		if err != nil {
+			return err
+		}
+		snap, err := fetchPeerSnapshot(context.Background(), &http.Client{}, peer.Name, peer.URL)
+		if err != nil {
+			return err
+		}
+		rows = peerPaneRows(snap, peer.Name, tmactNow())
+	} else {
+		panes, err := listAllTmuxPanes()
+		if err != nil {
+			return err
+		}
+		rows = paneRows(panes, tmactNow())
 	}
-	rows := paneRows(panes, tmactNow())
 	cache := targetCache{GeneratedAt: tmactNow(), Panes: rows}
 	if err := writeTargetCache(cache); err != nil {
 		return err
