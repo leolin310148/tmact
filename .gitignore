@@ -22,3 +22,7 @@ internal/web/frontend/node_modules/
 # files count as modified for Go's vcs stamp, so leaving it unignored brands
 # every build "-dirty" and makes an installed binary look unversioned.
 /node_modules/
+# `go build ./cmd/tmact` without -o drops the binary here, which brands every
+# later build "-dirty" for the same reason. Anchored so it cannot match the
+# cmd/tmact package directory.
+/tmact
