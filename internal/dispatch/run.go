@@ -159,7 +159,7 @@ func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	steps[1].Status = StatusOK
 
-	trusted, err := waitReady(opts, deps, target)
+	trusted, err := waitReady(opts, deps, target, false)
 	report.TrustedFolder = trusted
 	if err != nil {
 		steps[2].Status = StatusFailed
@@ -217,9 +217,10 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 					return report, err
 				}
 				report.TrustedFolder = result.Accepted
-				withoutTrust := opts
-				withoutTrust.TrustFolder = false
-				if _, err := waitReady(withoutTrust, deps, target); err != nil {
+				// The trust screen can remain in tmux's capture briefly after Enter.
+				// Preserve the accepted state so waitReady settles instead of either
+				// answering the stale screen twice or treating it as a new blocker.
+				if _, err := waitReady(opts, deps, target, result.Accepted); err != nil {
 					return report, err
 				}
 				return dispatchReuse(opts, deps, report, target)
@@ -290,7 +291,7 @@ func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Repo
 	}
 	steps[0].Status = StatusOK
 
-	trusted, err := waitReady(opts, deps, target)
+	trusted, err := waitReady(opts, deps, target, false)
 	report.TrustedFolder = trusted
 	if err != nil {
 		steps[1].Status = StatusFailed

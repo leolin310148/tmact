@@ -481,6 +481,54 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 	}
 }
 
+func TestExistingSessionTrustWaitsPastStaleAcceptedPrompt(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	pane := codexPane()
+	pane.CurrentPath = dir
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{pane}, nil
+	}
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	captures := 0
+	deps.CapturePane = func(string, int) (string, error) {
+		captures++
+		if captures <= 2 {
+			return "OpenAI Codex\nDo you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n", nil
+		}
+		if len(rec.pastes) < 2 {
+			return "OpenAI Codex\n› ", nil
+		}
+		return "OpenAI Codex\nWorking... esc to interrupt", nil
+	}
+
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Agent = "codex"
+	opts.Execute = true
+	opts.TrustFolder = true
+	opts.ReadySettle = 0
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if !report.AgentWasRunning || !report.TrustedFolder {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(rec.keys) != 1 || len(rec.keys[0].keys) != 1 || rec.keys[0].keys[0] != "Enter" {
+		t.Fatalf("trust prompt keys = %#v, want exactly one Enter", rec.keys)
+	}
+	if captures < 3 {
+		t.Fatalf("captures = %d, want stale trust prompt followed by ready state", captures)
+	}
+}
+
 func TestExistingSessionUnknownStateRefusesClear(t *testing.T) {
 	rec, deps := baseDeps()
 	deps.ListLayout = func() (tmux.Layout, error) {

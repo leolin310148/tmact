@@ -9,10 +9,9 @@ import (
 	"github.com/leolin310148/tmact/internal/prompt"
 )
 
-func waitReady(opts Options, deps Deps, target string) (bool, error) {
+func waitReady(opts Options, deps Deps, target string, trustedFolder bool) (bool, error) {
 	deadline := deps.Now().Add(opts.ReadyTimeout)
 	var readySince time.Time
-	trustedFolder := false
 	for {
 		panes, err := deps.ListSessionPanes(opts.Session)
 		if err != nil {
