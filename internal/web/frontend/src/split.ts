@@ -15,7 +15,7 @@
 // server for no visible benefit.
 
 import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import UsagePanel from "./components/UsagePanel";
 
 const COLS_KEY = "tmact.split.cols";
@@ -107,7 +107,17 @@ const SHELL_CSS = `
   .slot.active::after { background: var(--accent, #4493f8); }
 `;
 
-export function initSplitShell(rootEl: HTMLElement): void {
+/**
+ * Mounts the split shell into `rootEl` and returns a dispose function.
+ *
+ * The app mounts the shell once and never tears it down, so the return value is
+ * there for callers that do — notably tests. Anything that outlives `rootEl`
+ * (React roots, document/window listeners, pending timers) is registered for
+ * disposal: removing the element alone leaves React's scheduler working against
+ * a document that is gone, which surfaces as a stray "window is not defined"
+ * once the test environment is torn down.
+ */
+export function initSplitShell(rootEl: HTMLElement): () => void {
   document.title = "tmact split";
   try {
     localStorage.setItem(SPLIT_ACTIVE_KEY, "1");
@@ -118,6 +128,19 @@ export function initSplitShell(rootEl: HTMLElement): void {
   const style = document.createElement("style");
   style.textContent = SHELL_CSS;
   document.head.appendChild(style);
+
+  const shellGone = new AbortController();
+  const roots: Root[] = [];
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  let disposed = false;
+  const dispose = (): void => {
+    if (disposed) return; // idempotent: unmounting a root twice warns
+    disposed = true;
+    shellGone.abort();
+    for (const timer of timers) clearTimeout(timer);
+    for (const root of roots) root.unmount();
+    style.remove();
+  };
 
   rootEl.innerHTML = `
     <header id="split-bar">
@@ -138,12 +161,16 @@ export function initSplitShell(rootEl: HTMLElement): void {
   `;
 
   const grid = rootEl.querySelector<HTMLElement>("#split-grid");
-  if (!grid) return;
+  if (!grid) return dispose;
 
   // One shared agent-usage panel for the whole split view (slots suppress
   // theirs) — a small React island; the rest of the shell stays plain DOM.
   const usageHost = rootEl.querySelector<HTMLElement>("#split-usage");
-  if (usageHost) createRoot(usageHost).render(createElement(UsagePanel));
+  if (usageHost) {
+    const usageRoot = createRoot(usageHost);
+    roots.push(usageRoot);
+    usageRoot.render(createElement(UsagePanel));
+  }
 
   const menuWrap = rootEl.querySelector<HTMLElement>("#split-menu-wrap");
   const menuBtn = rootEl.querySelector<HTMLButtonElement>("#split-menu-btn");
@@ -162,10 +189,14 @@ export function initSplitShell(rootEl: HTMLElement): void {
   });
   // Outside click closes the menu. Clicks landing INSIDE an iframe never
   // reach this document — the window `blur` handler below covers those.
-  document.addEventListener("click", (e) => {
-    if (e.target instanceof Node && menuWrap?.contains(e.target)) return;
-    setMenuOpen(false);
-  });
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (e.target instanceof Node && menuWrap?.contains(e.target)) return;
+      setMenuOpen(false);
+    },
+    { signal: shellGone.signal },
+  );
 
   const makeSlot = (n: number): HTMLElement => {
     const slot = document.createElement("div");
@@ -223,13 +254,17 @@ export function initSplitShell(rootEl: HTMLElement): void {
       slot.classList.toggle("active", slot === active);
     }
   };
-  window.addEventListener("blur", () => {
-    // Focus moved into an iframe: update the active highlight and close the
-    // menu (its outside-click handler can't see clicks inside iframes).
-    setMenuOpen(false);
-    // activeElement updates after the blur event settles.
-    setTimeout(markActive, 0);
-  });
+  window.addEventListener(
+    "blur",
+    () => {
+      // Focus moved into an iframe: update the active highlight and close the
+      // menu (its outside-click handler can't see clicks inside iframes).
+      setMenuOpen(false);
+      // activeElement updates after the blur event settles.
+      timers.push(setTimeout(markActive, 0));
+    },
+    { signal: shellGone.signal },
+  );
 
   // The blur path above only fires on the FIRST hop out of the shell. Going
   // slot 1 → slot 2 moves focus between two iframes while the parent window is
@@ -237,18 +272,22 @@ export function initSplitShell(rootEl: HTMLElement): void {
   // slot 1. Each slot document therefore announces its own focus (main.tsx); we
   // trust the message only by matching its source window against a live iframe,
   // never by a slot index in the payload.
-  window.addEventListener("message", (e: MessageEvent) => {
-    if (e.origin !== window.location.origin) return;
-    if (!e.data || (e.data as { tmact?: string }).tmact !== "slot-focus") return;
-    const active = Array.from(grid.children).find(
-      (slot) => slot.querySelector("iframe")?.contentWindow === e.source,
-    );
-    if (!active) return;
-    setMenuOpen(false);
-    for (const slot of grid.children) {
-      slot.classList.toggle("active", slot === active);
-    }
-  });
+  window.addEventListener(
+    "message",
+    (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (!e.data || (e.data as { tmact?: string }).tmact !== "slot-focus") return;
+      const active = Array.from(grid.children).find(
+        (slot) => slot.querySelector("iframe")?.contentWindow === e.source,
+      );
+      if (!active) return;
+      setMenuOpen(false);
+      for (const slot of grid.children) {
+        slot.classList.toggle("active", slot === active);
+      }
+    },
+    { signal: shellGone.signal },
+  );
 
   let initial = 2;
   try {
@@ -258,4 +297,5 @@ export function initSplitShell(rootEl: HTMLElement): void {
     /* ignore */
   }
   applyCols(initial);
+  return dispose;
 }
