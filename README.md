@@ -179,6 +179,38 @@ approval prompts are never auto-confirmed.
 For machine-readable flags, safety notes, and the exact lifecycle contract,
 use `tmact help loop --json` or `tmact llm instructions --json`.
 
+### Coordinator/implementer/reviewer workflow
+
+Workflow v2 has an `agent_dev` stage for a durable, serialized development
+loop. The coordinator commits one phase plan and unchecked work-item queue,
+the implementer completes and commits one item at a time, and the reviewer
+either commits the phase review checkbox on approval or submits structured
+blocking findings. Findings return to the coordinator as fix work items; the
+same phase is reviewed again until approval or a safety blocker requires a
+human.
+
+```sh
+tmact workflow example --profile agent-dev > agent-dev-workflow.yaml
+tmact workflow validate --config agent-dev-workflow.yaml \
+  --var request="implement the requested feature"
+tmact workflow plan --config agent-dev-workflow.yaml \
+  --var request="implement the requested feature"
+# Commit the reviewed workflow config and confirm Git is clean before start.
+tmact workflow start --config agent-dev-workflow.yaml \
+  --var request="implement the requested feature" --execute
+tmact workflow status --config agent-dev-workflow.yaml
+```
+
+The workspace is leased for the live run. Every dispatch starts from a clean
+tree on the same branch. Implementer completion and reviewer approval are
+accepted only when HEAD advances, the tree is clean, and the matching Markdown
+checkbox changed from `[ ]` to `[x]` in the committed range. Coordinator plan
+commits may change only the configured queue file. Separate permission,
+approval, dirty-tree, timeout, and repeated-no-progress states stop as
+`needs_user`; they are never auto-confirmed.
+Independent live `dispatch-work` calls to the same Git workspace are rejected
+while the workflow lease is held.
+
 ### Agent skills
 
 tmact-owned agent skills live under `skills/` as the canonical source. The

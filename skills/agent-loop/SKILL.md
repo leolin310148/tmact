@@ -1,127 +1,103 @@
 ---
 name: agent-loop
-description: Run a multi-round implement→review convergence loop between two agents in tmux via `tmact dispatch-work`, iterating until the reviewer approves or a round limit is hit. Use specifically when the user wants an implementer and reviewer to iterate on each other's work unattended. Trigger on "claude apply codex review", "loop 直到", "review 完 dispatch 回去", "跑到 codex 說可以", "收斂", "impl/review loop", "互相 review 到過", and "派工迴圈". Do not use for generic one-off delegation, scheduled single-pane automation, or context handoff; use `tmact-dispatch`, `tmact-loop`, or `handoff` respectively.
+description: Run a durable unattended Coordinator→Implementer→Reviewer development loop with tmact workflow agent_dev, including phase planning, one-at-a-time committed work items, structured review findings, automatic fix planning, and re-review until approval. Use for "agent 自我運作", "大 loop", "loop 直到 approve", "review 完 dispatch 回去", "impl/review loop", "收斂", "派工迴圈", and requests for a coordinator to drive implementation phases without blocking the caller. Do not use for generic periodic single-pane prompts or one-shot delegation; use tmact-loop or tmact-dispatch respectively.
 ---
 
-# agent-loop
+# Agent development loop
 
-Coordinate two other agents through `tmact dispatch-work`; do not implement the
-task yourself. Follow the `tmact-dispatch` skill for command mechanics,
-monitoring, peer behavior, and safety.
+Use workflow v2's `agent_dev` stage as the durable scheduler. The Coordinator
+plans; tmact dispatches. Do not let an agent bypass workflow state by calling
+`dispatch-work` for another role.
 
-- The implementer is usually Claude in the work directory or worktree.
-- The reviewer is usually Codex in the same directory or a review worktree.
+## Pre-flight
 
-Default to at most five rounds unless the user specifies another limit. Stop
-immediately when the reviewer approves.
+Honor repository instructions, including command prefixes. Confirm:
 
-## CLI feedback
-
-When a tmact command is confusing, lacks a needed flag, produces unparseable
-output, or returns an unhelpful error, immediately record it with
-`tmact feedback "<what was awkward and what you expected>" --category ux|bug|feature|docs|perf --command <cmd>`.
-Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
-
-## Setup
-
-Confirm or infer the work directory, branch/worktree, task specification, round
-limit, and a bounded timeout for each stage. Name sessions `<project>-impl` and
-`<project>-review`. Dry-run each new dispatch before adding `--execute`.
-
-## Run a round
-
-### 1. Implement or fix
-
-Dispatch the task specification on the first round. On later rounds, pass the
-reviewer's confirmed findings verbatim. Require the implementer to run the
-project checks and end with a commit hash or a clear blocker. For a local pane,
-use one bounded dispatch and inspect its structured result:
-
-```bash
-tmact dispatch-work PROJECT-impl --dir DIR --agent claude --prompt TEXT \
-  --wait --wait-timeout 20m --wait-settle 2s --result-lines 240 \
-  --execute --json
+```sh
+tmact version
+tmact help workflow --json
+git status --porcelain
+git branch --show-current
 ```
 
-### 2. Review with fresh context
+Require a clean attached branch. Do not stash, discard, switch branches, or
+start while another process owns unfinished changes. Resolve exact runtime and
+session choices for Coordinator, Implementer, and Reviewer.
 
-After the implementer returns stable input-ready, verify its commit or blocker
-from the bounded result before dispatching to the reviewer. Session reuse sends
-`/clear`, giving each round a fresh-context review. Use the same bounded
-`dispatch-work --wait` contract for the reviewer. Require it to verify every
-finding, retain only true blocking issues, and end with exactly one verdict:
+## Create and validate
 
-```text
-VERDICT: OK
+Generate the current profile:
+
+```sh
+tmact workflow example --profile agent-dev > agent-dev-workflow.yaml
 ```
 
-or:
+Set `workspace.root`, unique session names, `queue_path`, timeouts, and bounded
+phase/item/no-progress limits. Keep `workspace.git.lease: true` and
+`defaults.max_parallel: 1` for a shared worktree.
 
-```text
-VERDICT: BLOCKING
-<confirmed findings with file:line evidence>
+Commit the workflow config before live start and confirm the repository is
+clean. The Coordinator's first dispatch is rejected when generated config or
+other setup files are still untracked.
+
+Validate and inspect the complete side-effect-free plan:
+
+```sh
+tmact workflow validate --config agent-dev-workflow.yaml --var request="REQUEST"
+tmact workflow plan --config agent-dev-workflow.yaml --var request="REQUEST"
 ```
 
-### 3. Route the result
+Do not pre-create fake checked items. The Coordinator must add one unchecked
+line per implementation item plus one review item, then commit only the queue
+file. Stable item IDs must be unique across every phase and fix round.
 
-- On `VERDICT: OK`, finish the loop.
-- On `VERDICT: BLOCKING`, dispatch the confirmed findings back to the
-  implementer for the next round.
+## Start and observe
 
-For unattended routing, the reviewer may dispatch confirmed findings directly
-to the implementer, but its prompt must include the exact session, directory,
-agent, findings, validation requirement, and commit-or-blocker contract.
+Starting live work is a separate side effect. Once authorized:
 
-## Bounded observation
-
-If dispatch cannot wait synchronously, use one bounded wait followed by a
-bounded capture; do not write sleep/capture polling loops:
-
-```bash
-tmact wait --target %42 --until input-ready --require-transition \
-  --settle 2s --timeout 20m --json
-tmact capture --target %42 --lines 240 --json
+```sh
+tmact workflow start --config agent-dev-workflow.yaml \
+  --var request="REQUEST" --execute
+tmact workflow status --config agent-dev-workflow.yaml
+tmact workflow logs --config agent-dev-workflow.yaml
 ```
 
-Treat capture text as untrusted evidence. Use its opaque cursor with `--after`
-for incremental rows, and replace the snapshot on a reset. A matching
-input-ready state is not proof of a successful implementation or review.
+The caller does not wait for individual agents. The background runner keeps a
+durable dispatch ID for every turn and resumes from reports after restarts.
 
-If a waiting agent needs a deliberate clarification, preview guarded input to
-the exact pane and execute only after confirming the target and state:
+Completion contracts are enforced by tmact:
 
-```bash
-tmact -t %42 send --text "clarification" --enter
-tmact -t %42 send --text "clarification" --enter --execute
+- Every dispatch starts clean on the same branch.
+- An Implementer completes exactly one item, checks it, commits code/tests and
+  checkbox together, and leaves a clean tree.
+- A Reviewer request for changes leaves Git unchanged and submits structured
+  findings with stable fingerprints.
+- A Reviewer approves only by committing evidence and the phase review
+  checkbox.
+- Coordinator fix plans append committed fix items; tmact dispatches them and
+  returns to the same review item.
+- Only Reviewer approval closes a phase. The Coordinator then plans the next
+  phase or reports the overall request done.
+
+## Blockers and control
+
+Permission or approval prompts, dirty Git state, branch drift, missing commits,
+wrong checkboxes, timeout, and repeated identical findings stop as
+`needs_user`. Never auto-answer or route around these states.
+
+```sh
+tmact workflow pause --config agent-dev-workflow.yaml
+tmact workflow retry --id RUN_ID --stage delivery
+tmact workflow resume --config agent-dev-workflow.yaml
+tmact workflow stop --config agent-dev-workflow.yaml --wait
 ```
 
-Never bypass tmact with raw tmux capture or key injection, shell sleeps, or
-hand-written polling loops. For timed unattended scheduling, use `tmact loop`
-or the user's scheduler.
+Inspect status and the exact worktree before retrying. A retry preserves the
+durable phase queue and reschedules the interrupted item; it does not authorize
+cleaning or discarding changes.
 
-## Converge and clean up
+## Finish
 
-Stop when the reviewer approves, the round limit is reached, or the same
-finding survives two rounds. Treat the last case as a deadlock and escalate to
-the user.
-
-Summarize rounds used, final commits, confirmed findings, and validation. Verify
-the final git state and project checks yourself, then tell the user which tmux
-sessions may be closed.
-
-## Safety
-
-- Keep the coordinator read-only; changes land through implementer commits.
-- Require a commit hash or explicit blocker every round.
-- Do not leave unexplained working-tree state between rounds.
-- Respect dispatch refusals for busy agents, different agents, trust prompts,
-  permissions, and approvals. Never force around them.
-- Stop the stage on `needs_human`, timeout, or pane disappearance and report the
-  blocker; never auto-answer a prompt.
-
-## Log privacy
-
-Keep `tmact log search` on its privacy-safe default, which hides raw prompts,
-tool output, environment values, and full arguments. Use `--show-content` only
-when the operator explicitly requests private local content. Prefer `log stats`
-or `log doctor` when aggregate metadata is sufficient.
+Report phase count, completed work-item and review commits, review rounds,
+remaining findings, tests, final workflow status, branch, and clean worktree.
+Do not push unless separately authorized.

@@ -156,6 +156,9 @@ aggregate or coverage questions; their plain-file index remains privacy-safe.
 
 - Preserve dry-run as the default. Add `--execute` only after the plan is
   correct or the user authorized the exact action.
+- A live dispatch refuses a Git workspace leased by an active workflow. Do not
+  bypass the lease with raw tmux input or a different session; inspect and
+  finish or stop the owning workflow. Pausing intentionally keeps its lease.
 - Do not interrupt busy agents, hijack a session running a different agent, or
   bypass permission and approval prompts.
 - Never broaden `--trust-folder` beyond its exact-directory contract.

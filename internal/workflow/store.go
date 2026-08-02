@@ -66,6 +66,51 @@ type StageState struct {
 	FinishedAt     time.Time         `json:"finished_at,omitempty"`
 	NextAttemptAt  time.Time         `json:"next_attempt_at,omitempty"`
 	Error          string            `json:"error,omitempty"`
+	AgentDev       *AgentDevState    `json:"agent_dev,omitempty"`
+}
+
+type AgentDevState struct {
+	Status            string          `json:"status"`
+	Phases            []PhaseState    `json:"phases,omitempty"`
+	CurrentDispatchID string          `json:"current_dispatch_id,omitempty"`
+	CurrentRole       string          `json:"current_role,omitempty"`
+	CurrentWorkItem   string          `json:"current_work_item,omitempty"`
+	ReviewRound       int             `json:"review_round,omitempty"`
+	NoProgressReviews int             `json:"no_progress_reviews,omitempty"`
+	LastFindingKeys   []string        `json:"last_finding_keys,omitempty"`
+	Findings          []ReviewFinding `json:"findings,omitempty"`
+}
+
+type PhaseState struct {
+	ID         string          `json:"id"`
+	Title      string          `json:"title"`
+	Status     string          `json:"status"`
+	Items      []WorkItemState `json:"items"`
+	ReviewItem WorkItemState   `json:"review_item"`
+	StartedAt  time.Time       `json:"started_at"`
+	FinishedAt time.Time       `json:"finished_at,omitempty"`
+}
+
+type WorkItemState struct {
+	ID                 string    `json:"id"`
+	Kind               string    `json:"kind"`
+	Title              string    `json:"title"`
+	AcceptanceCriteria []string  `json:"acceptance_criteria,omitempty"`
+	Status             string    `json:"status"`
+	Attempt            int       `json:"attempt"`
+	Commit             string    `json:"commit,omitempty"`
+	StartedAt          time.Time `json:"started_at,omitempty"`
+	FinishedAt         time.Time `json:"finished_at,omitempty"`
+}
+
+type ReviewFinding struct {
+	ID          string `json:"id"`
+	Fingerprint string `json:"fingerprint"`
+	Severity    string `json:"severity"`
+	File        string `json:"file,omitempty"`
+	Line        int    `json:"line,omitempty"`
+	Description string `json:"description"`
+	Acceptance  string `json:"acceptance"`
 }
 
 type Evidence struct {
@@ -105,6 +150,7 @@ type Dispatch struct {
 	WorkItem  string            `json:"work_item,omitempty"`
 	BaseHead  string            `json:"base_head,omitempty"`
 	Branch    string            `json:"branch,omitempty"`
+	Role      string            `json:"role,omitempty"`
 }
 type Report struct {
 	Timestamp  time.Time         `json:"ts"`
@@ -116,6 +162,9 @@ type Report struct {
 	Outcome    string            `json:"outcome"`
 	Body       string            `json:"body,omitempty"`
 	Revisions  map[string]string `json:"revisions"`
+	WorkItem   string            `json:"work_item,omitempty"`
+	Commit     string            `json:"commit,omitempty"`
+	Findings   []ReviewFinding   `json:"findings,omitempty"`
 }
 
 type Store struct{ Root, RunID, Dir string }

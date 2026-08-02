@@ -52,13 +52,14 @@ Usage:
   tmact loop logs (--id ID | --config path) [--follow]
   tmact loop pause|resume|restart --config examples/night-loop.yaml
   tmact loop stop (LOOP_ID | --id ID | --config path) [--wait]
-  tmact workflow example [--profile openspec]
+  tmact workflow example [--profile openspec|agent-dev]
   tmact workflow validate --config workflow.yaml [--var key=value] [--json]
   tmact workflow plan --config workflow.yaml [--var key=value] [--json]
   tmact workflow run --config workflow.yaml [--var key=value] [--once] [--execute]
   tmact workflow start --config workflow.yaml [--var key=value] [--execute]
   tmact workflow status (--id ID | --config workflow.yaml) [--json]
-  tmact workflow report --dispatch-id ID --outcome OUTCOME [--body TEXT]
+  tmact workflow report --dispatch-id ID --outcome OUTCOME [--body TEXT] [--findings-file PATH]
+  tmact workflow plan-report --dispatch-id ID --file PATH
   tmact workflow stop (--id ID | --config workflow.yaml) --wait
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
   tmact dispatch-work SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]

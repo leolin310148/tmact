@@ -103,6 +103,33 @@ func TestWorkflowExampleAndRemovedCommands(t *testing.T) {
 	}
 }
 
+func TestWorkflowAgentDevProfileIsStrictlyValid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(workflowAgentDevProfileYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, map[string]string{"request": "deliver feature"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Config.Workspace.Git == nil || !loaded.Config.Workspace.Git.Lease {
+		t.Fatalf("workspace git=%#v", loaded.Config.Workspace.Git)
+	}
+	if len(loaded.Config.Stages) != 1 || loaded.Config.Stages[0].Type != "agent_dev" {
+		t.Fatalf("stages=%#v", loaded.Config.Stages)
+	}
+	out, err := captureRun(t, "workflow", "example", "--profile", "agent-dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"type: agent_dev", "lease: true", "max_parallel: 1", "queue_path: AGENT_WORK_ITEMS.md"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("profile missing %q", want)
+		}
+	}
+}
+
 func TestWorkflowValidatePlanAndExecuteBoundary(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")

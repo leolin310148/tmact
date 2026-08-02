@@ -89,6 +89,28 @@ func NewEngine(loaded Loaded, storeRoot string, execute bool) (*Engine, error) {
 		recovered := false
 		for _, stage := range loaded.Config.Stages {
 			ss := state.Stages[stage.ID]
+			if stage.Type == "agent_dev" && ss.Status == StageRunning && ss.AgentDev != nil && ss.AgentDev.CurrentDispatchID != "" {
+				last, ok, readErr := LastDispatch(e.Store, ss.AgentDev.CurrentDispatchID)
+				if readErr != nil {
+					return nil, readErr
+				}
+				if ok && last.Status == "sending" {
+					ss.Status = StageBlocked
+					ss.Error = "agent_dev restart found an indeterminate dispatch that may have been sent: " + last.ID
+					state.Status = "needs_user"
+					state.Reason = ss.Error
+					state.Stages[stage.ID] = ss
+					recovered = true
+					continue
+				}
+				if !ok || last.Status == "planned" || last.Status == "failed" {
+					resetActiveAgentDevItem(ss.AgentDev)
+					clearAgentDevDispatch(ss.AgentDev)
+					state.Stages[stage.ID] = ss
+					recovered = true
+				}
+				continue
+			}
 			if ss.Status != StageRunning {
 				continue
 			}
@@ -145,6 +167,11 @@ func (e *Engine) Run(ctx context.Context, once bool) error {
 	}
 	releaseWorkspace, err := e.acquireWorkspaceLease()
 	if err != nil {
+		_ = e.Store.Update(func(state *State) error {
+			state.Status = "needs_user"
+			state.Reason = err.Error()
+			return nil
+		})
 		return err
 	}
 	defer releaseWorkspace()
@@ -226,6 +253,9 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 		_ = e.Store.Event(Event{Type: "revisions_changed", Details: map[string]any{"before": old, "after": current}})
 	}
 	advanceStale(&state, e.Loaded.Config)
+	if handled, done, err := e.tickAgentDev(ctx, state); handled || err != nil {
+		return done, err
+	}
 	for _, stage := range e.Loaded.Config.Stages {
 		ss := state.Stages[stage.ID]
 		if ss.Status == StageWaitingReport && !ss.StartedAt.IsZero() && now.Sub(ss.StartedAt) >= stage.Timeout.Duration {
@@ -951,7 +981,7 @@ func (e *Engine) executeAgent(ctx context.Context, stage StageConfig, state Stat
 		if err := e.Store.Dispatch(dispatchRecord); err != nil {
 			return nil, err
 		}
-		report, err := e.DispatchAgent(dispatch.Options{Session: session, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, TrustFolder: trust})
+		report, err := e.DispatchAgent(dispatch.Options{Session: session, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, TrustFolder: trust, WorkspaceLeaseOwner: state.RunID})
 		if err != nil {
 			dispatchRecord.Timestamp = e.Now()
 			dispatchRecord.Status = "failed"
@@ -1144,9 +1174,19 @@ func (e *Engine) classifyAgentPane(target, raw string) (panestate.Result, error)
 }
 
 func ApplyReport(root, dispatchID, outcome, body string) (Report, error) {
+	return ApplyReportDetailed(root, dispatchID, outcome, body, nil)
+}
+
+func ApplyReportDetailed(root, dispatchID, outcome, body string, findings []ReviewFinding) (Report, error) {
 	store, d, err := FindDispatch(root, dispatchID)
 	if err != nil {
 		return Report{}, err
+	}
+	if d.Role != "" {
+		return applyAgentDevReport(store, d, outcome, body, findings)
+	}
+	if len(findings) > 0 {
+		return Report{}, errors.New("structured findings are only supported by agent_dev reviewer dispatches")
 	}
 	existing, hasReport, err := HasReport(store, dispatchID)
 	if err != nil {
@@ -1342,6 +1382,16 @@ func RetryStage(root, id, stageID string) error {
 		}
 		for id := range reset {
 			ss := s.Stages[id]
+			stage, _ := stageConfig(loaded.Config, id)
+			if id == stageID && stage.Type == "agent_dev" && ss.AgentDev != nil {
+				resetActiveAgentDevItem(ss.AgentDev)
+				clearAgentDevDispatch(ss.AgentDev)
+				ss.Status = StageRunning
+				ss.Error = ""
+				ss.FinishedAt = time.Time{}
+				s.Stages[id] = ss
+				continue
+			}
 			ss.Status = StagePending
 			ss.Generation++
 			ss.Attempt = 0

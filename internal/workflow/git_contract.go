@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/leolin310148/tmact/internal/workspacelease"
 )
 
 type gitWorkItemState struct {
@@ -20,25 +22,15 @@ func (e *Engine) acquireWorkspaceLease() (func(), error) {
 	if policy == nil || !policy.Lease {
 		return func() {}, nil
 	}
-	path, err := gitText(e.Loaded.Config.Workspace.Root, "rev-parse", "--git-path", "tmact-workspace.lock")
-	if err != nil {
-		return nil, fmt.Errorf("workspace lease: %w", err)
-	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(e.Loaded.Config.Workspace.Root, path)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	lease, err := workspacelease.Acquire(e.Loaded.Config.Workspace.Root, e.Store.RunID)
 	if err != nil {
 		return nil, err
 	}
-	if err := lockFile(file, true); err != nil {
-		_ = file.Close()
-		return nil, fmt.Errorf("workspace %s is leased by another workflow", e.Loaded.Config.Workspace.Root)
-	}
-	return func() { _ = unlockFile(file); _ = file.Close() }, nil
+	return lease.Release, nil
+}
+
+func ProbeWorkspaceLease(loaded Loaded) error {
+	return workspacelease.CheckAvailable(loaded.Config.Workspace.Root, "")
 }
 
 func inspectWorkItemStart(cfg Config, item WorkItemConfig) (gitWorkItemState, error) {
@@ -126,6 +118,21 @@ func verifyWorkItemReport(cfg Config, item WorkItemConfig, dispatch Dispatch, ou
 	if !checkboxTransition(diff, item.ID) {
 		return fmt.Errorf("work item %s completion report rejected: checkbox transition is not committed after %s", item.ID, dispatch.BaseHead)
 	}
+	if err := rejectOtherCheckboxChanges(diff, item.ID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func rejectOtherCheckboxChanges(diff []byte, id string) error {
+	for _, line := range strings.Split(string(diff), "\n") {
+		if (!strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "-")) || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
+			continue
+		}
+		if (strings.Contains(line, "[ ]") || strings.Contains(line, "[x]")) && !containsWorkItemID(line, id) {
+			return fmt.Errorf("work item %s completion report rejected: another checkbox changed", id)
+		}
+	}
 	return nil
 }
 
@@ -144,7 +151,7 @@ func checkboxState(cfg Config, item WorkItemConfig, unchecked bool) (bool, error
 	}
 	count := 0
 	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.Contains(line, needle) && strings.Contains(line, item.ID) {
+		if strings.Contains(line, needle) && containsWorkItemID(line, item.ID) {
 			count++
 		}
 	}
@@ -154,14 +161,35 @@ func checkboxState(cfg Config, item WorkItemConfig, unchecked bool) (bool, error
 func checkboxTransition(diff []byte, id string) bool {
 	removed, added := false, false
 	for _, line := range strings.Split(string(diff), "\n") {
-		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") && strings.Contains(line, "[ ]") && strings.Contains(line, id) {
+		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") && strings.Contains(line, "[ ]") && containsWorkItemID(line, id) {
 			removed = true
 		}
-		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") && strings.Contains(line, "[x]") && strings.Contains(line, id) {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") && strings.Contains(line, "[x]") && containsWorkItemID(line, id) {
 			added = true
 		}
 	}
 	return removed && added
+}
+
+func containsWorkItemID(line, id string) bool {
+	for offset := 0; ; {
+		index := strings.Index(line[offset:], id)
+		if index < 0 {
+			return false
+		}
+		index += offset
+		beforeOK := index == 0 || !isWorkItemIDByte(line[index-1])
+		after := index + len(id)
+		afterOK := after == len(line) || !isWorkItemIDByte(line[after])
+		if beforeOK && afterOK {
+			return true
+		}
+		offset = index + 1
+	}
+}
+
+func isWorkItemIDByte(value byte) bool {
+	return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z' || value >= '0' && value <= '9' || value == '_' || value == '-' || value == '.'
 }
 
 func gitText(dir string, args ...string) (string, error) {

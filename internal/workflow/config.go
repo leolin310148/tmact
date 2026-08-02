@@ -113,6 +113,7 @@ type StageConfig struct {
 	Retry             RetryConfig     `yaml:"retry,omitempty" json:"retry"`
 	Timeout           Duration        `yaml:"timeout,omitempty" json:"timeout"`
 	WorkItem          *WorkItemConfig `yaml:"work_item,omitempty" json:"work_item,omitempty"`
+	AgentDev          *AgentDevConfig `yaml:"agent_dev,omitempty" json:"agent_dev,omitempty"`
 
 	Actor    string            `yaml:"actor,omitempty" json:"actor,omitempty"`
 	Prompt   string            `yaml:"prompt,omitempty" json:"prompt,omitempty"`
@@ -127,6 +128,17 @@ type StageConfig struct {
 
 	Condition *Condition       `yaml:"condition,omitempty" json:"condition,omitempty"`
 	Input     map[string]Input `yaml:"input,omitempty" json:"input,omitempty"`
+}
+
+type AgentDevConfig struct {
+	Coordinator          string `yaml:"coordinator" json:"coordinator"`
+	Implementer          string `yaml:"implementer" json:"implementer"`
+	Reviewer             string `yaml:"reviewer" json:"reviewer"`
+	Request              string `yaml:"request" json:"request"`
+	QueuePath            string `yaml:"queue_path" json:"queue_path"`
+	MaxPhases            int    `yaml:"max_phases,omitempty" json:"max_phases"`
+	MaxItemsPerPhase     int    `yaml:"max_items_per_phase,omitempty" json:"max_items_per_phase"`
+	MaxNoProgressReviews int    `yaml:"max_no_progress_reviews,omitempty" json:"max_no_progress_reviews"`
 }
 
 type WorkItemConfig struct {
@@ -250,6 +262,17 @@ func applyDefaults(cfg *Config) {
 		}
 		if cfg.Stages[i].Type == "command" && len(cfg.Stages[i].SuccessExitCodes) == 0 {
 			cfg.Stages[i].SuccessExitCodes = []int{0}
+		}
+		if cfg.Stages[i].AgentDev != nil {
+			if cfg.Stages[i].AgentDev.MaxPhases == 0 {
+				cfg.Stages[i].AgentDev.MaxPhases = 20
+			}
+			if cfg.Stages[i].AgentDev.MaxItemsPerPhase == 0 {
+				cfg.Stages[i].AgentDev.MaxItemsPerPhase = 100
+			}
+			if cfg.Stages[i].AgentDev.MaxNoProgressReviews == 0 {
+				cfg.Stages[i].AgentDev.MaxNoProgressReviews = 2
+			}
 		}
 	}
 	for name, actor := range cfg.Actors {
@@ -633,6 +656,39 @@ func validateStage(cfg Config, vars map[string]any, s StageConfig) error {
 		if len(s.Argv) > 0 || s.Condition != nil || len(s.Input) > 0 {
 			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
 		}
+		if s.AgentDev != nil {
+			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
+		}
+	case "agent_dev":
+		if s.AgentDev == nil {
+			return fmt.Errorf("stage %q agent_dev config is required", s.ID)
+		}
+		for role, actor := range map[string]string{"coordinator": s.AgentDev.Coordinator, "implementer": s.AgentDev.Implementer, "reviewer": s.AgentDev.Reviewer} {
+			if _, ok := cfg.Actors[actor]; !ok {
+				return fmt.Errorf("stage %q agent_dev %s references unknown actor %q", s.ID, role, actor)
+			}
+		}
+		if s.AgentDev.Coordinator == s.AgentDev.Implementer || s.AgentDev.Coordinator == s.AgentDev.Reviewer || s.AgentDev.Implementer == s.AgentDev.Reviewer {
+			return fmt.Errorf("stage %q agent_dev roles must use distinct actors", s.ID)
+		}
+		if cfg.Workspace.Git == nil || !cfg.Workspace.Git.Lease {
+			return fmt.Errorf("stage %q agent_dev requires workspace.git.lease: true", s.ID)
+		}
+		if strings.TrimSpace(s.AgentDev.Request) == "" {
+			return fmt.Errorf("stage %q agent_dev request is required", s.ID)
+		}
+		if strings.TrimSpace(s.AgentDev.QueuePath) == "" {
+			return fmt.Errorf("stage %q agent_dev queue_path is required", s.ID)
+		}
+		if _, err := safeWorkspacePath(cfg.Workspace.Root, s.AgentDev.QueuePath); err != nil {
+			return fmt.Errorf("stage %q agent_dev queue_path: %w", s.ID, err)
+		}
+		if s.AgentDev.MaxPhases < 1 || s.AgentDev.MaxItemsPerPhase < 1 || s.AgentDev.MaxNoProgressReviews < 1 {
+			return fmt.Errorf("stage %q agent_dev limits must be positive", s.ID)
+		}
+		if s.Actor != "" || s.Prompt != "" || len(s.Outcomes) > 0 || len(s.Argv) > 0 || s.Condition != nil || len(s.Input) > 0 || s.WorkItem != nil {
+			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
+		}
 	case "command":
 		if (len(s.Argv) > 0) == (s.ArgvVariable != "") {
 			return fmt.Errorf("stage %q must set exactly one of argv or argv_variable", s.ID)
@@ -658,7 +714,7 @@ func validateStage(cfg Config, vars map[string]any, s StageConfig) error {
 		if strings.ContainsAny(argv[0], "|;&><\n") || contains([]string{"sh", "bash", "zsh", "fish", "dash", "ksh", "cmd", "powershell", "pwsh"}, filepath.Base(argv[0])) {
 			return fmt.Errorf("stage %q argv must not use a shell", s.ID)
 		}
-		if s.Actor != "" || s.Prompt != "" || s.Condition != nil || len(s.Input) > 0 {
+		if s.Actor != "" || s.Prompt != "" || s.Condition != nil || len(s.Input) > 0 || s.AgentDev != nil {
 			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
 		}
 		if _, err := safeWorkspacePath(cfg.Workspace.Root, s.Cwd); err != nil {
@@ -668,14 +724,14 @@ func validateStage(cfg Config, vars map[string]any, s StageConfig) error {
 		if s.Condition == nil {
 			return fmt.Errorf("stage %q condition is required", s.ID)
 		}
-		if s.Actor != "" || s.Prompt != "" || len(s.Argv) > 0 || len(s.Input) > 0 || len(s.Outcomes) > 0 {
+		if s.Actor != "" || s.Prompt != "" || len(s.Argv) > 0 || len(s.Input) > 0 || len(s.Outcomes) > 0 || s.AgentDev != nil {
 			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
 		}
 	case "human":
 		if len(s.Outcomes) == 0 {
 			return fmt.Errorf("stage %q outcomes are required", s.ID)
 		}
-		if s.Actor != "" || s.Prompt != "" || len(s.Argv) > 0 || s.Condition != nil {
+		if s.Actor != "" || s.Prompt != "" || len(s.Argv) > 0 || s.Condition != nil || s.AgentDev != nil {
 			return fmt.Errorf("stage %q contains fields for a different stage type", s.ID)
 		}
 		for name, input := range s.Input {
@@ -722,6 +778,9 @@ func stringListValue(value any) ([]string, error) {
 func validateStageTemplates(s StageConfig) error {
 	values := append([]string{}, s.Argv...)
 	values = append(values, s.Cwd, s.Prompt)
+	if s.AgentDev != nil {
+		values = append(values, s.AgentDev.Request)
+	}
 	for _, value := range s.Env {
 		values = append(values, value)
 	}

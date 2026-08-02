@@ -99,3 +99,46 @@ func TestWorkspaceLeaseIsExclusive(t *testing.T) {
 		t.Fatalf("second lease error=%v", err)
 	}
 }
+
+func TestGitWorkItemRejectsCompletingAnotherCheckbox(t *testing.T) {
+	dir := initGitWorkItemRepo(t)
+	path := filepath.Join(dir, "WORK_ITEMS.md")
+	if err := os.WriteFile(path, []byte("- [ ] P1-W1 implement guard\n- [ ] P1-W2 later work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "add", "WORK_ITEMS.md")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v: %s", err, out)
+	}
+	cmd = exec.Command("git", "commit", "-qm", "add second item")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v: %s", err, out)
+	}
+	cfg := Config{Workspace: WorkspaceConfig{Root: dir}}
+	item := WorkItemConfig{ID: "P1-W1", CheckboxPath: "WORK_ITEMS.md", CompleteOutcomes: []string{"complete"}}
+	start, err := inspectWorkItemStart(cfg, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("- [x] P1-W1 implement guard\n- [x] P1-W2 later work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd = exec.Command("git", "add", "WORK_ITEMS.md")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(string(out))
+	}
+	cmd = exec.Command("git", "commit", "-qm", "complete too much")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(string(out))
+	}
+	dispatch := Dispatch{WorkItem: item.ID, BaseHead: start.Head, Branch: start.Branch}
+	if err := verifyWorkItemReport(cfg, item, dispatch, "complete"); err == nil || !strings.Contains(err.Error(), "another checkbox") {
+		t.Fatalf("error=%v", err)
+	}
+}

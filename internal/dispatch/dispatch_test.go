@@ -2,6 +2,7 @@ package dispatch_test
 
 import (
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/leolin310148/tmact/internal/dispatch"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/workspacelease"
 )
 
 type paste struct {
@@ -204,6 +206,31 @@ func TestRunRejectsEmptyPrompt(t *testing.T) {
 	opts.Prompt = "  "
 	if _, err := dispatch.RunWithDeps(opts, deps); err == nil {
 		t.Fatal("expected error for empty prompt")
+	}
+}
+
+func TestExecuteRejectsWorkspaceLeasedByWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	lease, err := workspacelease.Acquire(dir, "wf-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	_, deps := baseDeps()
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Execute = true
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "workspace unavailable") {
+		t.Fatalf("error=%v", err)
+	}
+	opts.WorkspaceLeaseOwner = "wf-test"
+	if _, err := dispatch.RunWithDeps(opts, deps); err != nil && strings.Contains(err.Error(), "workspace unavailable") {
+		t.Fatalf("lease owner was rejected: %v", err)
 	}
 }
 

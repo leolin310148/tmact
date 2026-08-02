@@ -11,6 +11,7 @@ import (
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/workspacelease"
 )
 
 // Run dispatches work using the real tmux helpers.
@@ -64,6 +65,11 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	}
 	opts.Dir = dir
 	report.Dir = dir
+	if opts.Execute {
+		if err := workspacelease.CheckAvailable(dir, opts.WorkspaceLeaseOwner); err != nil {
+			return report, fmt.Errorf("dispatch workspace unavailable: %w", err)
+		}
+	}
 	if opts.ReadyTimeout <= 0 {
 		opts.ReadyTimeout = defaultReadyTimeout
 	}

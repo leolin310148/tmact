@@ -58,20 +58,21 @@ func SupportedAgents() []string {
 
 // Options configures a single dispatch-work run.
 type Options struct {
-	Session      string
-	Dir          string
-	Agent        string
-	Model        string
-	Prompt       string
-	Execute      bool
-	ReadyTimeout time.Duration
-	ReadySettle  time.Duration
-	TrustFolder  bool
-	Wait         bool
-	WaitTimeout  time.Duration
-	WaitSettle   time.Duration
-	ResultLines  int
-	Context      context.Context
+	Session             string
+	Dir                 string
+	Agent               string
+	Model               string
+	Prompt              string
+	Execute             bool
+	ReadyTimeout        time.Duration
+	ReadySettle         time.Duration
+	TrustFolder         bool
+	Wait                bool
+	WaitTimeout         time.Duration
+	WaitSettle          time.Duration
+	ResultLines         int
+	Context             context.Context
+	WorkspaceLeaseOwner string
 }
 
 // Step is one planned or executed operation in a dispatch.

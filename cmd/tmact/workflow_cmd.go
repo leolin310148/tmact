@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,7 +32,7 @@ func runWorkflow(args []string) error {
 		return printCommandHelp(topic)
 	}
 	if len(args) == 0 {
-		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, logs, pause, resume, retry, resolve, report, stop")
+		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, logs, pause, resume, retry, resolve, report, plan-report, stop")
 	}
 	switch args[0] {
 	case "example":
@@ -58,6 +59,8 @@ func runWorkflow(args []string) error {
 		return runWorkflowResolve(args[1:])
 	case "report":
 		return runWorkflowReport(args[1:])
+	case "plan-report":
+		return runWorkflowPlanReport(args[1:])
 	case "stop":
 		return runWorkflowStop(args[1:])
 	default:
@@ -71,7 +74,7 @@ func runWorkflowExample(args []string) error {
 	}
 	fs := flag.NewFlagSet("workflow example", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	profile := fs.String("profile", "", "built-in profile (openspec)")
+	profile := fs.String("profile", "", "built-in profile (openspec or agent-dev)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -83,6 +86,8 @@ func runWorkflowExample(args []string) error {
 		fmt.Print(workflowGenericExampleYAML)
 	case "openspec":
 		fmt.Print(workflowOpenSpecProfileYAML)
+	case "agent-dev":
+		fmt.Print(workflowAgentDevProfileYAML)
 	default:
 		return fmt.Errorf("unknown workflow profile %q", *profile)
 	}
@@ -217,6 +222,9 @@ func runWorkflowRun(args []string) error {
 		fmt.Println("dry-run: add --execute to perform side effects")
 		return nil
 	}
+	if *once && workflowHasAgentDev(loaded) {
+		return errors.New("workflow run --once --execute is unsafe for agent_dev; use workflow start or foreground run without --once so the workspace lease and scheduler remain active")
+	}
 	root := *storeDir
 	if root == "" {
 		root = filepath.Join(loaded.Config.Workspace.Root, workflow.DefaultStoreDir)
@@ -297,6 +305,9 @@ func runWorkflowStart(args []string) error {
 		fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", state.RunID, state.Status)
 		return nil
 	}
+	if err := workflow.ProbeWorkspaceLease(loaded); err != nil {
+		return err
+	}
 	executable, err := tmactExecutable()
 	if err != nil {
 		return err
@@ -323,6 +334,9 @@ func runWorkflowStart(args []string) error {
 			if activeErr != nil {
 				return activeErr
 			}
+			if fresh.Status == "needs_user" {
+				return fmt.Errorf("workflow %s needs user: %s", fresh.RunID, fresh.Reason)
+			}
 			if active || workflowTerminal(fresh.Status) {
 				fmt.Printf("started workflow %s in %s\n", fresh.RunID, workflowSupervisorSession)
 				return nil
@@ -331,6 +345,15 @@ func runWorkflowStart(args []string) error {
 		tmactSleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("timed out waiting for workflow %s to start", state.RunID)
+}
+
+func workflowHasAgentDev(loaded workflow.Loaded) bool {
+	for _, stage := range loaded.Config.Stages {
+		if stage.Type == "agent_dev" {
+			return true
+		}
+	}
+	return false
 }
 
 func workflowTerminal(status string) bool {
@@ -429,6 +452,18 @@ func printWorkflowStateV2(state workflow.State) {
 			extra += " error=" + s.Error
 		}
 		fmt.Printf("%-24s %-15s attempt=%d%s\n", s.ID, s.Status, s.Attempt, extra)
+		if s.AgentDev != nil {
+			fmt.Printf("  agent-dev: %s role=%s item=%s review-round=%d\n", s.AgentDev.Status, s.AgentDev.CurrentRole, s.AgentDev.CurrentWorkItem, s.AgentDev.ReviewRound)
+			for _, phase := range s.AgentDev.Phases {
+				complete := 0
+				for _, item := range phase.Items {
+					if item.Status == "complete" {
+						complete++
+					}
+				}
+				fmt.Printf("    phase %s %-12s items=%d/%d review=%s\n", phase.ID, phase.Status, complete, len(phase.Items), phase.ReviewItem.Status)
+			}
+		}
 	}
 }
 
@@ -592,6 +627,7 @@ func runWorkflowReport(args []string) error {
 	dispatchID := fs.String("dispatch-id", "", "durable dispatch id")
 	outcome := fs.String("outcome", "", "allowed outcome")
 	body := fs.String("body", "", "report summary")
+	findingsFile := fs.String("findings-file", "", "JSON file containing structured reviewer findings")
 	root := fs.String("store-dir", workflow.DefaultStoreDir, "workflow state root")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -599,11 +635,52 @@ func runWorkflowReport(args []string) error {
 	if *dispatchID == "" || *outcome == "" {
 		return errors.New("--dispatch-id and --outcome are required")
 	}
-	report, err := workflow.ApplyReport(*root, *dispatchID, *outcome, *body)
+	var findings []workflow.ReviewFinding
+	if *findingsFile != "" {
+		raw, err := os.ReadFile(*findingsFile)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(raw, &findings); err != nil {
+			return fmt.Errorf("decode findings file: %w", err)
+		}
+	}
+	report, err := workflow.ApplyReportDetailed(*root, *dispatchID, *outcome, *body, findings)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("workflow_report: %s\n", report.ID)
+	return nil
+}
+
+func runWorkflowPlanReport(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow plan-report")
+	}
+	fs := flag.NewFlagSet("workflow plan-report", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dispatchID := fs.String("dispatch-id", "", "active coordinator dispatch id")
+	file := fs.String("file", "", "JSON phase plan file")
+	root := fs.String("store-dir", workflow.DefaultStoreDir, "workflow state root")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dispatchID == "" || *file == "" {
+		return errors.New("--dispatch-id and --file are required")
+	}
+	raw, err := os.ReadFile(*file)
+	if err != nil {
+		return err
+	}
+	var plan workflow.AgentDevPlan
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		return fmt.Errorf("decode plan file: %w", err)
+	}
+	report, err := workflow.ApplyAgentDevPlan(*root, *dispatchID, plan)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("workflow_plan_report: %s\n", report.ID)
 	return nil
 }
 func runWorkflowStop(args []string) error {

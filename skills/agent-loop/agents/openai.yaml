@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent Review Loop"
-  short_description: "Converge implementation through agent review"
-  default_prompt: "Use $agent-loop to run an implementation and review loop until it converges."
+  display_name: "Agent Development Loop"
+  short_description: "Run durable phased implementation and review"
+  default_prompt: "Use $agent-loop to run a committed Coordinator, Implementer, and Reviewer loop until every phase is approved."

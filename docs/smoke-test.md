@@ -33,6 +33,9 @@ Run dry-run config checks:
 .cache/tmact workflow example --profile openspec > tmact-openspec-workflow.yaml
 .cache/tmact workflow validate --config tmact-openspec-workflow.yaml --var change=demo
 .cache/tmact workflow plan --config tmact-openspec-workflow.yaml --var change=demo
+.cache/tmact workflow example --profile agent-dev > tmact-agent-dev-workflow.yaml
+.cache/tmact workflow validate --config tmact-agent-dev-workflow.yaml --var request=demo
+.cache/tmact workflow plan --config tmact-agent-dev-workflow.yaml --var request=demo
 ```
 
 ## Shell hook events (live socket)

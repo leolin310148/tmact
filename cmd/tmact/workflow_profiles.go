@@ -30,6 +30,57 @@ stages:
       reject: failed
 `
 
+const workflowAgentDevProfileYAML = `version: 2
+workspace:
+  root: .
+  git:
+    lease: true
+variables:
+  request:
+    type: string
+    required: true
+actors:
+  coordinator:
+    launch:
+      runtime: codex
+      session: project-coordinator
+      reuse: true
+      on_finish: keep
+  implementer:
+    launch:
+      runtime: claude
+      session: project-implementer
+      reuse: true
+      on_finish: keep
+  reviewer:
+    launch:
+      runtime: codex
+      session: project-reviewer
+      reuse: true
+      on_finish: keep
+defaults:
+  max_parallel: 1
+  timeout: 2h
+  poll_interval: 2s
+  idle_after: 2s
+  retry:
+    max_attempts: 3
+    backoff: 10s
+stages:
+  - id: delivery
+    type: agent_dev
+    timeout: 8h
+    agent_dev:
+      coordinator: coordinator
+      implementer: implementer
+      reviewer: reviewer
+      request: "{{ .vars.request }}"
+      queue_path: AGENT_WORK_ITEMS.md
+      max_phases: 20
+      max_items_per_phase: 100
+      max_no_progress_reviews: 2
+`
+
 // workflowOpenSpecProfileYAML is data consumed by the generic v2 engine. Keep
 // domain behavior here rather than adding profile-specific branches to it.
 const workflowOpenSpecProfileYAML = `version: 2
