@@ -142,3 +142,30 @@ func TestCommandArgvVariableValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigValidatesAgentWorkItemContract(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "WORK_ITEMS.md"), []byte("- [ ] P1-W1 test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := writeConfig(t, dir, `version: 2
+workspace:
+  root: .
+  git: {lease: true}
+actors:
+  worker: {launch: {runtime: codex, session: worker}}
+stages:
+  - id: implement
+    type: agent
+    actor: worker
+    prompt: implement
+    outcomes: {complete: success, blocked: blocked}
+    work_item:
+      id: P1-W1
+      checkbox_path: WORK_ITEMS.md
+      complete_outcomes: [complete]
+`)
+	if _, err := Load(path, nil); err != nil {
+		t.Fatal(err)
+	}
+}

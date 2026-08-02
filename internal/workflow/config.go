@@ -49,7 +49,12 @@ type Config struct {
 }
 
 type WorkspaceConfig struct {
-	Root string `yaml:"root" json:"root"`
+	Root string              `yaml:"root" json:"root"`
+	Git  *WorkspaceGitConfig `yaml:"git,omitempty" json:"git,omitempty"`
+}
+
+type WorkspaceGitConfig struct {
+	Lease bool `yaml:"lease,omitempty" json:"lease,omitempty"`
 }
 
 type VariableConfig struct {
@@ -99,14 +104,15 @@ type RetryConfig struct {
 }
 
 type StageConfig struct {
-	ID                string      `yaml:"id" json:"id"`
-	Type              string      `yaml:"type" json:"type"`
-	Needs             []string    `yaml:"needs,omitempty" json:"needs,omitempty"`
-	When              *Condition  `yaml:"when,omitempty" json:"when,omitempty"`
-	BindRevisions     []string    `yaml:"bind_revisions,omitempty" json:"bind_revisions,omitempty"`
-	ProducesRevisions []string    `yaml:"produces_revisions,omitempty" json:"produces_revisions,omitempty"`
-	Retry             RetryConfig `yaml:"retry,omitempty" json:"retry"`
-	Timeout           Duration    `yaml:"timeout,omitempty" json:"timeout"`
+	ID                string          `yaml:"id" json:"id"`
+	Type              string          `yaml:"type" json:"type"`
+	Needs             []string        `yaml:"needs,omitempty" json:"needs,omitempty"`
+	When              *Condition      `yaml:"when,omitempty" json:"when,omitempty"`
+	BindRevisions     []string        `yaml:"bind_revisions,omitempty" json:"bind_revisions,omitempty"`
+	ProducesRevisions []string        `yaml:"produces_revisions,omitempty" json:"produces_revisions,omitempty"`
+	Retry             RetryConfig     `yaml:"retry,omitempty" json:"retry"`
+	Timeout           Duration        `yaml:"timeout,omitempty" json:"timeout"`
+	WorkItem          *WorkItemConfig `yaml:"work_item,omitempty" json:"work_item,omitempty"`
 
 	Actor    string            `yaml:"actor,omitempty" json:"actor,omitempty"`
 	Prompt   string            `yaml:"prompt,omitempty" json:"prompt,omitempty"`
@@ -121,6 +127,12 @@ type StageConfig struct {
 
 	Condition *Condition       `yaml:"condition,omitempty" json:"condition,omitempty"`
 	Input     map[string]Input `yaml:"input,omitempty" json:"input,omitempty"`
+}
+
+type WorkItemConfig struct {
+	ID               string   `yaml:"id" json:"id"`
+	CheckboxPath     string   `yaml:"checkbox_path" json:"checkbox_path"`
+	CompleteOutcomes []string `yaml:"complete_outcomes" json:"complete_outcomes"`
 }
 
 type Input struct {
@@ -580,6 +592,33 @@ func Validate(cfg Config, vars map[string]any) error {
 }
 
 func validateStage(cfg Config, vars map[string]any, s StageConfig) error {
+	if s.WorkItem != nil {
+		if s.Type != "agent" {
+			return fmt.Errorf("stage %q work_item is only supported for agent stages", s.ID)
+		}
+		if !idPattern.MatchString(s.WorkItem.ID) {
+			return fmt.Errorf("stage %q work_item has invalid id %q", s.ID, s.WorkItem.ID)
+		}
+		if strings.TrimSpace(s.WorkItem.CheckboxPath) == "" {
+			return fmt.Errorf("stage %q work_item checkbox_path is required", s.ID)
+		}
+		if _, err := safeWorkspacePath(cfg.Workspace.Root, s.WorkItem.CheckboxPath); err != nil {
+			return fmt.Errorf("stage %q work_item checkbox_path: %w", s.ID, err)
+		}
+		if len(s.WorkItem.CompleteOutcomes) == 0 {
+			return fmt.Errorf("stage %q work_item complete_outcomes is required", s.ID)
+		}
+		seen := map[string]bool{}
+		for _, outcome := range s.WorkItem.CompleteOutcomes {
+			if seen[outcome] {
+				return fmt.Errorf("stage %q work_item repeats complete outcome %q", s.ID, outcome)
+			}
+			seen[outcome] = true
+			if _, ok := s.Outcomes[outcome]; !ok {
+				return fmt.Errorf("stage %q work_item complete outcome %q is not declared by the stage", s.ID, outcome)
+			}
+		}
+	}
 	switch s.Type {
 	case "agent":
 		if _, ok := cfg.Actors[s.Actor]; !ok {

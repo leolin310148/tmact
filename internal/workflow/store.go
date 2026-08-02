@@ -102,6 +102,9 @@ type Dispatch struct {
 	Runtime   string            `json:"runtime,omitempty"`
 	Status    string            `json:"status"`
 	Revisions map[string]string `json:"revisions"`
+	WorkItem  string            `json:"work_item,omitempty"`
+	BaseHead  string            `json:"base_head,omitempty"`
+	Branch    string            `json:"branch,omitempty"`
 }
 type Report struct {
 	Timestamp  time.Time         `json:"ts"`
