@@ -45,6 +45,15 @@ func Classify(raw string) Result {
 	if len(lines) == 0 {
 		return result
 	}
+	// Claude and Codex keep a steering input visible while work is active. A
+	// plain capture therefore still ends in an agent prompt, but the nearby
+	// interrupt indicator is the stronger live-state signal. This check must
+	// precede the generic input-ready shortcut used by read-only waits.
+	if hasActiveInterruptIndicator(raw) {
+		result.State = StateWorking
+		result.Signals = appendSignal(result.Signals, "working_text")
+		return result
+	}
 
 	last := strings.ToLower(lastInteractiveLine(lines))
 	if looksLikeAgentPrompt(last) || looksLikeShellPrompt(last) {

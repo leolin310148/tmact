@@ -145,6 +145,36 @@ func TestClassifyDetectsWorkingText(t *testing.T) {
 	}
 }
 
+func TestClassifyTreatsActiveSteeringInputAsWorking(t *testing.T) {
+	result := Classify(`
+• Working (1s • esc to interrupt)
+
+› Implement {feature}
+
+/private/tmp/repo · Context 0% used
+`)
+
+	if result.State != StateWorking {
+		t.Fatalf("state = %q, signals = %#v", result.State, result.Signals)
+	}
+}
+
+func TestClassifyDoesNotReviveStaleInterruptIndicatorAfterCompletion(t *testing.T) {
+	result := Classify(`
+• Working (46s • esc to interrupt)
+
+• TRUST_REGRESSION_READY
+
+› Implement {feature}
+
+/private/tmp/repo · Context 2% used
+`)
+
+	if result.State != StateWaitingInput {
+		t.Fatalf("state = %q, signals = %#v", result.State, result.Signals)
+	}
+}
+
 func TestLastMeaningfulLineTruncatesWithoutSplittingUTF8(t *testing.T) {
 	prefix := strings.Repeat("a", 179)
 	got := LastMeaningfulLine(prefix + "界")
