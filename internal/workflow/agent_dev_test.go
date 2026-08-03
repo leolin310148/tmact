@@ -328,14 +328,29 @@ func TestAgentDevQuotaWaitPersistsAndResumesSameDispatch(t *testing.T) {
 		t.Fatalf("next_check_at=%s want=%s", dev.QuotaWait.NextCheckAt, want)
 	}
 
+	if err := engine.Store.Update(func(interrupted *State) error {
+		interrupted.Status = "stopped"
+		interrupted.Desired = "running"
+		interrupted.Reason = "runner_context_canceled"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := engine.Tick(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	state, err = engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != agentDevWaitingQuota || state.Stages["delivery"].AgentDev.QuotaWait == nil {
+		t.Fatalf("quota wait did not survive runner restart state: %#v", state)
 	}
 	if captures != 1 {
 		t.Fatalf("captured before reset: %d", captures)
 	}
 
-	now = dev.QuotaWait.NextCheckAt
+	now = state.Stages["delivery"].AgentDev.QuotaWait.NextCheckAt
 	engine.CapturePane = func(string, int) (string, error) { return "Claude Code ready\n❯", nil }
 	var resumed dispatch.Options
 	engine.DispatchAgent = func(options dispatch.Options) (dispatch.Report, error) {

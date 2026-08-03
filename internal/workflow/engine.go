@@ -249,6 +249,18 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 		}
 		return false, nil
 	}
+	if state.Status == "stopped" && state.Desired == "running" {
+		recovered, recoverErr := e.recoverBlockedAgentDevQuota(&state)
+		if recoverErr != nil {
+			return false, recoverErr
+		}
+		if recovered {
+			return false, nil
+		}
+		state.Status = "running"
+		state.Reason = ""
+		state.FinishedAt = time.Time{}
+	}
 	data := templateData(state)
 	current, err := ComputeRevisions(e.Loaded.Config, data)
 	if err != nil {

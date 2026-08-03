@@ -322,3 +322,19 @@ stages:
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestWorkflowStartTerminalAllowsInterruptedRunningIntent(t *testing.T) {
+	if workflowStartTerminal(workflow.State{Status: "stopped", Desired: "running"}) {
+		t.Fatal("an interrupted runner with running intent must be restartable")
+	}
+	for _, state := range []workflow.State{
+		{Status: "stopped", Desired: "stopped"},
+		{Status: "failed", Desired: "running"},
+		{Status: "blocked", Desired: "running"},
+		{Status: "succeeded", Desired: "running"},
+	} {
+		if !workflowStartTerminal(state) {
+			t.Fatalf("state should remain terminal: %#v", state)
+		}
+	}
+}

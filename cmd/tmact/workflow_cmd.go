@@ -275,7 +275,7 @@ func runWorkflowStart(args []string) error {
 		if existing.Desired == "stopped" {
 			return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", existing.RunID)
 		}
-		if workflowTerminal(existing.Status) {
+		if workflowStartTerminal(existing) {
 			fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", existing.RunID, existing.Status)
 			return nil
 		}
@@ -301,7 +301,7 @@ func runWorkflowStart(args []string) error {
 	if state.Desired == "stopped" {
 		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", state.RunID)
 	}
-	if workflowTerminal(state.Status) {
+	if workflowStartTerminal(state) {
 		fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", state.RunID, state.Status)
 		return nil
 	}
@@ -358,6 +358,10 @@ func workflowHasAgentDev(loaded workflow.Loaded) bool {
 
 func workflowTerminal(status string) bool {
 	return status == "stopped" || status == "failed" || status == "blocked" || status == "succeeded"
+}
+
+func workflowStartTerminal(state workflow.State) bool {
+	return workflowTerminal(state.Status) && !(state.Status == "stopped" && state.Desired == "running")
 }
 
 func acquireWorkflowStartLock(root, id string) (func(), error) {
