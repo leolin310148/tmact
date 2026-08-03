@@ -1,9 +1,14 @@
 // CopyLineBar — the React port of app.js's "copy as one line" bar
 // (#copyline-bar) + wireCopyLine. A multi-line selection of wrapped pane output
 // copies with the terminal's soft-wrap newlines + continuation indent baked in;
-// the copy and run actions re-join the selection:
+// the copy actions re-join the selection:
 //   joinGlue  — drops the wrap entirely (paths / URLs / commands)
 //   joinSpace — collapses each wrap to a single space (prose)
+// The run actions instead use smartJoinCommand (post-parity, MIGRATION_SPEC
+// item 48a): with the pane grid width from the WS patches, only rows exactly
+// pane-width wide (terminal soft-wraps) are glued and real newlines survive,
+// so multi-line commands reach `$SHELL -lc` as written. Unknown width falls
+// back to joinGlue; the arrow menu's 「接成一行執行」 is the legacy rescue.
 //
 // Parity notes (byte-for-behavior with app.js lines 920–1012):
 //   - joinGlue:  /[ \t]*\n[ \t]*/g -> ""
@@ -43,6 +48,70 @@ function joinGlue(text: string): string {
 }
 function joinSpace(text: string): string {
   return text.replace(/[ \t]*\n[ \t]*/g, " ");
+}
+
+// displayColumns approximates the tmux grid width of a captured row: CJK /
+// fullwidth code points occupy two columns, zero-width marks none. It only has
+// to reproduce tmux's count well enough that "row exactly pane-width wide"
+// detection holds; a miscount degrades to keeping the newline.
+export function displayColumns(line: string): number {
+  let cols = 0;
+  for (const ch of line) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (
+      cp === 0x200b ||
+      cp === 0x200d ||
+      (cp >= 0xfe00 && cp <= 0xfe0f) ||
+      (cp >= 0x0300 && cp <= 0x036f)
+    ) {
+      continue;
+    }
+    const wide =
+      (cp >= 0x1100 && cp <= 0x115f) ||
+      (cp >= 0x2e80 && cp <= 0xa4cf) ||
+      (cp >= 0xac00 && cp <= 0xd7a3) ||
+      (cp >= 0xf900 && cp <= 0xfaff) ||
+      (cp >= 0xfe30 && cp <= 0xfe4f) ||
+      (cp >= 0xff00 && cp <= 0xff60) ||
+      (cp >= 0xffe0 && cp <= 0xffe6) ||
+      (cp >= 0x1f300 && cp <= 0x1f64f) ||
+      (cp >= 0x1f900 && cp <= 0x1faff) ||
+      (cp >= 0x20000 && cp <= 0x3fffd);
+    cols += wide ? 2 : 1;
+  }
+  return cols;
+}
+
+// smartJoinCommand re-joins a selection [start,end) of the rendered pane text
+// into a runnable shell command. Captured rows exactly paneWidth columns wide
+// are terminal soft-wraps of one logical line, so their trailing newline is
+// glued away verbatim; every other newline is a real line break and is kept —
+// the run endpoints hand the whole string to `$SHELL -lc`, which handles
+// multi-line scripts and trailing-backslash continuations natively. The full
+// buffer text is needed (not just the selection) so a selection that starts
+// mid-row still measures the entire grid row.
+export function smartJoinCommand(
+  fullText: string,
+  start: number,
+  end: number,
+  paneWidth: number,
+): string {
+  let out = "";
+  let i = start;
+  while (i < end) {
+    const nl = fullText.indexOf("\n", i);
+    if (nl === -1 || nl >= end) {
+      out += fullText.slice(i, end);
+      break;
+    }
+    out += fullText.slice(i, nl);
+    const lineStart = fullText.lastIndexOf("\n", nl - 1) + 1;
+    if (displayColumns(fullText.slice(lineStart, nl)) !== paneWidth) {
+      out += "\n";
+    }
+    i = nl + 1;
+  }
+  return out.trim();
 }
 
 function unquotePath(text: string): string {
@@ -124,10 +193,39 @@ function paneSelectionText(): string {
   return sel.toString();
 }
 
+// paneSelectionContext locates the live pane selection inside the full
+// rendered buffer text so smartJoinCommand can measure whole grid rows. Null
+// when there is no pane selection or when Range-based offsets do not line up
+// with the selection text (markdown mode's block rendering breaks the
+// equivalence) — callers then fall back to the legacy glue join.
+function paneSelectionContext(): { fullText: string; start: number; end: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  const content = document.getElementById("content");
+  if (!content) return null;
+  if (!content.contains(sel.anchorNode) || !content.contains(sel.focusNode)) return null;
+  const range = sel.getRangeAt(0);
+  const full = document.createRange();
+  full.selectNodeContents(content);
+  const before = full.cloneRange();
+  before.setEnd(range.startContainer, range.startOffset);
+  const start = before.toString().length;
+  const selText = range.toString();
+  const fullText = full.toString();
+  if (!selText || fullText.slice(start, start + selText.length) !== selText) return null;
+  return { fullText, start, end: start + selText.length };
+}
+
 export interface CopyLineBarProps {
   cwd?: string | null;
   peer?: string | null;
   paneID?: string | null;
+  /**
+   * Latest streamed pane grid width in columns (0 = unknown). Read at click
+   * time so patches don't need to re-render the bar. Unknown width falls back
+   * to the legacy join-everything command build.
+   */
+  getPaneWidth?: () => number;
   onSelectPane?: (paneID: string) => void;
   onError?: (message: string) => void;
   startBackground?: typeof startBackgroundCommand;
@@ -152,6 +250,7 @@ export default function CopyLineBar({
   cwd,
   peer,
   paneID,
+  getPaneWidth,
   onSelectPane,
   onError,
   startBackground = startBackgroundCommand,
@@ -165,6 +264,7 @@ export default function CopyLineBar({
   const downloadRef = useRef<HTMLAnchorElement | null>(null);
   const runRef = useRef<HTMLButtonElement | null>(null);
   const runMenuCommandRef = useRef("");
+  const runMenuGluedRef = useRef("");
   const runMenuOpenRef = useRef(false);
   const commandJobPeerRef = useRef<string | undefined>(undefined);
   const commandRequestRef = useRef(0);
@@ -292,10 +392,24 @@ export default function CopyLineBar({
       }, FLASH_MS);
     };
 
-  const selectedCommand = (): string => joinGlue(paneSelectionText());
+  // selectedCommand builds the runnable command from the live selection. With
+  // a known pane width it only glues true terminal soft-wraps and keeps real
+  // newlines (the run endpoints execute via `$SHELL -lc`, which takes
+  // multi-line scripts as written); without one it falls back to the legacy
+  // glue-everything join.
+  const selectedCommand = (): string => {
+    const width = getPaneWidth?.() ?? 0;
+    if (width > 0) {
+      const context = paneSelectionContext();
+      if (context) {
+        return smartJoinCommand(context.fullText, context.start, context.end, width);
+      }
+    }
+    return joinGlue(paneSelectionText());
+  };
 
-  const runCommand = async (): Promise<void> => {
-    const command = selectedCommand();
+  const runCommand = async (command?: string): Promise<void> => {
+    if (command === undefined) command = selectedCommand();
     if (!command || !paneID) return;
     const request = ++commandRequestRef.current;
     commandJobPeerRef.current = paneID.includes("@")
@@ -343,13 +457,30 @@ export default function CopyLineBar({
 
   const toggleRunMenu = (event: ReactMouseEvent): void => {
     event.stopPropagation();
+    // Capture both variants while the selection is still alive: the smart join
+    // for "Run in tmux session" and the legacy glue as an explicit rescue for
+    // soft-wraps the width heuristic cannot see (e.g. an agent TUI's own
+    // word-wrap at less than the pane width).
     const text = paneSelectionText();
-    if (text) runMenuCommandRef.current = joinGlue(text);
-    if (!runMenuCommandRef.current) return;
+    if (text) {
+      runMenuCommandRef.current = selectedCommand();
+      runMenuGluedRef.current = joinGlue(text);
+    }
+    if (!runMenuCommandRef.current && !runMenuGluedRef.current) return;
     const next = !runMenuOpenRef.current;
     runMenuOpenRef.current = next;
     setRunMenuOpen(next);
     syncCopyLineBar.current();
+  };
+
+  const runGluedFromMenu = (event: ReactMouseEvent): void => {
+    event.stopPropagation();
+    const command = runMenuGluedRef.current;
+    runMenuOpenRef.current = false;
+    setRunMenuOpen(false);
+    syncCopyLineBar.current();
+    if (!command) return;
+    void runCommand(command);
   };
 
   const runInTmux = async (event: ReactMouseEvent): Promise<void> => {
@@ -447,6 +578,15 @@ export default function CopyLineBar({
               onClick={(event) => void runInTmux(event)}
             >
               Run in tmux session
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              title="把選取內容的換行全部去掉、接成一行後執行(寬度判斷失準時的救援)"
+              onPointerDown={onPointerDownNoBlur}
+              onClick={runGluedFromMenu}
+            >
+              接成一行執行
             </button>
           </div>
         ) : null}

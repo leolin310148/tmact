@@ -36,8 +36,12 @@ export type ConnState = "connecting" | "open" | "reconnecting" | "closed";
 export interface PaneStreamCallbacks {
   /** `() => state.selected`. Consulted at reconnect time to skip stale retries. */
   getSelectedPane: () => string | null;
-  /** Server patch: replace buffer (from=0) or splice `lines` in at `from`. */
-  onPatch: (from: number, lines: string[], question: Question | null) => void;
+  /**
+   * Server patch: replace buffer (from=0) or splice `lines` in at `from`.
+   * `paneWidth` is the pane's grid width in columns, 0 when the server did not
+   * report one (older server or a failed width read).
+   */
+  onPatch: (from: number, lines: string[], question: Question | null, paneWidth: number) => void;
   /** Question payload; called with `null` on close to clear the option bar. */
   onQuestion: (q: Question | null) => void;
   /** A fork completed; the pane becomes selectable after snapshot discovery. */
@@ -169,6 +173,7 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
             (m.from ?? 0) | 0,
             Array.isArray(m.lines) ? m.lines : [],
             m.q ?? null,
+            (m.w ?? 0) | 0,
           );
         } else if (m.t === "forked") {
           cbRef.current.onForked(m.pane);

@@ -38,7 +38,9 @@ type paneDiffMsg struct {
 	From   int              `json:"from"`
 	Lines  []string         `json:"lines"`
 	Q      *prompt.Question `json:"q,omitempty"`
-	Cursor string           `json:"cursor"`
+	// W mirrors outMsg.W: the pane's grid width in columns, 0 when unknown.
+	W      int    `json:"w,omitempty"`
+	Cursor string `json:"cursor"`
 }
 
 func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
@@ -83,11 +85,18 @@ func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	width := 0
+	widthCtx, widthCancel := context.WithTimeout(r.Context(), s.paneCaptureTimeout())
+	if paneWidth, widthErr := s.paneWidth()(widthCtx, pane); widthErr == nil {
+		width = paneWidth
+	}
+	widthCancel()
 	writeJSON(w, http.StatusOK, paneDiffMsg{
 		T:      "patch",
 		From:   from,
 		Lines:  tail,
 		Q:      prompt.DetectQuestion(content),
+		W:      width,
 		Cursor: cursor,
 	})
 }
@@ -306,7 +315,7 @@ func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane s
 		if ok {
 			cursor = patch.Cursor
 			unchanged = 0
-			if write(outMsg{T: patch.T, From: patch.From, Lines: patch.Lines, Q: patch.Q}) != nil {
+			if write(outMsg{T: patch.T, From: patch.From, Lines: patch.Lines, Q: patch.Q, W: patch.W}) != nil {
 				return
 			}
 			delay = 200 * time.Millisecond

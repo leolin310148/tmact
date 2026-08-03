@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -30,6 +31,24 @@ func TestPaneDiffFirstRequestReturnsFullPatch(t *testing.T) {
 	decodeJSON(t, rec, &got)
 	if got.T != "patch" || got.From != 0 || strings.Join(got.Lines, "|") != "line 1|line 2" || got.Cursor == "" {
 		t.Fatalf("diff = %+v, want full patch with cursor", got)
+	}
+}
+
+func TestPaneDiffCarriesPaneWidth(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "line 1", nil },
+		PaneWidth:   func(ctx context.Context, target string) (int, error) { return 200, nil },
+	}).Handler())
+	defer srv.Close()
+
+	rec := getPaneDiff(t, srv.URL, "%7", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got paneDiffMsg
+	decodeJSON(t, rec, &got)
+	if got.W != 200 {
+		t.Fatalf("diff = %+v, want w=200", got)
 	}
 }
 

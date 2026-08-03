@@ -76,6 +76,10 @@ type Server struct {
 	// PaneCaptureTimeout bounds each pane-stream capture; defaults to
 	// wsCaptureTimeout.
 	PaneCaptureTimeout time.Duration
+	// PaneWidth reports a pane's grid width in columns; defaults to
+	// tmux.PaneWidthContext. Rides on pane patches so the browser can tell
+	// terminal soft-wrap newlines from real ones when running a selection.
+	PaneWidth func(ctx context.Context, target string) (int, error)
 	// SendText inserts literal text into a pane; defaults to tmux.PasteText.
 	SendText func(target, text string, enter bool) error
 	// SendKey sends one tmux key to a pane; defaults to tmux.SendKeys.
@@ -249,6 +253,13 @@ func (s *Server) captureContext() func(context.Context, string, int) (string, er
 		}
 	}
 	return tmux.CapturePaneContext
+}
+
+func (s *Server) paneWidth() func(context.Context, string) (int, error) {
+	if s.PaneWidth != nil {
+		return s.PaneWidth
+	}
+	return tmux.PaneWidthContext
 }
 
 func (s *Server) paneCaptureTimeout() time.Duration {

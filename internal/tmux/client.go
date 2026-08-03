@@ -754,6 +754,25 @@ func CapturePaneContext(ctx context.Context, target string, lines int) (string, 
 	return capturePaneContext(ctx, target, lines, false)
 }
 
+// PaneWidthContext reports the pane's grid width in columns. The web UI uses
+// it to tell terminal soft-wrap newlines (a captured row exactly as wide as
+// the pane) apart from real newlines when re-joining a selection into a
+// runnable command.
+func PaneWidthContext(ctx context.Context, target string) (int, error) {
+	if target == "" {
+		return 0, fmt.Errorf("target cannot be empty")
+	}
+	output, err := outputTmuxContext(ctx, "display-message", "-p", "-t", target, "#{pane_width}")
+	if err != nil {
+		return 0, err
+	}
+	width, err := strconv.Atoi(strings.TrimSpace(output))
+	if err != nil || width <= 0 {
+		return 0, fmt.Errorf("invalid tmux pane width %q", strings.TrimSpace(output))
+	}
+	return width, nil
+}
+
 // CapturePaneANSI is CapturePane with tmux's -e flag (keeping colour and
 // attribute escape sequences) and without -J (so full-width input-box borders
 // don't get joined onto the next line — see capturePane). Use it only where the

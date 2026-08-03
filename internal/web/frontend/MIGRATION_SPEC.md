@@ -458,6 +458,7 @@ Plus module-scoped refs that live in App: `paneLines`, `paneCache`, `snapshotSSE
 46. Copy-line bar visible when non-empty in-`#content` selection OR `Date.now() < copyFlashUntil` (900 ms flash).
 47. `joinGlue` `/[ \t]*\n[ \t]*/g → ""`; `joinSpace` → `" "`.
 48. `copyText`: `navigator.clipboard` if `window.isSecureContext`, else hidden-textarea + `execCommand("copy")` at `position:fixed;top:-1000px`.
+48a. *(post-parity)* Run command builds its command with `smartJoinCommand`, not `joinGlue`: the WS patch carries the pane grid width (`w`), rows exactly that many display columns wide are terminal soft-wraps and get glued, every other newline is kept (the server runs the string via `$SHELL -lc`). Unknown width (older server) falls back to `joinGlue`; the arrow menu's 「接成一行執行」 item is the explicit legacy-glue rescue. Copy buttons are unchanged.
 
 **Image preview**
 49. Long-press 550 ms with ≤10 px move; `pointerType==="mouse"` skips long-press; pointer move >10 px / pointerup / pointercancel clears timer.

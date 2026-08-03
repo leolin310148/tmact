@@ -54,6 +54,12 @@ type outMsg struct {
 	// It rides along with each "patch" so the browser can offer quick-answer
 	// buttons; nil (omitted) means there is no question to answer.
 	Q *prompt.Question `json:"q,omitempty"`
+	// W is the pane's grid width in columns. It rides on each "patch" so the
+	// browser can tell terminal soft-wrap newlines (captured row exactly W
+	// columns wide) from real newlines when re-joining a selection into a
+	// runnable command. 0 (omitted) means unknown; the browser falls back to
+	// its legacy join-everything behavior.
+	W int `json:"w,omitempty"`
 }
 
 func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +143,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 
 	last := ""
 	var lastLines []string
+	lastWidth := 0
 	push := func() bool {
 		captureCtx, captureCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
 		content, err := s.captureContext()(captureCtx, pane, wsCaptureLines)
@@ -149,6 +156,14 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			return true
 		}
 		last = content
+		// Refresh the pane width alongside each real patch; a failed read keeps
+		// the previous value rather than flapping the browser back to legacy
+		// join behavior.
+		widthCtx, widthCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
+		if width, widthErr := s.paneWidth()(widthCtx, pane); widthErr == nil {
+			lastWidth = width
+		}
+		widthCancel()
 		next := strings.Split(content, "\n")
 		// Find longest common prefix line count; the client only needs the
 		// diverging tail. Typical AI-agent output advances one line per tick,
@@ -164,6 +179,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			From:  p,
 			Lines: tail,
 			Q:     prompt.DetectQuestion(content),
+			W:     lastWidth,
 		}) == nil
 	}
 

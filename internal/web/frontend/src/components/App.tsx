@@ -200,6 +200,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // ----- module-scoped mutable state from app.js → refs -----
   const paneLinesRef = useRef<string[]>([]);
   const paneCacheRef = useRef<Record<string, string[]>>({});
+  // Grid width in columns of the streamed pane, from the latest WS patch; 0
+  // until a patch reports one. CopyLineBar reads it at click time (via getter,
+  // so patches never force a re-render) to split terminal soft-wrap newlines
+  // from real ones.
+  const paneWidthRef = useRef(0);
   const streamVisibleLinesRef = useRef(STREAM_RENDER_LINES);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctrlArmedRef = useRef(false);
@@ -387,10 +392,11 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // splices paneLines, caches, drives setContent + renderOptions (app.js block).
   const paneStream = usePaneStream({
     getSelectedPane: () => state.selected,
-    onPatch: (from, lines, question) => {
+    onPatch: (from, lines, question, paneWidth) => {
       // Reconstruct the full buffer synchronously (keeps `from`-splicing exact
       // and the cache complete), then coalesce the repaint into one rAF and
       // render only the trailing lines. See scheduleStream above.
+      if (paneWidth > 0) paneWidthRef.current = paneWidth;
       const buf = paneLinesRef.current.slice(0, from).concat(lines);
       paneLinesRef.current = buf;
       if (state.selected) paneCacheRef.current[state.selected] = buf;
@@ -441,6 +447,9 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       // Seed from the cache so a revisited pane shows content immediately; the
       // first patch (from=0) replaces it. A never-seen pane stays empty.
       streamVisibleLinesRef.current = STREAM_RENDER_LINES;
+      // Another pane may have a different grid width; unknown until its first
+      // patch reports one.
+      paneWidthRef.current = 0;
       const cached = paneCacheRef.current[paneID];
       paneLinesRef.current = cached ? cached.slice() : [];
       if (paneLinesRef.current.length) {
@@ -1239,6 +1248,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
             cwd={pc.cwd}
             peer={pc.peer}
             paneID={state.selected}
+            getPaneWidth={() => paneWidthRef.current}
             onSelectPane={callbacks.selectPane}
             onError={showInputError}
           />

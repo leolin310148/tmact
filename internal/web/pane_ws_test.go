@@ -203,6 +203,42 @@ func TestPaneWSStreamsContent(t *testing.T) {
 	}
 }
 
+func TestPaneWSPatchCarriesPaneWidth(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "pane body", nil },
+		PaneWidth:   func(context.Context, string) (int, error) { return 120, nil },
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "patch" || m.W != 120 {
+		t.Fatalf("got %+v, want patch with w=120", m)
+	}
+}
+
+func TestPaneWSPatchOmitsUnknownPaneWidth(t *testing.T) {
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) { return "pane body", nil },
+		PaneWidth: func(context.Context, string) (int, error) {
+			return 0, fmt.Errorf("no such pane")
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	var m outMsg
+	if err := wsjson.Read(ctx, c, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.T != "patch" || m.W != 0 {
+		t.Fatalf("got %+v, want patch with w=0 when the width read fails", m)
+	}
+}
+
 func TestPaneWSIdleCaptureWakesOnHumanActivity(t *testing.T) {
 	var active atomic.Bool
 	var captures atomic.Int32
