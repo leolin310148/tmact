@@ -160,6 +160,7 @@ func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss Stage
 	ss.Error = fmt.Sprintf("Claude quota exhausted; waiting until %s", nextCheckAt.Format(time.RFC3339))
 	state.Status = agentDevWaitingQuota
 	state.Reason = ss.Error
+	state.FinishedAt = time.Time{}
 	state.Stages[stage.ID] = ss
 	if err := e.Store.Write(state); err != nil {
 		return true, false, err
@@ -267,6 +268,24 @@ func (e *Engine) resumeAgentDevAfterQuota(ctx context.Context, state State, stag
 		}
 	}
 	if err != nil && !isDeferredDispatch(err) {
+		quotaTarget := target
+		if quotaTarget == "" && dev.QuotaWait != nil {
+			quotaTarget = dev.QuotaWait.Target
+		}
+		if quotaTarget != "" {
+			if raw, captureErr := e.CapturePane(quotaTarget, 200); captureErr == nil {
+				if detected := prompt.Detect(raw); prompt.IsClaudeSessionLimitWait(raw, detected) {
+					last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)
+					if lastErr != nil {
+						return true, false, lastErr
+					}
+					if ok {
+						last.Target = quotaTarget
+						return e.beginAgentDevQuotaWait(state, stage, ss, last, raw, detected)
+					}
+				}
+			}
+		}
 		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev after quota reset: %v", err))
 	}
 	last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)

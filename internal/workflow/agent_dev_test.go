@@ -346,6 +346,9 @@ func TestAgentDevQuotaWaitPersistsAndResumesSameDispatch(t *testing.T) {
 	if state.Status != agentDevWaitingQuota || state.Stages["delivery"].AgentDev.QuotaWait == nil {
 		t.Fatalf("quota wait did not survive runner restart state: %#v", state)
 	}
+	if !state.FinishedAt.IsZero() {
+		t.Fatalf("waiting workflow retained terminal finished_at: %s", state.FinishedAt)
+	}
 	if captures != 1 {
 		t.Fatalf("captured before reset: %d", captures)
 	}
@@ -374,6 +377,63 @@ func TestAgentDevQuotaWaitPersistsAndResumesSameDispatch(t *testing.T) {
 	last, ok, err := LastDispatch(engine.Store, record.ID)
 	if err != nil || !ok || !last.Timestamp.Equal(now) || last.Attempt != 1 {
 		t.Fatalf("last=%#v ok=%t err=%v", last, ok, err)
+	}
+}
+
+func TestAgentDevQuotaResetExtendsWhenProviderStillLimits(t *testing.T) {
+	_, engine, _ := initAgentDevTest(t)
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 4, 2, 1, 0, 0, location)
+	engine.Now = func() time.Time { return now }
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
+	record.Target = "%42"
+	record.Status = "sent"
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ss := state.Stages["delivery"]
+	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "claude", Target: "%42", ResetAt: now.Add(-time.Minute), NextCheckAt: now, PromptAnswered: true}
+	ss.Error = "waiting quota"
+	state.Stages["delivery"] = ss
+	state.Status = agentDevWaitingQuota
+	if err := engine.Store.Write(state); err != nil {
+		t.Fatal(err)
+	}
+	quotaRaw := "You've hit your session limit · resets 3am (Asia/Taipei)\nWhat do you want to do?\n❯ 1. Stop and wait for limit to reset\n  2. Upgrade your plan\n"
+	limited := false
+	engine.CapturePane = func(string, int) (string, error) {
+		if limited {
+			return quotaRaw, nil
+		}
+		return "Claude Code ready\n❯", nil
+	}
+	engine.DispatchAgent = func(dispatch.Options) (dispatch.Report, error) {
+		limited = true
+		return dispatch.Report{Target: "%42"}, errors.New("target is waiting on choice_prompt prompt")
+	}
+	answered := 0
+	engine.SendKeys = func(string, []string) error { answered++; return nil }
+	if _, err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err = engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := state.Stages["delivery"].AgentDev.QuotaWait
+	if state.Status != agentDevWaitingQuota || wait == nil || answered != 1 {
+		t.Fatalf("state=%#v wait=%#v answered=%d", state, wait, answered)
+	}
+	want := time.Date(2026, 8, 4, 3, 1, 0, 0, location)
+	if !wait.NextCheckAt.Equal(want) {
+		t.Fatalf("next_check_at=%s want=%s", wait.NextCheckAt, want)
 	}
 }
 
