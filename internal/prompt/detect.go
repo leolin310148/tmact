@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -72,6 +73,71 @@ func IsCodexModelCapacityRetry(detected *Prompt) bool {
 
 	question := normalizePromptText(detected.Question)
 	return strings.Contains(question, "less capable of handling complex requests")
+}
+
+// IsClaudeSessionLimitWait reports the exact benign Claude session-limit menu
+// that an unattended workflow may answer. The raw pane text is part of the
+// allowlist so an unrelated two-option menu with the same labels cannot pass.
+func IsClaudeSessionLimitWait(raw string, detected *Prompt) bool {
+	if detected == nil || detected.Type != TypeChoicePrompt || len(detected.Options) != 2 {
+		return false
+	}
+	if normalizePromptText(detected.Question) != "what do you want to do?" ||
+		detected.SelectedOption == nil || detected.SelectedOption.Number != 1 || !detected.SelectedOption.Selected {
+		return false
+	}
+	first, second := detected.Options[0], detected.Options[1]
+	if first.Number != 1 || !first.Selected || normalizePromptText(first.Label) != "stop and wait for limit to reset" ||
+		second.Number != 2 || second.Selected || normalizePromptText(second.Label) != "upgrade your plan" {
+		return false
+	}
+	cleaned := normalizePromptText(strings.Join(cleanedLines(raw), " "))
+	return strings.Contains(cleaned, "you've hit your session limit") && strings.Contains(cleaned, " resets ")
+}
+
+var claudeSessionResetPattern = regexp.MustCompile(`(?i)\bresets\s+([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?`)
+
+// ClaudeSessionLimitResetAt parses the next reset instant from an allowlisted
+// Claude session-limit prompt. It fails closed on invalid clocks or timezones.
+func ClaudeSessionLimitResetAt(raw string, detected *Prompt, now time.Time) (time.Time, bool) {
+	if !IsClaudeSessionLimitWait(raw, detected) {
+		return time.Time{}, false
+	}
+	match := claudeSessionResetPattern.FindStringSubmatch(strings.Join(cleanedLines(raw), " "))
+	if len(match) == 0 {
+		return time.Time{}, false
+	}
+	hour, err := strconv.Atoi(match[1])
+	if err != nil || hour < 1 || hour > 12 {
+		return time.Time{}, false
+	}
+	minute := 0
+	if match[2] != "" {
+		minute, err = strconv.Atoi(match[2])
+		if err != nil || minute < 0 || minute > 59 {
+			return time.Time{}, false
+		}
+	}
+	if strings.EqualFold(match[3], "am") {
+		if hour == 12 {
+			hour = 0
+		}
+	} else if hour != 12 {
+		hour += 12
+	}
+	location := now.Location()
+	if zone := strings.TrimSpace(match[4]); zone != "" {
+		location, err = time.LoadLocation(zone)
+		if err != nil {
+			return time.Time{}, false
+		}
+	}
+	localNow := now.In(location)
+	resetAt := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), hour, minute, 0, 0, location)
+	if !resetAt.After(localNow) {
+		resetAt = resetAt.AddDate(0, 0, 1)
+	}
+	return resetAt, true
 }
 
 func normalizePromptText(text string) string {

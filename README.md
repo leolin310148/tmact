@@ -211,6 +211,15 @@ approval, dirty-tree, timeout, and repeated-no-progress states stop as
 Independent live `dispatch-work` calls to the same Git workspace are rejected
 while the workflow lease is held.
 
+Claude's exact session-limit menu is the narrow exception to prompt stopping:
+when option 1 is already selected as `Stop and wait for limit to reset` and
+option 2 is `Upgrade your plan`, tmact selects the wait option, persists
+`waiting_quota` with the parsed reset time, and makes no more model calls until
+then. After reset it resumes the same dispatch, actor session, and work-item
+attempt. The wait survives runner restarts; tmact never selects the upgrade
+option. Any wording/menu drift, permission prompt, or other choice still fails
+closed as `needs_user`.
+
 ### Agent skills
 
 tmact-owned agent skills live under `skills/` as the canonical source. The

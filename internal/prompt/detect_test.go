@@ -1,6 +1,10 @@
 package prompt
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestDetectDirectoryAccessPrompt(t *testing.T) {
 	raw := `
@@ -400,6 +404,48 @@ func TestIsCodexModelCapacityRetryRejectsPermissionAndUnknownChoices(t *testing.
 
 	for _, detected := range tests {
 		if IsCodexModelCapacityRetry(detected) {
+			t.Fatalf("unsafe prompt was allowlisted: %#v", detected)
+		}
+	}
+}
+
+func TestClaudeSessionLimitWaitAndResetAt(t *testing.T) {
+	raw := `
+You've hit your session limit · resets 2am (Asia/Taipei)
+What do you want to do?
+❯ 1. Stop and wait for limit to reset
+  2. Upgrade your plan
+`
+	detected := Detect(raw)
+	if !IsClaudeSessionLimitWait(raw, detected) {
+		t.Fatalf("prompt was not allowlisted: %#v", detected)
+	}
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 3, 23, 0, 0, 0, location)
+	resetAt, ok := ClaudeSessionLimitResetAt(raw, detected, now)
+	want := time.Date(2026, 8, 4, 2, 0, 0, 0, location)
+	if !ok || !resetAt.Equal(want) {
+		t.Fatalf("resetAt=%s ok=%t want=%s", resetAt, ok, want)
+	}
+}
+
+func TestClaudeSessionLimitWaitFailsClosed(t *testing.T) {
+	base := `
+You've hit your session limit · resets 2am (Asia/Taipei)
+What do you want to do?
+❯ 1. Stop and wait for limit to reset
+  2. Upgrade your plan
+`
+	tests := []string{
+		"Allow this command?\n❯ 1. Stop and wait for limit to reset\n  2. Upgrade your plan\n",
+		strings.Replace(base, "Upgrade your plan", "Approve filesystem access", 1),
+		strings.Replace(base, "❯ 1.", "  1.", 1),
+	}
+	for _, raw := range tests {
+		if detected := Detect(raw); IsClaudeSessionLimitWait(raw, detected) {
 			t.Fatalf("unsafe prompt was allowlisted: %#v", detected)
 		}
 	}

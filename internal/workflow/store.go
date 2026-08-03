@@ -70,15 +70,24 @@ type StageState struct {
 }
 
 type AgentDevState struct {
-	Status            string          `json:"status"`
-	Phases            []PhaseState    `json:"phases,omitempty"`
-	CurrentDispatchID string          `json:"current_dispatch_id,omitempty"`
-	CurrentRole       string          `json:"current_role,omitempty"`
-	CurrentWorkItem   string          `json:"current_work_item,omitempty"`
-	ReviewRound       int             `json:"review_round,omitempty"`
-	NoProgressReviews int             `json:"no_progress_reviews,omitempty"`
-	LastFindingKeys   []string        `json:"last_finding_keys,omitempty"`
-	Findings          []ReviewFinding `json:"findings,omitempty"`
+	Status            string             `json:"status"`
+	Phases            []PhaseState       `json:"phases,omitempty"`
+	CurrentDispatchID string             `json:"current_dispatch_id,omitempty"`
+	CurrentRole       string             `json:"current_role,omitempty"`
+	CurrentWorkItem   string             `json:"current_work_item,omitempty"`
+	ReviewRound       int                `json:"review_round,omitempty"`
+	NoProgressReviews int                `json:"no_progress_reviews,omitempty"`
+	LastFindingKeys   []string           `json:"last_finding_keys,omitempty"`
+	Findings          []ReviewFinding    `json:"findings,omitempty"`
+	QuotaWait         *AgentDevQuotaWait `json:"quota_wait,omitempty"`
+}
+
+type AgentDevQuotaWait struct {
+	Provider       string    `json:"provider"`
+	Target         string    `json:"target"`
+	ResetAt        time.Time `json:"reset_at,omitempty"`
+	NextCheckAt    time.Time `json:"next_check_at"`
+	PromptAnswered bool      `json:"prompt_answered"`
 }
 
 type PhaseState struct {

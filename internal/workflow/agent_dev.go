@@ -15,10 +15,13 @@ import (
 )
 
 const (
-	agentDevPlanning    = "planning"
-	agentDevActive      = "active"
-	agentDevFixPlanning = "fix_planning"
-	agentDevComplete    = "complete"
+	agentDevPlanning     = "planning"
+	agentDevActive       = "active"
+	agentDevFixPlanning  = "fix_planning"
+	agentDevComplete     = "complete"
+	agentDevWaitingQuota = "waiting_quota"
+	agentDevQuotaRecheck = 5 * time.Minute
+	agentDevQuotaGrace   = time.Minute
 )
 
 type AgentDevPlan struct {
@@ -66,6 +69,9 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 		if ss.AgentDev == nil {
 			return true, false, fmt.Errorf("agent_dev stage %s has no durable state", stage.ID)
 		}
+		if ss.AgentDev.QuotaWait != nil {
+			return e.tickAgentDevQuotaWait(ctx, state, stage, ss)
+		}
 		if ss.AgentDev.CurrentDispatchID != "" {
 			last, ok, err := LastDispatch(e.Store, ss.AgentDev.CurrentDispatchID)
 			if err != nil {
@@ -89,6 +95,9 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 					return true, false, e.Store.Write(state)
 				}
 				if detected := prompt.Detect(raw); detected != nil {
+					if prompt.IsClaudeSessionLimitWait(raw, detected) {
+						return e.beginAgentDevQuotaWait(state, stage, ss, last, raw, detected)
+					}
 					ss.Status = StageBlocked
 					ss.Error = fmt.Sprintf("agent_dev target %s is waiting on %s prompt", last.Target, detected.Type)
 					state.Status = "needs_user"
@@ -103,6 +112,220 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 		return e.dispatchNextAgentDev(ctx, state, stage, ss)
 	}
 	return false, false, nil
+}
+
+func (e *Engine) recoverBlockedAgentDevQuota(state *State) (bool, error) {
+	for _, stage := range e.Loaded.Config.Stages {
+		if stage.Type != "agent_dev" {
+			continue
+		}
+		ss := state.Stages[stage.ID]
+		if ss.Status != StageBlocked || ss.AgentDev == nil || ss.AgentDev.CurrentDispatchID == "" {
+			continue
+		}
+		last, ok, err := LastDispatch(e.Store, ss.AgentDev.CurrentDispatchID)
+		if err != nil {
+			return false, err
+		}
+		if !ok || last.Status != "sent" || last.Target == "" {
+			continue
+		}
+		raw, err := e.CapturePane(last.Target, 200)
+		if err != nil {
+			continue
+		}
+		detected := prompt.Detect(raw)
+		if !prompt.IsClaudeSessionLimitWait(raw, detected) {
+			continue
+		}
+		ss.Status = StageRunning
+		ss.Error = ""
+		state.Status = "running"
+		state.Reason = ""
+		state.Stages[stage.ID] = ss
+		_, _, beginErr := e.beginAgentDevQuotaWait(*state, stage, ss, last, raw, detected)
+		return true, beginErr
+	}
+	return false, nil
+}
+
+func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss StageState, last Dispatch, raw string, detected *prompt.Prompt) (bool, bool, error) {
+	now := e.Now()
+	resetAt, parsed := prompt.ClaudeSessionLimitResetAt(raw, detected, now)
+	nextCheckAt := now.Add(agentDevQuotaRecheck)
+	if parsed {
+		nextCheckAt = resetAt.Add(agentDevQuotaGrace)
+	}
+	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "claude", Target: last.Target, ResetAt: resetAt, NextCheckAt: nextCheckAt}
+	ss.Error = fmt.Sprintf("Claude quota exhausted; waiting until %s", nextCheckAt.Format(time.RFC3339))
+	state.Status = agentDevWaitingQuota
+	state.Reason = ss.Error
+	state.Stages[stage.ID] = ss
+	if err := e.Store.Write(state); err != nil {
+		return true, false, err
+	}
+	if err := e.SendKeys(last.Target, []string{"Enter"}); err != nil {
+		reason := fmt.Sprintf("cannot select Claude quota wait option on %s: %v", last.Target, err)
+		return true, false, e.Store.Update(func(current *State) error {
+			currentStage := current.Stages[stage.ID]
+			currentStage.Status = StageBlocked
+			currentStage.Error = reason
+			current.Status = "needs_user"
+			current.Reason = reason
+			current.Stages[stage.ID] = currentStage
+			return nil
+		})
+	}
+	if err := e.Store.Update(func(current *State) error {
+		currentStage := current.Stages[stage.ID]
+		if currentStage.AgentDev == nil || currentStage.AgentDev.QuotaWait == nil {
+			return ErrStateConflict
+		}
+		currentStage.AgentDev.QuotaWait.PromptAnswered = true
+		current.Stages[stage.ID] = currentStage
+		return nil
+	}); err != nil {
+		return true, false, err
+	}
+	ss.AgentDev.QuotaWait.PromptAnswered = true
+	_ = e.Store.Event(Event{Type: "agent_dev_quota_wait", Stage: stage.ID, Attempt: last.Attempt, Status: agentDevWaitingQuota, Reason: ss.Error, Details: ss.AgentDev.QuotaWait})
+	return true, false, nil
+}
+
+func (e *Engine) tickAgentDevQuotaWait(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {
+	wait := ss.AgentDev.QuotaWait
+	now := e.Now()
+	if !wait.PromptAnswered {
+		raw, err := e.CapturePane(wait.Target, 200)
+		if err != nil {
+			return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s disappeared before wait selection: %v", wait.Target, err))
+		}
+		if detected := prompt.Detect(raw); detected != nil {
+			if !prompt.IsClaudeSessionLimitWait(raw, detected) {
+				return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s changed to unrecognized %s prompt before wait selection", wait.Target, detected.Type))
+			}
+			if err := e.SendKeys(wait.Target, []string{"Enter"}); err != nil {
+				return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot select Claude quota wait option on %s: %v", wait.Target, err))
+			}
+		}
+		wait.PromptAnswered = true
+		state.Stages[stage.ID] = ss
+		return true, false, e.Store.Write(state)
+	}
+	if now.Before(wait.NextCheckAt) {
+		state.Status = agentDevWaitingQuota
+		state.Reason = ss.Error
+		state.Stages[stage.ID] = ss
+		return true, false, e.Store.Write(state)
+	}
+	raw, err := e.CapturePane(wait.Target, 200)
+	if err != nil {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s disappeared or cannot be captured: %v", wait.Target, err))
+	}
+	if detected := prompt.Detect(raw); detected != nil {
+		if prompt.IsClaudeSessionLimitWait(raw, detected) {
+			wait.NextCheckAt = now.Add(agentDevQuotaRecheck)
+			ss.Error = fmt.Sprintf("Claude quota is still exhausted; checking again at %s", wait.NextCheckAt.Format(time.RFC3339))
+			state.Status = agentDevWaitingQuota
+			state.Reason = ss.Error
+			state.Stages[stage.ID] = ss
+			_ = e.Store.Event(Event{Type: "agent_dev_quota_extended", Stage: stage.ID, Status: agentDevWaitingQuota, Reason: ss.Error, Details: wait})
+			return true, false, e.Store.Write(state)
+		}
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s is now waiting on unrecognized %s prompt", wait.Target, detected.Type))
+	}
+	return e.resumeAgentDevAfterQuota(ctx, state, stage, ss)
+}
+
+func (e *Engine) blockAgentDevQuota(state State, stage StageConfig, ss StageState, reason string) (bool, bool, error) {
+	ss.Status = StageBlocked
+	ss.Error = reason
+	state.Status = "needs_user"
+	state.Reason = reason
+	state.Stages[stage.ID] = ss
+	_ = e.Store.Event(Event{Type: "agent_dev_quota_stop", Stage: stage.ID, Status: StageBlocked, Reason: reason})
+	return true, false, e.Store.Write(state)
+}
+
+func (e *Engine) resumeAgentDevAfterQuota(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {
+	dev := ss.AgentDev
+	actorName, promptText, err := e.currentAgentDevDispatchPrompt(state, stage, dev)
+	if err != nil {
+		return e.blockAgentDevQuota(state, stage, ss, err.Error())
+	}
+	actor := e.Loaded.Config.Actors[actorName]
+	target, runtime, session, trust, launch, err := e.resolveActor(actor)
+	if err == nil {
+		if launch {
+			var report dispatch.Report
+			report, err = e.DispatchAgent(dispatch.Options{Session: session, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, TrustFolder: trust, WorkspaceLeaseOwner: state.RunID})
+			target = report.Target
+		} else if preflightErr := e.preflightAgent(target, runtime, e.Loaded.Config.Workspace.Root, e.Loaded.Config.Defaults.IdleAfter.Duration); preflightErr != nil {
+			err = preflightErr
+		} else {
+			err = e.PasteText(target, promptText, true)
+		}
+	}
+	if err != nil && !isDeferredDispatch(err) {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev after quota reset: %v", err))
+	}
+	last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)
+	if lastErr != nil {
+		return true, false, lastErr
+	}
+	if !ok {
+		return e.blockAgentDevQuota(state, stage, ss, "cannot resume agent_dev after quota reset: active dispatch record is missing")
+	}
+	last.Timestamp = e.Now()
+	if target != "" {
+		last.Target = target
+	}
+	last.Status = "sent"
+	if writeErr := e.Store.Dispatch(last); writeErr != nil {
+		return true, false, writeErr
+	}
+	dev.QuotaWait = nil
+	ss.Error = ""
+	state.Status = "running"
+	state.Reason = ""
+	state.Stages[stage.ID] = ss
+	eventType := "agent_dev_quota_resumed"
+	if err != nil {
+		eventType = "agent_dev_quota_resumed_running"
+	}
+	_ = e.Store.Event(Event{Type: eventType, Stage: stage.ID, Attempt: last.Attempt, Status: StageWaitingReport, Details: last})
+	return true, false, e.Store.Write(state)
+}
+
+func (e *Engine) currentAgentDevDispatchPrompt(state State, stage StageConfig, dev *AgentDevState) (string, string, error) {
+	cfg := *stage.AgentDev
+	phase := currentPhase(dev)
+	var actor, promptText string
+	switch dev.CurrentRole {
+	case "coordinator":
+		actor = cfg.Coordinator
+		if phase != nil && phase.Status == agentDevFixPlanning {
+			promptText = coordinatorFixPrompt(state, stage, *phase, dev.CurrentDispatchID, e.Store.Root)
+		} else {
+			promptText = coordinatorPlanPrompt(state, stage, phase, dev.CurrentDispatchID, e.Store.Root)
+		}
+	case "implementer":
+		actor = cfg.Implementer
+		item := findPhaseItem(phase, dev.CurrentWorkItem)
+		if item == nil {
+			return "", "", fmt.Errorf("cannot resume missing work item %s", dev.CurrentWorkItem)
+		}
+		promptText = implementerPrompt(stage, *phase, *item, dev.CurrentDispatchID, e.Store.Root)
+	case "reviewer":
+		actor = cfg.Reviewer
+		if phase == nil {
+			return "", "", errors.New("cannot resume reviewer without an active phase")
+		}
+		promptText = reviewerPrompt(stage, *phase, dev.CurrentDispatchID, e.Store.Root)
+	default:
+		return "", "", fmt.Errorf("cannot resume unknown agent_dev role %q", dev.CurrentRole)
+	}
+	return actor, promptText + agentDevStopProtocol(state.RunID, e.Store.Root), nil
 }
 
 func (e *Engine) dispatchNextAgentDev(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {

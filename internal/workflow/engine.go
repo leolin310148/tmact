@@ -36,6 +36,7 @@ type Engine struct {
 	CapturePane      func(string, int) (string, error)
 	CapturePaneANSI  func(string, int) (string, error)
 	PasteText        func(string, string, bool) error
+	SendKeys         func(string, []string) error
 	DispatchAgent    func(dispatch.Options) (dispatch.Report, error)
 	ProcessRuntime   func(int) panestatus.RuntimeDetection
 	KillSession      func(string) error
@@ -75,7 +76,7 @@ func BuildPlan(loaded Loaded) (Plan, error) {
 
 func NewEngine(loaded Loaded, storeRoot string, execute bool) (*Engine, error) {
 	id := RunID(loaded.Hash)
-	e := &Engine{Loaded: loaded, Store: NewStore(storeRoot, id), Execute: execute, Now: time.Now, Sleep: time.Sleep, ListLayout: tmux.ListLayout, ListPanes: tmux.ListPanes, ListSessionPanes: tmux.ListSessionPanes, CapturePane: tmux.CapturePane, CapturePaneANSI: tmux.CapturePaneANSI, PasteText: tmux.PasteText, DispatchAgent: dispatch.Run, ProcessRuntime: panestatus.DetectChildProcessRuntime, KillSession: tmux.KillSession}
+	e := &Engine{Loaded: loaded, Store: NewStore(storeRoot, id), Execute: execute, Now: time.Now, Sleep: time.Sleep, ListLayout: tmux.ListLayout, ListPanes: tmux.ListPanes, ListSessionPanes: tmux.ListSessionPanes, CapturePane: tmux.CapturePane, CapturePaneANSI: tmux.CapturePaneANSI, PasteText: tmux.PasteText, SendKeys: tmux.SendKeys, DispatchAgent: dispatch.Run, ProcessRuntime: panestatus.DetectChildProcessRuntime, KillSession: tmux.KillSession}
 	e.ActorKeys = e.buildActorKeys()
 	release, err := e.Store.AcquireRunnerLock()
 	if err != nil {
@@ -239,7 +240,14 @@ func (e *Engine) Tick(ctx context.Context) (bool, error) {
 		state.Status = "running"
 	}
 	if state.Status == "needs_user" {
-		return false, e.Store.Write(state)
+		recovered, recoverErr := e.recoverBlockedAgentDevQuota(&state)
+		if recoverErr != nil {
+			return false, recoverErr
+		}
+		if !recovered {
+			return false, e.Store.Write(state)
+		}
+		return false, nil
 	}
 	data := templateData(state)
 	current, err := ComputeRevisions(e.Loaded.Config, data)

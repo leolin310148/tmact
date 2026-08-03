@@ -64,6 +64,11 @@ tmact workflow logs --config agent-dev-workflow.yaml
 
 The caller does not wait for individual agents. The background runner keeps a
 durable dispatch ID for every turn and resumes from reports after restarts.
+If Claude reaches its session limit, the runner may enter durable
+`waiting_quota`; this is normal unattended operation, not a failed work item.
+It selects only the exact preselected `Stop and wait for limit to reset` menu,
+never `Upgrade your plan`, sleeps until the parsed reset time, and resumes the
+same dispatch/session/attempt. The wait and reset time survive runner restarts.
 
 Completion contracts are enforced by tmact:
 
@@ -83,7 +88,9 @@ Completion contracts are enforced by tmact:
 
 Permission or approval prompts, dirty Git state, branch drift, missing commits,
 wrong checkboxes, timeout, and repeated identical findings stop as
-`needs_user`. Never auto-answer or route around these states.
+`needs_user`. Never auto-answer or route around these states. The only prompt
+exception is tmact's built-in exact Claude session-limit wait menu; any menu
+shape or wording drift remains `needs_user`.
 
 ```sh
 tmact workflow pause --config agent-dev-workflow.yaml
