@@ -143,20 +143,30 @@ func (e *Engine) recoverBlockedAgentDevQuota(state *State) (bool, error) {
 		state.Status = "running"
 		state.Reason = ""
 		state.Stages[stage.ID] = ss
-		_, _, beginErr := e.beginAgentDevQuotaWait(*state, stage, ss, last, raw, detected)
+		_, _, beginErr := e.beginAgentDevQuotaWaitAt(*state, stage, ss, last, raw, detected, last.Timestamp)
 		return true, beginErr
 	}
 	return false, nil
 }
 
 func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss StageState, last Dispatch, raw string, detected *prompt.Prompt) (bool, bool, error) {
+	return e.beginAgentDevQuotaWaitAt(state, stage, ss, last, raw, detected, e.Now())
+}
+
+func (e *Engine) beginAgentDevQuotaWaitAt(state State, stage StageConfig, ss StageState, last Dispatch, raw string, detected *prompt.Prompt, observedAt time.Time) (bool, bool, error) {
 	now := e.Now()
-	resetAt, parsed := prompt.ClaudeSessionLimitResetAt(raw, detected, now)
+	if observedAt.IsZero() || observedAt.After(now) {
+		observedAt = now
+	}
+	resetAt, parsed := prompt.ClaudeSessionLimitResetAt(raw, detected, observedAt)
 	nextCheckAt := now.Add(agentDevQuotaRecheck)
 	if parsed {
 		nextCheckAt = resetAt.Add(agentDevQuotaGrace)
+		if nextCheckAt.Before(now) {
+			nextCheckAt = now
+		}
 	}
-	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "claude", Target: last.Target, ResetAt: resetAt, NextCheckAt: nextCheckAt}
+	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "claude", Target: last.Target, ObservedAt: observedAt, ResetAt: resetAt, NextCheckAt: nextCheckAt}
 	ss.Error = fmt.Sprintf("Claude quota exhausted; waiting until %s", nextCheckAt.Format(time.RFC3339))
 	state.Status = agentDevWaitingQuota
 	state.Reason = ss.Error
@@ -196,6 +206,21 @@ func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss Stage
 func (e *Engine) tickAgentDevQuotaWait(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {
 	wait := ss.AgentDev.QuotaWait
 	now := e.Now()
+	if wait.ObservedAt.IsZero() {
+		wait.ObservedAt = now
+		last, ok, err := LastDispatch(e.Store, ss.AgentDev.CurrentDispatchID)
+		if err != nil {
+			return true, false, err
+		}
+		if ok && !last.Timestamp.IsZero() {
+			wait.ObservedAt = last.Timestamp
+			if !wait.ResetAt.IsZero() && wait.ResetAt.Sub(last.Timestamp) > 24*time.Hour {
+				wait.ResetAt = wait.ResetAt.AddDate(0, 0, -1)
+				wait.NextCheckAt = wait.NextCheckAt.AddDate(0, 0, -1)
+				_ = e.Store.Event(Event{Type: "agent_dev_quota_date_corrected", Stage: stage.ID, Status: agentDevWaitingQuota, Details: wait})
+			}
+		}
+	}
 	if !wait.PromptAnswered {
 		raw, err := e.CapturePane(wait.Target, 200)
 		if err != nil {

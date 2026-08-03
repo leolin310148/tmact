@@ -439,9 +439,16 @@ func TestAgentDevQuotaResetExtendsWhenProviderStillLimits(t *testing.T) {
 
 func TestAgentDevRecoversPreviouslyBlockedQuotaPrompt(t *testing.T) {
 	_, engine, _ := initAgentDevTest(t)
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 3, 10, 3, 0, 0, location)
+	engine.Now = func() time.Time { return now }
 	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
 	record.Target = "%42"
 	record.Status = "sent"
+	record.Timestamp = time.Date(2026, 8, 3, 0, 53, 0, 0, location)
 	if err := engine.Store.Dispatch(record); err != nil {
 		t.Fatal(err)
 	}
@@ -472,6 +479,60 @@ func TestAgentDevRecoversPreviouslyBlockedQuotaPrompt(t *testing.T) {
 	}
 	if state.Status != agentDevWaitingQuota || state.Stages["delivery"].Status != StageRunning || answered != 1 {
 		t.Fatalf("state=%#v answered=%d", state, answered)
+	}
+	wait := state.Stages["delivery"].AgentDev.QuotaWait
+	wantReset := time.Date(2026, 8, 3, 2, 0, 0, 0, location)
+	if wait == nil || !wait.ObservedAt.Equal(record.Timestamp) || !wait.ResetAt.Equal(wantReset) || !wait.NextCheckAt.Equal(now) {
+		t.Fatalf("wait=%#v want reset=%s next=%s", wait, wantReset, now)
+	}
+}
+
+func TestAgentDevCorrectsLegacyQuotaDateAndResumes(t *testing.T) {
+	_, engine, _ := initAgentDevTest(t)
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 3, 16, 20, 0, 0, location)
+	engine.Now = func() time.Time { return now }
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
+	record.Target = "%42"
+	record.Status = "sent"
+	record.Timestamp = time.Date(2026, 8, 3, 0, 53, 0, 0, location)
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ss := state.Stages["delivery"]
+	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{
+		Provider:       "claude",
+		Target:         "%42",
+		ResetAt:        time.Date(2026, 8, 4, 2, 0, 0, 0, location),
+		NextCheckAt:    time.Date(2026, 8, 4, 2, 1, 0, 0, location),
+		PromptAnswered: true,
+	}
+	state.Stages["delivery"] = ss
+	state.Status = agentDevWaitingQuota
+	if err := engine.Store.Write(state); err != nil {
+		t.Fatal(err)
+	}
+	engine.CapturePane = func(string, int) (string, error) { return "Claude Code ready\n❯", nil }
+	engine.DispatchAgent = func(dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{Target: "%42"}, nil
+	}
+	if _, err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err = engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev := state.Stages["delivery"].AgentDev
+	if state.Status != "running" || dev.QuotaWait != nil || dev.CurrentDispatchID != record.ID {
+		t.Fatalf("legacy quota did not resume: state=%#v dev=%#v", state, dev)
 	}
 }
 
