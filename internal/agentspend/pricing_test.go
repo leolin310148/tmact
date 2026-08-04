@@ -12,6 +12,29 @@ func approx(t *testing.T, label string, got, want float64) {
 	}
 }
 
+func TestOpus5ManualPricing(t *testing.T) {
+	cost, ok := calculateCost("claude-opus-5", 1_000_000, 1_000_000, 2_000_000, 1_000_000, 0, "standard", 1_000_000)
+	if !ok {
+		t.Fatal("claude-opus-5 unpriced")
+	}
+	// input $5 + output $25 + 5m cache write $6.25 + 1h cache write $10 + read $0.50.
+	approx(t, "claude opus 5 line", cost, 46.75)
+}
+
+func TestOpus5ProviderPrefixPricing(t *testing.T) {
+	cost, ok := calculateCost("anthropic.claude-opus-5-20260724-v1:0", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	if !ok {
+		t.Fatal("anthropic claude opus 5 unpriced")
+	}
+	approx(t, "anthropic claude opus 5 input", cost, 5)
+}
+
+func TestOpus5FastMultiplier(t *testing.T) {
+	standard, _ := calculateCost("claude-opus-5", 1_000, 0, 0, 0, 0, "standard", 0)
+	fast, _ := calculateCost("claude-opus-5", 1_000, 0, 0, 0, 0, "fast", 0)
+	approx(t, "claude opus 5 fast 2x", fast, standard*2)
+}
+
 // Validates the load-bearing manual entry: claude-opus-4-8 is absent from the
 // snapshot and must price at $5/$25 per Mtok, NOT the longest-prefix fallback
 // claude-opus-4 ($15/$75).

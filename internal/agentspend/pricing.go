@@ -80,6 +80,22 @@ var manualPricing = map[string]modelCosts{
 		cacheReadPerToken:  0.1e-6,
 		webSearchPerReq:    webSearchCost,
 	},
+	"claude-opus-5": {
+		inputPerToken:      5e-6,
+		outputPerToken:     25e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
+	"anthropic.claude-opus-5": {
+		inputPerToken:      5e-6,
+		outputPerToken:     25e-6,
+		cacheWritePerToken: 6.25e-6,
+		cacheReadPerToken:  0.5e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
 	"claude-opus-4-8": {
 		inputPerToken:      5e-6,
 		outputPerToken:     25e-6,
