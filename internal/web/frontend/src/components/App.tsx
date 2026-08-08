@@ -110,10 +110,18 @@ import { SELECTED_KEY, inSplitSlot } from "../lib/slot";
 // line) on each repaint, so cost scales with the number of lines rendered. A
 // flooding agent makes that the main-thread bottleneck on phones. We keep the
 // full buffer (paneLines) for patch reconstruction + cache, and initially hand
-// only the last STREAM_RENDER_LINES lines to the renderer. When the user scrolls
-// to the top, App lazily reveals more lines from the existing captured buffer.
-const STREAM_RENDER_LINES = 500;
+// only the trailing render window to ContentPane. Split slots are narrower and
+// may run two or three independent live panes at once, so render half as many
+// lines there. This reduces each full innerHTML replacement without changing
+// the WS cadence or retained scrollback; the first scroll-to-top reveal adds
+// another 250 lines and immediately reaches the normal 500-line window.
+const SINGLE_STREAM_RENDER_LINES = 500;
+const SPLIT_STREAM_RENDER_LINES = 250;
 const STREAM_REVEAL_LINES = 250;
+export function streamRenderLineLimit(split: boolean): number {
+  return split ? SPLIT_STREAM_RENDER_LINES : SINGLE_STREAM_RENDER_LINES;
+}
+const STREAM_RENDER_LINES = streamRenderLineLimit(inSplitSlot);
 const PANE_BOTTOM_STICKY_PX = 80;
 const PANE_TOP_REVEAL_PX = 8;
 
