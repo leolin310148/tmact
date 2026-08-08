@@ -31,7 +31,7 @@ import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { fetchSnapshot, subscribeSnapshot } from "../api/client";
 import { logFrontend } from "../lib/frontendLog";
 import { useAppState } from "../store/AppStateContext";
-import type { PaneStatus, Snapshot } from "../types/server";
+import type { PaneStatus, Snapshot, SnapshotHeartbeat } from "../types/server";
 import { SELECTED_KEY } from "../lib/slot";
 
 // Polling keeps the original cadence. Snapshot freshness prefers the daemon's
@@ -329,6 +329,21 @@ export function useSnapshotStream(deps: SnapshotStreamDeps): SnapshotStream {
       () => {
         snapshotSSE.current = null;
         startPolling();
+      },
+      (heartbeat: SnapshotHeartbeat) => {
+        // Freshness-only traffic must not invalidate the global React context.
+        // ConnStatus already ticks once per second and reads this mutable
+        // snapshot object, so it observes the new timestamp without an App
+        // render. A heartbeat cannot precede the stream's initial snapshot.
+        const snap = state.snapshot;
+        if (!snap) return;
+        if (heartbeat.ts) snap.ts = heartbeat.ts;
+        if (Number.isFinite(heartbeat.interval_ms)) {
+          snap.interval_ms = heartbeat.interval_ms;
+        }
+        if (Number.isFinite(heartbeat.stale_after_ms) && heartbeat.stale_after_ms > 0) {
+          snap.stale_after_ms = heartbeat.stale_after_ms;
+        }
       },
     );
   }, [stopPolling, applySnapshot, startPolling]);

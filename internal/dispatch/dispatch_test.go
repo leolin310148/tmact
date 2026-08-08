@@ -481,6 +481,90 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 	}
 }
 
+func TestExistingSessionReuseWaitsForStableReadyBeforeClear(t *testing.T) {
+	rec, deps := baseDeps()
+	now := time.Unix(0, 0)
+	var clearAt time.Time
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) {
+		rec.sleeps = append(rec.sleeps, d)
+		now = now.Add(d)
+	}
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) >= 2 {
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+		return "Claude Code\n❯", nil
+	}
+	deps.PasteText = func(target, text string, enter bool) error {
+		rec.pastes = append(rec.pastes, paste{target, text, enter})
+		if text == "/clear" {
+			clearAt = now
+		}
+		return nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	opts.ReadySettle = 1500 * time.Millisecond
+	if _, err := dispatch.RunWithDeps(opts, deps); err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if elapsed := clearAt.Sub(time.Unix(0, 0)); elapsed < opts.ReadySettle {
+		t.Fatalf("/clear sent after %s, want at least %s", elapsed, opts.ReadySettle)
+	}
+	want := []paste{{"%1", "/clear", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	for i := range want {
+		if rec.pastes[i] != want[i] {
+			t.Fatalf("paste %d = %+v, want %+v", i, rec.pastes[i], want[i])
+		}
+	}
+}
+
+func TestExistingSessionReuseRefusesTransientIdleBeforeClear(t *testing.T) {
+	rec, deps := baseDeps()
+	now := time.Unix(0, 0)
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) {
+		rec.sleeps = append(rec.sleeps, d)
+		now = now.Add(d)
+	}
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	captures := 0
+	deps.CapturePane = func(string, int) (string, error) {
+		captures++
+		if captures == 1 {
+			return "Claude Code\n❯", nil
+		}
+		return "Claude Code\nWorking... esc to interrupt", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	opts.ReadySettle = 1500 * time.Millisecond
+	_, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil || !strings.Contains(err.Error(), "did not remain idle") {
+		t.Fatalf("error = %v, want transient-idle refusal", err)
+	}
+	if len(rec.pastes) != 0 {
+		t.Fatalf("pastes = %+v, want no /clear or prompt", rec.pastes)
+	}
+}
+
 func TestExistingSessionTrustWaitsPastStaleAcceptedPrompt(t *testing.T) {
 	rec, deps := baseDeps()
 	dir := t.TempDir()

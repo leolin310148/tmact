@@ -12,7 +12,7 @@ GO ?= go
 FRONTEND_DIR := internal/web/frontend
 STATIC_DIR := internal/web/static
 
-.PHONY: all build test go-test web-test skills-test web web-deps web-dev web-clean run vet fmt clean
+.PHONY: all build test go-test web-test skills-test codesign-test codesign-setup web web-deps web-dev web-clean run vet fmt clean
 
 all: build
 
@@ -40,6 +40,14 @@ web-test: web-deps
 skills-test:
 	bash scripts/install-skills_test.sh
 
+## codesign-test: test macOS code-signing script behavior with mock tools
+codesign-test:
+	bash scripts/macos-codesign_test.sh
+
+## codesign-setup: create the local macOS signing identity (one-time setup)
+codesign-setup:
+	bash scripts/setup-macos-codesigning.sh
+
 ## web-clean: remove built UI assets but keep the embed placeholder
 web-clean:
 	find $(STATIC_DIR) -mindepth 1 ! -name .gitkeep -delete
@@ -54,7 +62,7 @@ go-test:
 	$(GO) test ./...
 
 ## test: build the frontend, then run frontend + Go tests
-test: web web-test skills-test
+test: web web-test skills-test codesign-test
 	$(GO) test ./...
 
 ## run: build the frontend, then run statusd (pass ARGS="statusd start --web-addr :8080")

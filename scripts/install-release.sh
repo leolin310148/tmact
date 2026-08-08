@@ -11,6 +11,8 @@
 #   TMACT_BIN_DIR=$HOME/.local/bin  Install directory
 #   TMACT_INSTALL_STATUSD=1         Also install the statusd service
 #                                   (macOS launchd or Linux systemd --user)
+#   TMACT_CODESIGN_IDENTITY=...     macOS certificate (default: tmact-signing)
+#   TMACT_CODESIGN_IDENTIFIER=...   macOS identifier (default: com.leolin.tmact)
 #   GH_TOKEN=...                    Token for private release downloads
 #
 # statusd reads ~/.tmact/statusd.json itself and seeds defaults on first run.
@@ -50,6 +52,61 @@ download() {
   fi
 }
 
+sign_macos_binary() {
+  binary="$1"
+  identity="${TMACT_CODESIGN_IDENTITY:-tmact-signing}"
+  identifier="${TMACT_CODESIGN_IDENTIFIER:-com.leolin.tmact}"
+
+  case "$identity" in
+    ''|*[!A-Za-z0-9._-]*)
+      echo "invalid TMACT_CODESIGN_IDENTITY" >&2
+      exit 1
+      ;;
+  esac
+  case "$identifier" in
+    ''|*[!A-Za-z0-9.-]*|.*|-*|*.)
+      echo "invalid TMACT_CODESIGN_IDENTIFIER" >&2
+      exit 1
+      ;;
+  esac
+
+  identity_hash="$({ security find-identity -v -p codesigning 2>/dev/null || true; } | awk -v wanted="\"$identity\"" '
+    {
+      sub(/[[:space:]]+$/, "", $0)
+      if (length($0) >= length(wanted) && substr($0, length($0) - length(wanted) + 1) == wanted) {
+        print $2
+        exit
+      }
+    }
+  ')"
+
+  case "$identity_hash" in
+    ''|*[!0-9A-Fa-f]*) identity_hash="" ;;
+  esac
+  if [ "${#identity_hash}" -ne 40 ]; then
+    cat >&2 <<EOF
+tmact release installer: no valid macOS code-signing identity named "$identity"
+was found. Create it once from a tmact checkout:
+  scripts/setup-macos-codesigning.sh
+or run:
+  bash <(curl -fsSL https://raw.githubusercontent.com/${repo}/main/scripts/setup-macos-codesigning.sh)
+Then run this installer again.
+EOF
+    exit 1
+  fi
+
+  requirement="identifier \"$identifier\" and certificate leaf = H\"$identity_hash\""
+  codesign \
+    --force \
+    --sign "$identity_hash" \
+    --identifier "$identifier" \
+    --requirements "=designated => $requirement" \
+    --timestamp=none \
+    "$binary"
+  codesign --verify --strict --verbose=2 -R "=$requirement" "$binary"
+  echo "==> Signed tmact ($identifier, $identity)"
+}
+
 echo "==> Downloading ${repo} ${version} (${os}/${arch})"
 
 if command -v gh >/dev/null 2>&1; then
@@ -84,6 +141,10 @@ else
   echo "    WARNING: checksums.txt not available; skipping verification" >&2
 fi
 tar -xzf "$tmp_dir/$asset" -C "$tmp_dir"
+
+if [ "$os" = "darwin" ]; then
+  sign_macos_binary "$tmp_dir/tmact"
+fi
 
 mkdir -p "$bin_dir"
 install "$tmp_dir/tmact" "$bin_dir/tmact"

@@ -130,6 +130,59 @@ func TestWorkflowAgentDevProfileIsStrictlyValid(t *testing.T) {
 	}
 }
 
+func TestWorkflowResumePreservesPromptBlockedAgentDevDispatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(workflowAgentDevProfileYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, map[string]string{"request": "deliver feature"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const dispatchID = "wf-test.delivery.agent-dev.P1-W2.1"
+	if err := engine.Store.Update(func(state *workflow.State) error {
+		stage := state.Stages["delivery"]
+		stage.Status = workflow.StageBlocked
+		stage.Error = "agent_dev target %42 is waiting on generic_confirmation prompt"
+		stage.AgentDev = &workflow.AgentDevState{
+			Status:            "active",
+			CurrentDispatchID: dispatchID,
+			CurrentRole:       "implementer",
+			CurrentWorkItem:   "P1-W2",
+		}
+		state.Status = "needs_user"
+		state.Reason = stage.Error
+		state.Stages["delivery"] = stage
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := captureRun(t, "workflow", "resume", "--id", engine.Store.RunID, "--store-dir", root); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := state.Stages["delivery"]
+	if state.Status != "running" || state.Desired != "running" || state.Reason != "" {
+		t.Fatalf("state=%#v", state)
+	}
+	if stage.Status != workflow.StageRunning || stage.Error != "" || stage.AgentDev == nil {
+		t.Fatalf("stage=%#v", stage)
+	}
+	if stage.AgentDev.CurrentDispatchID != dispatchID || stage.AgentDev.CurrentRole != "implementer" || stage.AgentDev.CurrentWorkItem != "P1-W2" {
+		t.Fatalf("agent_dev=%#v", stage.AgentDev)
+	}
+}
+
 func TestWorkflowValidatePlanAndExecuteBoundary(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")

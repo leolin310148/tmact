@@ -10,6 +10,7 @@
 
 import type {
   Snapshot,
+  SnapshotHeartbeat,
   AgentUsage,
   ClosedSession,
   STTSettings,
@@ -118,13 +119,14 @@ export async function fetchSnapshot(): Promise<Snapshot> {
 export function subscribeSnapshot(
   onSnapshot: (snapshot: Snapshot) => void,
   onError: (err: Error) => void,
+  onHeartbeat?: (heartbeat: SnapshotHeartbeat) => void,
 ): () => void {
   if (typeof EventSource === "undefined") {
     logFrontend("warn", "snapshot_stream", "EventSource unavailable");
     onError(new Error("EventSource not supported"));
     return () => {};
   }
-  const es = new EventSource("/api/snapshot/stream");
+  const es = new EventSource("/api/snapshot/stream?view=web");
   es.onopen = () => {
     logFrontend("info", "snapshot_stream", "stream open");
   };
@@ -133,6 +135,16 @@ export function subscribeSnapshot(
       onSnapshot(JSON.parse(ev.data) as Snapshot);
     } catch (e) {
       logFrontend("warn", "snapshot_stream", "snapshot message parse failed", {
+        error: errorSummary(e),
+      });
+    }
+  });
+  es.addEventListener("heartbeat", (ev: MessageEvent) => {
+    if (!onHeartbeat) return;
+    try {
+      onHeartbeat(JSON.parse(ev.data) as SnapshotHeartbeat);
+    } catch (e) {
+      logFrontend("warn", "snapshot_stream", "heartbeat message parse failed", {
         error: errorSummary(e),
       });
     }

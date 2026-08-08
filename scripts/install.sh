@@ -14,6 +14,8 @@
 # Overridable via env:
 #   TMACT_BIN_DIR   install directory for the binary (default: ~/.local/bin)
 #   TMACT_PATH      PATH written into the service unit
+#   TMACT_CODESIGN_IDENTITY    macOS certificate name (default: tmact-signing)
+#   TMACT_CODESIGN_IDENTIFIER  macOS code identifier (default: com.leolin.tmact)
 #
 # statusd reads ~/.tmact/statusd.json itself and seeds defaults on first run.
 # To change the web bind address, edit that file and reload the service:
@@ -51,7 +53,18 @@ make web
 
 echo "==> Building tmact"
 mkdir -p "$BIN_DIR"
-go build -o "$BIN_PATH" ./cmd/tmact
+BUILD_PATH="$(mktemp "$BIN_DIR/.tmact-build.XXXXXX")"
+trap 'rm -f "$BUILD_PATH"' EXIT INT TERM
+go build -o "$BUILD_PATH" ./cmd/tmact
+chmod 755 "$BUILD_PATH"
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  echo "==> Signing tmact"
+  "$REPO_DIR/scripts/macos-codesign.sh" "$BUILD_PATH"
+fi
+
+mv -f "$BUILD_PATH" "$BIN_PATH"
+trap - EXIT INT TERM
 echo "    installed: $BIN_PATH"
 
 case ":$PATH:" in

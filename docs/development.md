@@ -75,6 +75,18 @@ Local source installs build the binary and refresh the statusd service:
   `systemctl --user` is unavailable, e.g. WSL without
   `systemd=true` in `/etc/wsl.conf`)
 
+On macOS, create the local code-signing identity once:
+
+```sh
+make codesign-setup
+```
+
+The helper creates a self-signed `tmact-signing` identity in the user's default
+keychain and verifies private-key access. Each source install then signs and
+verifies the new binary with identifier `com.leolin.tmact` before replacing the
+installed binary. Preserve that keychain identity so macOS TCC grants remain
+stable across rebuilds.
+
 ```sh
 scripts/install.sh
 ```
@@ -86,6 +98,8 @@ scripts/install.sh --bin-only
 ```
 
 The generated service runs the installed binary from `~/.local/bin/tmact`.
+Use `scripts/macos-codesign.sh --check` to verify signing setup without changing
+the installed binary.
 
 ## Contribution Notes
 

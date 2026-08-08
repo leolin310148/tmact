@@ -103,6 +103,12 @@ Inspect status and the exact worktree before retrying. A retry preserves the
 durable phase queue and reschedules the interrupted item; it does not authorize
 cleaning or discarding changes.
 
+After a human has handled a prompt, prefer `workflow resume` when the blocked
+`agent_dev` stage still has an active dispatch. Resume preserves that dispatch,
+its Git baseline, and the current phase/work item so the agent can submit its
+original report. If the prompt remains visible, the runner fails closed again.
+Use `retry` only when the interrupted work item must actually be rescheduled.
+
 ## Finish
 
 Report phase count, completed work-item and review commits, review rounds,

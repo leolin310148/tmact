@@ -18,6 +18,7 @@ import {
   type AppStateStore,
 } from "../store/AppStateContext";
 import type { Snapshot } from "../types/server";
+import { subscribeSnapshot } from "../api/client";
 import { useSnapshotStream, type SnapshotStreamDeps } from "./useSnapshotStream";
 
 // useSnapshotStream pulls snapshots from api/client; stub both so applySnapshot
@@ -109,5 +110,36 @@ describe("useSnapshotStream applySnapshot", () => {
     });
 
     expect(deps.clearSelection).not.toHaveBeenCalled();
+  });
+
+  it("applies heartbeat freshness without running snapshot render side effects", () => {
+    const renderMode = vi.fn();
+    const { result } = renderHook(() => useSnapshotStream(makeDeps(renderMode)), {
+      wrapper,
+    });
+    if (!mountedStore) throw new Error("store was not mounted");
+    const snapshot = {
+      ts: "2026-08-08T00:00:00.000Z",
+      interval_ms: 500,
+      stale_after_ms: 10000,
+      panes: {},
+    } as Snapshot;
+    mountedStore.value.state.snapshot = snapshot;
+
+    act(() => result.current.startSnapshotStream());
+    const heartbeat = vi.mocked(subscribeSnapshot).mock.calls.at(-1)?.[2];
+    if (!heartbeat) throw new Error("heartbeat callback was not registered");
+    act(() =>
+      heartbeat({
+        ts: "2026-08-08T00:00:05.000Z",
+        interval_ms: 5000,
+        stale_after_ms: 30000,
+      }),
+    );
+
+    expect(snapshot.ts).toBe("2026-08-08T00:00:05.000Z");
+    expect(snapshot.interval_ms).toBe(5000);
+    expect(snapshot.stale_after_ms).toBe(30000);
+    expect(renderMode).not.toHaveBeenCalled();
   });
 });

@@ -32,14 +32,16 @@ export interface Snapshot {
   /** Generation time, ISO8601 (Go json tag is "ts"). */
   ts: string;
   /** Producer identifier, e.g. "tmact statusd". */
-  generated_by: string;
+  /** Present on the full HTTP snapshot; omitted by the compact Web SSE view. */
+  generated_by?: string;
   /** Poll interval in milliseconds. */
   interval_ms: number;
   /** Staleness threshold in milliseconds. */
   stale_after_ms: number;
-  summary: Summary;
-  /** Keyed by session name. */
-  sessions: Record<string, SessionStatus>;
+  /** Full HTTP snapshot only; the Web SSE view does not duplicate pane state. */
+  summary?: Summary;
+  /** Keyed by session name. Full HTTP snapshot only. */
+  sessions?: Record<string, SessionStatus>;
   /** Keyed by target. */
   panes: Record<string, PaneStatus>;
   /** Up to 32 collection errors; absent (omitempty) when none. */
@@ -90,11 +92,13 @@ export interface PaneStatus {
   /** Go: `current_command,omitempty`. */
   current_command?: string;
   runtime: string;
-  tag: string;
+  /** Full HTTP snapshot diagnostic/display metadata. */
+  tag?: string;
   /** "working" | "idle" | "unknown" | "waiting_permission" (free-form string). */
   state: string;
   idle: boolean;
-  input_ready: boolean;
+  /** Full HTTP snapshot only; pane input uses the selected pane WebSocket. */
+  input_ready?: boolean;
   running: boolean;
   asking: boolean;
   /** Go: `stale,omitempty` — true only for stale merged-peer panes. */
@@ -120,7 +124,8 @@ export interface PaneStatus {
    * this explicitly as `string | null`.
    */
   last_changed_at?: string | null;
-  updated_at: string;
+  /** Full HTTP snapshot only; Web freshness is carried by snapshot heartbeat. */
+  updated_at?: string;
   /** Go: `error,omitempty`. */
   error?: string;
   /** Empty for local panes; the peer name for merged remotes (omitempty). */
@@ -132,6 +137,13 @@ export interface SnapshotError {
   /** Go: `target,omitempty`. */
   target?: string;
   error: string;
+}
+
+/** Lightweight freshness event emitted between unchanged Web snapshots. */
+export interface SnapshotHeartbeat {
+  ts: string;
+  interval_ms: number;
+  stale_after_ms: number;
 }
 
 // ---------------------------------------------------------------------------

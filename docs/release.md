@@ -16,9 +16,16 @@
 ```sh
 git clone <repo-url>
 cd tmact
+make codesign-setup # one-time macOS setup; omit on Linux
 scripts/install.sh --bin-only
 tmact ls
 ```
+
+On macOS, both source and release installers require the local
+`tmact-signing` identity and sign the installed executable with identifier
+`com.leolin.tmact`. The identity is intentionally machine-local and is not
+included in release artifacts. Preserve it across updates so privacy grants
+continue to match the same designated requirement.
 
 On macOS, install the status daemon:
 
@@ -55,6 +62,7 @@ The release workflow publishes:
 Install the latest macOS release binary:
 
 ```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/setup-macos-codesigning.sh) # once
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
 

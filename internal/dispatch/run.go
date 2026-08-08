@@ -11,6 +11,7 @@ import (
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/prompt"
+	"github.com/leolin310148/tmact/internal/tmux"
 	"github.com/leolin310148/tmact/internal/workspacelease"
 )
 
@@ -230,6 +231,9 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
 			return report, fmt.Errorf("session %s is running %s but pane state is %s; refusing to clear or dispatch until it is explicitly input-ready", opts.Session, opts.Agent, classified.State)
 		}
+		if err := settleExistingAgent(opts, deps, pane, target); err != nil {
+			return report, err
+		}
 		report.AgentWasRunning = true
 		return dispatchReuse(opts, deps, report, target)
 	case runtime == panestatus.RuntimeShell:
@@ -239,6 +243,46 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 	default:
 		return report, fmt.Errorf("session %s active pane runtime is %q; refusing to dispatch (expected %s or an idle shell)", opts.Session, runtime, opts.Agent)
 	}
+}
+
+// settleExistingAgent closes the gap between a one-shot input-ready snapshot
+// and the destructive /clear used to reuse an agent session. Agent UIs can
+// briefly render an idle footer between tool calls while the same turn is
+// still active. Every sample in ReadySettle must therefore remain explicitly
+// input-ready; unlike cold-start readiness, becoming busy again defers the
+// dispatch immediately instead of waiting for another transient idle window.
+func settleExistingAgent(opts Options, deps Deps, pane tmux.Pane, target string) error {
+	if !opts.Execute || opts.ReadySettle <= 0 {
+		return nil
+	}
+	deadline := deps.Now().Add(opts.ReadySettle)
+	for deps.Now().Before(deadline) {
+		sleep := pollInterval
+		if remaining := deadline.Sub(deps.Now()); remaining < sleep {
+			sleep = remaining
+		}
+		deps.Sleep(sleep)
+
+		raw, err := deps.CapturePane(target, captureLines)
+		if err != nil {
+			return fmt.Errorf("confirm session %s remained idle: %w", opts.Session, err)
+		}
+		classified, err := classifyPane(deps, target, raw)
+		if err != nil {
+			return fmt.Errorf("confirm session %s remained idle: %w", opts.Session, err)
+		}
+		if classified.Asking {
+			return fmt.Errorf("session %s is running %s but it is waiting on a prompt (%s); resolve it first", opts.Session, opts.Agent, promptKind(classified))
+		}
+		runtime := detectRuntime(deps, pane, raw)
+		if runtime != opts.Agent {
+			return fmt.Errorf("session %s changed runtime from %s to %s while settling", opts.Session, opts.Agent, runtime)
+		}
+		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
+			return fmt.Errorf("session %s did not remain idle for %s (state=%s); refusing to clear or dispatch", opts.Session, opts.ReadySettle, classified.State)
+		}
+	}
+	return nil
 }
 
 func dispatchReuse(opts Options, deps Deps, report Report, target string) (Report, error) {

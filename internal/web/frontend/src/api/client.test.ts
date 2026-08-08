@@ -66,6 +66,7 @@ describe("api client logging", () => {
 
     subscribeSnapshot(onSnapshot, onError);
     const source = FakeEventSource.instances[0];
+    expect(source?.url).toBe("/api/snapshot/stream?view=web");
     source?.onopen?.();
     source?.emit("snapshot", "{");
     source?.onerror?.();
@@ -80,6 +81,32 @@ describe("api client logging", () => {
     expect(logFrontend).toHaveBeenCalledWith("warn", "snapshot_stream", "stream closed");
     expect(onSnapshot).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalled();
+  });
+
+  it("delivers compact snapshot heartbeat events without a full snapshot", () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const onSnapshot = vi.fn();
+    const onError = vi.fn();
+    const onHeartbeat = vi.fn();
+
+    subscribeSnapshot(onSnapshot, onError, onHeartbeat);
+    const source = FakeEventSource.instances[0];
+    source?.emit(
+      "heartbeat",
+      JSON.stringify({
+        ts: "2026-08-08T00:00:05.000Z",
+        interval_ms: 500,
+        stale_after_ms: 10000,
+      }),
+    );
+
+    expect(onHeartbeat).toHaveBeenCalledWith({
+      ts: "2026-08-08T00:00:05.000Z",
+      interval_ms: 500,
+      stale_after_ms: 10000,
+    });
+    expect(onSnapshot).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("routes federated commands to the peer with a local pane id", async () => {

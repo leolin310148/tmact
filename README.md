@@ -337,11 +337,24 @@ recognized trust prompt when the detected runtime matches and the canonical
 pane cwd is exactly the allowed directory. Parent directories, child
 directories, ambiguous choices, and every other permission prompt are refused.
 
-Install the release binary (macOS or Linux/WSL, amd64/arm64):
+On macOS, create the local signing identity once before the first install:
+
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/setup-macos-codesigning.sh)
+```
+
+Then install or update the release binary (macOS or Linux/WSL, amd64/arm64):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leolin310148/tmact/main/scripts/install-release.sh | sh
 ```
+
+Every macOS install signs the binary as `com.leolin.tmact` with that same local
+identity before replacing the installed copy. This gives macOS TCC a stable
+code identity across rebuilds and updates. The certificate is self-signed and
+local-only; it is not a Developer ID certificate and does not notarize public
+releases. Keep the `tmact-signing` identity in the default keychain—replacing it
+changes the code identity and causes privacy permissions to be requested again.
 
 On WSL, statusd auto-start requires `systemd` (set `systemd=true` in
 `/etc/wsl.conf` and `wsl --shutdown`); without it the binary still installs

@@ -557,7 +557,16 @@ func runWorkflowControl(args []string, desired string) error {
 			s.FinishedAt = time.Time{}
 			for id, ss := range s.Stages {
 				if ss.Status == workflow.StageBlocked && strings.Contains(ss.Error, "prompt") {
-					ss.Status = workflow.StagePending
+					// A prompt can disappear after the runner has failed closed while
+					// the dispatched agent is still working. Preserve an active
+					// agent_dev turn so its original Git baseline and report contract
+					// remain valid. The next scheduler tick captures the pane again and
+					// blocks immediately if the prompt has not actually been handled.
+					if ss.AgentDev != nil && ss.AgentDev.CurrentDispatchID != "" {
+						ss.Status = workflow.StageRunning
+					} else {
+						ss.Status = workflow.StagePending
+					}
 					ss.Error = ""
 					s.Stages[id] = ss
 				}
