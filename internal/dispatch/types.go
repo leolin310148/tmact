@@ -59,6 +59,7 @@ func SupportedAgents() []string {
 // Options configures a single dispatch-work run.
 type Options struct {
 	Session             string
+	Target              string
 	Dir                 string
 	Agent               string
 	Model               string

@@ -34,6 +34,7 @@ func runDispatch(args []string) error {
 	fs := flag.NewFlagSet("dispatch-work", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
+	target := fs.String("target", "", "pane to dispatch into within the existing session: %id, WINDOW, or WINDOW.PANE (optionally session-prefixed)")
 	dir := fs.String("dir", "", "working directory; sets cwd when the session is created")
 	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
 	model := fs.String("model", "", dispatchModelHelp())
@@ -92,11 +93,15 @@ func runDispatch(args []string) error {
 	if *peerName != "" && *wait {
 		return errors.New("dispatch-work --wait does not support peer waiting; run without --wait or invoke tmact on the peer")
 	}
+	if *peerName != "" && *target != "" {
+		return errors.New("dispatch-work --target is not supported with --peer; older peers would silently ignore it and dispatch into the active pane")
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	opts := dispatch.Options{
 		Session:      session,
+		Target:       *target,
 		Dir:          *dir,
 		Agent:        *agent,
 		Model:        *model,

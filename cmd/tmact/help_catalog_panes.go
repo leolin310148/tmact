@@ -107,10 +107,11 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "dispatch-work",
 			Summary: "Create or reuse a local or peer tmux session, launch an agent, and send it a prompt.",
 			Usage: []string{
-				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute] [--json]",
+				"tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini [--target WINDOW[.PANE]] [--model MODEL] --prompt TEXT [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute] [--json]",
 				"tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--trust-folder] [--execute] [--json]",
 			},
 			Flags: []helpFlag{
+				{Name: "--target", Value: "TARGET", Description: "pane to dispatch into within the existing session: %id, WINDOW, or WINDOW.PANE; default is the active pane"},
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created", Required: true},
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini", Required: true},
 				{Name: "--model", Value: "MODEL", Description: dispatchModelHelp()},
@@ -142,6 +143,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Notes: []string{
 				"The session name is the first positional argument.",
+				"Without --target the active pane of the session is used, which follows whichever window tmux has selected; pass --target to pin a window or pane (e.g. --target 1 for SESSION:1). It requires the session to exist and is not supported with --peer.",
 				"For a configured remote machine, use --peer; tmact dispatches through the peer statusd, so do not SSH there to invoke tmact unless SSH was explicitly requested.",
 				"A new session starts a shell and launches the agent into it, so quitting the agent drops back to a shell instead of closing the session.",
 				"Reusing a session that already runs the agent sends /clear before the prompt.",

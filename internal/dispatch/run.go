@@ -110,6 +110,9 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	}
 	report.SessionExisted = layout.Sessions[opts.Session]
 
+	if opts.Target != "" && !report.SessionExisted {
+		return report, fmt.Errorf("--target %s requires session %s to already exist", opts.Target, opts.Session)
+	}
 	if report.SessionExisted {
 		return dispatchExisting(opts, deps, report)
 	}
@@ -189,6 +192,13 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 		return report, fmt.Errorf("session %s has no panes", opts.Session)
 	}
 	pane := activePane(panes)
+	if opts.Target != "" {
+		found, ok := findTargetPane(panes, opts.Session, opts.Target)
+		if !ok {
+			return report, fmt.Errorf("target %q does not match any pane in session %s", opts.Target, opts.Session)
+		}
+		pane = found
+	}
 	target := paneTarget(pane)
 	report.Target = target
 

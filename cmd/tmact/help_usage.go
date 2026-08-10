@@ -62,7 +62,7 @@ Usage:
   tmact workflow plan-report --dispatch-id ID --file PATH
   tmact workflow stop (--id ID | --config workflow.yaml) --wait
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
+  tmact dispatch-work SESSION --dir DIR --agent claude [--target WINDOW[.PANE]] [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
   tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--execute]
   tmact ask SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--timeout 30m] [--trust-folder] [--execute] [--json]
   tmact reply QUESTION_ID (--text TEXT | --file PATH) [--json]

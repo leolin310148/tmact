@@ -2,6 +2,8 @@ package dispatch
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
@@ -53,6 +55,59 @@ func activePane(panes []tmux.Pane) tmux.Pane {
 		}
 	}
 	return panes[0]
+}
+
+// findTargetPane resolves an explicit --target — a pane id ("%3"), a window
+// index ("1"), or a window.pane pair ("1.0"), each optionally prefixed with
+// "session:" — to a pane of the session, so dispatch acts on the requested
+// window instead of whichever one tmux currently has selected. A bare window
+// index picks that window's active pane. Only panes already listed for the
+// session can match, so a target in another session never resolves.
+func findTargetPane(panes []tmux.Pane, session, target string) (tmux.Pane, bool) {
+	if strings.HasPrefix(target, "%") {
+		for _, pane := range panes {
+			if pane.PaneID == target {
+				return pane, true
+			}
+		}
+		return tmux.Pane{}, false
+	}
+	spec := strings.TrimPrefix(target, session+":")
+	windowSpec := spec
+	paneIndex := -1
+	if dot := strings.IndexByte(spec, '.'); dot >= 0 {
+		windowSpec = spec[:dot]
+		idx, err := strconv.Atoi(spec[dot+1:])
+		if err != nil {
+			return tmux.Pane{}, false
+		}
+		paneIndex = idx
+	}
+	windowIndex, err := strconv.Atoi(windowSpec)
+	if err != nil {
+		return tmux.Pane{}, false
+	}
+	var fallback tmux.Pane
+	found := false
+	for _, pane := range panes {
+		if pane.WindowIndex != windowIndex {
+			continue
+		}
+		if paneIndex >= 0 {
+			if pane.PaneIndex == paneIndex {
+				return pane, true
+			}
+			continue
+		}
+		if pane.Active {
+			return pane, true
+		}
+		if !found {
+			fallback = pane
+			found = true
+		}
+	}
+	return fallback, found
 }
 
 func findPane(panes []tmux.Pane, target string) (tmux.Pane, bool) {

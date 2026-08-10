@@ -481,6 +481,74 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 	}
 }
 
+func TestDispatchTargetSelectsPaneInInactiveWindow(t *testing.T) {
+	rec, deps := baseDeps()
+	shell := tmux.Pane{Session: "work", PaneID: "%0", PanePID: 100, CurrentCommand: "zsh", WindowIndex: 0, PaneIndex: 0, Active: true, WindowActive: true}
+	agent := claudePane()
+	agent.PaneID = "%2"
+	agent.WindowIndex = 1
+	agent.WindowActive = false
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{shell, agent}, nil
+	}
+	deps.ProcessRuntime = func(pid int) panestatus.RuntimeDetection {
+		if pid == agent.PanePID {
+			return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+		}
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeShell}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) >= 2 {
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+		return "Claude Code\n❯", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	opts.Target = "work:1"
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if report.Target != "%2" {
+		t.Fatalf("target = %q, want %%2", report.Target)
+	}
+	for _, p := range rec.pastes {
+		if p.target != "%2" {
+			t.Fatalf("paste went to %q, want %%2: %+v", p.target, rec.pastes)
+		}
+	}
+}
+
+func TestDispatchTargetRejectsUnknownPaneAndMissingSession(t *testing.T) {
+	_, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	opts.Target = "work:5"
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "does not match any pane") {
+		t.Fatalf("error = %v, want unknown-pane refusal", err)
+	}
+
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{}}, nil
+	}
+	opts.Target = "work:1"
+	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "already exist") {
+		t.Fatalf("error = %v, want missing-session refusal", err)
+	}
+}
+
 func TestExistingSessionReuseWaitsForStableReadyBeforeClear(t *testing.T) {
 	rec, deps := baseDeps()
 	now := time.Unix(0, 0)
