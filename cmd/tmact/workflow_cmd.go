@@ -32,7 +32,7 @@ func runWorkflow(args []string) error {
 		return printCommandHelp(topic)
 	}
 	if len(args) == 0 {
-		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, logs, pause, resume, retry, resolve, report, plan-report, stop")
+		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, wait, logs, pause, resume, retry, resolve, report, plan-report, stop")
 	}
 	switch args[0] {
 	case "example":
@@ -47,6 +47,8 @@ func runWorkflow(args []string) error {
 		return runWorkflowStart(args[1:])
 	case "status":
 		return runWorkflowStatus(args[1:])
+	case "wait":
+		return runWorkflowWait(args[1:])
 	case "logs":
 		return runWorkflowLogs(args[1:])
 	case "pause":
@@ -483,6 +485,66 @@ func printWorkflowStateV2(state workflow.State) {
 				fmt.Printf("    phase %s %-12s items=%d/%d review=%s\n", phase.ID, phase.Status, complete, len(phase.Items), phase.ReviewItem.Status)
 			}
 		}
+	}
+}
+
+func runWorkflowWait(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow wait")
+	}
+	fs := flag.NewFlagSet("workflow wait", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id, config, root := workflowSelection(fs)
+	timeout := fs.Duration("timeout", 0, "give up after this long; 0 waits forever")
+	poll := fs.Duration("poll-interval", 2*time.Second, "state re-read interval")
+	jsonOut := fs.Bool("json", false, "print JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *poll <= 0 {
+		return errors.New("--poll-interval must be positive")
+	}
+	store, state, err := selectWorkflow(*id, *config, *root)
+	if err != nil {
+		return err
+	}
+	var deadline time.Time
+	if *timeout > 0 {
+		deadline = time.Now().Add(*timeout)
+	}
+	for {
+		if workflowTerminal(state.Status) || state.Status == "needs_user" {
+			return reportWorkflowWaitResult(state, *jsonOut)
+		}
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			return fmt.Errorf("timed out waiting for workflow %s (status %s)", state.RunID, state.Status)
+		}
+		tmactSleep(*poll)
+		if state, err = store.Read(); err != nil {
+			return err
+		}
+	}
+}
+
+func reportWorkflowWaitResult(state workflow.State, jsonOut bool) error {
+	if jsonOut {
+		if err := printJSON(map[string]any{"run_id": state.RunID, "status": state.Status, "reason": state.Reason}); err != nil {
+			return err
+		}
+	} else {
+		line := fmt.Sprintf("workflow %s: %s", state.RunID, state.Status)
+		if state.Reason != "" {
+			line += " (" + state.Reason + ")"
+		}
+		fmt.Println(line)
+	}
+	switch state.Status {
+	case "succeeded", "stopped":
+		return nil
+	case "needs_user":
+		return fmt.Errorf("workflow %s needs user: %s", state.RunID, state.Reason)
+	default:
+		return fmt.Errorf("workflow %s ended %s", state.RunID, state.Status)
 	}
 }
 

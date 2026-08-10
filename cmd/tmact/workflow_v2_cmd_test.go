@@ -183,6 +183,57 @@ func TestWorkflowResumePreservesPromptBlockedAgentDevDispatch(t *testing.T) {
 	}
 }
 
+func TestWorkflowWaitReturnsTerminalAndNeedsUserStates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(workflowAgentDevProfileYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, map[string]string{"request": "deliver feature"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setStatus := func(status, reason string) {
+		t.Helper()
+		if err := engine.Store.Update(func(state *workflow.State) error {
+			state.Status = status
+			state.Reason = reason
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setStatus("running", "")
+	if _, err := captureRun(t, "workflow", "wait", "--id", engine.Store.RunID, "--store-dir", root, "--timeout", "50ms", "--poll-interval", "10ms"); err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("err=%v", err)
+	}
+
+	setStatus("succeeded", "")
+	out, err := captureRun(t, "workflow", "wait", "--id", engine.Store.RunID, "--store-dir", root, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"status": "succeeded"`) {
+		t.Fatalf("out=%s", out)
+	}
+
+	setStatus("needs_user", "waiting on prompt")
+	out, err = captureRun(t, "workflow", "wait", "--id", engine.Store.RunID, "--store-dir", root)
+	if err == nil || !strings.Contains(err.Error(), "needs user") {
+		t.Fatalf("err=%v", err)
+	}
+	if !strings.Contains(out, "needs_user") {
+		t.Fatalf("out=%s", out)
+	}
+}
+
 func TestWorkflowValidatePlanAndExecuteBoundary(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
