@@ -52,6 +52,28 @@ download() {
   fi
 }
 
+# launchctl bootout returns before the service finishes tearing down, and a
+# bootstrap issued during teardown fails with "Bootstrap failed: 5:
+# Input/output error". Wait for the label to disappear and retry bootstrap.
+wait_label_gone() {
+  i=0
+  while launchctl print "$1/$2" >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -ge 20 ] && return 1
+    sleep 1
+  done
+  return 0
+}
+bootstrap_retry() {
+  i=0
+  until launchctl bootstrap "$1" "$2"; do
+    i=$((i + 1))
+    [ "$i" -ge 5 ] && return 1
+    sleep 2
+  done
+  return 0
+}
+
 sign_macos_binary() {
   binary="$1"
   identity="${TMACT_CODESIGN_IDENTITY:-tmact-signing}"
@@ -199,7 +221,9 @@ if [ "${TMACT_INSTALL_STATUSD:-0}" = "1" ]; then
 EOF
       domain="gui/$(id -u)"
       launchctl bootout "$domain/$label" 2>/dev/null || true
-      launchctl bootstrap "$domain" "$plist"
+      wait_label_gone "$domain" "$label" \
+        || echo "==> WARNING: $label still registered after bootout; retrying bootstrap anyway"
+      bootstrap_retry "$domain" "$plist"
       echo "==> Loaded $plist"
       ;;
     linux)

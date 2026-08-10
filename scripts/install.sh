@@ -37,6 +37,28 @@ SYSTEMD_UNIT="tmact-statusd.service"
 SYSTEMD_TEMPLATE="$REPO_DIR/systemd/$SYSTEMD_UNIT.in"
 SYSTEMD_DST="$HOME/.config/systemd/user/$SYSTEMD_UNIT"
 
+# launchctl bootout returns before the service finishes tearing down, and a
+# bootstrap issued during teardown fails with "Bootstrap failed: 5:
+# Input/output error". Wait for the label to disappear and retry bootstrap.
+wait_label_gone() {
+  i=0
+  while launchctl print "$1/$2" >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -ge 20 ] && return 1
+    sleep 1
+  done
+  return 0
+}
+bootstrap_retry() {
+  i=0
+  until launchctl bootstrap "$1" "$2"; do
+    i=$((i + 1))
+    [ "$i" -ge 5 ] && return 1
+    sleep 2
+  done
+  return 0
+}
+
 BIN_ONLY=0
 for arg in "$@"; do
   case "$arg" in
@@ -88,7 +110,9 @@ if [[ "$BIN_ONLY" -eq 0 ]]; then
         # with "Input/output error" on recent macOS once the agent is loaded.
         domain="gui/$(id -u)"
         launchctl bootout "$domain/$PLIST_LABEL" 2>/dev/null || true
-        launchctl bootstrap "$domain" "$PLIST_DST"
+        wait_label_gone "$domain" "$PLIST_LABEL" \
+          || echo "    WARNING: $PLIST_LABEL still registered after bootout; retrying bootstrap anyway"
+        bootstrap_retry "$domain" "$PLIST_DST"
         echo "    loaded: $PLIST_DST"
       fi
       ;;
