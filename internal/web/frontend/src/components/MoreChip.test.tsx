@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PaneStatus } from "../types/server";
-import { MoreChip } from "./MoreChip";
+import { MoreChip, overflowMenuShiftX } from "./MoreChip";
 
 // The shared menu content fetches the recently-closed history on open; keep
 // these tests offline and history-less.
@@ -47,6 +47,12 @@ const items = [
 ];
 
 describe("MoreChip keyboard menu", () => {
+  it("shifts a right-aligned menu back inside a narrow viewport", () => {
+    expect(overflowMenuShiftX({ left: -128, right: 212 }, 504)).toBe(136);
+    expect(overflowMenuShiftX({ left: 508, right: 848 }, 1_008)).toBe(0);
+    expect(overflowMenuShiftX({ left: 780, right: 1_120 }, 1_008)).toBe(-120);
+  });
+
   it("associates the trigger and menu and exposes rows as menu items", async () => {
     const user = userEvent.setup();
     render(<MoreChip items={items} onSelect={vi.fn()} />);

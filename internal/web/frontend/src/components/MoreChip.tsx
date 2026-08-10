@@ -8,7 +8,7 @@
 // recently-closed history. The chip renders even with zero hidden panes so the
 // history stays reachable; the count badge only appears when panes are hidden.
 
-import { useId } from "react";
+import { useId, useLayoutEffect } from "react";
 import type { PaneListItem } from "./StatusLine";
 import { OverflowMenuContent, useMenuPopover } from "./OverflowMenu";
 
@@ -18,10 +18,43 @@ interface MoreChipProps {
   onSelect: (paneID: string) => void;
 }
 
+// The statusline wraps, so the more chip can land near either viewport edge.
+// Keep its right-aligned menu on screen without changing the normal anchor.
+export function overflowMenuShiftX(
+  rect: Pick<DOMRect, "left" | "right">,
+  viewportWidth: number,
+  gutter = 8,
+): number {
+  if (rect.left < gutter) return gutter - rect.left;
+  if (rect.right > viewportWidth - gutter) return viewportWidth - gutter - rect.right;
+  return 0;
+}
+
 export function MoreChip({ items, onSelect }: MoreChipProps) {
   const pop = useMenuPopover(true);
   const buttonID = useId();
   const menuID = useId();
+
+  useLayoutEffect(() => {
+    if (!pop.open || !pop.menuRef.current) return;
+    const menu = pop.menuRef.current;
+    const place = () => {
+      // Measure the unshifted right-aligned position so a later resize can
+      // remove an earlier correction as well as add a new one.
+      menu.style.transform = "";
+      const shift = overflowMenuShiftX(menu.getBoundingClientRect(), window.innerWidth);
+      menu.style.transform = shift === 0 ? "" : `translateX(${shift}px)`;
+    };
+
+    place();
+    window.addEventListener("resize", place);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(menu);
+    return () => {
+      window.removeEventListener("resize", place);
+      observer?.disconnect();
+    };
+  }, [items.length, pop.open, pop.menuRef]);
 
   const count = items.length;
   const label =
