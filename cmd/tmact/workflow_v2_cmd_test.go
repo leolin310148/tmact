@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leolin310148/tmact/internal/workflow"
 )
@@ -180,6 +181,77 @@ func TestWorkflowResumePreservesPromptBlockedAgentDevDispatch(t *testing.T) {
 	}
 	if stage.AgentDev.CurrentDispatchID != dispatchID || stage.AgentDev.CurrentRole != "implementer" || stage.AgentDev.CurrentWorkItem != "P1-W2" {
 		t.Fatalf("agent_dev=%#v", stage.AgentDev)
+	}
+}
+
+func TestWorkflowAcknowledgePreservesDispatchAndRestartsTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(workflowAgentDevProfileYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, map[string]string{"request": "deliver feature"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const dispatchID = "wf-test.delivery.agent-dev.P1-W2.1"
+	staleSent := time.Now().Add(-2 * time.Hour)
+	if err := engine.Store.Dispatch(workflow.Dispatch{Timestamp: staleSent, ID: dispatchID, RunID: engine.Store.RunID, Stage: "delivery", Attempt: 1, Actor: "implementer", Status: "sent"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Store.Update(func(state *workflow.State) error {
+		stage := state.Stages["delivery"]
+		stage.Status = workflow.StageBlocked
+		stage.Error = "agent_dev dispatch timed out: " + dispatchID
+		stage.AgentDev = &workflow.AgentDevState{
+			Status:            "active",
+			CurrentDispatchID: dispatchID,
+			CurrentRole:       "implementer",
+			CurrentWorkItem:   "P1-W2",
+		}
+		state.Status = "needs_user"
+		state.Reason = stage.Error
+		state.Stages["delivery"] = stage
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := captureRun(t, "workflow", "acknowledge", "--id", engine.Store.RunID, "--store-dir", root); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := state.Stages["delivery"]
+	if state.Status != "running" || state.Reason != "" {
+		t.Fatalf("state=%#v", state)
+	}
+	if stage.Status != workflow.StageRunning || stage.Error != "" || stage.AgentDev == nil {
+		t.Fatalf("stage=%#v", stage)
+	}
+	if stage.AgentDev.CurrentDispatchID != dispatchID || stage.AgentDev.CurrentWorkItem != "P1-W2" {
+		t.Fatalf("agent_dev=%#v", stage.AgentDev)
+	}
+	last, ok, err := workflow.LastDispatch(engine.Store, dispatchID)
+	if err != nil || !ok {
+		t.Fatalf("dispatch missing: ok=%v err=%v", ok, err)
+	}
+	if !last.Timestamp.After(staleSent.Add(time.Hour)) {
+		t.Fatalf("dispatch timestamp not refreshed: %v", last.Timestamp)
+	}
+	if last.Status != "sent" || last.Stage != "delivery" {
+		t.Fatalf("dispatch=%#v", last)
+	}
+
+	if _, err := captureRun(t, "workflow", "acknowledge", "--id", engine.Store.RunID, "--store-dir", root); err == nil {
+		t.Fatal("second acknowledge should fail with nothing blocked")
 	}
 }
 

@@ -32,7 +32,7 @@ func runWorkflow(args []string) error {
 		return printCommandHelp(topic)
 	}
 	if len(args) == 0 {
-		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, wait, logs, pause, resume, retry, resolve, report, plan-report, stop")
+		return errors.New("workflow requires a subcommand: example, validate, plan, run, start, status, wait, logs, pause, resume, acknowledge, retry, resolve, report, plan-report, stop")
 	}
 	switch args[0] {
 	case "example":
@@ -55,6 +55,8 @@ func runWorkflow(args []string) error {
 		return runWorkflowControl(args[1:], "paused")
 	case "resume":
 		return runWorkflowControl(args[1:], "running")
+	case "acknowledge":
+		return runWorkflowAcknowledge(args[1:])
 	case "retry":
 		return runWorkflowRetry(args[1:])
 	case "resolve":
@@ -657,6 +659,29 @@ func runWorkflowControl(args []string, desired string) error {
 	fmt.Printf("workflow %s desired=%s (was %s)\n", state.RunID, desired, state.Desired)
 	return nil
 }
+func runWorkflowAcknowledge(args []string) error {
+	if wantsHelp(args) {
+		return printCommandHelp("workflow acknowledge")
+	}
+	fs := flag.NewFlagSet("workflow acknowledge", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id, config, root := workflowSelection(fs)
+	stage := fs.String("stage", "", "blocked agent_dev stage id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	store, _, err := selectWorkflow(*id, *config, *root)
+	if err != nil {
+		return err
+	}
+	acknowledged, err := workflow.AcknowledgeStage(store, *stage)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("workflow %s stage %s acknowledged; dispatch preserved and timeout restarted\n", store.RunID, acknowledged)
+	return nil
+}
+
 func runWorkflowRetry(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("workflow retry")

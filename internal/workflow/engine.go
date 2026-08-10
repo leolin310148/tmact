@@ -1369,6 +1369,73 @@ func ResolveHuman(root, id, configPath, stageID, outcome string, input map[strin
 	})
 }
 
+// AcknowledgeStage clears a blocked agent_dev stage after a human has handled
+// whatever stopped it (prompt, timeout, lost pane), preserving the active
+// dispatch so the agent's original Git baseline and report contract stay
+// valid. The dispatch record is re-appended with a fresh timestamp so the
+// stage timeout window restarts instead of immediately re-blocking. Unlike
+// resume it never resets a stage to pending, and unlike retry it never clears
+// the dispatch.
+func AcknowledgeStage(store Store, stageID string) (string, error) {
+	state, err := store.Read()
+	if err != nil {
+		return "", err
+	}
+	if state.Desired == "stopped" || state.Status == "stopped" {
+		return "", fmt.Errorf("workflow %s is stopped; resume it before acknowledging", state.RunID)
+	}
+	var acknowledged, dispatchID string
+	err = store.Update(func(s *State) error {
+		var candidates []string
+		for sid, ss := range s.Stages {
+			if ss.Status != StageBlocked || ss.AgentDev == nil || ss.AgentDev.CurrentDispatchID == "" {
+				continue
+			}
+			if stageID != "" && sid != stageID {
+				continue
+			}
+			candidates = append(candidates, sid)
+		}
+		if len(candidates) == 0 {
+			if stageID != "" {
+				return fmt.Errorf("stage %q is not a blocked agent_dev stage with an active dispatch", stageID)
+			}
+			return errors.New("no blocked agent_dev stage with an active dispatch to acknowledge")
+		}
+		if len(candidates) > 1 {
+			sort.Strings(candidates)
+			return fmt.Errorf("multiple blocked agent_dev stages (%s); pass --stage", strings.Join(candidates, ", "))
+		}
+		sid := candidates[0]
+		ss := s.Stages[sid]
+		ss.Status = StageRunning
+		ss.Error = ""
+		ss.FinishedAt = time.Time{}
+		s.Stages[sid] = ss
+		s.Status = "running"
+		s.Reason = ""
+		s.FinishedAt = time.Time{}
+		acknowledged = sid
+		dispatchID = ss.AgentDev.CurrentDispatchID
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	last, ok, err := LastDispatch(store, dispatchID)
+	if err != nil {
+		return "", err
+	}
+	if ok && last.Status == "sent" {
+		last.Timestamp = time.Now()
+		if err := store.Dispatch(last); err != nil {
+			return "", err
+		}
+	}
+	_ = store.Event(Event{Type: "agent_dev_acknowledged", Stage: acknowledged, Status: StageRunning, Reason: dispatchID})
+	return acknowledged, nil
+}
+
 func RetryStage(root, id, stageID string) error {
 	store, state, err := Find(root, id, "")
 	if err != nil {
