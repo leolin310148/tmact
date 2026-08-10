@@ -244,7 +244,7 @@ func runWorkflowStart(args []string) error {
 	}
 	fs := flag.NewFlagSet("workflow start", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	f := addWorkflowConfigFlags(fs, false)
+	f := addWorkflowConfigFlags(fs, true)
 	execute := fs.Bool("execute", false, "create the detached runner and perform live side effects")
 	timeout := fs.Duration("timeout", 10*time.Second, "startup wait")
 	if err := fs.Parse(args); err != nil {
@@ -259,6 +259,9 @@ func runWorkflowStart(args []string) error {
 		return err
 	}
 	if !*execute {
+		if *f.json {
+			return printJSON(map[string]any{"run_id": plan.RunID, "session": workflowSupervisorSession, "dry_run": true})
+		}
 		printWorkflowPlan(plan)
 		fmt.Printf("detached session: %s\ndry-run: add --execute to start\n", workflowSupervisorSession)
 		return nil
@@ -276,6 +279,9 @@ func runWorkflowStart(args []string) error {
 			return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", existing.RunID)
 		}
 		if workflowStartTerminal(existing) {
+			if *f.json {
+				return printJSON(map[string]any{"run_id": existing.RunID, "status": existing.Status, "already_terminal": true})
+			}
 			fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", existing.RunID, existing.Status)
 			return nil
 		}
@@ -284,6 +290,9 @@ func runWorkflowStart(args []string) error {
 			return activeErr
 		}
 		if active {
+			if *f.json {
+				return printJSON(map[string]any{"run_id": existing.RunID, "status": existing.Status, "already_active": true})
+			}
 			fmt.Printf("workflow already active: %s (%s)\n", existing.RunID, existing.Status)
 			return nil
 		}
@@ -302,6 +311,9 @@ func runWorkflowStart(args []string) error {
 		return fmt.Errorf("workflow %s has a stop request; run workflow resume before starting it", state.RunID)
 	}
 	if workflowStartTerminal(state) {
+		if *f.json {
+			return printJSON(map[string]any{"run_id": state.RunID, "status": state.Status, "already_terminal": true})
+		}
 		fmt.Printf("workflow already terminal: %s (%s); use retry or change the config\n", state.RunID, state.Status)
 		return nil
 	}
@@ -338,6 +350,9 @@ func runWorkflowStart(args []string) error {
 				return fmt.Errorf("workflow %s needs user: %s", fresh.RunID, fresh.Reason)
 			}
 			if active || workflowTerminal(fresh.Status) {
+				if *f.json {
+					return printJSON(map[string]any{"run_id": fresh.RunID, "status": fresh.Status, "session": workflowSupervisorSession, "started": true})
+				}
 				fmt.Printf("started workflow %s in %s\n", fresh.RunID, workflowSupervisorSession)
 				return nil
 			}
