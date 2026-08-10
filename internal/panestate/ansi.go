@@ -1,6 +1,7 @@
 package panestate
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -70,10 +71,18 @@ func hasActiveInterruptIndicator(raw string) bool {
 			continue
 		}
 		lower := strings.ToLower(line)
-		return strings.Contains(lower, "esc to interrupt") || strings.Contains(lower, "ctrl-c to interrupt")
+		if strings.Contains(lower, "esc to interrupt") || strings.Contains(lower, "ctrl-c to interrupt") {
+			return true
+		}
+		return claudeSpinnerPattern.MatchString(strings.TrimSpace(line))
 	}
 	return false
 }
+
+// claudeSpinnerPattern matches Claude's live activity line — spinner glyph,
+// gerund, ellipsis, elapsed timer — which narrow or split panes render
+// without the "esc to interrupt" tail, e.g. "✻ Frosting… (2m 51s)".
+var claudeSpinnerPattern = regexp.MustCompile(`^[✻✽✶✳✢✺·∗*+] ?[A-Za-z][A-Za-z' -]{1,40}(…|\.\.\.)\s*\((?:\d+h\s*)?(?:\d+m\s*)?\d+s\b`)
 
 func currentStyledInput(raw string) ([]styledRune, bool) {
 	lines := strings.Split(raw, "\n")

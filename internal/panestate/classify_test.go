@@ -159,6 +159,36 @@ func TestClassifyTreatsActiveSteeringInputAsWorking(t *testing.T) {
 	}
 }
 
+func TestClassifyTreatsClaudeSpinnerWithoutInterruptHintAsWorking(t *testing.T) {
+	result := Classify(`
+✻ Frosting… (2m 51s)
+
+❯
+
+⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+`)
+
+	if result.State != StateWorking {
+		t.Fatalf("state = %q, signals = %#v", result.State, result.Signals)
+	}
+}
+
+func TestClassifyDoesNotReviveStaleClaudeSpinnerAfterCompletion(t *testing.T) {
+	result := Classify(`
+✻ Frosting… (2m 51s)
+
+Done. All tests pass.
+
+❯
+
+⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+`)
+
+	if result.State != StateWaitingInput {
+		t.Fatalf("state = %q, signals = %#v", result.State, result.Signals)
+	}
+}
+
 func TestClassifyDoesNotReviveStaleInterruptIndicatorAfterCompletion(t *testing.T) {
 	result := Classify(`
 • Working (46s • esc to interrupt)

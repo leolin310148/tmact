@@ -46,6 +46,12 @@ func TestClassifyANSIDistinguishesSuggestionsAndDrafts(t *testing.T) {
 			want: StateWorking,
 		},
 		{
+			name: "claude spinner without interrupt hint over empty input",
+			raw:  "✻ Frosting… (2m 51s)\n❯\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+			ansi: "✻ Frosting… (2m 51s)\n\x1b[39m❯ \x1b[0m\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
+			want: StateWorking,
+		},
+		{
 			name: "claude completed output mentioning running with empty input",
 			raw:  "Completed successfully. Workflow remained running.\n❯\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
 			ansi: "Completed successfully. Workflow remained running.\n\x1b[39m❯ \x1b[0m\n⏵⏵ auto mode on (shift+tab to cycle) · ← for agents\n",
