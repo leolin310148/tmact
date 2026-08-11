@@ -190,13 +190,28 @@
   }
   .ovf-sep {
     display: flex; align-items: center; gap: 6px;
-    margin: 6px 2px 2px;
+    width: calc(100% - 4px);
+    margin: 6px 2px 2px; padding: 5px 4px;
+    border: 0; border-radius: 4px;
+    background: transparent;
     color: var(--fg-dim);
     font: 700 9px/1 var(--mono);
     text-transform: uppercase; letter-spacing: 0.08em;
+    cursor: pointer;
   }
-  .ovf-sep::before, .ovf-sep::after {
+  .ovf-sep:hover { background: var(--panel-2); color: var(--fg); }
+  .ovf-sep:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .ovf-sep::after {
     content: ""; flex: 1 1 auto; height: 1px; background: var(--border);
+  }
+  .ovf-sep-chevron { width: 9px; text-align: center; }
+  .ovf-sep-count {
+    order: 3;
+    min-width: 16px; padding: 2px 3px;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: var(--bg);
+    text-align: center;
+    letter-spacing: 0;
   }
   .ovf-reopen { flex: 0 0 auto; color: var(--fg-dim); font: 12px/1 var(--mono); }
   .ovf-closed .ovf-main:hover .ovf-reopen { color: var(--green); }

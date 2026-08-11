@@ -130,7 +130,18 @@ describe("OverflowMenuContent recently closed", () => {
     const user = userEvent.setup();
     render(<OverflowMenuContent items={[]} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
 
-    const reopen = await screen.findByRole("menuitem", { name: "Reopen session old" });
+    const toggle = await screen.findByRole("menuitem", {
+      name: "Show 2 recently closed sessions",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("menuitem", { name: "Reopen session old" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    const reopen = screen.getByRole("menuitem", { name: "Reopen session old" });
     expect(reopen).toHaveTextContent("…/w/proj");
     expect(screen.getByText("recently closed")).toBeInTheDocument();
 
@@ -157,7 +168,10 @@ describe("OverflowMenuContent recently closed", () => {
     const user = userEvent.setup();
     render(<OverflowMenuContent items={[]} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
 
-    await user.click(await screen.findByRole("menuitem", { name: "Reopen session old" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Show 1 recently closed session" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Reopen session old" }));
 
     await waitFor(() =>
       expect(screen.getByText("reopen old: cwd does not exist")).toBeInTheDocument(),

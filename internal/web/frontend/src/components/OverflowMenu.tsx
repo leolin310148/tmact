@@ -7,9 +7,10 @@
 //   - OverflowMenuContent: the rich row list. Each hidden pane renders a state
 //     dot + peer badge + label + runtime badge plus an exit button that kills
 //     the whole tmux session after a two-stage confirm (first press arms it,
-//     second press kills; it disarms on a timeout). Below the panes, a
-//     "recently closed" section lists sessions from /api/sessions/closed —
-//     selecting one recreates it (same name, old cwd, plain shell).
+//     second press kills; it disarms on a timeout). Below the panes, a collapsed
+//     "recently closed" section loads sessions from /api/sessions/closed —
+//     expanding it exposes rows that recreate a session (same name, old cwd,
+//     plain shell).
 //
 // Session kill/reopen calls are made here (not lifted to App): failures render
 // as an inline error line at the foot of the menu, and success needs no
@@ -152,6 +153,7 @@ interface OverflowMenuContentProps {
 
 export function OverflowMenuContent({ items, onSelect, closeRestoring }: OverflowMenuContentProps) {
   const [closed, setClosed] = useState<ClosedSession[] | null>(null);
+  const [closedExpanded, setClosedExpanded] = useState(false);
   const [error, setError] = useState("");
   // armed = pane row whose exit button awaits its confirming second press.
   const [armed, setArmed] = useState<string | null>(null);
@@ -316,42 +318,64 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
       })}
       {closed && closed.length > 0 ? (
         <>
-          <div className="ovf-sep" role="separator">
-            recently closed
-          </div>
-          {closed.map((entry) => {
-            const key = closedKey(entry);
-            const icon = RUNTIME_ICON[(entry.runtime ?? "").toLowerCase()];
-            const isBusy = !!busy[key];
-            return (
-              <div key={key} className={"ovf-row ovf-closed" + (isBusy ? " busy" : "")}>
-                <button
-                  type="button"
-                  className="ovf-main"
-                  role="menuitem"
-                  tabIndex={-1}
-                  title={
-                    "Reopen session " +
-                    entry.session +
-                    (entry.cwd ? " at " + entry.cwd : "") +
-                    (entry.peer ? " on " + entry.peer : "")
-                  }
-                  aria-label={"Reopen session " + entry.session}
-                  disabled={isBusy}
-                  onPointerDown={onPointerDownNoBlur}
-                  onClick={() => doReopen(entry)}
-                >
-                  <span className="ovf-reopen" aria-hidden="true">
-                    ↺
-                  </span>
-                  {entry.peer ? <span className="peer-badge">{entry.peer}</span> : null}
-                  <span className="ovf-label">{entry.session}</span>
-                  {entry.cwd ? <span className="ovf-cwd">{shortCwd(entry.cwd)}</span> : null}
-                  {icon ? <span className="ovf-rt">{icon}</span> : null}
-                </button>
-              </div>
-            );
-          })}
+          <button
+            type="button"
+            className="ovf-sep"
+            role="menuitem"
+            tabIndex={-1}
+            aria-expanded={closedExpanded}
+            aria-label={
+              (closedExpanded ? "Hide " : "Show ") +
+              closed.length +
+              " recently closed session" +
+              (closed.length === 1 ? "" : "s")
+            }
+            onPointerDown={onPointerDownNoBlur}
+            onClick={() => setClosedExpanded((expanded) => !expanded)}
+          >
+            <span className="ovf-sep-chevron" aria-hidden="true">
+              {closedExpanded ? "▾" : "▸"}
+            </span>
+            <span>recently closed</span>
+            <span className="ovf-sep-count" aria-hidden="true">
+              {closed.length}
+            </span>
+          </button>
+          {closedExpanded
+            ? closed.map((entry) => {
+                const key = closedKey(entry);
+                const icon = RUNTIME_ICON[(entry.runtime ?? "").toLowerCase()];
+                const isBusy = !!busy[key];
+                return (
+                  <div key={key} className={"ovf-row ovf-closed" + (isBusy ? " busy" : "")}>
+                    <button
+                      type="button"
+                      className="ovf-main"
+                      role="menuitem"
+                      tabIndex={-1}
+                      title={
+                        "Reopen session " +
+                        entry.session +
+                        (entry.cwd ? " at " + entry.cwd : "") +
+                        (entry.peer ? " on " + entry.peer : "")
+                      }
+                      aria-label={"Reopen session " + entry.session}
+                      disabled={isBusy}
+                      onPointerDown={onPointerDownNoBlur}
+                      onClick={() => doReopen(entry)}
+                    >
+                      <span className="ovf-reopen" aria-hidden="true">
+                        ↺
+                      </span>
+                      {entry.peer ? <span className="peer-badge">{entry.peer}</span> : null}
+                      <span className="ovf-label">{entry.session}</span>
+                      {entry.cwd ? <span className="ovf-cwd">{shortCwd(entry.cwd)}</span> : null}
+                      {icon ? <span className="ovf-rt">{icon}</span> : null}
+                    </button>
+                  </div>
+                );
+              })
+            : null}
         </>
       ) : null}
       {error ? <div className="ovf-error">{error}</div> : null}
