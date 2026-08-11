@@ -22,21 +22,10 @@ describe("useSettings pane switcher layout", () => {
     });
   });
 
-  it("accepts and persists the train pane switcher layout", () => {
-    const { result } = renderHook(() => useSettings());
-
-    act(() => result.current.onPaneSwitcherLayoutChange("train"));
-
-    expect(document.documentElement.dataset.paneSwitcherLayout).toBe("train");
-    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toMatchObject({
-      paneSwitcherLayout: "train",
-    });
-  });
-
-  it("falls back to the default for an invalid saved pane switcher layout", () => {
+  it("falls back to the default for the removed train pane switcher layout", () => {
     localStorage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ paneSwitcherLayout: "floating" }),
+      JSON.stringify({ paneSwitcherLayout: "train" }),
     );
     const { result } = renderHook(() => useSettings());
 

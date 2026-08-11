@@ -73,17 +73,6 @@ function Harness({ asyncStatus = "" }: { asyncStatus?: string }) {
 }
 
 describe("SettingsDialog focus management", () => {
-  it("offers the train pane switcher layout", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-
-    await user.click(screen.getByRole("button", { name: "Open settings" }));
-
-    expect(
-      screen.getByRole("option", { name: "Train layout" }),
-    ).toBeInTheDocument();
-  });
-
   it("focuses a stable control on open and traps forward and reverse Tab", async () => {
     const user = userEvent.setup();
     render(<Harness />);

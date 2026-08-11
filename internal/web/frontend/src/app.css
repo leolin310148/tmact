@@ -15,7 +15,7 @@
     /* Pane output font size — the default; the settings panel overrides it
        with an inline value on <html>, persisted in localStorage. */
     --pane-font: 13px;
-    /* Shared outer-height contract for the office/train pane switchers.
+    /* Outer-height contract for the office pane switcher.
        The formula preserves the office room's established geometry:
        wall (1.4 * 46 units) + floor apron (38 units) + 10px floor drop. */
     --pane-switcher-scene-scale: 1.7;

@@ -325,7 +325,6 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             >
               <option value="bottom">Panel list (chips)</option>
               <option value="office">Office layout</option>
-              <option value="train">Train layout</option>
             </select>
           </label>
           {typeof window.matchMedia === "function" && !isMobile() && window === window.top && (

@@ -8,8 +8,8 @@ const SCENE_MODE_BOUNDARIES = [
   [18, 30],
 ] as const;
 
-// Shared by the office and train layouts so both local-time scenes cross the
-// same boundaries: day from 06:00, sunset from 17:00, and night from 18:30.
+// The office layout uses these stable local-time boundaries: day from 06:00,
+// sunset from 17:00, and night from 18:30.
 export function clockSceneMode(now: Date): SceneMode {
   const minutes = now.getHours() * 60 + now.getMinutes();
   if (minutes >= 17 * 60 && minutes < 18 * 60 + 30) return "sunset";
