@@ -205,7 +205,7 @@ func (m *Manager) reusableIdleShell(name, dir string, panes []tmux.Pane) (tmux.P
 		}
 		return tmux.Pane{}, fmt.Errorf("session %q is busy with runtime %q; expected an idle shell", name, runtime)
 	}
-	if classified.State == panestate.StateWorking || classified.State == panestate.StateDraftInput || classified.State == panestate.StateBlocked {
+	if classified.State == panestate.StateWorking || classified.State == panestate.StateDraftInput || classified.State == panestate.StateBlocked || classified.State == panestate.StateWaitingQuota {
 		return tmux.Pane{}, fmt.Errorf("session %q shell state is %s; expected an idle shell", name, classified.State)
 	}
 	return pane, nil

@@ -145,6 +145,30 @@ func TestClassifyDetectsWorkingText(t *testing.T) {
 	}
 }
 
+func TestClassifyDetectsExactCodexUsageLimit(t *testing.T) {
+	result := Classify(`
+› Do the work
+■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 18th, 2026 9:34
+AM.
+› Summarize recent commits
+/work/repo · Context 0% used
+`)
+	if result.State != StateWaitingQuota || result.UsageLimit == nil || result.UsageLimit.Provider != "codex" {
+		t.Fatalf("result=%#v", result)
+	}
+}
+
+func TestClassifyBlocksMalformedCurrentCodexUsageLimit(t *testing.T) {
+	result := Classify(`
+■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again sometime.
+› Summarize recent commits
+/work/repo · Context 0% used
+`)
+	if result.State != StateBlocked || len(result.Signals) != 1 || result.Signals[0] != "usage_limit_unrecognized" {
+		t.Fatalf("result=%#v", result)
+	}
+}
+
 func TestClassifyTreatsActiveSteeringInputAsWorking(t *testing.T) {
 	result := Classify(`
 • Working (1s • esc to interrupt)

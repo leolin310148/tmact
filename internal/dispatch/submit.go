@@ -119,7 +119,7 @@ func promptSubmitted(classified panestate.Result) bool {
 		return true
 	}
 	switch classified.State {
-	case panestate.StateWorking, panestate.StateBlocked:
+	case panestate.StateWorking, panestate.StateBlocked, panestate.StateWaitingQuota:
 		return true
 	default:
 		return false

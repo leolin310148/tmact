@@ -211,14 +211,21 @@ approval, dirty-tree, timeout, and repeated-no-progress states stop as
 Independent live `dispatch-work` calls to the same Git workspace are rejected
 while the workflow lease is held.
 
-Claude's exact session-limit menu is the narrow exception to prompt stopping:
-when option 1 is already selected as `Stop and wait for limit to reset` and
-option 2 is `Upgrade your plan`, tmact selects the wait option, persists
-`waiting_quota` with the parsed reset time, and makes no more model calls until
-then. After reset it resumes the same dispatch, actor session, and work-item
-attempt. The wait survives runner restarts; tmact never selects the upgrade
-option. Any wording/menu drift, permission prompt, or other choice still fails
-closed as `needs_user`.
+Exact Claude and Codex usage-limit screens are narrow exceptions to prompt
+stopping. For Claude, option 1 must already be selected as
+`Stop and wait for limit to reset` and option 2 must be `Upgrade your plan`;
+tmact selects only the wait option. For Codex, tmact accepts only the current
+non-interactive `You've hit your usage limit` screen with the fixed usage URL
+and a complete English reset timestamp including year. Codex timestamps are
+interpreted in the runner's local timezone because the TUI omits a zone.
+
+Both paths persist `waiting_quota`, the reset timezone/deadline, and the
+original dispatch, actor session, attempt, role, and work item. The runner
+makes no model calls before the deadline, survives restarts, and then resumes
+that same work. Codex waits never send a key or follow the credit-purchase URL;
+the one-time post-deadline dispatch capability is rejected for every other
+pane state or reset timestamp. Any wording, URL, timestamp, menu, permission
+prompt, or other format drift fails closed as `needs_user`.
 
 ### Agent skills
 

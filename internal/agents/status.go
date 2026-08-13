@@ -16,6 +16,7 @@ const (
 	StateIdle              = panestate.StateIdle
 	StateUnknown           = panestate.StateUnknown
 	StateWaitingPermission = panestate.StateWaitingPermission
+	StateWaitingQuota      = panestate.StateWaitingQuota
 	StateWaitingInput      = panestate.StateWaitingInput
 	StateWorking           = panestate.StateWorking
 )

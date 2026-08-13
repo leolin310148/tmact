@@ -282,7 +282,7 @@ func finishContext(parent, waitCtx context.Context, report *Report, now time.Tim
 // Callers that already captured a baseline can use the same state vocabulary
 // as Run without duplicating prompt/blocker rules.
 func NormalizeState(result panestate.Result) string {
-	if result.Asking || result.State == panestate.StateBlocked || result.State == panestate.StateWaitingPermission {
+	if result.Asking || result.State == panestate.StateBlocked || result.State == panestate.StateWaitingPermission || result.State == panestate.StateWaitingQuota {
 		return UntilNeedsHuman
 	}
 	switch result.State {

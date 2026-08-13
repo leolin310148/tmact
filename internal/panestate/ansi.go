@@ -19,7 +19,7 @@ type styledRune struct {
 // separate prevents automation from clearing an unsent draft.
 func ClassifyANSI(raw, ansi string) Result {
 	result := Classify(raw)
-	if result.Asking || !strings.Contains(ansi, "\x1b[") {
+	if result.Asking || result.State == StateWaitingQuota || hasSignal(result.Signals, "usage_limit_unrecognized") || !strings.Contains(ansi, "\x1b[") {
 		return result
 	}
 	if hasActiveInterruptIndicator(raw) {
@@ -51,6 +51,15 @@ func ClassifyANSI(raw, ansi string) Result {
 	result.State = StateDraftInput
 	result.Signals = appendSignal(result.Signals, "draft_input")
 	return result
+}
+
+func hasSignal(signals []string, want string) bool {
+	for _, signal := range signals {
+		if signal == want {
+			return true
+		}
+	}
+	return false
 }
 
 func hasActiveInterruptIndicator(raw string) bool {

@@ -481,6 +481,132 @@ func TestExistingSessionReuseSameAgent(t *testing.T) {
 	}
 }
 
+func TestExistingCodexUsageLimitRequiresExactMaturedResumeCapability(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalLocal := time.Local
+	time.Local = location
+	t.Cleanup(func() { time.Local = originalLocal })
+	resetAt := time.Date(2026, 8, 18, 9, 34, 0, 0, location)
+	resumeAt := resetAt.Add(time.Minute)
+	raw := "■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 18th, 2026 9:34 AM.\n› Suggestion\n/work · Context 0% used\n"
+
+	for _, tc := range []struct {
+		name   string
+		resume *dispatch.QuotaResume
+		now    time.Time
+	}{
+		{name: "missing capability", now: resumeAt},
+		{name: "before deadline", resume: &dispatch.QuotaResume{Provider: "codex", ResetAt: resetAt, ResumeAt: resumeAt}, now: resumeAt.Add(-time.Nanosecond)},
+		{name: "changed reset", resume: &dispatch.QuotaResume{Provider: "codex", ResetAt: resetAt.Add(time.Minute), ResumeAt: resumeAt}, now: resumeAt},
+		{name: "wrong provider", resume: &dispatch.QuotaResume{Provider: "claude", ResetAt: resetAt, ResumeAt: resumeAt}, now: resumeAt},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec, deps := baseDeps()
+			deps.ListLayout = func() (tmux.Layout, error) { return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil }
+			deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{codexPane()}, nil }
+			deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+				return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+			}
+			deps.CapturePane = func(string, int) (string, error) { return raw, nil }
+			deps.Now = func() time.Time { return tc.now }
+			opts := baseOpts()
+			opts.Agent = "codex"
+			opts.Execute = true
+			opts.ReadySettle = 0
+			opts.QuotaResume = tc.resume
+			if _, err := dispatch.RunWithDeps(opts, deps); err == nil {
+				t.Fatal("expected quota resume rejection")
+			}
+			if len(rec.pastes) != 0 || len(rec.keys) != 0 {
+				t.Fatalf("rejected quota resume touched pane: pastes=%#v keys=%#v", rec.pastes, rec.keys)
+			}
+		})
+	}
+}
+
+func TestExistingCodexUsageLimitResumesOnceAfterPersistedDeadline(t *testing.T) {
+	rec, deps := baseDeps()
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalLocal := time.Local
+	time.Local = location
+	t.Cleanup(func() { time.Local = originalLocal })
+	resetAt := time.Date(2026, 8, 18, 9, 34, 0, 0, location)
+	resumeAt := resetAt.Add(time.Minute)
+	quotaRaw := "■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 18th, 2026 9:34 AM.\n› Suggestion\n/work · Context 0% used\n"
+	deps.ListLayout = func() (tmux.Layout, error) { return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil }
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{codexPane()}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) < 2 {
+			return quotaRaw, nil
+		}
+		return "OpenAI Codex\nWorking... esc to interrupt", nil
+	}
+	deps.Now = func() time.Time { return resumeAt }
+	opts := baseOpts()
+	opts.Agent = "codex"
+	opts.Execute = true
+	opts.ReadySettle = 0
+	opts.QuotaResume = &dispatch.QuotaResume{Provider: "codex", ResetAt: resetAt, ResumeAt: resumeAt}
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.AgentWasRunning {
+		t.Fatalf("report=%#v", report)
+	}
+	want := []paste{{"%1", "/clear", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes=%#v want=%#v", rec.pastes, want)
+	}
+	for index := range want {
+		if rec.pastes[index] != want[index] {
+			t.Fatalf("paste[%d]=%#v want=%#v", index, rec.pastes[index], want[index])
+		}
+	}
+	if len(rec.keys) != 0 {
+		t.Fatalf("quota resume sent unexpected keys: %#v", rec.keys)
+	}
+}
+
+func TestCodexLimitAfterSubmissionDoesNotRetryPromptOrPressEnter(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) { return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil }
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{codexPane()}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeCodex}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) < 2 {
+			return "OpenAI Codex\n› Suggestion\n/work · Context 0% used\n", nil
+		}
+		return "› do the thing\n■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 18th, 2026 9:34 AM.\n› Suggestion\n/work · Context 0% used\n", nil
+	}
+	opts := baseOpts()
+	opts.Agent = "codex"
+	opts.Execute = true
+	opts.ReadySettle = 0
+	if _, err := dispatch.RunWithDeps(opts, deps); err != nil {
+		t.Fatal(err)
+	}
+	want := []paste{{"%1", "/clear", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("Codex quota caused duplicate prompt submission: pastes=%#v", rec.pastes)
+	}
+	if len(rec.keys) != 0 {
+		t.Fatalf("Codex quota caused unexpected key input: %#v", rec.keys)
+	}
+}
+
 func TestDispatchTargetSelectsPaneInInactiveWindow(t *testing.T) {
 	rec, deps := baseDeps()
 	shell := tmux.Pane{Session: "work", PaneID: "%0", PanePID: 100, CurrentCommand: "zsh", WindowIndex: 0, PaneIndex: 0, Active: true, WindowActive: true}

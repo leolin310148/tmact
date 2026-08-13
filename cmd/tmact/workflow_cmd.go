@@ -477,6 +477,9 @@ func printWorkflowStateV2(state workflow.State) {
 		fmt.Printf("%-24s %-15s attempt=%d%s\n", s.ID, s.Status, s.Attempt, extra)
 		if s.AgentDev != nil {
 			fmt.Printf("  agent-dev: %s role=%s item=%s review-round=%d\n", s.AgentDev.Status, s.AgentDev.CurrentRole, s.AgentDev.CurrentWorkItem, s.AgentDev.ReviewRound)
+			if wait := s.AgentDev.QuotaWait; wait != nil {
+				fmt.Printf("    quota: provider=%s reset=%s resume=%s session=%s dispatch=%s attempt=%d\n", wait.Provider, wait.ResetAt.Format(time.RFC3339), wait.NextCheckAt.Format(time.RFC3339), wait.Session, wait.DispatchID, wait.Attempt)
+			}
 			for _, phase := range s.AgentDev.Phases {
 				complete := 0
 				for _, item := range phase.Items {

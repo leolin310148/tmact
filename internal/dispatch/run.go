@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/leolin310148/tmact/internal/foldertrust"
 	"github.com/leolin310148/tmact/internal/panestate"
@@ -217,7 +218,11 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 		if opts.Model != "" {
 			return report, fmt.Errorf("session %s is already running %s; --model only applies when launching a new agent", opts.Session, opts.Agent)
 		}
-		if classified.State == panestate.StateWorking {
+		if classified.State == panestate.StateWaitingQuota {
+			if err := validateQuotaResume(opts, deps, classified); err != nil {
+				return report, fmt.Errorf("session %s is running %s but %w", opts.Session, opts.Agent, err)
+			}
+		} else if classified.State == panestate.StateWorking {
 			return report, fmt.Errorf("session %s is already running %s but it is busy working; refusing to dispatch", opts.Session, opts.Agent)
 		}
 		if classified.Asking {
@@ -238,7 +243,7 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 			}
 			return report, fmt.Errorf("session %s is running %s but it is waiting on a prompt (%s); resolve it first", opts.Session, opts.Agent, promptKind(classified))
 		}
-		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
+		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle && classified.State != panestate.StateWaitingQuota {
 			return report, fmt.Errorf("session %s is running %s but pane state is %s; refusing to clear or dispatch until it is explicitly input-ready", opts.Session, opts.Agent, classified.State)
 		}
 		if err := settleExistingAgent(opts, deps, pane, target); err != nil {
@@ -288,9 +293,34 @@ func settleExistingAgent(opts Options, deps Deps, pane tmux.Pane, target string)
 		if runtime != opts.Agent {
 			return fmt.Errorf("session %s changed runtime from %s to %s while settling", opts.Session, opts.Agent, runtime)
 		}
-		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
+		if classified.State == panestate.StateWaitingQuota {
+			if err := validateQuotaResume(opts, deps, classified); err != nil {
+				return fmt.Errorf("session %s did not remain safely quota-resumable: %w", opts.Session, err)
+			}
+		} else if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle {
 			return fmt.Errorf("session %s did not remain idle for %s (state=%s); refusing to clear or dispatch", opts.Session, opts.ReadySettle, classified.State)
 		}
+	}
+	return nil
+}
+
+func validateQuotaResume(opts Options, deps Deps, classified panestate.Result) error {
+	resume := opts.QuotaResume
+	if resume == nil || classified.UsageLimit == nil {
+		return fmt.Errorf("pane is waiting for quota reset; refusing to clear or dispatch")
+	}
+	if opts.Agent != panestatus.RuntimeCodex || resume.Provider != panestatus.RuntimeCodex || classified.UsageLimit.Provider != panestatus.RuntimeCodex {
+		return fmt.Errorf("quota resume provider does not match exact Codex limit screen")
+	}
+	if resume.ResetAt.IsZero() || !classified.UsageLimit.ResetAt.Equal(resume.ResetAt) {
+		return fmt.Errorf("quota reset time changed from persisted deadline")
+	}
+	now := time.Now()
+	if deps.Now != nil {
+		now = deps.Now()
+	}
+	if resume.ResumeAt.IsZero() || now.Before(resume.ResumeAt) {
+		return fmt.Errorf("quota reset deadline has not arrived")
 	}
 	return nil
 }

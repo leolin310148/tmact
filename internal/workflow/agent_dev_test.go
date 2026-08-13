@@ -380,6 +380,232 @@ func TestAgentDevQuotaWaitPersistsAndResumesSameDispatch(t *testing.T) {
 	}
 }
 
+func TestAgentDevCodexQuotaWaitSurvivesRunnerRestartAndResumesSameAttempt(t *testing.T) {
+	loaded, engine, _ := initAgentDevTest(t)
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 13, 11, 55, 0, 0, location)
+	engine.Now = func() time.Time { return now }
+	record := activateAgentDevDispatch(t, engine, "coordinator", "P3-fix-plan-48", 52)
+	record.Target = "%169"
+	record.Runtime = "codex"
+	record.Timestamp = now
+	record.Status = "sent"
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Store.Update(func(state *State) error {
+		stage := state.Stages["delivery"]
+		stage.Error = "session coordinator is busy; refusing to dispatch"
+		state.Stages["delivery"] = stage
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw := "› Act as the Coordinator.\n■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 18th, 2026 9:34\nAM.\n› Summarize recent commits\n~/w/ndt/mxcp-flow · main · Context 0% used\n"
+	captures := 0
+	engine.CapturePane = func(target string, _ int) (string, error) {
+		captures++
+		if target != "%169" {
+			t.Fatalf("target=%q", target)
+		}
+		return raw, nil
+	}
+	keys := 0
+	engine.SendKeys = func(string, []string) error { keys++; return nil }
+	if done, err := engine.Tick(context.Background()); err != nil || done {
+		t.Fatalf("done=%t err=%v", done, err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := state.Stages["delivery"].AgentDev.QuotaWait
+	wantReset := time.Date(2026, 8, 18, 9, 34, 0, 0, location)
+	if state.Status != agentDevWaitingQuota || !strings.Contains(state.Reason, "Codex quota exhausted") || strings.Contains(state.Reason, "busy") || wait == nil || wait.Provider != "codex" || !wait.ResetAt.Equal(wantReset) || wait.DispatchID != record.ID || wait.Session != "coordinator" || wait.Attempt != 52 || wait.Role != "coordinator" || wait.WorkItem != "P3-fix-plan-48" || !wait.PromptAnswered {
+		t.Fatalf("state=%#v wait=%#v", state, wait)
+	}
+	if wait.Timezone != "Asia/Taipei" || keys != 0 || captures != 1 {
+		t.Fatalf("timezone=%q keys=%d captures=%d", wait.Timezone, keys, captures)
+	}
+
+	restarted, err := NewEngine(loaded, engine.Store.Root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted.Now = func() time.Time { return now }
+	restarted.CapturePane = func(string, int) (string, error) {
+		captures++
+		return raw, nil
+	}
+	if _, err := restarted.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if captures != 1 {
+		t.Fatalf("runner restart captured before deadline: %d", captures)
+	}
+
+	now = wait.NextCheckAt
+	var resumed dispatch.Options
+	resumeCalls := 0
+	restarted.DispatchAgent = func(options dispatch.Options) (dispatch.Report, error) {
+		resumeCalls++
+		resumed = options
+		return dispatch.Report{Target: "%169"}, nil
+	}
+	if _, err := restarted.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err = restarted.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev := state.Stages["delivery"].AgentDev
+	if state.Status != "running" || dev.QuotaWait != nil || dev.CurrentDispatchID != record.ID || dev.CurrentRole != "coordinator" || dev.CurrentWorkItem != "P3-fix-plan-48" {
+		t.Fatalf("state=%#v dev=%#v", state, dev)
+	}
+	if resumed.Session != "coordinator" || resumed.QuotaResume == nil || resumed.QuotaResume.Provider != "codex" || !resumed.QuotaResume.ResetAt.Equal(wantReset) || !resumed.QuotaResume.ResumeAt.Equal(now) || !strings.Contains(resumed.Prompt, record.ID) {
+		t.Fatalf("resumed=%#v", resumed)
+	}
+	last, ok, err := LastDispatch(restarted.Store, record.ID)
+	if err != nil || !ok || last.Attempt != 52 || last.Status != "sent" || !last.Timestamp.Equal(now) {
+		t.Fatalf("last=%#v ok=%t err=%v", last, ok, err)
+	}
+	restarted.CapturePane = func(string, int) (string, error) { return "OpenAI Codex\nWorking (1s · esc to interrupt)\n", nil }
+	if _, err := restarted.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if resumeCalls != 1 {
+		t.Fatalf("same dispatch resumed %d times", resumeCalls)
+	}
+	events, err := os.ReadFile(restarted.Store.EventsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(events), `"type":"agent_dev_quota_wait"`) || !strings.Contains(string(events), `"type":"agent_dev_quota_resumed"`) {
+		t.Fatalf("quota lifecycle events missing: %s", events)
+	}
+}
+
+func TestAgentDevCodexQuotaResumeCrashDoesNotRedispatch(t *testing.T) {
+	loaded, engine, _ := initAgentDevTest(t)
+	location, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 18, 9, 35, 0, 0, location)
+	engine.Now = func() time.Time { return now }
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 7)
+	record.Target = "%169"
+	record.Runtime = "codex"
+	record.Status = "sent"
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := state.Stages["delivery"]
+	stage.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "codex", Target: "%169", Session: "coordinator", DispatchID: record.ID, Attempt: 7, Role: "coordinator", WorkItem: "phase-plan-1", Timezone: "Asia/Taipei", ObservedAt: now.Add(-5 * 24 * time.Hour), ResetAt: now.Add(-time.Minute), NextCheckAt: now, PromptAnswered: true}
+	stage.Error = "Codex quota exhausted"
+	state.Status = agentDevWaitingQuota
+	state.Reason = stage.Error
+	state.Stages["delivery"] = stage
+	if err := engine.Store.Write(state); err != nil {
+		t.Fatal(err)
+	}
+	engine.DispatchAgent = func(dispatch.Options) (dispatch.Report, error) {
+		panic("simulated runner crash after durable sending marker")
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected simulated crash")
+			}
+		}()
+		_, _ = engine.Tick(context.Background())
+	}()
+	last, ok, err := LastDispatch(engine.Store, record.ID)
+	if err != nil || !ok || last.Status != "sending" {
+		t.Fatalf("last=%#v ok=%t err=%v", last, ok, err)
+	}
+
+	restarted, err := NewEngine(loaded, engine.Store.Root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatches := 0
+	restarted.DispatchAgent = func(dispatch.Options) (dispatch.Report, error) {
+		dispatches++
+		return dispatch.Report{}, nil
+	}
+	state, err = restarted.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage = state.Stages["delivery"]
+	if state.Status != "needs_user" || stage.Status != StageBlocked || !strings.Contains(stage.Error, "indeterminate dispatch") || dispatches != 0 {
+		t.Fatalf("state=%#v stage=%#v dispatches=%d", state, stage, dispatches)
+	}
+}
+
+func TestAgentDevCodexQuotaFormatDriftFailsClosedWithoutInput(t *testing.T) {
+	_, engine, _ := initAgentDevTest(t)
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
+	record.Target = "%169"
+	record.Runtime = "codex"
+	record.Status = "sent"
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	engine.CapturePane = func(string, int) (string, error) {
+		return "■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again later.\n› Suggestion\n/work · Context 0% used\n", nil
+	}
+	inputs := 0
+	engine.SendKeys = func(string, []string) error { inputs++; return nil }
+	engine.PasteText = func(string, string, bool) error { inputs++; return nil }
+	if _, err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := state.Stages["delivery"]
+	if state.Status != "needs_user" || stage.Status != StageBlocked || stage.AgentDev.QuotaWait != nil || !strings.Contains(stage.Error, "unrecognized usage-limit") || inputs != 0 {
+		t.Fatalf("state=%#v stage=%#v inputs=%d", state, stage, inputs)
+	}
+}
+
+func TestAgentDevClaudeQuotaMalformedResetFailsClosedWithoutSelection(t *testing.T) {
+	_, engine, _ := initAgentDevTest(t)
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
+	record.Target = "%42"
+	record.Status = "sent"
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	engine.CapturePane = func(string, int) (string, error) {
+		return "You've hit your session limit · resets whenever (Asia/Taipei)\nWhat do you want to do?\n❯ 1. Stop and wait for limit to reset\n  2. Upgrade your plan\n", nil
+	}
+	keys := 0
+	engine.SendKeys = func(string, []string) error { keys++; return nil }
+	if _, err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := state.Stages["delivery"]
+	if state.Status != "needs_user" || stage.Status != StageBlocked || stage.AgentDev.QuotaWait != nil || keys != 0 {
+		t.Fatalf("state=%#v stage=%#v keys=%d", state, stage, keys)
+	}
+}
+
 func TestAgentDevQuotaResetExtendsWhenProviderStillLimits(t *testing.T) {
 	_, engine, _ := initAgentDevTest(t)
 	location, err := time.LoadLocation("Asia/Taipei")

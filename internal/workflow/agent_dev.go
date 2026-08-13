@@ -77,14 +77,6 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 			if err != nil {
 				return true, false, err
 			}
-			if ok && last.Status == "sent" && e.Now().Sub(last.Timestamp) >= stage.Timeout.Duration {
-				ss.Status = StageBlocked
-				ss.Error = "agent_dev dispatch timed out: " + ss.AgentDev.CurrentDispatchID
-				state.Status = "needs_user"
-				state.Stages[stage.ID] = ss
-				_ = e.Store.Event(Event{Type: "agent_dev_timeout", Stage: stage.ID, Attempt: last.Attempt, Status: StageBlocked, Reason: ss.Error})
-				return true, false, e.Store.Write(state)
-			}
 			if ok && last.Status == "sent" && last.Target != "" {
 				raw, captureErr := e.CapturePane(last.Target, 200)
 				if captureErr != nil {
@@ -94,10 +86,17 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 					state.Stages[stage.ID] = ss
 					return true, false, e.Store.Write(state)
 				}
-				if detected := prompt.Detect(raw); detected != nil {
-					if prompt.IsClaudeSessionLimitWait(raw, detected) {
-						return e.beginAgentDevQuotaWait(state, stage, ss, last, raw, detected)
+				detected := prompt.Detect(raw)
+				if limit, recognized := prompt.DetectUsageLimit(raw, detected, e.Now()); recognized {
+					if last.Runtime != "" && last.Runtime != limit.Provider {
+						return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("agent_dev target %s showed %s quota while dispatch runtime is %s", last.Target, limit.Provider, last.Runtime))
 					}
+					return e.beginAgentDevQuotaWait(state, stage, ss, last, limit)
+				}
+				if prompt.HasCurrentUsageLimitMarker(raw, detected) {
+					return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("agent_dev target %s showed an unrecognized usage-limit screen; refusing automated input", last.Target))
+				}
+				if detected != nil {
 					ss.Status = StageBlocked
 					ss.Error = fmt.Sprintf("agent_dev target %s is waiting on %s prompt", last.Target, detected.Type)
 					state.Status = "needs_user"
@@ -105,6 +104,14 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 					_ = e.Store.Event(Event{Type: "agent_dev_prompt_stop", Stage: stage.ID, Attempt: last.Attempt, Status: StageBlocked, Reason: ss.Error})
 					return true, false, e.Store.Write(state)
 				}
+			}
+			if ok && last.Status == "sent" && e.Now().Sub(last.Timestamp) >= stage.Timeout.Duration {
+				ss.Status = StageBlocked
+				ss.Error = "agent_dev dispatch timed out: " + ss.AgentDev.CurrentDispatchID
+				state.Status = "needs_user"
+				state.Stages[stage.ID] = ss
+				_ = e.Store.Event(Event{Type: "agent_dev_timeout", Stage: stage.ID, Attempt: last.Attempt, Status: StageBlocked, Reason: ss.Error})
+				return true, false, e.Store.Write(state)
 			}
 			state.Stages[stage.ID] = ss
 			return true, false, e.Store.Write(state)
@@ -135,7 +142,11 @@ func (e *Engine) recoverBlockedAgentDevQuota(state *State) (bool, error) {
 			continue
 		}
 		detected := prompt.Detect(raw)
-		if !prompt.IsClaudeSessionLimitWait(raw, detected) {
+		limit, recognized := prompt.DetectUsageLimit(raw, detected, last.Timestamp)
+		if !recognized {
+			continue
+		}
+		if last.Runtime != "" && last.Runtime != limit.Provider {
 			continue
 		}
 		ss.Status = StageRunning
@@ -143,37 +154,57 @@ func (e *Engine) recoverBlockedAgentDevQuota(state *State) (bool, error) {
 		state.Status = "running"
 		state.Reason = ""
 		state.Stages[stage.ID] = ss
-		_, _, beginErr := e.beginAgentDevQuotaWaitAt(*state, stage, ss, last, raw, detected, last.Timestamp)
+		_, _, beginErr := e.beginAgentDevQuotaWaitAt(*state, stage, ss, last, limit, last.Timestamp)
 		return true, beginErr
 	}
 	return false, nil
 }
 
-func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss StageState, last Dispatch, raw string, detected *prompt.Prompt) (bool, bool, error) {
-	return e.beginAgentDevQuotaWaitAt(state, stage, ss, last, raw, detected, e.Now())
+func (e *Engine) beginAgentDevQuotaWait(state State, stage StageConfig, ss StageState, last Dispatch, limit *prompt.UsageLimit) (bool, bool, error) {
+	return e.beginAgentDevQuotaWaitAt(state, stage, ss, last, limit, e.Now())
 }
 
-func (e *Engine) beginAgentDevQuotaWaitAt(state State, stage StageConfig, ss StageState, last Dispatch, raw string, detected *prompt.Prompt, observedAt time.Time) (bool, bool, error) {
+func (e *Engine) beginAgentDevQuotaWaitAt(state State, stage StageConfig, ss StageState, last Dispatch, limit *prompt.UsageLimit, observedAt time.Time) (bool, bool, error) {
 	now := e.Now()
 	if observedAt.IsZero() || observedAt.After(now) {
 		observedAt = now
 	}
-	resetAt, parsed := prompt.ClaudeSessionLimitResetAt(raw, detected, observedAt)
-	nextCheckAt := now.Add(agentDevQuotaRecheck)
-	if parsed {
-		nextCheckAt = resetAt.Add(agentDevQuotaGrace)
-		if nextCheckAt.Before(now) {
-			nextCheckAt = now
-		}
+	if limit == nil || limit.ResetAt.IsZero() {
+		return e.blockAgentDevQuota(state, stage, ss, "recognized quota screen has no exact reset time")
 	}
-	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{Provider: "claude", Target: last.Target, ObservedAt: observedAt, ResetAt: resetAt, NextCheckAt: nextCheckAt}
-	ss.Error = fmt.Sprintf("Claude quota exhausted; waiting until %s", nextCheckAt.Format(time.RFC3339))
+	nextCheckAt := limit.ResetAt.Add(agentDevQuotaGrace)
+	if nextCheckAt.Before(now) {
+		nextCheckAt = now
+	}
+	session := ""
+	if actor, ok := e.Loaded.Config.Actors[last.Actor]; ok {
+		_, _, session, _, _, _ = e.resolveActor(actor)
+	}
+	ss.AgentDev.QuotaWait = &AgentDevQuotaWait{
+		Provider:       limit.Provider,
+		Target:         last.Target,
+		Session:        session,
+		DispatchID:     last.ID,
+		Attempt:        last.Attempt,
+		Role:           ss.AgentDev.CurrentRole,
+		WorkItem:       ss.AgentDev.CurrentWorkItem,
+		Timezone:       limit.Timezone,
+		ObservedAt:     observedAt,
+		ResetAt:        limit.ResetAt,
+		NextCheckAt:    nextCheckAt,
+		PromptAnswered: !limit.WaitSelection,
+	}
+	ss.Error = fmt.Sprintf("%s quota exhausted; waiting until %s", providerDisplayName(limit.Provider), nextCheckAt.Format(time.RFC3339))
 	state.Status = agentDevWaitingQuota
 	state.Reason = ss.Error
 	state.FinishedAt = time.Time{}
 	state.Stages[stage.ID] = ss
 	if err := e.Store.Write(state); err != nil {
 		return true, false, err
+	}
+	if !limit.WaitSelection {
+		_ = e.Store.Event(Event{Type: "agent_dev_quota_wait", Stage: stage.ID, Attempt: last.Attempt, Status: agentDevWaitingQuota, Reason: ss.Error, Details: ss.AgentDev.QuotaWait})
+		return true, false, nil
 	}
 	if err := e.SendKeys(last.Target, []string{"Enter"}); err != nil {
 		reason := fmt.Sprintf("cannot select Claude quota wait option on %s: %v", last.Target, err)
@@ -203,15 +234,50 @@ func (e *Engine) beginAgentDevQuotaWaitAt(state State, stage StageConfig, ss Sta
 	return true, false, nil
 }
 
+func providerDisplayName(provider string) string {
+	switch provider {
+	case prompt.UsageLimitProviderClaude:
+		return "Claude"
+	case prompt.UsageLimitProviderCodex:
+		return "Codex"
+	default:
+		return provider
+	}
+}
+
 func (e *Engine) tickAgentDevQuotaWait(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {
 	wait := ss.AgentDev.QuotaWait
 	now := e.Now()
+	if wait.Provider != prompt.UsageLimitProviderClaude && wait.Provider != prompt.UsageLimitProviderCodex {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait has unknown provider %q", wait.Provider))
+	}
+	if wait.Target == "" || wait.ResetAt.IsZero() || wait.NextCheckAt.IsZero() {
+		return e.blockAgentDevQuota(state, stage, ss, "quota wait is missing target or reset deadline")
+	}
+	if (wait.Role != "" && wait.Role != ss.AgentDev.CurrentRole) || (wait.WorkItem != "" && wait.WorkItem != ss.AgentDev.CurrentWorkItem) {
+		return e.blockAgentDevQuota(state, stage, ss, "quota wait role or work item no longer matches active agent_dev work")
+	}
+	if wait.DispatchID == "" {
+		wait.DispatchID = ss.AgentDev.CurrentDispatchID
+	}
+	if wait.DispatchID == "" || wait.DispatchID != ss.AgentDev.CurrentDispatchID {
+		return e.blockAgentDevQuota(state, stage, ss, "quota wait dispatch identity no longer matches active agent_dev work")
+	}
+	last, ok, err := LastDispatch(e.Store, wait.DispatchID)
+	if err != nil {
+		return true, false, err
+	}
+	if !ok || (wait.Attempt != 0 && wait.Attempt != last.Attempt) {
+		return e.blockAgentDevQuota(state, stage, ss, "quota wait dispatch attempt is missing or changed")
+	}
+	if last.Status != "sent" {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait dispatch %s has indeterminate status %s; refusing duplicate resume", wait.DispatchID, last.Status))
+	}
+	if wait.Attempt == 0 {
+		wait.Attempt = last.Attempt
+	}
 	if wait.ObservedAt.IsZero() {
 		wait.ObservedAt = now
-		last, ok, err := LastDispatch(e.Store, ss.AgentDev.CurrentDispatchID)
-		if err != nil {
-			return true, false, err
-		}
 		if ok && !last.Timestamp.IsZero() {
 			wait.ObservedAt = last.Timestamp
 			if !wait.ResetAt.IsZero() && wait.ResetAt.Sub(last.Timestamp) > 24*time.Hour {
@@ -222,12 +288,16 @@ func (e *Engine) tickAgentDevQuotaWait(ctx context.Context, state State, stage S
 		}
 	}
 	if !wait.PromptAnswered {
+		if wait.Provider != prompt.UsageLimitProviderClaude {
+			return e.blockAgentDevQuota(state, stage, ss, "passive quota wait unexpectedly requires interactive input")
+		}
 		raw, err := e.CapturePane(wait.Target, 200)
 		if err != nil {
 			return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s disappeared before wait selection: %v", wait.Target, err))
 		}
 		if detected := prompt.Detect(raw); detected != nil {
-			if !prompt.IsClaudeSessionLimitWait(raw, detected) {
+			limit, recognized := prompt.DetectUsageLimit(raw, detected, wait.ObservedAt)
+			if !recognized || limit.Provider != prompt.UsageLimitProviderClaude || !limit.ResetAt.Equal(wait.ResetAt) {
 				return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s changed to unrecognized %s prompt before wait selection", wait.Target, detected.Type))
 			}
 			if err := e.SendKeys(wait.Target, []string{"Enter"}); err != nil {
@@ -244,12 +314,15 @@ func (e *Engine) tickAgentDevQuotaWait(ctx context.Context, state State, stage S
 		state.Stages[stage.ID] = ss
 		return true, false, e.Store.Write(state)
 	}
+	if wait.Provider == prompt.UsageLimitProviderCodex {
+		return e.resumeAgentDevAfterQuota(ctx, state, stage, ss)
+	}
 	raw, err := e.CapturePane(wait.Target, 200)
 	if err != nil {
 		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("quota wait target %s disappeared or cannot be captured: %v", wait.Target, err))
 	}
 	if detected := prompt.Detect(raw); detected != nil {
-		if prompt.IsClaudeSessionLimitWait(raw, detected) {
+		if limit, recognized := prompt.DetectUsageLimit(raw, detected, now); recognized && limit.Provider == prompt.UsageLimitProviderClaude {
 			wait.NextCheckAt = now.Add(agentDevQuotaRecheck)
 			ss.Error = fmt.Sprintf("Claude quota is still exhausted; checking again at %s", wait.NextCheckAt.Format(time.RFC3339))
 			state.Status = agentDevWaitingQuota
@@ -275,45 +348,96 @@ func (e *Engine) blockAgentDevQuota(state State, stage StageConfig, ss StageStat
 
 func (e *Engine) resumeAgentDevAfterQuota(ctx context.Context, state State, stage StageConfig, ss StageState) (bool, bool, error) {
 	dev := ss.AgentDev
+	wait := dev.QuotaWait
+	if wait == nil || wait.DispatchID != dev.CurrentDispatchID {
+		return e.blockAgentDevQuota(state, stage, ss, "cannot resume agent_dev: durable quota dispatch identity changed")
+	}
 	actorName, promptText, err := e.currentAgentDevDispatchPrompt(state, stage, dev)
 	if err != nil {
 		return e.blockAgentDevQuota(state, stage, ss, err.Error())
 	}
 	actor := e.Loaded.Config.Actors[actorName]
 	target, runtime, session, trust, launch, err := e.resolveActor(actor)
+	if err == nil && wait.Session != "" && session != wait.Session {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev: actor session changed from %s to %s", wait.Session, session))
+	}
+	if err == nil && !launch && wait.Target != "" && target != wait.Target {
+		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev: actor target changed from %s to %s", wait.Target, target))
+	}
+	last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)
+	if lastErr != nil {
+		return true, false, lastErr
+	}
+	if !ok {
+		return e.blockAgentDevQuota(state, stage, ss, "cannot resume agent_dev after quota reset: active dispatch record is missing")
+	}
+	if wait.Attempt != 0 && last.Attempt != wait.Attempt {
+		return e.blockAgentDevQuota(state, stage, ss, "cannot resume agent_dev after quota reset: dispatch attempt changed")
+	}
 	if err == nil {
+		last.Timestamp = e.Now()
+		last.Status = "sending"
+		if wait.Target != "" {
+			last.Target = wait.Target
+		}
+		if writeErr := e.Store.Dispatch(last); writeErr != nil {
+			return true, false, writeErr
+		}
+		_ = e.Store.Event(Event{Type: "agent_dev_quota_resume_started", Stage: stage.ID, Attempt: last.Attempt, Status: "sending", Details: wait})
 		if launch {
 			var report dispatch.Report
-			report, err = e.DispatchAgent(dispatch.Options{Session: session, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, TrustFolder: trust, WorkspaceLeaseOwner: state.RunID})
+			options := dispatch.Options{Session: session, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, TrustFolder: trust, WorkspaceLeaseOwner: state.RunID}
+			if wait.Provider == prompt.UsageLimitProviderCodex {
+				options.QuotaResume = &dispatch.QuotaResume{Provider: wait.Provider, ResetAt: wait.ResetAt, ResumeAt: wait.NextCheckAt}
+			}
+			report, err = e.DispatchAgent(options)
 			target = report.Target
+		} else if wait.Provider == prompt.UsageLimitProviderCodex {
+			var report dispatch.Report
+			report, err = e.DispatchAgent(dispatch.Options{Session: session, Target: target, Dir: e.Loaded.Config.Workspace.Root, Agent: runtime, Prompt: promptText, Execute: true, ReadyTimeout: stage.Timeout.Duration, ReadySettle: 1500 * time.Millisecond, WorkspaceLeaseOwner: state.RunID, QuotaResume: &dispatch.QuotaResume{Provider: wait.Provider, ResetAt: wait.ResetAt, ResumeAt: wait.NextCheckAt}})
+			if report.Target != "" {
+				target = report.Target
+			}
 		} else if preflightErr := e.preflightAgent(target, runtime, e.Loaded.Config.Workspace.Root, e.Loaded.Config.Defaults.IdleAfter.Duration); preflightErr != nil {
 			err = preflightErr
 		} else {
 			err = e.PasteText(target, promptText, true)
 		}
 	}
-	if err != nil && !isDeferredDispatch(err) {
+	if err != nil && (!isDeferredDispatch(err) || wait.Provider == prompt.UsageLimitProviderCodex) {
 		quotaTarget := target
 		if quotaTarget == "" && dev.QuotaWait != nil {
 			quotaTarget = dev.QuotaWait.Target
 		}
 		if quotaTarget != "" {
 			if raw, captureErr := e.CapturePane(quotaTarget, 200); captureErr == nil {
-				if detected := prompt.Detect(raw); prompt.IsClaudeSessionLimitWait(raw, detected) {
+				detected := prompt.Detect(raw)
+				if limit, recognized := prompt.DetectUsageLimit(raw, detected, e.Now()); recognized {
+					if limit.Provider == prompt.UsageLimitProviderCodex && !limit.ResetAt.After(e.Now()) {
+						return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev: Codex returned a non-future quota reset time %s", limit.ResetAt.Format(time.RFC3339)))
+					}
 					last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)
 					if lastErr != nil {
 						return true, false, lastErr
 					}
 					if ok {
 						last.Target = quotaTarget
-						return e.beginAgentDevQuotaWait(state, stage, ss, last, raw, detected)
+						last.Timestamp = e.Now()
+						last.Status = "sent"
+						if writeErr := e.Store.Dispatch(last); writeErr != nil {
+							return true, false, writeErr
+						}
+						return e.beginAgentDevQuotaWait(state, stage, ss, last, limit)
 					}
+				}
+				if prompt.HasCurrentUsageLimitMarker(raw, detected) {
+					return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev: quota screen format changed on %s", quotaTarget))
 				}
 			}
 		}
 		return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("cannot resume agent_dev after quota reset: %v", err))
 	}
-	last, ok, lastErr := LastDispatch(e.Store, dev.CurrentDispatchID)
+	last, ok, lastErr = LastDispatch(e.Store, dev.CurrentDispatchID)
 	if lastErr != nil {
 		return true, false, lastErr
 	}
@@ -441,6 +565,10 @@ func (e *Engine) dispatchNextAgentDev(ctx context.Context, state State, stage St
 	dev.CurrentRole = role
 	dev.CurrentWorkItem = workItemID
 	ss.AgentDev = dev
+	ss.Error = ""
+	if state.Status == "running" {
+		state.Reason = ""
+	}
 	state.Stages[stage.ID] = ss
 	if err := e.Store.Write(state); err != nil {
 		return true, false, err

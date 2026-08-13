@@ -85,6 +85,12 @@ type AgentDevState struct {
 type AgentDevQuotaWait struct {
 	Provider       string    `json:"provider"`
 	Target         string    `json:"target"`
+	Session        string    `json:"session,omitempty"`
+	DispatchID     string    `json:"dispatch_id,omitempty"`
+	Attempt        int       `json:"attempt,omitempty"`
+	Role           string    `json:"role,omitempty"`
+	WorkItem       string    `json:"work_item,omitempty"`
+	Timezone       string    `json:"timezone,omitempty"`
 	ObservedAt     time.Time `json:"observed_at,omitempty"`
 	ResetAt        time.Time `json:"reset_at,omitempty"`
 	NextCheckAt    time.Time `json:"next_check_at"`

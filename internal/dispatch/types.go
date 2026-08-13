@@ -74,6 +74,16 @@ type Options struct {
 	ResultLines         int
 	Context             context.Context
 	WorkspaceLeaseOwner string
+	QuotaResume         *QuotaResume
+}
+
+// QuotaResume is an internal capability used by durable workflows to reuse a
+// Codex pane only after the exact persisted usage-limit deadline. The CLI does
+// not expose it.
+type QuotaResume struct {
+	Provider string
+	ResetAt  time.Time
+	ResumeAt time.Time
 }
 
 // Step is one planned or executed operation in a dispatch.

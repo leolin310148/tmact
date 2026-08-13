@@ -184,6 +184,52 @@ func TestWorkflowResumePreservesPromptBlockedAgentDevDispatch(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatusShowsDurableQuotaIdentity(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	if err := os.WriteFile(path, []byte(workflowAgentDevProfileYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workflow.Load(path, map[string]string{"request": "deliver feature"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "runs")
+	engine, err := workflow.NewEngine(loaded, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetAt := time.Date(2026, 8, 18, 9, 34, 0, 0, time.FixedZone("Asia/Taipei", 8*60*60))
+	if err := engine.Store.Update(func(state *workflow.State) error {
+		stage := state.Stages["delivery"]
+		stage.Status = workflow.StageRunning
+		stage.AgentDev = &workflow.AgentDevState{
+			Status:            "fix_planning",
+			CurrentDispatchID: "wf-test.delivery.agent-dev.P3-fix-plan-48.52",
+			CurrentRole:       "coordinator",
+			CurrentWorkItem:   "P3-fix-plan-48",
+			QuotaWait: &workflow.AgentDevQuotaWait{
+				Provider: "codex", Session: "coordinator", DispatchID: "wf-test.delivery.agent-dev.P3-fix-plan-48.52", Attempt: 52,
+				ResetAt: resetAt, NextCheckAt: resetAt.Add(time.Minute),
+			},
+		}
+		state.Status = "waiting_quota"
+		state.Stages["delivery"] = stage
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "workflow", "status", "--id", engine.Store.RunID, "--store-dir", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"status: waiting_quota", "quota: provider=codex", "reset=2026-08-18T09:34:00+08:00", "session=coordinator", "dispatch=wf-test.delivery.agent-dev.P3-fix-plan-48.52", "attempt=52"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("status output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestWorkflowAcknowledgePreservesDispatchAndRestartsTimeout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")

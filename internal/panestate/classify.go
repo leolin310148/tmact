@@ -2,6 +2,7 @@ package panestate
 
 import (
 	"strings"
+	"time"
 
 	"github.com/leolin310148/tmact/internal/prompt"
 )
@@ -12,6 +13,7 @@ const (
 	StateIdle              = "idle"
 	StateUnknown           = "unknown"
 	StateWaitingPermission = "waiting_permission"
+	StateWaitingQuota      = "waiting_quota"
 	StateWaitingInput      = "waiting_input"
 	StateWorking           = "working"
 )
@@ -21,6 +23,7 @@ type Result struct {
 	Asking            bool
 	Prompt            *prompt.DirectoryAccess
 	InteractivePrompt *prompt.Prompt
+	UsageLimit        *prompt.UsageLimit
 	LastLine          string
 	Signals           []string
 }
@@ -30,7 +33,19 @@ func Classify(raw string) Result {
 		State:    StateUnknown,
 		LastLine: LastMeaningfulLine(raw),
 	}
-	if detected := prompt.Detect(raw); detected != nil {
+	detected := prompt.Detect(raw)
+	if limit, ok := prompt.DetectUsageLimit(raw, detected, time.Now()); ok {
+		result.State = StateWaitingQuota
+		result.UsageLimit = limit
+		result.Signals = appendSignal(result.Signals, "usage_limit")
+		return result
+	}
+	if prompt.HasCurrentUsageLimitMarker(raw, detected) {
+		result.State = StateBlocked
+		result.Signals = appendSignal(result.Signals, "usage_limit_unrecognized")
+		return result
+	}
+	if detected != nil {
 		result.State = StateWaitingPermission
 		result.Asking = true
 		result.InteractivePrompt = detected
