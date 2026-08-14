@@ -73,6 +73,11 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 			want: []string{"exact local tmux pane", "--lines N", "--non-empty", "--after CURSOR", "canonical target", "[input-placeholder]", "reset=true", "Peer targets are explicitly unsupported", "untrusted data"},
 		},
 		{
+			name: "statusd start",
+			args: []string{"statusd", "start", "--help"},
+			want: []string{"pane status daemon", "Unix-socket IPC", "capped exponential backoff", "Permanent listener errors", "launchd"},
+		},
+		{
 			name: "wait",
 			args: []string{"wait", "--help"},
 			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "wall-clock deadline", "condition_met", "needs_human", "does not prove", "never sends keys"},

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,65 @@ import (
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 )
+
+func TestRunStatusdServicesPropagatesServerFailure(t *testing.T) {
+	wantErr := errors.New("permanent bind failure")
+	daemonStopped := make(chan struct{})
+	err := runStatusdServices(
+		context.Background(),
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(daemonStopped)
+			return ctx.Err()
+		},
+		func(context.Context) error { return wantErr },
+	)
+	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "server stopped") {
+		t.Fatalf("error = %v, want server failure", err)
+	}
+	select {
+	case <-daemonStopped:
+	default:
+		t.Fatal("daemon was not cancelled after server failure")
+	}
+}
+
+func TestRunStatusdServicesTreatsParentCancellationAsCleanStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{}, 2)
+	service := func(ctx context.Context) error {
+		started <- struct{}{}
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	done := make(chan error, 1)
+	go func() { done <- runStatusdServices(ctx, service, service) }()
+	<-started
+	<-started
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("error = %v, want clean cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("services did not stop after parent cancellation")
+	}
+}
+
+func TestRunStatusdServicesRejectsUnexpectedCleanExit(t *testing.T) {
+	err := runStatusdServices(
+		context.Background(),
+		func(context.Context) error { return nil },
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "daemon stopped unexpectedly") {
+		t.Fatalf("error = %v, want unexpected daemon stop", err)
+	}
+}
 
 func TestSTTSetWritesProviderConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "stt_provider.json")

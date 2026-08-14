@@ -28,6 +28,7 @@ func agentCommandHelpCatalog() []commandHelp {
 			Usage:    []string{"tmact statusd start [--interval 1s] [--socket-path PATH] [--no-tmux-options] [--web-addr ADDR]"},
 			Flags:    statusdStartHelpFlags(),
 			Examples: []string{"tmact statusd start --interval 1s", "tmact statusd start --once --json", "tmact statusd start --web-addr 0.0.0.0:7890"},
+			Notes:    []string{"Local Unix-socket IPC starts independently from the optional TCP listener.", "If a configured local IP is not assigned yet, TCP binding retries with capped exponential backoff while IPC and pane scanning remain available.", "Permanent listener errors stop the process so a service manager such as launchd can restart it."},
 		},
 		{
 			Command:  "statusd once",

@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
@@ -132,6 +133,15 @@ type Server struct {
 	// Logf logs server-side diagnostics; defaults to writing to stderr, which
 	// statusd routes to its log file.
 	Logf func(format string, args ...any)
+	// Listen overrides net.Listen. It exists for deterministic listener
+	// lifecycle tests; production callers should leave it nil.
+	Listen func(network, address string) (net.Listener, error)
+	// ListenRetryDelay overrides the capped exponential TCP retry delay. It is
+	// primarily a test hook; production callers should leave it nil.
+	ListenRetryDelay func(attempt int) time.Duration
+	// OnListenerReady is called after a listener has bound successfully. The
+	// callback must return promptly and may be called again after TCP recovery.
+	OnListenerReady func(network, address string)
 	// BuildTime is the VCS timestamp shown in the settings panel.
 	BuildTime string
 	// Peers is the set of remote statusd instances reachable for federated pane
@@ -532,13 +542,23 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const (
+	listenerRetryInitial = time.Second
+	listenerRetryMax     = 30 * time.Second
+)
+
 // Serve runs the HTTP server until ctx is cancelled, then shuts down
-// gracefully. It serves the same handler on the TCP Addr (if set) and on the
-// unix SocketPath (if set); at least one must be configured.
+// gracefully. The unix SocketPath is opened independently from the optional
+// TCP Addr so local CLI IPC stays available while a not-yet-configured network
+// address (for example a Tailscale IP during boot) is retried in the
+// background. Background refreshers are started exactly once for the whole
+// Serve lifetime, not once per TCP bind attempt.
 func (s *Server) Serve(ctx context.Context) error {
 	if s.Addr == "" && s.SocketPath == "" {
 		return errors.New("web.Server: Addr or SocketPath must be set")
 	}
+	serveCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	srv := &http.Server{
 		Handler:           s.Handler(),
@@ -553,88 +573,158 @@ func (s *Server) Serve(ctx context.Context) error {
 		},
 	}
 
-	go s.runUploadsGC(ctx)
+	var unixListener net.Listener
+	if s.SocketPath != "" {
+		var err error
+		unixListener, err = s.openUnixListener()
+		if err != nil {
+			return err
+		}
+		defer os.Remove(s.SocketPath)
+		s.listenerReady("unix", s.SocketPath)
+	}
+
+	go s.runUploadsGC(serveCtx)
 	// Quota and cost are independently gated: a peer can run cost-only (spend
 	// served for a hub to aggregate) without ever hitting the rate-limited
 	// quota endpoints.
 	if s.UsageEnabled {
-		go s.runUsageRefresh(ctx)
+		go s.runUsageRefresh(serveCtx)
 	}
 	if s.SpendEnabled {
-		go s.runSpendRefresh(ctx)
+		go s.runSpendRefresh(serveCtx)
 	}
 
-	listeners, err := s.listeners()
-	if err != nil {
-		return err
-	}
-
-	errCh := make(chan error, len(listeners))
+	errCh := make(chan error, 2)
 	var wg sync.WaitGroup
-	for _, ln := range listeners {
+	if unixListener != nil {
 		wg.Add(1)
-		go func(ln net.Listener) {
+		go func() {
 			defer wg.Done()
-			errCh <- srv.Serve(ln)
-		}(ln)
+			err := srv.Serve(unixListener)
+			if serveCtx.Err() == nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- fmt.Errorf("serve unix %s: %w", s.SocketPath, err)
+			}
+		}()
+	}
+	if s.Addr != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.serveTCP(serveCtx, srv); err != nil {
+				errCh <- err
+			}
+		}()
 	}
 
+	var serveErr error
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-		wg.Wait()
-		if s.SocketPath != "" {
-			_ = os.Remove(s.SocketPath)
-		}
-		return nil
 	case err := <-errCh:
-		_ = srv.Shutdown(context.Background())
-		wg.Wait()
-		if s.SocketPath != "" {
-			_ = os.Remove(s.SocketPath)
+		serveErr = err
+	}
+
+	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_ = srv.Shutdown(shutdownCtx)
+	shutdownCancel()
+	if unixListener != nil {
+		_ = unixListener.Close()
+	}
+	wg.Wait()
+	return serveErr
+}
+
+func (s *Server) serveTCP(ctx context.Context, srv *http.Server) error {
+	attempt := 0
+	for {
+		ln, err := s.listen("tcp", s.Addr)
+		if err != nil {
+			wrapped := fmt.Errorf("listen tcp %s: %w", s.Addr, err)
+			if !retryableTCPListenError(err) {
+				return wrapped
+			}
+			delay := s.listenRetryDelay(attempt)
+			attempt++
+			s.logf("tcp listener %s unavailable: %v; retrying in %s", s.Addr, err, delay)
+			if !waitForListenerRetry(ctx, delay) {
+				return nil
+			}
+			continue
 		}
-		if errors.Is(err, http.ErrServerClosed) {
+
+		attempt = 0
+		s.listenerReady("tcp", s.Addr)
+		err = srv.Serve(ln)
+		_ = ln.Close()
+		if ctx.Err() != nil || errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
-		return err
+		delay := s.listenRetryDelay(attempt)
+		attempt++
+		s.logf("tcp listener %s stopped: %v; retrying in %s", s.Addr, err, delay)
+		if !waitForListenerRetry(ctx, delay) {
+			return nil
+		}
 	}
 }
 
-// listeners opens the configured TCP and/or unix-socket listeners. A stale
-// unix socket from a crashed prior run is removed first; the socket is created
-// with 0600 perms so other local users cannot send keys.
-func (s *Server) listeners() ([]net.Listener, error) {
-	var out []net.Listener
-	if s.Addr != "" {
-		ln, err := net.Listen("tcp", s.Addr)
-		if err != nil {
-			return nil, fmt.Errorf("listen tcp %s: %w", s.Addr, err)
-		}
-		out = append(out, ln)
+// openUnixListener removes a stale socket from a crashed prior run and opens
+// the local-only IPC listener with owner-only permissions.
+func (s *Server) openUnixListener() (net.Listener, error) {
+	_ = os.Remove(s.SocketPath)
+	ln, err := s.listen("unix", s.SocketPath)
+	if err != nil {
+		return nil, fmt.Errorf("listen unix %s: %w", s.SocketPath, err)
 	}
-	if s.SocketPath != "" {
-		// Best-effort remove of a stale socket from a previous run. Ignore
-		// failure here so we surface a clearer error from Listen below.
+	if err := os.Chmod(s.SocketPath, 0o600); err != nil {
+		_ = ln.Close()
 		_ = os.Remove(s.SocketPath)
-		ln, err := net.Listen("unix", s.SocketPath)
-		if err != nil {
-			for _, prev := range out {
-				_ = prev.Close()
-			}
-			return nil, fmt.Errorf("listen unix %s: %w", s.SocketPath, err)
-		}
-		if err := os.Chmod(s.SocketPath, 0o600); err != nil {
-			_ = ln.Close()
-			for _, prev := range out {
-				_ = prev.Close()
-			}
-			return nil, fmt.Errorf("chmod %s: %w", s.SocketPath, err)
-		}
-		out = append(out, ln)
+		return nil, fmt.Errorf("chmod %s: %w", s.SocketPath, err)
 	}
-	return out, nil
+	return ln, nil
+}
+
+func (s *Server) listen(network, address string) (net.Listener, error) {
+	if s.Listen != nil {
+		return s.Listen(network, address)
+	}
+	return net.Listen(network, address)
+}
+
+func (s *Server) listenerReady(network, address string) {
+	if s.OnListenerReady != nil {
+		s.OnListenerReady(network, address)
+	}
+}
+
+func (s *Server) listenRetryDelay(attempt int) time.Duration {
+	if s.ListenRetryDelay != nil {
+		return s.ListenRetryDelay(attempt)
+	}
+	delay := listenerRetryInitial
+	for i := 0; i < attempt && delay < listenerRetryMax; i++ {
+		delay *= 2
+		if delay > listenerRetryMax {
+			delay = listenerRetryMax
+		}
+	}
+	return delay
+}
+
+func retryableTCPListenError(err error) bool {
+	return errors.Is(err, syscall.EADDRNOTAVAIL)
+}
+
+func waitForListenerRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {

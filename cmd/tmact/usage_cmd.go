@@ -119,8 +119,12 @@ Flags:
 		SpendEnabled:  spendEnabled,
 		UsageInterval: *usageInterval,
 		SpendInterval: *spendInterval,
+		OnListenerReady: func(network, address string) {
+			if network == "tcp" {
+				fmt.Fprintf(os.Stderr, "usage server listening on %s\n", address)
+			}
+		},
 	}
-	fmt.Fprintf(os.Stderr, "usage server listening on %s\n", *webAddr)
 	if *costOnly {
 		fmt.Fprintln(os.Stderr, "usage server mode: cost-only")
 	}

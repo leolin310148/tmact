@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/statusd"
@@ -149,7 +150,7 @@ func runStatusdStart(args []string) error {
 	}
 
 	daemon := statusd.NewDaemon(cfg)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if *once {
 		if *webAddr != "" {
@@ -188,6 +189,14 @@ func runStatusdStart(args []string) error {
 		WebPushVAPIDPrivateKey:   fileCfg.WebPushVAPIDPrivateKey,
 		WebPushVAPIDSubject:      fileCfg.WebPushVAPIDSubject,
 		WebPushSubscriptionsPath: fileCfg.WebPushSubscriptionsPath,
+		OnListenerReady: func(network, address string) {
+			switch network {
+			case "unix":
+				fmt.Fprintf(os.Stderr, "statusd IPC listening on %s\n", address)
+			case "tcp":
+				fmt.Fprintf(os.Stderr, "statusd web UI listening on %s\n", address)
+			}
+		},
 	}
 	// Adaptive idle pacing: the daemon reads the web tracker's clock each
 	// tick, wakes early on fresh web activity, and ingests the human-idle
@@ -199,21 +208,35 @@ func runStatusdStart(args []string) error {
 		server.HumanActive = daemon.HumanActive
 		server.IdlePaneCaptureInterval = cfg.IdleInterval
 	}
-	go func() {
-		if err := server.Serve(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "statusd server stopped: %v\n", err)
-		}
-	}()
-	fmt.Fprintf(os.Stderr, "statusd IPC listening on %s\n", cfg.SocketPath)
-	if *webAddr != "" {
-		fmt.Fprintf(os.Stderr, "statusd web UI listening on %s\n", *webAddr)
-	}
+	return runStatusdServices(ctx, daemon.Start, server.Serve)
+}
 
-	err := daemon.Start(ctx)
-	if errors.Is(err, context.Canceled) {
+type statusdServiceResult struct {
+	name string
+	err  error
+}
+
+// runStatusdServices ties the scanner and web/IPC server into one lifecycle.
+// A permanent failure in either service cancels the other and exits the
+// process, allowing launchd KeepAlive to restart a genuinely unhealthy daemon.
+func runStatusdServices(parent context.Context, daemonStart, serverServe func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	results := make(chan statusdServiceResult, 2)
+	go func() { results <- statusdServiceResult{name: "daemon", err: daemonStart(ctx)} }()
+	go func() { results <- statusdServiceResult{name: "server", err: serverServe(ctx)} }()
+
+	first := <-results
+	cancel()
+	<-results
+	if parent.Err() != nil {
 		return nil
 	}
-	return err
+	if first.err == nil || errors.Is(first.err, context.Canceled) {
+		return fmt.Errorf("statusd %s stopped unexpectedly", first.name)
+	}
+	return fmt.Errorf("statusd %s stopped: %w", first.name, first.err)
 }
 
 // applyFileConfig overlays values from the on-disk config onto cfg for any
