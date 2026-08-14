@@ -88,3 +88,55 @@ func TestClassifyANSIDoesNotOverridePermissionPrompt(t *testing.T) {
 		t.Fatalf("result=%#v", got)
 	}
 }
+
+func TestAnnotateDimSuggestion(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		ansi    string
+		want    string
+		changed bool
+	}{
+		{
+			name:    "claude suggestion",
+			raw:     "done\n❯ source ~/.zsh_aliases\nfooter\n",
+			ansi:    "done\n\x1b[39m❯ \x1b[2msource ~/.zsh_aliases\x1b[0m\nfooter\n",
+			want:    "done\n❯ [input-placeholder]\nfooter\n",
+			changed: true,
+		},
+		{
+			name:    "codex suggestion",
+			raw:     "› Write tests for @filename\n~/repo · main\n",
+			ansi:    "\x1b[0;1m›\x1b[0m \x1b[2mWrite tests for @filename\x1b[0m\n~/repo · main\n",
+			want:    "› [input-placeholder]\n~/repo · main\n",
+			changed: true,
+		},
+		{
+			name: "operator draft",
+			raw:  "❯ source ~/.zsh_aliases\n",
+			ansi: "\x1b[39m❯ \x1b[38;5;231msource ~/.zsh_aliases\x1b[0m\n",
+			want: "❯ source ~/.zsh_aliases\n",
+		},
+		{
+			name: "capture changed between reads",
+			raw:  "❯ typed draft\n",
+			ansi: "\x1b[39m❯ \x1b[2mold suggestion\x1b[0m\n",
+			want: "❯ typed draft\n",
+		},
+		{
+			name: "empty input",
+			raw:  "❯\n",
+			ansi: "\x1b[39m❯ \x1b[0m\n",
+			want: "❯\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := AnnotateDimSuggestion(tt.raw, tt.ansi)
+			if got != tt.want || changed != tt.changed {
+				t.Fatalf("AnnotateDimSuggestion() = %q, %v; want %q, %v", got, changed, tt.want, tt.changed)
+			}
+		})
+	}
+}

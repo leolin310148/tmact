@@ -24,6 +24,9 @@ func TestCapturePrintsOnlyCapturedText(t *testing.T) {
 		}
 		return "first\n\nsecond\n", nil
 	}
+	captureTmuxPaneStyled = func(target string, lines int) (string, error) {
+		return captureTmuxPane(target, lines)
+	}
 
 	out, err := captureRun(t, "capture", "--target", "work:2.1", "--lines", "40")
 	if err != nil {
@@ -43,6 +46,9 @@ func TestCaptureNonEmptyOmitsBlankRows(t *testing.T) {
 	}
 	captureTmuxPane = func(string, int) (string, error) {
 		return "first\n   \nsecond\n\n", nil
+	}
+	captureTmuxPaneStyled = func(target string, lines int) (string, error) {
+		return captureTmuxPane(target, lines)
 	}
 
 	out, err := captureRun(t, "-t", "%7", "capture", "--non-empty")
@@ -66,6 +72,9 @@ func TestCaptureJSONIncludesCanonicalPaneAndTruncation(t *testing.T) {
 			t.Fatalf("capture target = %q, lines = %d", target, lines)
 		}
 		return "done\n", nil
+	}
+	captureTmuxPaneStyled = func(target string, lines int) (string, error) {
+		return captureTmuxPane(target, lines)
 	}
 
 	out, err := captureRun(t, "capture", "--target", "work:3.2", "--json")
@@ -97,6 +106,9 @@ func TestCaptureAfterReturnsIncrementalJSON(t *testing.T) {
 	}
 	text := "one\ntwo\n"
 	captureTmuxPane = func(string, int) (string, error) { return text, nil }
+	captureTmuxPaneStyled = func(target string, lines int) (string, error) {
+		return captureTmuxPane(target, lines)
+	}
 
 	initialOut, err := captureRun(t, "capture", "--target", "%7", "--json")
 	if err != nil {
@@ -119,6 +131,56 @@ func TestCaptureAfterReturnsIncrementalJSON(t *testing.T) {
 	}
 	if incremental.Text != "three\n" || incremental.FullSnapshot || incremental.Reset || incremental.Cursor == "" || incremental.Cursor == initial.Cursor {
 		t.Fatalf("incremental report = %#v", incremental)
+	}
+}
+
+func TestCaptureAnnotatesDimInputSuggestion(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	captureTmuxPaneInfo = func(string) (tmux.CapturePaneInfo, error) {
+		return tmux.CapturePaneInfo{Target: "work:0.0", PaneID: "%7"}, nil
+	}
+	captureTmuxPane = func(string, int) (string, error) {
+		return "completed\n❯ source ~/.zsh_aliases\nfooter\n", nil
+	}
+	captureTmuxPaneStyled = func(string, int) (string, error) {
+		return "completed\n\x1b[39m❯ \x1b[2msource ~/.zsh_aliases\x1b[0m\nfooter\n", nil
+	}
+
+	out, err := captureRun(t, "capture", "--target", "%7", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report captureReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Text != "completed\n❯ [input-placeholder]\nfooter\n" || !report.InputPlaceholder {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestCapturePreservesOperatorDraft(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+
+	captureTmuxPaneInfo = func(string) (tmux.CapturePaneInfo, error) {
+		return tmux.CapturePaneInfo{Target: "work:0.0", PaneID: "%7"}, nil
+	}
+	captureTmuxPane = func(string, int) (string, error) {
+		return "❯ source ~/.zsh_aliases\n", nil
+	}
+	captureTmuxPaneStyled = func(string, int) (string, error) {
+		return "\x1b[39m❯ \x1b[38;5;231msource ~/.zsh_aliases\x1b[0m\n", nil
+	}
+
+	out, err := captureRun(t, "capture", "--target", "%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "❯ source ~/.zsh_aliases\n" {
+		t.Fatalf("output = %q", out)
 	}
 }
 

@@ -8,21 +8,23 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 type captureReport struct {
-	Selector       string `json:"selector"`
-	Target         string `json:"target"`
-	PaneID         string `json:"pane_id"`
-	RequestedLines int    `json:"requested_lines"`
-	Text           string `json:"text"`
-	HistorySize    int    `json:"history_size"`
-	Truncated      bool   `json:"truncated"`
-	Cursor         string `json:"cursor"`
-	FullSnapshot   bool   `json:"full_snapshot"`
-	Reset          bool   `json:"reset"`
-	ResetReason    string `json:"reset_reason,omitempty"`
+	Selector         string `json:"selector"`
+	Target           string `json:"target"`
+	PaneID           string `json:"pane_id"`
+	RequestedLines   int    `json:"requested_lines"`
+	Text             string `json:"text"`
+	HistorySize      int    `json:"history_size"`
+	Truncated        bool   `json:"truncated"`
+	Cursor           string `json:"cursor"`
+	FullSnapshot     bool   `json:"full_snapshot"`
+	Reset            bool   `json:"reset"`
+	ResetReason      string `json:"reset_reason,omitempty"`
+	InputPlaceholder bool   `json:"input_placeholder"`
 }
 
 func runCapture(args []string, globals globalOptions) error {
@@ -89,6 +91,11 @@ func runCapture(args []string, globals globalOptions) error {
 	if err != nil {
 		return err
 	}
+	styled, err := captureTmuxPaneStyled(info.PaneID, *lines)
+	if err != nil {
+		return err
+	}
+	text, inputPlaceholder := panestate.AnnotateDimSuggestion(text, styled)
 	if *nonEmpty {
 		text = omitBlankRows(text)
 	}
@@ -105,17 +112,18 @@ func runCapture(args []string, globals globalOptions) error {
 	}
 
 	report := captureReport{
-		Selector:       selector,
-		Target:         info.Target,
-		PaneID:         info.PaneID,
-		RequestedLines: *lines,
-		Text:           delta.Text,
-		HistorySize:    info.HistorySize,
-		Truncated:      info.HistorySize > *lines,
-		Cursor:         cursor,
-		FullSnapshot:   delta.FullSnapshot,
-		Reset:          delta.Reset,
-		ResetReason:    delta.ResetReason,
+		Selector:         selector,
+		Target:           info.Target,
+		PaneID:           info.PaneID,
+		RequestedLines:   *lines,
+		Text:             delta.Text,
+		HistorySize:      info.HistorySize,
+		Truncated:        info.HistorySize > *lines,
+		Cursor:           cursor,
+		FullSnapshot:     delta.FullSnapshot,
+		Reset:            delta.Reset,
+		ResetReason:      delta.ResetReason,
+		InputPlaceholder: inputPlaceholder,
 	}
 	if *jsonOutput {
 		return printJSON(report)

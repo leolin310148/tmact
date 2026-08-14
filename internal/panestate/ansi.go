@@ -13,6 +13,35 @@ type styledRune struct {
 	dim   bool
 }
 
+const inputPlaceholder = "[input-placeholder]"
+
+// AnnotateDimSuggestion replaces the current generated input suggestion with
+// an explicit placeholder. Claude and Codex render generated suggestions dim,
+// while operator-entered drafts are non-dim. Requiring the styled and plain
+// input text to match also avoids hiding a draft if the pane changes between
+// the two captures.
+func AnnotateDimSuggestion(raw, ansi string) (string, bool) {
+	input, ok := currentStyledInput(ansi)
+	if !ok || len(input) == 0 || !allInputDim(input) {
+		return raw, false
+	}
+
+	styledText := styledInputText(input)
+	lines := strings.Split(raw, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		prefix, plainText, ok := splitInputLine(lines[i])
+		if !ok {
+			continue
+		}
+		if plainText != styledText {
+			return raw, false
+		}
+		lines[i] = prefix + " " + inputPlaceholder
+		return strings.Join(lines, "\n"), true
+	}
+	return raw, false
+}
+
 // ClassifyANSI refines the plain-text classification with the live input
 // line's terminal attributes. Claude and Codex render generated suggestions
 // dim, while text typed by the operator is non-dim. Keeping those states
@@ -36,14 +65,7 @@ func ClassifyANSI(raw, ansi string) Result {
 		result.Signals = appendSignal(result.Signals, "empty_input")
 		return result
 	}
-	allDim := true
-	for _, char := range input {
-		if !unicode.IsSpace(char.value) && !char.dim {
-			allDim = false
-			break
-		}
-	}
-	if allDim {
+	if allInputDim(input) {
 		result.State = StateWaitingInput
 		result.Signals = appendSignal(result.Signals, "dim_suggestion")
 		return result
@@ -51,6 +73,44 @@ func ClassifyANSI(raw, ansi string) Result {
 	result.State = StateDraftInput
 	result.Signals = appendSignal(result.Signals, "draft_input")
 	return result
+}
+
+func allInputDim(input []styledRune) bool {
+	for _, char := range input {
+		if !unicode.IsSpace(char.value) && !char.dim {
+			return false
+		}
+	}
+	return true
+}
+
+func styledInputText(input []styledRune) string {
+	runes := make([]rune, len(input))
+	for i, char := range input {
+		runes[i] = char.value
+	}
+	return string(runes)
+}
+
+func splitInputLine(line string) (prefix, input string, ok bool) {
+	runes := []rune(line)
+	start := 0
+	for start < len(runes) && unicode.IsSpace(runes[start]) {
+		start++
+	}
+	if start == len(runes) || (runes[start] != '❯' && runes[start] != '›') {
+		return "", "", false
+	}
+	prefix = string(runes[:start+1])
+	start++
+	for start < len(runes) && unicode.IsSpace(runes[start]) {
+		start++
+	}
+	end := len(runes)
+	for end > start && unicode.IsSpace(runes[end-1]) {
+		end--
+	}
+	return prefix, string(runes[start:end]), true
 }
 
 func hasSignal(signals []string, want string) bool {

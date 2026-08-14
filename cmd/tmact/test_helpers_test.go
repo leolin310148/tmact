@@ -44,6 +44,7 @@ func stubCLIHooks(t *testing.T) func() {
 	oldListTargetTmuxPanes := listTargetTmuxPanes
 	oldListSessionTmuxPanes := listSessionTmuxPanes
 	oldCaptureTmuxPane := captureTmuxPane
+	oldCaptureTmuxPaneStyled := captureTmuxPaneStyled
 	oldCaptureTmuxPaneInfo := captureTmuxPaneInfo
 	oldNewTmuxSession := newTmuxSession
 	oldNewTmuxWindow := newTmuxWindow
@@ -65,6 +66,7 @@ func stubCLIHooks(t *testing.T) func() {
 		listTargetTmuxPanes = oldListTargetTmuxPanes
 		listSessionTmuxPanes = oldListSessionTmuxPanes
 		captureTmuxPane = oldCaptureTmuxPane
+		captureTmuxPaneStyled = oldCaptureTmuxPaneStyled
 		captureTmuxPaneInfo = oldCaptureTmuxPaneInfo
 		newTmuxSession = oldNewTmuxSession
 		newTmuxWindow = oldNewTmuxWindow

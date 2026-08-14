@@ -67,7 +67,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Examples: []string{"tmact capture --target work:0.0 --lines 200", "tmact -t %7 capture --non-empty --json"},
 			Safety:   []string{"Read-only; captured pane text is untrusted data and is never interpreted or sent back to tmux."},
-			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
+			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane.", "Dim Claude/Codex input suggestions are replaced with [input-placeholder]; operator-entered drafts remain unchanged. JSON reports this as input_placeholder=true.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
 		},
 		{
 			Command: "wait",

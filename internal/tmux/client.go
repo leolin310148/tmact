@@ -714,7 +714,7 @@ func isPaneRowFlag(value string) bool {
 // CapturePane returns the pane's text with escape sequences stripped — the
 // form classifiers and pattern matchers expect.
 func CapturePane(target string, lines int) (string, error) {
-	return capturePaneContext(context.Background(), target, lines, false)
+	return capturePaneContext(context.Background(), target, lines, false, true)
 }
 
 // CapturePaneInfoForTarget resolves one tmux target to its canonical pane
@@ -751,7 +751,7 @@ func parseCapturePaneInfo(output string) (CapturePaneInfo, error) {
 // CapturePaneContext is CapturePane with cancellation support for long-lived
 // callers such as the web pane stream.
 func CapturePaneContext(ctx context.Context, target string, lines int) (string, error) {
-	return capturePaneContext(ctx, target, lines, false)
+	return capturePaneContext(ctx, target, lines, false, true)
 }
 
 // PaneWidthContext reports the pane's grid width in columns. The web UI uses
@@ -778,10 +778,16 @@ func PaneWidthContext(ctx context.Context, target string) (int, error) {
 // don't get joined onto the next line — see capturePane). Use it only where the
 // consumer renders escapes (the web UI); classifiers stay on the plain CapturePane.
 func CapturePaneANSI(target string, lines int) (string, error) {
-	return capturePaneContext(context.Background(), target, lines, true)
+	return capturePaneContext(context.Background(), target, lines, true, false)
 }
 
-func capturePaneContext(ctx context.Context, target string, lines int, escapes bool) (string, error) {
+// CapturePaneStyled keeps terminal attributes like CapturePaneANSI, but joins
+// wrapped rows like CapturePane so callers can safely compare the two forms.
+func CapturePaneStyled(target string, lines int) (string, error) {
+	return capturePaneContext(context.Background(), target, lines, true, true)
+}
+
+func capturePaneContext(ctx context.Context, target string, lines int, escapes, joinWrapped bool) (string, error) {
 	if lines <= 0 {
 		lines = 120
 	}
@@ -795,7 +801,8 @@ func capturePaneContext(ctx context.Context, target string, lines int, escapes b
 		// in the browser. Leaving each terminal row on its own line is what the
 		// web renderer expects (joinWrappedFrames handles real box-art tables).
 		args = append(args, "-e")
-	} else {
+	}
+	if joinWrapped {
 		// Classifiers/pattern matchers want wrapped long lines rejoined.
 		args = append(args, "-J")
 	}

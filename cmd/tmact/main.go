@@ -36,18 +36,19 @@ func main() {
 }
 
 var (
-	listAllTmuxPanes     = tmux.ListAllPanes
-	listTargetTmuxPanes  = tmux.ListPanes
-	listSessionTmuxPanes = tmux.ListSessionPanes
-	captureTmuxPane      = tmux.CapturePane
-	captureTmuxPaneInfo  = tmux.CapturePaneInfoForTarget
-	newTmuxSession       = tmux.NewSession
-	newTmuxWindow        = tmux.NewWindow
-	pasteTmuxText        = tmux.PasteText
-	sendTmuxKeys         = tmux.SendKeys
-	tmactNow             = time.Now
-	tmactSleep           = time.Sleep
-	tmactExecutable      = os.Executable
+	listAllTmuxPanes      = tmux.ListAllPanes
+	listTargetTmuxPanes   = tmux.ListPanes
+	listSessionTmuxPanes  = tmux.ListSessionPanes
+	captureTmuxPane       = tmux.CapturePane
+	captureTmuxPaneStyled = tmux.CapturePaneStyled
+	captureTmuxPaneInfo   = tmux.CapturePaneInfoForTarget
+	newTmuxSession        = tmux.NewSession
+	newTmuxWindow         = tmux.NewWindow
+	pasteTmuxText         = tmux.PasteText
+	sendTmuxKeys          = tmux.SendKeys
+	tmactNow              = time.Now
+	tmactSleep            = time.Sleep
+	tmactExecutable       = os.Executable
 )
 
 func run(args []string) error {
