@@ -1228,3 +1228,50 @@ func TestExistingSessionUnknownRuntime(t *testing.T) {
 		t.Fatal("expected error for an undetermined runtime")
 	}
 }
+
+func TestExistingSessionReuseNoClearSkipsClear(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		return []tmux.Pane{claudePane()}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.pastes) >= 1 {
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+		return "Claude Code\n❯", nil
+	}
+
+	opts := baseOpts()
+	opts.NoClear = true
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("dry-run RunWithDeps: %v", err)
+	}
+	for _, step := range report.Steps {
+		if step.Name == "clear" {
+			t.Fatalf("dry-run planned a clear step: %+v", report.Steps)
+		}
+	}
+	if len(report.Steps) != 1 || report.Steps[0].Name != "send-prompt" {
+		t.Fatalf("dry-run steps = %+v", report.Steps)
+	}
+
+	opts.Execute = true
+	report, err = dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatalf("RunWithDeps: %v", err)
+	}
+	if !report.AgentWasRunning {
+		t.Fatal("agent_was_running should be true")
+	}
+	want := []paste{{"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) || rec.pastes[0] != want[0] {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+	if got := stepStatus(t, report, "send-prompt"); got != dispatch.StatusOK {
+		t.Fatalf("send-prompt status = %q", got)
+	}
+}

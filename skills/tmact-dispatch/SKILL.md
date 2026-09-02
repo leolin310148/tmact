@@ -36,7 +36,7 @@ Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ```bash
 tmact dispatch-work SESSION --dir DIR --agent claude|codex|gemini \
-  [--model MODEL] --prompt TEXT [--trust-folder] \
+  [--model MODEL] --prompt TEXT [--trust-folder] [--no-clear] \
   [--ready-timeout 30s] [--ready-settle 1.5s] \
   [--wait] [--wait-timeout 10m] [--wait-settle 2s] \
   [--result-lines 200] [--execute] [--json]
@@ -107,7 +107,7 @@ Session behavior:
 | --- | --- |
 | Missing | Creates a detached session in `--dir`, launches the agent, waits, sends the prompt |
 | Existing idle shell | Starts the requested agent, waits, sends the prompt |
-| Existing same idle agent | Sends `/clear`, then the new prompt |
+| Existing same idle agent | Sends `/clear`, then the new prompt (`--no-clear` skips the clear) |
 | Existing different agent | Refuses |
 | Existing busy agent or prompt wait | Refuses |
 | Permission or approval prompt | Refuses |
@@ -133,9 +133,13 @@ Replace local state when the response says `reset=true` and
 
 Once the same agent is idle, dispatching to the same session sends `/clear`
 before the new prompt. To continue the current conversation without clearing,
-preview guarded input to the exact returned pane, then execute the same send:
+repeat the dispatch with `--no-clear` (local only; it keeps every idle, prompt,
+and lease check) or preview guarded input to the exact returned pane, then
+execute the same send:
 
 ```bash
+tmact dispatch-work myjob --dir ~/w/proj --agent codex \
+  --prompt "address the test failure and report back" --no-clear
 tmact -t %42 send --text "address the test failure and report back" --enter
 tmact -t %42 send --text "address the test failure and report back" --enter --execute
 ```

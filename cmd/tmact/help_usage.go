@@ -65,7 +65,8 @@ Usage:
   tmact dispatch-work SESSION --dir DIR --agent claude [--target WINDOW[.PANE]] [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
   tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--execute]
   tmact ask SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--timeout 30m] [--trust-folder] [--execute] [--json]
-  tmact reply QUESTION_ID (--text TEXT | --file PATH) [--json]
+  tmact ask --thread QUESTION_ID --prompt "..." [--timeout 30m] [--execute] [--json]
+  tmact reply QUESTION_ID (--text TEXT | --file PATH) [--wait [--timeout 10m] | --final] [--json]
   tmact trust-folder --target work:0.0 --dir /repo --agent claude [--execute]
   tmact help [command] [--json]
   tmact commands [--json]
@@ -97,8 +98,8 @@ Commands:
   workflow      run and manage persistent revision-aware DAG workflows
   watch         watch a pane and answer narrow allowlisted prompts
   dispatch-work create/reuse a session, launch an agent, and send it a prompt
-  ask           dispatch work and wait for an explicit question-id reply
-  reply         return a one-shot answer to a waiting ask
+  ask           dispatch work and wait for an explicit question-id reply; --thread continues it
+  reply         answer a waiting ask; --wait blocks for the asker's follow-up, --final closes
   trust-folder  dry-run or accept one exact-directory Claude/Codex trust prompt
   commands      print the command catalog for humans, tools, and LLMs
   llm           print LLM-facing operating instructions

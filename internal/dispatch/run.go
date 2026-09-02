@@ -326,31 +326,39 @@ func validateQuotaResume(opts Options, deps Deps, classified panestate.Result) e
 }
 
 func dispatchReuse(opts Options, deps Deps, report Report, target string) (Report, error) {
-	clear := Step{Name: "clear", Detail: "/clear", Status: StatusPlanned}
-	send := Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned}
-	steps := []Step{clear, send}
+	var steps []Step
+	if !opts.NoClear {
+		steps = append(steps, Step{Name: "clear", Detail: "/clear", Status: StatusPlanned})
+	}
+	steps = append(steps, Step{Name: "send-prompt", Detail: promptDetail(opts.Prompt), Status: StatusPlanned})
 	steps = appendWaitStep(opts, steps)
+	sendIndex := len(steps) - 1
+	if opts.Wait {
+		sendIndex--
+	}
 
 	if !opts.Execute {
 		report.Steps = steps
 		return report, nil
 	}
 
-	if err := deps.PasteText(target, "/clear", true); err != nil {
-		steps[0].Status = StatusFailed
-		report.Steps = steps
-		return report, fmt.Errorf("send /clear: %w", err)
+	if !opts.NoClear {
+		if err := deps.PasteText(target, "/clear", true); err != nil {
+			steps[0].Status = StatusFailed
+			report.Steps = steps
+			return report, fmt.Errorf("send /clear: %w", err)
+		}
+		steps[0].Status = StatusOK
+		deps.Sleep(clearDelay)
 	}
-	steps[0].Status = StatusOK
-	deps.Sleep(clearDelay)
 
 	submission, err := submitPrompt(opts, deps, target)
 	if err != nil {
-		steps[1].Status = StatusFailed
+		steps[sendIndex].Status = StatusFailed
 		report.Steps = steps
 		return report, fmt.Errorf("send prompt: %w", err)
 	}
-	steps[1].Status = StatusOK
+	steps[sendIndex].Status = StatusOK
 	report.Steps = steps
 	return finishDispatch(opts, deps, report, target, submission)
 }

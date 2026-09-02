@@ -36,7 +36,9 @@ Use the CLI when you want scriptable tmux control:
   workspace trust.
 - `tmact ask` wraps a local dispatch in an explicit request/reply protocol;
   the answering agent calls `tmact reply QUESTION_ID`, and the waiting `ask`
-  process receives that answer without scraping pane output.
+  process receives that answer without scraping pane output. A question is a
+  thread: `ask --thread` sends a follow-up, `reply --wait` lets the answerer
+  block for one, and `reply --final` or `ask --close` ends it.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
 - `tmact hook init zsh|bash|fish` prints an opt-in shell snippet whose
@@ -312,17 +314,43 @@ tmact reply q_abcdefghijklmnopqrstuvwxyz \
 ```
 
 For a multiline answer, the answerer can use `--file PATH` instead of
-`--text`. A question accepts exactly one reply. Unknown, malformed, duplicate,
-expired, canceled, and late replies are rejected.
+`--text`. Unknown, malformed, expired, closed, and late replies are rejected.
+
+A question is a thread, so both sides can keep talking:
+
+```sh
+# asker: continue the same question; session, dir, and agent come from its record
+tmact ask --thread q_abcdefghijklmnopqrstuvwxyz \
+  --prompt "also cover the retry path" --execute --json
+
+# answerer: ask a clarifying question and block for the asker's follow-up
+tmact reply q_abcdefghijklmnopqrstuvwxyz \
+  --text "which branch should I target?" --wait --timeout 5m
+
+# either side ends the thread
+tmact reply q_abcdefghijklmnopqrstuvwxyz --text "merged and verified" --final
+tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --close
+```
+
+Delivery follows one rule: while the answerer is blocked in `reply --wait`,
+the asker's follow-up goes through the mailbox and `reply` prints it; otherwise
+`ask --thread` dispatches the follow-up into the recorded pane without `/clear`
+(the same idle, prompt, and lease checks as `dispatch-work --no-clear` apply)
+and blocks for the next reply. The asker's JSON report sets
+`answerer_waiting: true` when the reply came from `reply --wait` and
+`closed: true` after a final reply. An asker timeout or interrupt closes the
+question; an answerer `--wait` timeout does not, so the asker can still
+continue through the pane.
 
 The exchange uses a user-private mailbox below the system temporary runtime
 directory by default (for example `$TMPDIR/tmact-501/asks`). tmact verifies
 ownership and `0700` directory modes; request and reply files use `0600`. This
 location lets sandboxed agents exchange replies without requesting
 home-directory write access. Only routing metadata is stored in the request;
-the original prompt is not copied into the mailbox. The waiting `ask` receives
-the reply through its own stdout, so `reply` never has to inject keystrokes into
-a busy asker pane.
+the original prompt and pane-delivered follow-ups are not copied into the
+mailbox, while replies and mailbox-delivered follow-ups are. The waiting `ask`
+receives the reply through its own stdout, so `reply` never has to inject
+keystrokes into a busy asker pane.
 Timeout and interrupt finalize the request and return non-zero. `ask` is
 currently local-only; `--store-dir` is available when both local sessions need
 an explicitly shared mailbox path.

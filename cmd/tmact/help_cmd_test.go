@@ -55,17 +55,17 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "peer dispatch",
 			args: []string{"dispatch-work", "--help"},
-			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "wall-clock deadline", "--wait-settle DURATION", "--result-lines N", "local-only", "not proof"},
+			want: []string{"local or peer tmux session", "--peer NAME", "named remote machine", "do not SSH", "--wait", "--wait-timeout DURATION", "wall-clock deadline", "--wait-settle DURATION", "--result-lines N", "--no-clear", "local-only", "not proof"},
 		},
 		{
 			name: "ask",
 			args: []string{"ask", "--help"},
-			want: []string{"explicit question-id reply", "--timeout DURATION", "--store-dir DIR", "--execute", "one-shot local mailbox", "does not infer success", "Peer dispatch is not supported"},
+			want: []string{"explicit question-id reply", "--thread QUESTION_ID", "--close", "--timeout DURATION", "--store-dir DIR", "--execute", "private local mailbox", "does not infer success", "reply --wait", "answerer_waiting", "Peer dispatch is not supported"},
 		},
 		{
 			name: "reply",
 			args: []string{"reply", "--help"},
-			want: []string{"one-shot answer", "--text TEXT", "--file PATH", "--store-dir DIR", "duplicate", "never sends tmux keys", "1 MiB"},
+			want: []string{"wait for its follow-up", "--text TEXT", "--file PATH", "--wait", "--timeout DURATION", "--final", "--store-dir DIR", "exactly once per turn", "never sends tmux keys", "does not close the question", "1 MiB"},
 		},
 		{
 			name: "capture",

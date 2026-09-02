@@ -58,16 +58,19 @@ func SupportedAgents() []string {
 
 // Options configures a single dispatch-work run.
 type Options struct {
-	Session             string
-	Target              string
-	Dir                 string
-	Agent               string
-	Model               string
-	Prompt              string
-	Execute             bool
-	ReadyTimeout        time.Duration
-	ReadySettle         time.Duration
-	TrustFolder         bool
+	Session      string
+	Target       string
+	Dir          string
+	Agent        string
+	Model        string
+	Prompt       string
+	Execute      bool
+	ReadyTimeout time.Duration
+	ReadySettle  time.Duration
+	TrustFolder  bool
+	// NoClear reuses an idle same-agent pane without sending /clear first, so
+	// the new prompt continues the pane's current conversation.
+	NoClear             bool
 	Wait                bool
 	WaitTimeout         time.Duration
 	WaitSettle          time.Duration
