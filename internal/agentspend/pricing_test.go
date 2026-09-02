@@ -101,6 +101,47 @@ func TestClaudeFable5ProviderPrefixPricing(t *testing.T) {
 	approx(t, "anthropic claude fable 5 input", cost, 10)
 }
 
+func TestClaudeFable51Pricing(t *testing.T) {
+	cost, ok := calculateCost("claude-fable-5-1", 1_000_000, 1_000_000, 2_000_000, 1_000_000, 0, "standard", 1_000_000)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	// input $10 + output $50 + 5m cache write $12.50 + 1h cache write $20 + read $0.25.
+	approx(t, "claude fable 5.1 line", cost, 92.75)
+}
+
+// claude-fable-5-1 must resolve to its own entry, not fall through the
+// longest-prefix match onto claude-fable-5 (which has a different cache-read rate).
+func TestClaudeFable51DoesNotFallBackToFable5(t *testing.T) {
+	c51, ok := getModelCosts("claude-fable-5-1")
+	if !ok {
+		t.Fatal("claude-fable-5-1 did not resolve")
+	}
+	c5, _ := getModelCosts("claude-fable-5")
+	if c51 == c5 {
+		t.Fatalf("fable-5-1 priced identically to fable-5 %v; expected distinct cache-read rate", c51)
+	}
+	if c51.cacheReadPerToken != 0.25e-6 {
+		t.Fatalf("fable-5-1 cache read rate %.2e, want 0.25e-6", c51.cacheReadPerToken)
+	}
+}
+
+func TestClaudeFable51DottedAliasPricing(t *testing.T) {
+	cost, ok := calculateCost("claude-fable-5.1", 0, 0, 0, 1_000_000, 0, "standard", 0)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	approx(t, "claude fable 5.1 dotted cache read", cost, 0.25)
+}
+
+func TestClaudeFable51ProviderPrefixPricing(t *testing.T) {
+	cost, ok := calculateCost("anthropic.claude-fable-5-1-20260901-v1:0", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	if !ok {
+		t.Fatal("unpriced")
+	}
+	approx(t, "anthropic claude fable 5.1 input", cost, 10)
+}
+
 // Codex normalizes cached into cacheRead. Reasoning is already included in
 // output_tokens and must not be added a second time by the log parser.
 // gpt-5.3-codex = [input 1.75e-6, output 1.4e-5, cacheWrite nil, cacheRead 1.75e-7].

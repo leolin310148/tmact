@@ -126,6 +126,22 @@ var manualPricing = map[string]modelCosts{
 		cacheReadPerToken:  1e-6,
 		webSearchPerReq:    webSearchCost,
 	},
+	// Claude Fable 5.1: same $10/$50 tier as Fable 5, but cache reads are
+	// billed at $0.25/MTok instead of the usual 10% of input.
+	"claude-fable-5-1": {
+		inputPerToken:      10e-6,
+		outputPerToken:     50e-6,
+		cacheWritePerToken: 12.5e-6,
+		cacheReadPerToken:  0.25e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"anthropic.claude-fable-5-1": {
+		inputPerToken:      10e-6,
+		outputPerToken:     50e-6,
+		cacheWritePerToken: 12.5e-6,
+		cacheReadPerToken:  0.25e-6,
+		webSearchPerReq:    webSearchCost,
+	},
 }
 
 // builtinAliases maps the many model-name variants emitted by agent logs onto
@@ -136,6 +152,7 @@ var manualPricing = map[string]modelCosts{
 // Claude dotted display names are normalized onto the hyphenated snapshot or
 // manual-pricing keys before longest-prefix fallback runs.
 var builtinAliases = map[string]string{
+	"claude-fable-5.1":  "claude-fable-5-1",
 	"claude-opus-4.8":   "claude-opus-4-8",
 	"claude-opus-4.7":   "claude-opus-4-7",
 	"claude-opus-4.6":   "claude-opus-4-6",
