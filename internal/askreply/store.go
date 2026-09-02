@@ -54,6 +54,7 @@ const (
 	waiterFile    = "waiter.json"
 	messagePrefix = "msg-"
 	messageSuffix = ".json"
+	ackPrefix     = "ack-"
 )
 
 var (
@@ -122,6 +123,12 @@ type closedRecord struct {
 type waiterRecord struct {
 	PID   int       `json:"pid"`
 	Until time.Time `json:"until"`
+}
+
+type ackRecord struct {
+	Seq int       `json:"seq"`
+	PID int       `json:"pid"`
+	At  time.Time `json:"at"`
 }
 
 // Store is a local, filesystem-backed request/reply mailbox. A random question
@@ -487,7 +494,7 @@ func (s *Store) AwaitPrompt(ctx context.Context, id string, afterSeq int) (Messa
 			return Message{}, err
 		}
 		if message, ok := nextFrom(thread, RoleAsker, afterSeq, DeliveryMailbox); ok {
-			return message, nil
+			return s.acknowledge(id, message)
 		}
 		if thread.Closed != nil {
 			return Message{}, fmt.Errorf("%w: %s", ErrClosed, thread.Closed.Reason)
@@ -500,12 +507,42 @@ func (s *Store) AwaitPrompt(ctx context.Context, id string, afterSeq int) (Messa
 				return Message{}, err
 			}
 			if message, ok := nextFrom(thread, RoleAsker, afterSeq, DeliveryMailbox); ok {
-				return message, nil
+				return s.acknowledge(id, message)
 			}
 			return Message{}, fmt.Errorf("wait for follow-up %s: %w", id, ctx.Err())
 		case <-ticker.C:
 		}
 	}
+}
+
+// acknowledge records that the waiter consumed message before the deferred
+// waiter-marker removal runs, so an asker rechecking the waiter can tell
+// "delivered" from "the waiter gave up".
+func (s *Store) acknowledge(id string, message Message) (Message, error) {
+	if err := writePrivateJSON(s.ackPath(id, message.Seq), ackRecord{Seq: message.Seq, PID: os.Getpid(), At: s.now()}); err != nil {
+		return Message{}, fmt.Errorf("acknowledge follow-up: %w", err)
+	}
+	return message, nil
+}
+
+// Acknowledged reports whether an answerer waiter has consumed the
+// mailbox-delivered message with the given seq.
+func (s *Store) Acknowledged(id string, seq int) (bool, error) {
+	if err := validateID(id); err != nil {
+		return false, err
+	}
+	_, err := os.Stat(s.ackPath(id, seq))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read acknowledgement marker: %w", err)
+	}
+	return true, nil
+}
+
+func (s *Store) ackPath(id string, seq int) string {
+	return filepath.Join(s.questionDir(id), fmt.Sprintf("%s%06d%s", ackPrefix, seq, messageSuffix))
 }
 
 // HasWaiter reports whether an answerer process is currently blocked in

@@ -438,3 +438,37 @@ func TestInvalidQuestionIDCannotEscapeStore(t *testing.T) {
 		t.Fatalf("load error = %v", err)
 	}
 }
+
+func TestAwaitPromptAcknowledgesConsumedFollowUp(t *testing.T) {
+	store := newTestStore(t)
+	request, err := store.Create("answerer", "/repo", "codex", "", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acked, err := store.Acknowledged(request.ID, 1); err != nil || acked {
+		t.Fatalf("ack before any follow-up = %v, %v", acked, err)
+	}
+	posted, err := store.Post(request.ID, askerPrompt("consume me"), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AwaitPrompt(context.Background(), request.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if has, err := store.HasWaiter(request.ID); err != nil || has {
+		t.Fatalf("waiter after consuming = %v, %v", has, err)
+	}
+	if acked, err := store.Acknowledged(request.ID, posted.Seq); err != nil || !acked {
+		t.Fatalf("ack for consumed follow-up = %v, %v", acked, err)
+	}
+	if acked, err := store.Acknowledged(request.ID, posted.Seq+1); err != nil || acked {
+		t.Fatalf("ack for unposted seq = %v, %v", acked, err)
+	}
+	thread, err := store.Load(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(thread.Messages) != 1 {
+		t.Fatalf("ack marker must not be read as a message: %#v", thread.Messages)
+	}
+}

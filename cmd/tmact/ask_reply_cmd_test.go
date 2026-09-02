@@ -487,3 +487,74 @@ func TestReplyCommandShellQuotesCustomStore(t *testing.T) {
 		t.Fatalf("follow-up command = %s", followUp)
 	}
 }
+
+func TestAskThreadKeepsMailboxDeliveryWhenWaiterConsumesBeforeRecheck(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	store, request := seedThread(t, storeDir)
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		t.Fatalf("a consumed mailbox follow-up must not be re-sent to the pane: %#v", opts)
+		return dispatch.Report{}, nil
+	}
+
+	// The answerer's `reply --wait` returns (dropping its waiter marker) as
+	// soon as the follow-up lands, then thinks for a while before replying.
+	consumed := make(chan struct{})
+	answererErr := make(chan error, 1)
+	go func() {
+		if _, err := store.AwaitPrompt(context.Background(), request.ID, 2); err != nil {
+			answererErr <- err
+			return
+		}
+		<-consumed
+		_, err := store.Post(request.ID, askreply.Message{
+			From: askreply.RoleAnswerer, Kind: askreply.KindAnswer,
+			Text: "the summary", Delivery: askreply.DeliveryMailbox,
+		}, time.Time{})
+		answererErr <- err
+	}()
+	waitForWaiter(t, store, request.ID)
+	// The asker's recheck runs only after the waiter is gone and before the
+	// answerer has posted anything: the exact window of the live failure.
+	tmactSleep = func(time.Duration) {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			has, err := store.HasWaiter(request.ID)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if !has {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Error("waiter never consumed the follow-up")
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	go func() {
+		// Release the answerer once the asker has had time to run its recheck.
+		time.Sleep(200 * time.Millisecond)
+		close(consumed)
+	}()
+
+	out, err := captureRun(t, "ask", "--thread", request.ID, "--prompt", "audience: maintainers", "--store-dir", storeDir, "--timeout", "5s", "--execute", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-answererErr; err != nil {
+		t.Fatal(err)
+	}
+	var report askReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != "answered" || report.Delivery != askreply.DeliveryMailbox || report.Dispatch != nil {
+		t.Fatalf("report = %#v", report)
+	}
+	if report.Reply == nil || report.Reply.Text != "the summary" || report.Reply.Kind != askreply.KindAnswer || report.AnswererWaiting {
+		t.Fatalf("reply = %#v", report)
+	}
+}

@@ -262,10 +262,11 @@ func runAskThread(f askFlags) error {
 		if !f.execute {
 			return printAskOutput(report, f.jsonOutput)
 		}
-		if _, err := store.Post(f.thread, askreply.Message{
+		posted, err := store.Post(f.thread, askreply.Message{
 			From: askreply.RoleAsker, Kind: askreply.KindPrompt,
 			Text: f.prompt, Delivery: askreply.DeliveryMailbox,
-		}, waitUntil); err != nil {
+		}, waitUntil)
+		if err != nil {
 			return err
 		}
 		tmactSleep(askWaiterRecheckDelay)
@@ -274,11 +275,17 @@ func runAskThread(f askFlags) error {
 			return err
 		}
 		if !stillWaiting {
+			// The waiter removes its marker as soon as it returns, so a
+			// missing marker also means "consumed"; the ack tells them apart.
+			acked, err := store.Acknowledged(f.thread, posted.Seq)
+			if err != nil {
+				return err
+			}
 			current, err := store.Load(f.thread)
 			if err != nil {
 				return err
 			}
-			if current.LastSeq(askreply.RoleAnswerer) == lastAnswerSeq && current.Closed == nil {
+			if !acked && current.LastSeq(askreply.RoleAnswerer) == lastAnswerSeq && current.Closed == nil {
 				// The waiter gave up between our check and our post. Fall back
 				// to the pane so the follow-up is not stranded.
 				report.Delivery = deliveryMailboxThenPane
