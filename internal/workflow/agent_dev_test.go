@@ -281,6 +281,33 @@ func TestAgentDevWaitingDispatchStopsOnApprovalPrompt(t *testing.T) {
 	}
 }
 
+func TestAgentDevTransientConfirmationDoesNotStopOrSendInput(t *testing.T) {
+	_, engine, _ := initAgentDevTest(t)
+	record := activateAgentDevDispatch(t, engine, "coordinator", "phase-plan-1", 1)
+	record.Target, record.Status, record.Timestamp = "%42", "sent", engine.Now()
+	if err := engine.Store.Dispatch(record); err != nil {
+		t.Fatal(err)
+	}
+	captures := 0
+	engine.Sleep = func(time.Duration) {}
+	engine.CapturePane = func(string, int) (string, error) {
+		captures++
+		if captures == 1 {
+			return "Do you want to proceed?\n  1. Yes\n❯ 2. No\n", nil
+		}
+		return "Working... esc to interrupt", nil
+	}
+	engine.SendKeys = func(string, []string) error { t.Fatal("must not answer prompt"); return nil }
+	engine.PasteText = func(string, string, bool) error { t.Fatal("must not dispatch again"); return nil }
+	if _, err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := engine.Store.Read()
+	if err != nil || captures != 2 || state.Status == "needs_user" || state.Stages["delivery"].AgentDev.CurrentDispatchID != record.ID {
+		t.Fatalf("state=%#v captures=%d err=%v", state, captures, err)
+	}
+}
+
 func TestAgentDevQuotaWaitPersistsAndResumesSameDispatch(t *testing.T) {
 	_, engine, _ := initAgentDevTest(t)
 	location, err := time.LoadLocation("Asia/Taipei")

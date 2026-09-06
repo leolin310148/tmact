@@ -69,7 +69,8 @@ type Report struct {
 // Dependencies isolates tmux reads and time so waits can be tested without a
 // live tmux server or wall-clock sleeps.
 type Dependencies struct {
-	ResolveTarget   func(context.Context, string) (tmux.CapturePaneInfo, error)
+	ResolveTarget func(context.Context, string) (tmux.CapturePaneInfo, error)
+	// CapturePane may preserve ANSI attributes for draft/suggestion detection.
 	CapturePane     func(context.Context, string, int) (string, error)
 	IsTargetGone    func(error) bool
 	Now             func() time.Time
@@ -81,7 +82,7 @@ type Dependencies struct {
 func DefaultDependencies() Dependencies {
 	return Dependencies{
 		ResolveTarget:   tmux.CapturePaneInfoForTargetContext,
-		CapturePane:     tmux.CapturePaneContext,
+		CapturePane:     tmux.CapturePaneANSIContext,
 		IsTargetGone:    tmux.IsTargetGoneError,
 		Now:             time.Now,
 		Wait:            waitContext,
@@ -182,7 +183,7 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			return report, contextErr
 		}
 
-		classified := panestate.Classify(raw)
+		classified := panestate.ClassifyANSI(raw, raw)
 		state := NormalizeState(classified)
 		now := deps.Now()
 		report.Samples++

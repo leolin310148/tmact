@@ -87,6 +87,23 @@ func (e *Engine) tickAgentDev(ctx context.Context, state State) (bool, bool, err
 					return true, false, e.Store.Write(state)
 				}
 				detected := prompt.Detect(raw)
+				// Claude auto mode can resolve a generic dialog between polls.
+				// Observe it again before stopping; never send confirmation keys.
+				if detected != nil && detected.Type == prompt.TypeGenericConfirmation {
+					e.Sleep(500 * time.Millisecond)
+					if err := ctx.Err(); err != nil {
+						return true, false, err
+					}
+					raw, captureErr = e.CapturePane(last.Target, 200)
+					if captureErr != nil {
+						ss.Status = StageBlocked
+						ss.Error = fmt.Sprintf("confirm agent_dev prompt on %s: %v", last.Target, captureErr)
+						state.Status = "needs_user"
+						state.Stages[stage.ID] = ss
+						return true, false, e.Store.Write(state)
+					}
+					detected = prompt.Detect(raw)
+				}
 				if limit, recognized := prompt.DetectUsageLimit(raw, detected, e.Now()); recognized {
 					if last.Runtime != "" && last.Runtime != limit.Provider {
 						return e.blockAgentDevQuota(state, stage, ss, fmt.Sprintf("agent_dev target %s showed %s quota while dispatch runtime is %s", last.Target, limit.Provider, last.Runtime))

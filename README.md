@@ -126,6 +126,10 @@ matched. `condition_met` means only that the pane state was observed; an
 input-ready or idle-looking pane does not prove its task succeeded. Peer waits
 are explicitly unsupported.
 
+Waits use terminal attributes to distinguish dim Claude/Codex suggestions from
+unsent drafts. A suggestion can be input-ready; a real draft does not satisfy
+that condition.
+
 ### Privacy-safe log statistics
 
 `tmact log stats --since 24h` aggregates normalized records independently by
@@ -147,6 +151,11 @@ full command arguments. Provider log files are never modified.
 
 Use tmact itself as the loop supervisor. Do not wrap loops in `nohup`, shell
 backgrounding, PID files, `while` loops, or hand-written tmux sessions.
+
+`loop run --dry-run --once` emits `schedule_preview` events with each action or
+flow's first eligible time, repeat interval, and complete step text/keys, even
+when its initial delay extends into the next day. These times are eligibility
+times; idle/quota gates and prior flow steps can delay actual execution.
 
 ```sh
 # 1. Generate a complete template, edit target/prompt, then validate it.

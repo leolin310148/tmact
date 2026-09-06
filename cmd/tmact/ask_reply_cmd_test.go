@@ -16,6 +16,22 @@ import (
 
 var questionIDInPrompt = regexp.MustCompile(`q_[a-z2-7]{26}`)
 
+func TestAskNoClearPreservesExistingContext(t *testing.T) {
+	defer stubCLIHooks(t)()
+	called := false
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		called = true
+		if !opts.NoClear || opts.Execute || !strings.Contains(opts.Prompt, "tmact reply protocol") {
+			t.Fatalf("opts=%#v", opts)
+		}
+		return dispatch.Report{}, nil
+	}
+	_, err := captureRun(t, "ask", "answerer", "--dir", t.TempDir(), "--agent", "claude", "--prompt", "follow up", "--no-clear", "--json")
+	if err != nil || !called {
+		t.Fatalf("called=%v err=%v", called, err)
+	}
+}
+
 func TestAskDispatchesProtocolAndReturnsExplicitReply(t *testing.T) {
 	defer stubCLIHooks(t)()
 	dir := t.TempDir()

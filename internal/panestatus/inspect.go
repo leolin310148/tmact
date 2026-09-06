@@ -551,11 +551,16 @@ func looksLikeCodexRunningChrome(raw string) bool {
 
 func looksLikeClaudeCurrentChrome(raw string) bool {
 	last := strings.ToLower(panestate.LastMeaningfulLine(raw))
-	return strings.Contains(last, "auto mode on (shift+tab to cycle)") && strings.Contains(last, "for agents")
+	return looksLikeClaudeRunningChrome(last)
 }
 
 func looksLikeClaudeRunningChrome(text string) bool {
-	return strings.Contains(text, "auto mode on (shift+tab to cycle)") && strings.Contains(text, "for agents")
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "⏵⏵ auto mode on") && strings.Contains(line, "← for agents") {
+			return true
+		}
+	}
+	return false
 }
 
 func targetName(pane tmux.Pane) string {

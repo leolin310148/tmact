@@ -21,6 +21,22 @@ func TestClassifyRuntimeDetectsCodexCommand(t *testing.T) {
 	}
 }
 
+func TestClassifyRuntimeVersionedClaudeNewFooter(t *testing.T) {
+	for _, cmd := range []string{"2.1.246", "zsh"} {
+		pane := tmux.Pane{CurrentCommand: cmd, WindowName: "project"}
+		raw := "❯ suggestion\n⏵⏵ auto mode on · 1 shell · ← for agents"
+		if got := ClassifyRuntime(pane, raw); got.Runtime != RuntimeClaude {
+			t.Fatalf("%s: %#v", cmd, got)
+		}
+	}
+	if got := ClassifyRuntime(tmux.Pane{CurrentCommand: "2.1.246"}, "❯ "); got.Runtime != RuntimeUnknown {
+		t.Fatalf("version alone must not identify Claude: %#v", got)
+	}
+	if got := ClassifyRuntime(tmux.Pane{CurrentCommand: "zsh"}, "❯ old\n⏵⏵ auto mode on · ← for agents\nproject $"); got.Runtime != RuntimeShell {
+		t.Fatalf("stale footer must not override shell: %#v", got)
+	}
+}
+
 func TestClassifyRuntimeDoesNotDetectCopilot(t *testing.T) {
 	pane := tmux.Pane{CurrentCommand: "copilot", WindowName: "copilot"}
 

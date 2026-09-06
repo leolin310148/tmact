@@ -33,15 +33,33 @@ func submitPrompt(opts Options, deps Deps, target string) (submissionEvidence, e
 		if err != nil {
 			return submissionEvidence{}, fmt.Errorf("confirm prompt submitted: %w", err)
 		}
-		classified := panestate.Classify(raw)
+		classified, err := classifyPane(deps, target, raw)
+		if err != nil {
+			return submissionEvidence{}, fmt.Errorf("confirm prompt submitted: %w", err)
+		}
 		if promptSubmitted(classified) {
 			return newSubmissionEvidence(classified, "pane_state"), nil
 		}
-		inBox := promptInInputBox(raw, opts.Prompt)
+		visible := raw
+		suggestion := false
+		for _, signal := range classified.Signals {
+			if signal == "dim_suggestion" {
+				suggestion = true
+				// Suggestions are not submission evidence, even if they repeat
+				// the prompt. Only match the transcript above the live input.
+				if idx := strings.LastIndexAny(visible, "❯›"); idx >= 0 {
+					visible = visible[:idx]
+				}
+			}
+		}
+		inBox := !suggestion && promptInInputBox(raw, opts.Prompt)
+		if classified.State == panestate.StateDraftInput && !inBox {
+			return submissionEvidence{}, fmt.Errorf("%s input contains an unmatched draft or partial paste; refusing to append or submit more text", opts.Agent)
+		}
 		// The prompt left the input box and is somewhere on screen: it was
 		// submitted, even if a fast task already finished and the agent is
 		// idle again.
-		if !inBox && promptVisible(raw, opts.Prompt) {
+		if !inBox && promptVisible(visible, opts.Prompt) {
 			return newSubmissionEvidence(classified, "prompt_in_transcript"), nil
 		}
 		if retry >= submitRetries {

@@ -776,9 +776,14 @@ func PaneWidthContext(ctx context.Context, target string) (int, error) {
 // CapturePaneANSI is CapturePane with tmux's -e flag (keeping colour and
 // attribute escape sequences) and without -J (so full-width input-box borders
 // don't get joined onto the next line — see capturePane). Use it only where the
-// consumer renders escapes (the web UI); classifiers stay on the plain CapturePane.
+// consumer renders escapes or classifies terminal input attributes.
 func CapturePaneANSI(target string, lines int) (string, error) {
-	return capturePaneContext(context.Background(), target, lines, true, false)
+	return CapturePaneANSIContext(context.Background(), target, lines)
+}
+
+// CapturePaneANSIContext preserves attributes within the caller's deadline.
+func CapturePaneANSIContext(ctx context.Context, target string, lines int) (string, error) {
+	return capturePaneContext(ctx, target, lines, true, false)
 }
 
 // CapturePaneStyled keeps terminal attributes like CapturePaneANSI, but joins
@@ -866,7 +871,9 @@ func PasteText(target string, text string, enter bool) error {
 func canSendLiteral(text string) bool {
 	// tmux parses a standalone semicolon argument as a command separator, even
 	// when argv came from exec.Command. Use paste-buffer for that literal.
-	return text != ";"
+	// Long single-line prompts also need bracketed paste: sending thousands
+	// of individual key events can overwhelm an agent's input renderer.
+	return text != ";" && len(text) <= 1024
 }
 
 func pasteBufferArgs(target string, bufferName string) []string {

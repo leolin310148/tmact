@@ -32,6 +32,33 @@ func TestLoopEventsIncludeManagedRunID(t *testing.T) {
 	}
 }
 
+func TestDryRunOncePreviewsNextDayFlowWithoutSending(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "preview.jsonl")
+	start := time.Date(2026, 9, 7, 23, 0, 0, 0, time.UTC)
+	runner := NewRunner(Config{
+		Target: "%7", LogPath: logPath, PollInterval: Duration{time.Second},
+		Flows: []FlowConfig{{
+			Name: "tomorrow", InitialDelay: Duration{2 * time.Hour}, OnlyWhenIdle: true,
+			Steps: []ActionConfig{{Name: "prompt", Type: "send_text", Text: "check tomorrow's report"}},
+		}},
+	}, Options{DryRun: true, Once: true})
+	runner.now = func() time.Time { return start }
+	runner.capturePane = func(string, int) (string, error) { return "❯ ", nil }
+	runner.sendText = func(string, string, bool) error { t.Fatal("dry-run sent input"); return nil }
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"type":"schedule_preview"`, `"eligible_at":"2026-09-08T01:00:00Z"`, `"text":"check tomorrow's report"`, `"only_when_idle":true`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("missing %s in %s", want, data)
+		}
+	}
+}
+
 func TestLoopStopsCooperativelyWhileWaitingForNextPoll(t *testing.T) {
 	calls := 0
 	runner := NewRunner(Config{

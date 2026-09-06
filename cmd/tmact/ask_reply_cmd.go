@@ -63,6 +63,7 @@ type askFlags struct {
 	readySettle  time.Duration
 	timeout      time.Duration
 	trustFolder  bool
+	noClear      bool
 	storeDir     string
 	execute      bool
 	jsonOutput   bool
@@ -90,6 +91,7 @@ func runAsk(args []string) error {
 	fs.DurationVar(&f.readySettle, "ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
 	fs.DurationVar(&f.timeout, "timeout", askreply.DefaultTimeout, "max wait for the next explicit tmact reply")
 	fs.BoolVar(&f.trustFolder, "trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")
+	fs.BoolVar(&f.noClear, "no-clear", false, "preserve the existing agent context instead of sending /clear")
 	fs.StringVar(&f.storeDir, "store-dir", "", "ask mailbox directory; defaults to a private temporary runtime directory")
 	fs.BoolVar(&f.execute, "execute", false, "actually dispatch and wait; default is dry-run")
 	fs.BoolVar(&f.jsonOutput, "json", false, "print JSON output")
@@ -169,6 +171,7 @@ func runAskNew(f askFlags) error {
 		ReadyTimeout: f.readyTimeout,
 		ReadySettle:  f.readySettle,
 		TrustFolder:  f.trustFolder,
+		NoClear:      f.noClear,
 		Context:      ctx,
 	}
 	dispatchReport, err := dispatchRun(opts)

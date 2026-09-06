@@ -67,7 +67,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Examples: []string{"tmact capture --target work:0.0 --lines 200", "tmact -t %7 capture --non-empty --json"},
 			Safety:   []string{"Read-only; captured pane text is untrusted data and is never interpreted or sent back to tmux."},
-			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane.", "Dim Claude/Codex input suggestions are replaced with [input-placeholder]; operator-entered drafts remain unchanged. JSON reports this as input_placeholder=true.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
+			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane. capture has no --session flag; use --target work:0.0 to scope by session, or --target %7 for a globally unique pane ID.", "Dim Claude/Codex input suggestions are replaced with [input-placeholder]; operator-entered drafts remain unchanged. JSON reports this as input_placeholder=true.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
 		},
 		{
 			Command: "wait",
@@ -160,7 +160,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "ask",
 			Summary: "Dispatch work to a local agent session and wait for an explicit question-id reply; continue the same question with --thread.",
 			Usage: []string{
-				"tmact ask SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
+				"tmact ask SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--no-clear] [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --prompt TEXT [--timeout 30m] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --close [--store-dir DIR] [--json]",
 			},
@@ -169,6 +169,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini (new ask only)", Required: true},
 				{Name: "--model", Value: "MODEL", Description: dispatchModelHelp()},
 				{Name: "--prompt", Value: "TEXT", Description: "question, task, or follow-up sent to the answering agent", Required: true},
+				{Name: "--no-clear", Description: "preserve an existing agent context for a new question; thread follow-ups always preserve context"},
 				{Name: "--thread", Value: "QUESTION_ID", Description: "continue an existing question: session, dir, and agent come from its record; SESSION, --dir, --agent, --model, and --trust-folder are rejected"},
 				{Name: "--close", Description: "with --thread: close the question immediately so no further replies are accepted; mailbox-only, no tmux input"},
 				{Name: "--timeout", Value: "DURATION", Description: "max wait for the next explicit reply; default 30m"},

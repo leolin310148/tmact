@@ -30,6 +30,17 @@ Use read-only commands first:
 Commands that send input to tmux panes should stay dry-run until the printed
 plan is correct.
 
+Keep runtime identity separate from permission to send input. Version numbers
+alone do not identify an agent; when process inspection is unavailable, the
+Claude footer can provide runtime evidence, but the pane must still pass the
+draft, activity, and approval checks. Read-only waits retain ANSI input
+attributes so suggestions do not hide real unsent drafts.
+
+The agent_dev supervisor rechecks generic confirmation dialogs after 500ms to
+allow Claude auto mode to resolve transient dialogs itself. A persistent or
+replacement prompt, or a failed recapture, still stops the workflow. This
+observation never authorizes tmact to confirm a prompt.
+
 ## Repo Layout
 
 ```text

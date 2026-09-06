@@ -11,6 +11,25 @@ import (
 
 var errGone = errors.New("pane gone")
 
+func TestWaitDistinguishesSuggestionFromDraft(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, reason string
+	}{
+		{"suggestion", "\x1b[2mnext task\x1b[22m", ReasonConditionMet},
+		{"draft", "\x1b[0mmy unsent task", ReasonTimeout},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeWait{captures: []string{"⏺ finished\n❯ " + tc.input + "\n⏵⏵ auto mode on · 1 shell · ← for agents"}}
+			options := baseOptions(UntilInputReady)
+			options.Settle = time.Second
+			report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+			if err != nil || report.Reason != tc.reason {
+				t.Fatalf("report=%#v err=%v", report, err)
+			}
+		})
+	}
+}
+
 type fakeWait struct {
 	now      time.Time
 	captures []string

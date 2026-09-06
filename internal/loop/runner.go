@@ -137,6 +137,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	var lastHash string
+	if r.options.DryRun && r.options.Once {
+		if err := r.previewSchedule(start); err != nil {
+			return err
+		}
+	}
 	actionCount := 0
 	ticker := time.NewTicker(r.cfg.PollInterval.Duration)
 	defer ticker.Stop()
