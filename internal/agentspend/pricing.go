@@ -52,6 +52,16 @@ var fastMultipliers = map[string]float64{
 // manualPricing contains newly released models that are not yet present in the
 // vendored LiteLLM snapshot. Rates are dollars per token.
 var manualPricing = map[string]modelCosts{
+	// OpenAI GPT-6 Astra rates, verified 2026-09-07:
+	// https://developers.openai.com/api/docs/models/gpt-6-astra
+	"gpt-6-astra": {
+		inputPerToken:      10e-6,
+		outputPerToken:     50e-6,
+		cacheWritePerToken: 12.5e-6,
+		cacheReadPerToken:  1e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
 	"gpt-5.6": {
 		inputPerToken:      5e-6,
 		outputPerToken:     30e-6,

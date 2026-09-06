@@ -164,6 +164,40 @@ func TestCodexTokenCostDoesNotDoubleCountReasoning(t *testing.T) {
 	approx(t, "codex output includes reasoning", cost, 0.008435)
 }
 
+func TestGPT6AstraPricing(t *testing.T) {
+	for _, model := range []string{"gpt-6-astra", "openai/gpt-6-astra", "gpt-6-astra@20260907", "gpt-6-astra-20260907"} {
+		t.Run(model, func(t *testing.T) {
+			for _, speed := range []string{"standard", "fast"} {
+				cost, ok := calculateCost(model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 0, speed, 0)
+				if !ok {
+					t.Fatal("gpt-6-astra unpriced")
+				}
+				// Input $10 + output $50 + cache write $12.50 + cache read $1.
+				want := 73.5
+				if speed == "fast" {
+					want = 147
+				}
+				approx(t, speed, cost, want)
+			}
+			for _, tc := range []struct {
+				input int
+				want  float64
+			}{
+				{271_999, 1.41999},
+				{272_000, 1.42},
+				// All input (including cached) is 2x; output is 1.5x.
+				{272_001, 2.59002},
+			} {
+				cost, ok := calculateCodexTokenCost(model, tc.input, 200_000, 10_000)
+				if !ok {
+					t.Fatal("gpt-6-astra unpriced")
+				}
+				approx(t, "Codex long-context boundary", cost, tc.want)
+			}
+		})
+	}
+}
+
 func TestCodexGPT56LongContextPricing(t *testing.T) {
 	standard, ok := calculateCodexTokenCost("gpt-5.6-sol", 272_000, 200_000, 10_000)
 	if !ok {
