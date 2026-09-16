@@ -116,6 +116,20 @@ the conversation from the asker's side, run
 `tmact ask --thread QUESTION_ID --close`; this writes only to the mailbox and
 releases an answerer blocked in `reply --wait`.
 
+## Wait for the next reply without sending anything
+
+```bash
+tmact ask --thread QUESTION_ID --await [--timeout 30m] [--json]
+```
+
+An ordinary reply (neither `--final` nor `--wait`) may be an interim progress
+report from an answerer that is still working. Do not send a `--prompt`
+follow-up in that case: with no waiter it would be typed into the busy pane.
+`--await` blocks for the answerer's next reply (mailbox-only, no `--execute`
+needed) and extends the thread deadline by `--timeout`. Read its report the
+same way: `closed: true` is the final answer, `answerer_waiting: true` is a
+question for you, anything else is another interim reply to `--await` again.
+
 ## Respect the reply protocol
 
 `ask` creates a random question ID and appends the required `tmact reply`

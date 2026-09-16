@@ -163,6 +163,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"tmact ask SESSION [--target WINDOW[.PANE]] --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--no-clear] [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --prompt TEXT [--timeout 30m] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --close [--store-dir DIR] [--json]",
+				"tmact ask --thread QUESTION_ID --await [--timeout 30m] [--store-dir DIR] [--json]",
 			},
 			Flags: []helpFlag{
 				{Name: "--target", Value: "TARGET", Description: "pane to ask within the existing session: %id, WINDOW, or WINDOW.PANE; default is the active pane (new ask only; requires the session to exist)"},
@@ -173,6 +174,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--no-clear", Description: "preserve an existing agent context for a new question; thread follow-ups always preserve context"},
 				{Name: "--thread", Value: "QUESTION_ID", Description: "continue an existing question: session, pane, dir, and agent come from its record; SESSION, --target, --dir, --agent, --model, and --trust-folder are rejected"},
 				{Name: "--close", Description: "with --thread: close the question immediately so no further replies are accepted; mailbox-only, no tmux input"},
+				{Name: "--await", Description: "with --thread: block for the answerer's next reply without sending a follow-up (use after an interim, non-final reply); mailbox-only, extends the thread deadline by --timeout"},
 				{Name: "--timeout", Value: "DURATION", Description: "max wait for the next explicit reply; default 30m"},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the answering agent to become ready"},
 				{Name: "--ready-settle", Value: "DURATION", Description: "stable idle time after ready before sending the prompt"},
@@ -187,6 +189,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				`tmact ask work --target 0 --dir ~/proj --agent claude --prompt "fix the failing test" --no-clear --execute --json`,
 				`tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --prompt "also cover the retry path" --execute --json`,
 				`tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --close`,
+				`tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --await --timeout 1h --json`,
 			},
 			Safety: []string{
 				"Without --execute this prints the dispatch, delivery, and reply protocol plan without writing to the mailbox or touching tmux.",
@@ -198,6 +201,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"`ask` wraps local dispatch-work and appends an instruction requiring the answerer to call `tmact reply` with a random capability ID.",
 				"The ask process blocks until the next explicit reply, timeout, interrupt, or dispatch failure. It does not infer success from pane state or agent exit code.",
 				"A question is a thread. An ordinary reply leaves it open so the asker can continue with --thread; the answerer closes it with `reply --final`, the asker with `--close`, and an asker timeout or interrupt also closes it.",
+				"An ordinary (non-final) reply may be an interim progress report. Use `ask --thread QUESTION_ID --await` to wait for the next reply without interrupting the answerer; a plain --prompt follow-up would be typed into a pane that is still working.",
 				"The JSON report's answerer_waiting is true when the reply came from `tmact reply --wait`: the answerer is blocked for your follow-up. closed is true after a final reply.",
 				"Requests persist only routing metadata in a user-private temporary runtime directory; the original prompt and pane-delivered follow-ups are not copied into the mailbox, while mailbox-delivered follow-ups and replies are. Question directories and files use 0700/0600 modes and the default directory owner is verified.",
 				"Use --store-dir only when both local sessions can access the exact same directory. Peer dispatch is not supported by ask.",

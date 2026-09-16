@@ -591,3 +591,87 @@ func TestAskThreadKeepsMailboxDeliveryWhenWaiterConsumesBeforeRecheck(t *testing
 		t.Fatalf("reply = %#v", report)
 	}
 }
+
+func TestAskThreadAwaitReturnsNextReplyWithoutSendingAnything(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	store, request := seedThread(t, storeDir)
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		t.Fatalf("--await must not dispatch into the pane: %#v", opts)
+		return dispatch.Report{}, nil
+	}
+	before, err := store.Load(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	answererErr := make(chan error, 1)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_, err := store.Post(request.ID, askreply.Message{
+			From: askreply.RoleAnswerer, Kind: askreply.KindFinal,
+			Text: "deployed and verified", Delivery: askreply.DeliveryMailbox,
+		}, time.Time{})
+		answererErr <- err
+	}()
+
+	out, err := captureRun(t, "ask", "--thread", request.ID, "--await", "--store-dir", storeDir, "--timeout", "2h", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-answererErr; err != nil {
+		t.Fatal(err)
+	}
+	var report askReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != "answered" || report.Dispatch != nil || report.Delivery != askreply.DeliveryMailbox {
+		t.Fatalf("report = %#v", report)
+	}
+	if report.Reply == nil || report.Reply.Text != "deployed and verified" || report.Reply.Seq != 3 || !report.Closed || report.AnswererWaiting {
+		t.Fatalf("reply = %#v", report)
+	}
+	after, err := store.Load(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ExpiresAt.After(before.ExpiresAt.Add(time.Hour)) {
+		t.Fatalf("deadline not extended: before=%s after=%s", before.ExpiresAt, after.ExpiresAt)
+	}
+	thread, err := store.Load(request.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := thread.LastSeq(askreply.RoleAsker); got != 1 {
+		t.Fatalf("--await posted an asker message: last asker seq = %d", got)
+	}
+}
+
+func TestAskAwaitRejectsPromptCloseAndMissingThread(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	_, request := seedThread(t, storeDir)
+	cases := map[string][]string{
+		"no thread":   {"ask", "answerer", "--await", "--dir", t.TempDir(), "--agent", "claude", "--prompt", "x"},
+		"with prompt": {"ask", "--thread", request.ID, "--await", "--prompt", "x", "--store-dir", storeDir},
+		"with close":  {"ask", "--thread", request.ID, "--await", "--close", "--store-dir", storeDir},
+	}
+	for name, args := range cases {
+		if _, err := captureRun(t, args...); err == nil {
+			t.Fatalf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestAskAwaitRefusesClosedThread(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	store, request := seedThread(t, storeDir)
+	if err := store.Close(request.ID, askreply.RoleAnswerer, "final reply"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "ask", "--thread", request.ID, "--await", "--store-dir", storeDir, "--json"); err == nil || !strings.Contains(err.Error(), "is closed") {
+		t.Fatalf("err = %v, want closed-thread refusal", err)
+	}
+}

@@ -60,6 +60,7 @@ type askFlags struct {
 	prompt       string
 	thread       string
 	closeThread  bool
+	await        bool
 	readyTimeout time.Duration
 	readySettle  time.Duration
 	timeout      time.Duration
@@ -89,6 +90,7 @@ func runAsk(args []string) error {
 	fs.StringVar(&f.prompt, "prompt", "", "question, task, or follow-up sent to the answering agent")
 	fs.StringVar(&f.thread, "thread", "", "continue an existing question ID instead of dispatching a new one")
 	fs.BoolVar(&f.closeThread, "close", false, "with --thread: close the question so no further replies are accepted")
+	fs.BoolVar(&f.await, "await", false, "with --thread: wait for the answerer's next reply without sending anything")
 	fs.DurationVar(&f.readyTimeout, "ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	fs.DurationVar(&f.readySettle, "ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
 	fs.DurationVar(&f.timeout, "timeout", askreply.DefaultTimeout, "max wait for the next explicit tmact reply")
@@ -117,6 +119,9 @@ func runAsk(args []string) error {
 	}
 	if f.closeThread {
 		return errors.New("--close requires --thread")
+	}
+	if f.await {
+		return errors.New("--await requires --thread")
 	}
 	if f.session == "" {
 		return errors.New("ask requires a session name as the first argument")
@@ -225,6 +230,9 @@ func runAskThread(f askFlags) error {
 		if strings.TrimSpace(f.prompt) != "" {
 			return errors.New("--close does not take --prompt")
 		}
+		if f.await {
+			return errors.New("--close and --await are mutually exclusive")
+		}
 		thread, err := store.Load(f.thread)
 		if err != nil {
 			return err
@@ -236,8 +244,14 @@ func runAskThread(f askFlags) error {
 			Status: askStatusClosed, QuestionID: f.thread, Session: thread.Request.Session, Closed: true,
 		}, f.jsonOutput)
 	}
+	if f.await {
+		if strings.TrimSpace(f.prompt) != "" {
+			return errors.New("--await does not take --prompt; it only waits for the next reply")
+		}
+		return runAskAwait(f, store)
+	}
 	if strings.TrimSpace(f.prompt) == "" {
-		return errors.New("ask --thread requires --prompt (or --close)")
+		return errors.New("ask --thread requires --prompt (or --close / --await)")
 	}
 
 	thread, err := store.Load(f.thread)
@@ -340,6 +354,34 @@ func runAskThread(f askFlags) error {
 		}
 	}
 	return awaitAskAnswer(ctx, store, report, f.thread, lastAnswerSeq, f.timeout, f.jsonOutput)
+}
+
+// runAskAwait waits for the answerer's next reply on an open thread without
+// posting anything: the asker already has an interim (non-final) answer and
+// wants the next one. It is mailbox-only, so --execute is not required, and
+// it pushes the thread deadline out to cover the wait.
+func runAskAwait(f askFlags, store *askreply.Store) error {
+	thread, err := store.Load(f.thread)
+	if err != nil {
+		return err
+	}
+	if thread.Closed != nil {
+		return fmt.Errorf("question %s is closed (%s by %s); start a new ask", f.thread, thread.Closed.Reason, thread.Closed.By)
+	}
+	if err := store.Extend(f.thread, time.Now().Add(f.timeout)); err != nil {
+		return err
+	}
+	report := askReport{
+		Status:     dispatch.StatusPlanned,
+		QuestionID: f.thread,
+		Session:    thread.Request.Session,
+		Timeout:    f.timeout.String(),
+		Delivery:   askreply.DeliveryMailbox,
+	}
+	report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(f.thread, store.Dir, f.storeDir != "")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	return awaitAskAnswer(ctx, store, report, f.thread, thread.LastSeq(askreply.RoleAnswerer), f.timeout, f.jsonOutput)
 }
 
 func awaitAskAnswer(ctx context.Context, store *askreply.Store, report askReport, id string, afterSeq int, timeout time.Duration, jsonOutput bool) error {

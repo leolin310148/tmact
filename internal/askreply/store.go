@@ -224,6 +224,34 @@ func (s *Store) Create(session, dir, agent, requesterPane string, timeout time.D
 	return Request{}, errors.New("allocate unique question id")
 }
 
+// Extend moves the request's deadline forward to until when that is later
+// than the current one. The asker uses it before waiting again on an open
+// thread without posting a follow-up, so a long task reported in several
+// interim replies does not expire mid-way.
+func (s *Store) Extend(id string, until time.Time) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	request, err := s.readRequest(id)
+	if err != nil {
+		return err
+	}
+	if !until.After(request.ExpiresAt) {
+		return nil
+	}
+	request.ExpiresAt = until
+	path := filepath.Join(s.questionDir(id), requestFile)
+	tmp := path + ".tmp"
+	if err := writeJSONFile(tmp, request, os.O_WRONLY|os.O_CREATE|os.O_TRUNC); err != nil {
+		return fmt.Errorf("write question request: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("replace question request: %w", err)
+	}
+	return nil
+}
+
 // Load reads the request, every complete message, and the closed marker.
 func (s *Store) Load(id string) (Thread, error) {
 	if err := validateID(id); err != nil {
