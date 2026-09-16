@@ -32,6 +32,22 @@ func TestAskNoClearPreservesExistingContext(t *testing.T) {
 	}
 }
 
+func TestAskTargetPinsPaneWithinSession(t *testing.T) {
+	defer stubCLIHooks(t)()
+	called := false
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		called = true
+		if opts.Session != "answerer" || opts.Target != "0.1" || opts.Execute {
+			t.Fatalf("opts=%#v", opts)
+		}
+		return dispatch.Report{}, nil
+	}
+	_, err := captureRun(t, "ask", "answerer", "--target", "0.1", "--dir", t.TempDir(), "--agent", "claude", "--prompt", "look", "--json")
+	if err != nil || !called {
+		t.Fatalf("called=%v err=%v", called, err)
+	}
+}
+
 func TestAskDispatchesProtocolAndReturnsExplicitReply(t *testing.T) {
 	defer stubCLIHooks(t)()
 	dir := t.TempDir()
@@ -326,6 +342,7 @@ func TestAskThreadRejectsLaunchFlags(t *testing.T) {
 		{"ask", "--thread", request.ID, "--dir", "/repo", "--prompt", "x", "--store-dir", storeDir},
 		{"ask", "--thread", request.ID, "--agent", "codex", "--prompt", "x", "--store-dir", storeDir},
 		{"ask", "--thread", request.ID, "--trust-folder", "--prompt", "x", "--store-dir", storeDir},
+		{"ask", "--thread", request.ID, "--target", "0", "--prompt", "x", "--store-dir", storeDir},
 		{"ask", "--thread", request.ID, "--store-dir", storeDir},
 		{"ask", "--close", "--store-dir", storeDir},
 	}

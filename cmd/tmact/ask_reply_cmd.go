@@ -53,6 +53,7 @@ type replyReport struct {
 
 type askFlags struct {
 	session      string
+	target       string
 	dir          string
 	agent        string
 	model        string
@@ -81,6 +82,7 @@ func runAsk(args []string) error {
 	}
 	fs := flag.NewFlagSet("ask", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	fs.StringVar(&f.target, "target", "", "pane to ask within the existing session: %id, WINDOW, or WINDOW.PANE (new ask only)")
 	fs.StringVar(&f.dir, "dir", "", "working directory; sets cwd when the session is created")
 	fs.StringVar(&f.agent, "agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
 	fs.StringVar(&f.model, "model", "", dispatchModelHelp())
@@ -163,6 +165,7 @@ func runAskNew(f askFlags) error {
 
 	opts := dispatch.Options{
 		Session:      f.session,
+		Target:       f.target,
 		Dir:          f.dir,
 		Agent:        f.agent,
 		Model:        f.model,
@@ -209,6 +212,8 @@ func runAskThread(f askFlags) error {
 		return errors.New("--thread continues the question's recorded session; do not pass a session name")
 	case f.dir != "" || f.agent != "" || f.model != "":
 		return errors.New("--thread reuses the question's recorded dir and agent; do not pass --dir, --agent, or --model")
+	case f.target != "":
+		return errors.New("--thread continues in the question's recorded pane; do not pass --target")
 	case f.trustFolder:
 		return errors.New("--trust-folder only applies when launching a new agent, not with --thread")
 	}

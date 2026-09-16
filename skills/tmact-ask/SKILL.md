@@ -39,12 +39,14 @@ Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 ## Ask for an explicit result
 
 ```bash
-tmact ask SESSION --dir DIR --agent claude|codex|gemini \
+tmact ask SESSION [--target WINDOW[.PANE]] --dir DIR --agent claude|codex|gemini \
   [--model MODEL] --prompt TEXT [--trust-folder] \
   [--timeout 30m] [--execute] [--json]
 ```
 
 - `SESSION` is the first positional argument.
+- `--target` pins a window or pane inside an existing session (same forms as
+  `dispatch-work --target`); without it the session's active pane is used.
 - `--dir`, `--agent`, and `--prompt` are required.
 - `--model` is allowed only for a newly launched Claude or Codex agent and must
   match the installed CLI's allowlist.

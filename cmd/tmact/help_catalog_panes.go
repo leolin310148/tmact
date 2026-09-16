@@ -160,17 +160,18 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "ask",
 			Summary: "Dispatch work to a local agent session and wait for an explicit question-id reply; continue the same question with --thread.",
 			Usage: []string{
-				"tmact ask SESSION --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--no-clear] [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
+				"tmact ask SESSION [--target WINDOW[.PANE]] --dir DIR --agent claude|codex|gemini [--model MODEL] --prompt TEXT [--no-clear] [--timeout 30m] [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --prompt TEXT [--timeout 30m] [--store-dir DIR] [--execute] [--json]",
 				"tmact ask --thread QUESTION_ID --close [--store-dir DIR] [--json]",
 			},
 			Flags: []helpFlag{
+				{Name: "--target", Value: "TARGET", Description: "pane to ask within the existing session: %id, WINDOW, or WINDOW.PANE; default is the active pane (new ask only; requires the session to exist)"},
 				{Name: "--dir", Value: "DIR", Description: "working directory; sets cwd when the session is created (new ask only)", Required: true},
 				{Name: "--agent", Value: "NAME", Description: "agent to launch: claude, codex, or gemini (new ask only)", Required: true},
 				{Name: "--model", Value: "MODEL", Description: dispatchModelHelp()},
 				{Name: "--prompt", Value: "TEXT", Description: "question, task, or follow-up sent to the answering agent", Required: true},
 				{Name: "--no-clear", Description: "preserve an existing agent context for a new question; thread follow-ups always preserve context"},
-				{Name: "--thread", Value: "QUESTION_ID", Description: "continue an existing question: session, dir, and agent come from its record; SESSION, --dir, --agent, --model, and --trust-folder are rejected"},
+				{Name: "--thread", Value: "QUESTION_ID", Description: "continue an existing question: session, pane, dir, and agent come from its record; SESSION, --target, --dir, --agent, --model, and --trust-folder are rejected"},
 				{Name: "--close", Description: "with --thread: close the question immediately so no further replies are accepted; mailbox-only, no tmux input"},
 				{Name: "--timeout", Value: "DURATION", Description: "max wait for the next explicit reply; default 30m"},
 				{Name: "--ready-timeout", Value: "DURATION", Description: "max wait for the answering agent to become ready"},
@@ -183,6 +184,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			Examples: []string{
 				`tmact ask investigation --dir . --agent codex --prompt "find the root cause"`,
 				`tmact ask implementation --dir ~/proj --agent claude --prompt "implement and test the fix" --timeout 1h --execute --json`,
+				`tmact ask work --target 0 --dir ~/proj --agent claude --prompt "fix the failing test" --no-clear --execute --json`,
 				`tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --prompt "also cover the retry path" --execute --json`,
 				`tmact ask --thread q_abcdefghijklmnopqrstuvwxyz --close`,
 			},
