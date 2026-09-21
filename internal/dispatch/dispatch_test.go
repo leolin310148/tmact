@@ -1088,6 +1088,40 @@ func TestExistingSessionDifferentAgent(t *testing.T) {
 	}
 }
 
+// TestExistingSessionUnknownRuntimeExplainsItself covers the repeated report of
+// dispatch-work refusing a pane as "runtime unknown": the refusal now names the
+// pane, the command it reported, and how to look at it.
+func TestExistingSessionUnknownRuntimeExplainsItself(t *testing.T) {
+	rec, deps := baseDeps()
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) {
+		pane := claudePane()
+		pane.CurrentCommand = "2.1.246"
+		pane.WindowName = "project-x"
+		return []tmux.Pane{pane}, nil
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return "a pane with nothing recognizable left on screen", nil
+	}
+
+	opts := baseOpts()
+	opts.Execute = true
+	_, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil {
+		t.Fatal("expected an unknown-runtime refusal")
+	}
+	for _, want := range []string{`runtime is "unknown"`, `pane command is "2.1.246"`, "tmact inspect --target %1", "--target to pick another pane"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v, want it to mention %q", err, want)
+		}
+	}
+	if len(rec.pastes) != 0 || len(rec.keys) != 0 {
+		t.Fatalf("unknown pane received input: pastes=%#v keys=%#v", rec.pastes, rec.keys)
+	}
+}
+
 func TestExistingSessionShellLaunch(t *testing.T) {
 	rec, deps := baseDeps()
 	deps.ListLayout = func() (tmux.Layout, error) {

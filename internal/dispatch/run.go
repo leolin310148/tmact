@@ -256,7 +256,7 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 	case isAgentRuntime(runtime):
 		return report, fmt.Errorf("session %s is already running a different agent (%s); requested %s", opts.Session, runtime, opts.Agent)
 	default:
-		return report, fmt.Errorf("session %s active pane runtime is %q; refusing to dispatch (expected %s or an idle shell)", opts.Session, runtime, opts.Agent)
+		return report, fmt.Errorf("session %s pane %s runtime is %q; refusing to dispatch (expected %s or an idle shell). %s", opts.Session, target, runtime, opts.Agent, unknownRuntimeHint(pane, target))
 	}
 }
 
@@ -302,6 +302,18 @@ func settleExistingAgent(opts Options, deps Deps, pane tmux.Pane, target string)
 		}
 	}
 	return nil
+}
+
+// unknownRuntimeHint turns the runtime refusal into something actionable. An
+// agent that renames its process to a bare version string and whose banner has
+// scrolled out of the capture leaves nothing to identify it by, and the bare
+// word "unknown" gave no way to tell that apart from a wedged pane.
+func unknownRuntimeHint(pane tmux.Pane, target string) string {
+	command := strings.TrimSpace(pane.CurrentCommand)
+	if command == "" {
+		command = "(none)"
+	}
+	return fmt.Sprintf("pane command is %q; run `tmact inspect --target %s --json` to see what it is, or pass --target to pick another pane", command, target)
 }
 
 func validateQuotaResume(opts Options, deps Deps, classified panestate.Result) error {
