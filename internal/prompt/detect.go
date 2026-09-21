@@ -149,11 +149,19 @@ func normalizePromptText(text string) string {
 // is the current choice.
 var optionPattern = regexp.MustCompile(`^([❯›]\s*)?([0-9]+)\.\s+(.+)$`)
 
+// cursorOptionPattern matches a menu row that carries only a selection cursor.
+// Claude's workspace-trust screen dropped the digits, so the cursor is the
+// single marker that the row is the current choice.
+var cursorOptionPattern = regexp.MustCompile(`^([❯›])\s+(.+)$`)
+
 func Detect(raw string) *Prompt {
 	if detected := DetectDirectoryAccess(raw); detected != nil {
 		return PromptFromDirectoryAccess(detected)
 	}
 	if detected := detectGenericPrompt(raw); detected != nil {
+		return detected
+	}
+	if detected := detectClaudeWorkspaceTrust(raw); detected != nil {
 		return detected
 	}
 	return detectTrailingChoicePrompt(raw)
@@ -302,6 +310,104 @@ func genericPromptHeader(lower string) (string, string, bool) {
 	default:
 		return "", "", false
 	}
+}
+
+// detectClaudeWorkspaceTrust finds the workspace-trust screen Claude 2.1.x
+// renders without numbered options: an "Accessing workspace:" header followed
+// by a two-row cursor menu ("❯ No, exit" / "Yes, I trust this folder").
+// Nothing on that screen looks like a question to the numbered-menu detectors,
+// and the cursor row reads as an agent input line, so an undetected trust
+// screen is mistaken for a ready agent — a dispatched prompt then lands on the
+// default "No, exit" and drops back to the shell. Detection stays deliberately
+// exact: any wording drift fails closed instead of auto-answering a screen
+// this code no longer recognizes.
+func detectClaudeWorkspaceTrust(raw string) *Prompt {
+	recent := trimMenuFooter(recentLines(cleanedLines(raw), 24))
+	if len(recent) < 3 {
+		return nil
+	}
+	header := -1
+	for index, line := range recent {
+		if strings.HasPrefix(strings.ToLower(line), "accessing workspace:") {
+			header = index
+		}
+	}
+	if header < 0 {
+		return nil
+	}
+	question := lineContaining(recent[header:], claudeWorkspaceTrustQuestion)
+	if question == "" {
+		return nil
+	}
+
+	// The menu is the pane's trailing content: exactly two rows, exactly one
+	// of them cursored.
+	menu := len(recent) - 2
+	if menu <= header {
+		return nil
+	}
+	rows := recent[menu:]
+	options := make([]Option, 0, len(rows))
+	cursors := 0
+	for _, row := range rows {
+		option := parseCursorOption(row)
+		if option.Selected {
+			cursors++
+		}
+		options = append(options, option)
+	}
+	if cursors != 1 || !isClaudeWorkspaceTrustMenu(options) {
+		return nil
+	}
+
+	detected := &Prompt{
+		Type:       TypeTrustFolder,
+		Title:      "Confirm folder trust",
+		Question:   question,
+		Options:    options,
+		Confidence: "high",
+	}
+	for _, line := range recent[header:] {
+		if paths := parsePaths(line); len(paths) > 0 {
+			detected.Path = paths[0]
+			detected.Paths = paths
+			break
+		}
+	}
+	if selected := selectedOption(detected.Options); selected != nil {
+		detected.SelectedOption = selected
+	}
+	return detected
+}
+
+const claudeWorkspaceTrustQuestion = "is this a project you created or one you trust"
+
+// parseCursorOption reads one unnumbered menu row. Number stays 0 because the
+// row has no digit to relay: answering it means moving the cursor.
+func parseCursorOption(line string) Option {
+	if matches := cursorOptionPattern.FindStringSubmatch(line); matches != nil {
+		return Option{Label: strings.TrimSpace(trimBoxRight(matches[2])), Selected: true}
+	}
+	return Option{Label: strings.TrimSpace(trimBoxRight(line))}
+}
+
+func isClaudeWorkspaceTrustMenu(options []Option) bool {
+	if len(options) != 2 {
+		return false
+	}
+	first := normalizePromptText(options[0].Label)
+	second := normalizePromptText(options[1].Label)
+	return (first == "no, exit" && second == "yes, i trust this folder") ||
+		(first == "yes, i trust this folder" && second == "no, exit")
+}
+
+func lineContaining(lines []string, want string) string {
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), want) {
+			return line
+		}
+	}
+	return ""
 }
 
 func collectOptions(lines []string) []Option {

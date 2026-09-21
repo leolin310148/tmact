@@ -25,9 +25,11 @@ type Choice struct {
 // custom multiple-choice question that Detect's header list does not cover.
 func DetectQuestion(raw string) *Question {
 	if detected := Detect(raw); detected != nil && len(detected.Options) > 0 {
-		return &Question{
-			Prompt:  questionText(detected),
-			Choices: choicesFromOptions(detected.Options),
+		if choices := choicesFromOptions(detected.Options); len(choices) > 0 {
+			return &Question{
+				Prompt:  questionText(detected),
+				Choices: choices,
+			}
 		}
 	}
 	return nil
@@ -40,9 +42,15 @@ func questionText(p *Prompt) string {
 	return p.Title
 }
 
+// choicesFromOptions keeps only the rows a tap can answer by relaying a digit.
+// Cursor-only menus, such as Claude's workspace-trust screen, carry no number,
+// and relaying "0" for them would press whatever the cursor happens to sit on.
 func choicesFromOptions(options []Option) []Choice {
 	choices := make([]Choice, 0, len(options))
 	for _, option := range options {
+		if option.Number <= 0 {
+			continue
+		}
 		choices = append(choices, Choice{Number: option.Number, Label: option.Label})
 	}
 	return choices

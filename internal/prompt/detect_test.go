@@ -271,6 +271,74 @@ Enter to confirm · Esc to cancel
 	}
 }
 
+// TestDetectClaudeCursorOnlyTrustPrompt pins the screen Claude 2.1.278 renders:
+// the options lost their digits, leaving a cursor menu whose first row is the
+// negative one. An undetected screen here reads as a ready agent, so the
+// dispatched prompt confirms "No, exit" and lands in the shell instead.
+func TestDetectClaudeCursorOnlyTrustPrompt(t *testing.T) {
+	raw := `
+────────────────────────────────────────────
+
+ Accessing workspace:
+
+ /private/tmp/tmact-trust-probe
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from
+ your team). If not, take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+`
+	detected := Detect(raw)
+	if detected == nil || detected.Type != TypeTrustFolder {
+		t.Fatalf("detected=%#v", detected)
+	}
+	if detected.Path != "/private/tmp/tmact-trust-probe" {
+		t.Fatalf("path=%q", detected.Path)
+	}
+	if len(detected.Options) != 2 ||
+		detected.Options[0].Label != "No, exit" || !detected.Options[0].Selected ||
+		detected.Options[1].Label != "Yes, I trust this folder" || detected.Options[1].Selected {
+		t.Fatalf("options=%#v", detected.Options)
+	}
+	// A row with no digit must not advertise one: relaying "0" would confirm
+	// whatever the cursor happens to sit on.
+	for _, option := range detected.Options {
+		if option.Number != 0 {
+			t.Fatalf("option %q carries number %d", option.Label, option.Number)
+		}
+	}
+	if question := DetectQuestion(raw); question != nil {
+		t.Fatalf("cursor-only menu offered tappable choices: %#v", question)
+	}
+}
+
+// TestDetectIgnoresWorkspaceTrustScreenWithDriftedLabels keeps detection exact:
+// an unrecognized variant must fail closed rather than be auto-answered.
+func TestDetectIgnoresWorkspaceTrustScreenWithDriftedLabels(t *testing.T) {
+	raw := `
+ Accessing workspace:
+
+ /tmp/example
+
+ Quick safety check: Is this a project you created or one you trust?
+
+ ❯ No, take me out
+   Sure, trust it
+
+ Enter to confirm · Esc to cancel
+`
+	if detected := Detect(raw); detected != nil {
+		t.Fatalf("detected=%#v", detected)
+	}
+}
+
 func TestDetectGenericConfirmationPrompt(t *testing.T) {
 	raw := `
 Do you want to proceed?

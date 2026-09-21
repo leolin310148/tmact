@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panestatus"
+	"github.com/leolin310148/tmact/internal/prompt"
 	"github.com/leolin310148/tmact/internal/tmux"
 )
 
@@ -83,6 +84,53 @@ func TestAcceptPromptSelectsUnselectedClaudeTrustOptionByNumber(t *testing.T) {
 	}
 	if !result.Accepted || len(gotKeys) != 1 || gotKeys[0] != "1" {
 		t.Fatalf("result=%#v keys=%#v", result, gotKeys)
+	}
+}
+
+// TestAcceptPromptArrowsToUnnumberedClaudeTrustOption covers Claude 2.1.278's
+// cursor-only trust menu: with no digit to send, the affirmative row is reached
+// by moving the cursor down from the default "No, exit".
+func TestAcceptPromptArrowsToUnnumberedClaudeTrustOption(t *testing.T) {
+	dir := t.TempDir()
+	var gotKeys []string
+	raw := " Accessing workspace:\n\n " + dir + "\n\n Quick safety check: Is this a project you created or one you trust?\n\n \u276f No, exit\n   Yes, I trust this folder\n\n Enter to confirm \u00b7 Esc to cancel\n"
+	result, err := AcceptPrompt(Options{Target: "%8", Dir: dir, Agent: panestatus.RuntimeClaude},
+		tmux.Pane{CurrentPath: dir},
+		raw,
+		panestatus.RuntimeClaude,
+		func(_ string, keys []string) error {
+			gotKeys = append([]string(nil), keys...)
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Accepted || result.OptionLabel != "Yes, I trust this folder" {
+		t.Fatalf("result=%#v", result)
+	}
+	if len(gotKeys) != 2 || gotKeys[0] != "Down" || gotKeys[1] != "Enter" {
+		t.Fatalf("keys=%#v, want Down then Enter", gotKeys)
+	}
+}
+
+// TestSelectionKeysRefusesUnnumberedMenuWithoutCursor makes the cursor-only
+// menu fail closed when no row is marked: there is no digit to fall back to,
+// and pressing Enter would confirm whatever is currently highlighted.
+func TestSelectionKeysRefusesUnnumberedMenuWithoutCursor(t *testing.T) {
+	detected := &prompt.Prompt{
+		Type: prompt.TypeTrustFolder,
+		Options: []prompt.Option{
+			{Label: "No, exit"},
+			{Label: "Yes, I trust this folder"},
+		},
+	}
+	option, index, err := affirmativeOption(detected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := selectionKeys(detected, index, option.Number)
+	if err == nil {
+		t.Fatalf("expected a cursorless unnumbered menu to be refused, got keys=%#v", keys)
 	}
 }
 

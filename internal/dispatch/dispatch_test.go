@@ -279,7 +279,7 @@ func TestExecuteNewSession(t *testing.T) {
 	deps.CapturePane = func(string, int) (string, error) {
 		switch {
 		case len(rec.pastes) < 2:
-			return "Claude Code\nready for input", nil
+			return "Claude Code\n❯", nil
 		default:
 			return "Claude Code\nWorking... esc to interrupt", nil
 		}
@@ -364,6 +364,97 @@ func TestExecuteNewSessionAutoTrustsExactCodexDirectory(t *testing.T) {
 	}
 	if len(rec.keys) != 1 || len(rec.keys[0].keys) != 1 || rec.keys[0].keys[0] != "Enter" {
 		t.Fatalf("keys = %#v", rec.keys)
+	}
+}
+
+// claudeWorkspaceTrustScreen is the trust screen Claude 2.1.278 renders: the
+// options carry no digits and the cursor starts on "No, exit", so a prompt
+// pasted into it confirms the exit and falls through to the shell.
+func claudeWorkspaceTrustScreen(dir string) string {
+	return "Accessing workspace:\n\n" + dir + "\n\n" +
+		"Quick safety check: Is this a project you created or one you trust?\n\n" +
+		"Security guide\n\n \u276f No, exit\n   Yes, I trust this folder\n\nEnter to confirm \u00b7 Esc to cancel\n"
+}
+
+func TestExecuteNewSessionAutoTrustsExactClaudeCursorMenuDirectory(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	pane := claudePane()
+	pane.CurrentPath = dir
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.keys) == 0 {
+			return claudeWorkspaceTrustScreen(dir), nil
+		}
+		if len(rec.pastes) < 2 {
+			return "Claude Code\n❯", nil
+		}
+		return "Claude Code\nWorking... esc to interrupt", nil
+	}
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Execute = true
+	opts.TrustFolder = true
+	opts.ReadySettle = 0
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.TrustedFolder {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(rec.keys) != 1 || strings.Join(rec.keys[0].keys, ",") != "Down,Enter" {
+		t.Fatalf("keys = %#v, want one Down,Enter", rec.keys)
+	}
+	want := []paste{{"%1", "claude", true}, {"%1", "do the thing", true}}
+	if len(rec.pastes) != len(want) {
+		t.Fatalf("pastes = %+v, want %+v", rec.pastes, want)
+	}
+}
+
+// TestExecuteNewSessionRefusesToPromptUnrecognizedScreen is the regression for
+// the dispatch that typed its prompt into an unrecognized trust screen and
+// reported wait-ready and send-prompt as ok. A screen this build cannot
+// classify is not an input box: dispatch must wait and then fail, never paste.
+func TestExecuteNewSessionRefusesToPromptUnrecognizedScreen(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	now := time.Unix(0, 0)
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) {
+		rec.sleeps = append(rec.sleeps, d)
+		now = now.Add(d)
+	}
+	pane := claudePane()
+	pane.CurrentPath = dir
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return "Accessing workspace:\n\n" + dir + "\n\nSome unfamiliar question?\n\n \u276f No, exit\n   Yes, go ahead\n", nil
+	}
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Execute = true
+	opts.TrustFolder = true
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil || !strings.Contains(err.Error(), "did not become ready") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := stepStatus(t, report, "wait-ready"); got != dispatch.StatusFailed {
+		t.Fatalf("wait-ready status = %q, want failed", got)
+	}
+	if len(rec.pastes) != 1 || rec.pastes[0].text != "claude" {
+		t.Fatalf("pastes = %+v, want only the agent launch", rec.pastes)
+	}
+	if len(rec.keys) != 0 {
+		t.Fatalf("unrecognized screen received keys: %#v", rec.keys)
 	}
 }
 
@@ -1028,7 +1119,7 @@ func TestExistingSessionShellLaunch(t *testing.T) {
 		case len(rec.pastes) >= 2:
 			return "Claude Code\nWorking... esc to interrupt", nil
 		default:
-			return "Claude Code\nready", nil
+			return "Claude Code\n❯", nil
 		}
 	}
 
@@ -1068,7 +1159,7 @@ func TestExecuteNewSessionResendsEnterWhenPromptStuck(t *testing.T) {
 	deps.CapturePane = func(string, int) (string, error) {
 		switch {
 		case len(rec.pastes) < 2:
-			return "Claude Code\nready", nil
+			return "Claude Code\n❯", nil
 		case enterCount(rec) == 0:
 			return "Claude Code\n1 MCP server failed\n❯ do the thing", nil
 		default:
@@ -1106,7 +1197,7 @@ func TestExecuteNewSessionFailsWhenPromptNeverSubmits(t *testing.T) {
 	// input box, no matter how many times Enter is re-sent.
 	deps.CapturePane = func(string, int) (string, error) {
 		if len(rec.pastes) < 2 {
-			return "Claude Code\nready", nil
+			return "Claude Code\n❯", nil
 		}
 		return "Claude Code\n❯ do the thing", nil
 	}
@@ -1138,7 +1229,7 @@ func TestExecuteNewSessionRepastesWhenPasteLost(t *testing.T) {
 	deps.CapturePane = func(string, int) (string, error) {
 		switch {
 		case len(rec.pastes) < 2:
-			return "Claude Code\nready", nil
+			return "Claude Code\n❯", nil
 		case len(rec.pastes) < 3:
 			return "Claude Code\n❯ ", nil
 		default:
@@ -1180,7 +1271,7 @@ func TestExecuteNewSessionSucceedsWhenAgentFinishesFast(t *testing.T) {
 	}
 	deps.CapturePane = func(string, int) (string, error) {
 		if len(rec.pastes) < 2 {
-			return "Claude Code\nready", nil
+			return "Claude Code\n❯", nil
 		}
 		// The prompt was submitted (now in the transcript) and the fast
 		// task already finished; the live input box at the bottom is empty.

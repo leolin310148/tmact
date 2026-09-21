@@ -199,7 +199,10 @@ func AcceptPrompt(options Options, pane tmux.Pane, raw, runtime string, sendKeys
 	if sendKeys == nil {
 		return result, errors.New("send keys is required")
 	}
-	keys := selectionKeys(detected, optionIndex, option.Number)
+	keys, err := selectionKeys(detected, optionIndex, option.Number)
+	if err != nil {
+		return result, err
+	}
 	if err := sendKeys(options.Target, keys); err != nil {
 		return result, fmt.Errorf("accept trust-folder prompt: %w", err)
 	}
@@ -292,7 +295,11 @@ func isPositiveTrustLabel(label string) bool {
 		strings.HasPrefix(label, "allow")
 }
 
-func selectionKeys(detected *prompt.Prompt, affirmativeIndex, affirmativeNumber int) []string {
+// selectionKeys picks the keystrokes that answer one trust prompt. A numbered
+// menu can be answered by its digit, but Claude's cursor-only menu cannot: the
+// affirmative row has no number, so without a visible cursor to move from
+// there is no safe key to send and answering must fail closed.
+func selectionKeys(detected *prompt.Prompt, affirmativeIndex, affirmativeNumber int) ([]string, error) {
 	selectedIndex := -1
 	for index, option := range detected.Options {
 		if option.Selected {
@@ -301,7 +308,10 @@ func selectionKeys(detected *prompt.Prompt, affirmativeIndex, affirmativeNumber 
 		}
 	}
 	if selectedIndex < 0 {
-		return []string{strconv.Itoa(affirmativeNumber)}
+		if affirmativeNumber <= 0 {
+			return nil, errors.New("trust-folder menu has neither a selection cursor nor a numbered affirmative option; refusing to answer")
+		}
+		return []string{strconv.Itoa(affirmativeNumber)}, nil
 	}
 	keys := []string{}
 	delta := affirmativeIndex - selectedIndex
@@ -313,5 +323,5 @@ func selectionKeys(detected *prompt.Prompt, affirmativeIndex, affirmativeNumber 
 	for range delta {
 		keys = append(keys, key)
 	}
-	return append(keys, "Enter")
+	return append(keys, "Enter"), nil
 }

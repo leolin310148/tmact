@@ -57,7 +57,7 @@ func waitReady(opts Options, deps Deps, target string, trustedFolder bool) (bool
 			}
 			return trustedFolder, fmt.Errorf("%s startup is waiting on a prompt (%s); refusing to auto-confirm", opts.Agent, promptKind(classified))
 		}
-		if runtime == opts.Agent && classified.State != panestate.StateWorking {
+		if runtime == opts.Agent && isReadyToDispatch(opts, deps, classified) {
 			now := deps.Now()
 			if opts.ReadySettle <= 0 {
 				return trustedFolder, nil
@@ -83,6 +83,33 @@ func waitReady(opts Options, deps Deps, target string, trustedFolder bool) (bool
 		}
 		deps.Sleep(sleep)
 	}
+}
+
+// isReadyState allowlists the states a freshly launched agent may be dispatched
+// into. Anything else — an unrecognized full-screen dialog, an operator draft,
+// a blocked or unknown pane — must keep waiting rather than receive keystrokes:
+// a screen this build cannot classify is exactly where a dispatched prompt can
+// answer a question nobody meant to answer.
+func isReadyState(state string) bool {
+	switch state {
+	case panestate.StateWaitingInput, panestate.StateIdle:
+		return true
+	default:
+		return false
+	}
+}
+
+// isReadyToDispatch adds the one state outside that allowlist a launch may
+// still use: a Codex limit screen an explicit, still-matching quota resume
+// already vouched for, the same exception dispatchExisting makes.
+func isReadyToDispatch(opts Options, deps Deps, classified panestate.Result) bool {
+	if isReadyState(classified.State) {
+		return true
+	}
+	if classified.State != panestate.StateWaitingQuota {
+		return false
+	}
+	return validateQuotaResume(opts, deps, classified) == nil
 }
 
 func readyDetail(opts Options) string {
