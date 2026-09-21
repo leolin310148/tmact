@@ -51,6 +51,9 @@ func runList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("ls does not accept positional arguments: %q", fs.Arg(0))
+	}
 
 	var rows []listPaneRow
 	if *peerName != "" {
@@ -94,6 +97,9 @@ func runDetect(args []string) error {
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("detect does not accept positional arguments: %q; pass --target %s", fs.Arg(0), fs.Arg(0))
 	}
 	if *target == "" {
 		return errors.New("--target cannot be empty")
@@ -140,6 +146,11 @@ func runInspect(args []string) error {
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// An ignored positional looked like a scoped inspection but silently
+	// reported every pane, which reads as a much wider answer than it is.
+	if fs.NArg() != 0 {
+		return fmt.Errorf("inspect does not accept positional arguments: %q; pass --target %s to inspect that pane", fs.Arg(0), fs.Arg(0))
 	}
 	if *lines <= 0 {
 		return errors.New("--lines must be positive")
