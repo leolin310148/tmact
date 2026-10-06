@@ -114,7 +114,7 @@ Flags:
 	defer stop()
 	server := &web.Server{
 		Addr:          *webAddr,
-		BuildTime:     buildVersionInfo().Time,
+		BuildTime:     buildVersionInfo().BuiltAt(),
 		UsageEnabled:  usageEnabled,
 		SpendEnabled:  spendEnabled,
 		UsageInterval: *usageInterval,

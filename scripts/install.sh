@@ -77,7 +77,9 @@ echo "==> Building tmact"
 mkdir -p "$BIN_DIR"
 BUILD_PATH="$(mktemp "$BIN_DIR/.tmact-build.XXXXXX")"
 trap 'rm -f "$BUILD_PATH"' EXIT INT TERM
-go build -o "$BUILD_PATH" ./cmd/tmact
+# Stamp the real build time: Go's VCS metadata only has the commit time, which
+# stays the same across dirty rebuilds of one commit.
+go build -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "$BUILD_PATH" ./cmd/tmact
 chmod 755 "$BUILD_PATH"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

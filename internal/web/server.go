@@ -142,7 +142,8 @@ type Server struct {
 	// OnListenerReady is called after a listener has bound successfully. The
 	// callback must return promptly and may be called again after TCP recovery.
 	OnListenerReady func(network, address string)
-	// BuildTime is the VCS timestamp shown in the settings panel.
+	// BuildTime is the build timestamp shown in the settings panel (the VCS
+	// commit time when the binary was built without a stamped build time).
 	BuildTime string
 	// Peers is the set of remote statusd instances reachable for federated pane
 	// access. Pane ids with a "<name>@" prefix matching a peer name are bridged
