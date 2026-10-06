@@ -118,6 +118,37 @@ func TestPaneDiffChangedCaptureReturnsTailPatch(t *testing.T) {
 	}
 }
 
+func TestPaneDiffShiftOptInDropsScrolledLines(t *testing.T) {
+	captures := []string{"a\nb\nc\ns1", "b\nc\nd\ns2"}
+	s := &Server{CapturePane: func(string, int) (string, error) {
+		out := captures[0]
+		if len(captures) > 1 {
+			captures = captures[1:]
+		}
+		return out, nil
+	}}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	var seed paneDiffMsg
+	decodeJSON(t, getPaneDiff(t, srv.URL, "%7", ""), &seed)
+
+	resp, err := http.Get(srv.URL + "/api/pane/diff?" + url.Values{
+		"pane": {"%7"}, "cursor": {seed.Cursor}, "shift": {"1"},
+	}.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got paneDiffMsg
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Drop != 1 || got.From != 2 || strings.Join(got.Lines, "|") != "d|s2" {
+		t.Fatalf("diff = %+v, want drop=1 from=2 tail d/s2", got)
+	}
+}
+
 func TestPaneDiffStaleCursorReturnsFullPatch(t *testing.T) {
 	srv := httptest.NewServer((&Server{
 		CapturePane: func(string, int) (string, error) { return "fresh\nbody", nil },

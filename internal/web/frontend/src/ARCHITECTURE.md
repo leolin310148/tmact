@@ -176,7 +176,7 @@ Do NOT write `.ts`/`.tsx` in import specifiers.
 // ws/usePaneStream.ts  ← createPaneStream(callbacks)  [stream.js]
 usePaneStream({
   getSelectedPane: () => string | null,   // () => state.selected
-  onPatch: (from: number, lines: string[], question: Question | null) => void,
+  onPatch: (from: number, lines: string[], question: Question | null, paneWidth: number, drop: number) => void,
   onQuestion: (q: Question | null) => void,
   onError: (msg: string) => void,
   onStatus: (s: "connecting" | "open" | "reconnecting" | "closed") => void,
@@ -348,7 +348,7 @@ then `markImagePaths(pre, cwd, peer)` then auto-scroll. In React:
 - App owns `paneLines` (ref array) and `paneCache` (ref `Record<string,string[]>`):
   - `openWS`: `paneLines.current = cache[id]?.slice() ?? []`; if non-empty,
     `setContent(join, {cwd, peer})` immediately; then `paneStream.open(id)`.
-  - `onPatch`: `paneLines.current = paneLines.current.slice(0, from).concat(lines)`;
+  - `onPatch`: `paneLines.current = paneLines.current.slice(drop, drop + from).concat(lines)`;
     if selected, `paneCache.current[selected] = paneLines.current`; `setContent(...)`;
     `renderOptions(question)`.
   - "setContent" in React = update the state ContentPane reads, then its layout

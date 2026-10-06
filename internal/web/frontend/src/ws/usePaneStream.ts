@@ -7,7 +7,7 @@
 // mutation timing — especially the backoff reset/double ordering and the stale
 // `ws !== sock` close guard — matches byte-for-behavior.
 //
-// callbacks.onPatch(from, lines, question) — patch from the server
+// callbacks.onPatch(from, lines, question, paneWidth, drop) — patch from the server
 // callbacks.onForked(pane)                 — newly-created fork pane id
 // callbacks.onError(msg)                   — server-side error text
 // callbacks.onQuestion(q)                  — cleared (q=null) on close
@@ -37,11 +37,19 @@ export interface PaneStreamCallbacks {
   /** `() => state.selected`. Consulted at reconnect time to skip stale retries. */
   getSelectedPane: () => string | null;
   /**
-   * Server patch: replace buffer (from=0) or splice `lines` in at `from`.
+   * Server patch: drop the first `drop` lines of the buffer, then replace it
+   * (from=0) or splice `lines` in at `from` (relative to the dropped buffer).
    * `paneWidth` is the pane's grid width in columns, 0 when the server did not
-   * report one (older server or a failed width read).
+   * report one (older server or a failed width read). `drop` is 0 from servers
+   * that predate the `shift=1` opt-in.
    */
-  onPatch: (from: number, lines: string[], question: Question | null, paneWidth: number) => void;
+  onPatch: (
+    from: number,
+    lines: string[],
+    question: Question | null,
+    paneWidth: number,
+    drop: number,
+  ) => void;
   /** Question payload; called with `null` on close to clear the option bar. */
   onQuestion: (q: Question | null) => void;
   /** A fork completed; the pane becomes selectable after snapshot discovery. */
@@ -141,7 +149,9 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
       status("connecting");
       logFrontend("info", "pane_ws", "connecting", { pane: paneID });
       const sock = new WebSocket(
-        `${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}`,
+        // shift=1 opts into `drop` patches so a sliding capture window costs a
+        // few lines per tick instead of a full resend.
+        `${proto}://${location.host}/ws/pane?pane=${encodeURIComponent(paneID)}&shift=1`,
       );
       wsRef.current = sock;
       sock.onopen = () => {
@@ -174,6 +184,7 @@ export function usePaneStream(callbacks: PaneStreamCallbacks): PaneStream {
             Array.isArray(m.lines) ? m.lines : [],
             m.q ?? null,
             (m.w ?? 0) | 0,
+            (m.drop ?? 0) | 0,
           );
         } else if (m.t === "forked") {
           cbRef.current.onForked(m.pane);

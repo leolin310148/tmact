@@ -381,6 +381,47 @@ func TestPaneWSPatchOmitsCommonPrefix(t *testing.T) {
 	}
 }
 
+func TestPaneWSShiftOptInDropsScrolledLines(t *testing.T) {
+	captures := []string{
+		"line 1\nline 2\nline 3\nstatus a",
+		"line 2\nline 3\nline 4\nstatus b",
+	}
+	newServer := func() *httptest.Server {
+		idx := 0
+		return httptest.NewServer((&Server{
+			CapturePane: func(string, int) (string, error) {
+				out := captures[min(idx, len(captures)-1)]
+				idx++
+				return out, nil
+			},
+		}).Handler())
+	}
+
+	for _, tc := range []struct {
+		query    string
+		wantDrop int
+		wantFrom int
+		wantTail string
+	}{
+		{"%2511&shift=1", 1, 2, "line 4|status b"},
+		{"%2511", 0, 0, "line 2|line 3|line 4|status b"},
+	} {
+		srv := newServer()
+		t.Cleanup(srv.Close)
+		c, ctx := dialPane(t, srv, tc.query)
+		var first, second outMsg
+		if err := wsjson.Read(ctx, c, &first); err != nil {
+			t.Fatal(err)
+		}
+		if err := wsjson.Read(ctx, c, &second); err != nil {
+			t.Fatal(err)
+		}
+		if second.Drop != tc.wantDrop || second.From != tc.wantFrom || strings.Join(second.Lines, "|") != tc.wantTail {
+			t.Fatalf("%s: second patch %+v, want drop=%d from=%d tail=%s", tc.query, second, tc.wantDrop, tc.wantFrom, tc.wantTail)
+		}
+	}
+}
+
 func TestPaneWSCaptureTimeoutReportsError(t *testing.T) {
 	srv := httptest.NewServer((&Server{
 		PaneCaptureTimeout: 30 * time.Millisecond,

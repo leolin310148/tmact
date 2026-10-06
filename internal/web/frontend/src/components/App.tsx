@@ -395,12 +395,12 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // splices paneLines, caches, drives setContent + renderOptions (app.js block).
   const paneStream = usePaneStream({
     getSelectedPane: () => state.selected,
-    onPatch: (from, lines, question, paneWidth) => {
+    onPatch: (from, lines, question, paneWidth, drop) => {
       // Reconstruct the full buffer synchronously (keeps `from`-splicing exact
       // and the cache complete), then coalesce the repaint into one rAF and
       // render only the trailing lines. See scheduleStream above.
       if (paneWidth > 0) paneWidthRef.current = paneWidth;
-      const buf = paneLinesRef.current.slice(0, from).concat(lines);
+      const buf = paneLinesRef.current.slice(drop, drop + from).concat(lines);
       paneLinesRef.current = buf;
       if (state.selected) paneCacheRef.current[state.selected] = buf;
       if (contentPaneAtBottom(contentPaneElement())) {

@@ -83,6 +83,27 @@ describe("usePaneStream logging", () => {
     expect(onError).toHaveBeenCalledWith("capture failed");
   });
 
+  it("opts into shift patches and forwards drop", () => {
+    const onPatch = vi.fn();
+    const { result } = renderHook(() => usePaneStream(callbacks({ onPatch })));
+
+    act(() => {
+      result.current.open("%12");
+    });
+    const ws = FakeWebSocket.instances[0];
+    expect(ws?.url).toContain("&shift=1");
+
+    act(() => {
+      ws?.onopen?.();
+      ws?.onmessage?.({
+        data: `{"t":"patch","drop":3,"from":5,"lines":["tail"],"w":140}`,
+      } as MessageEvent);
+      ws?.onmessage?.({ data: `{"t":"patch","lines":["full"]}` } as MessageEvent);
+    });
+    expect(onPatch).toHaveBeenNthCalledWith(1, 5, ["tail"], null, 140, 3);
+    expect(onPatch).toHaveBeenNthCalledWith(2, 0, ["full"], null, 0, 0);
+  });
+
   it("ignores queued events from a replaced socket", () => {
     const onPatch = vi.fn();
     const onStatus = vi.fn();

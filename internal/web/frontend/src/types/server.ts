@@ -339,18 +339,27 @@ export type InputMsg =
 /**
  * Server → client. `outMsg`.
  * - "patch": initial connect is `from:0` with the full lines array (even
- *   when empty). Subsequent patches are an LCP line diff: `from = prefixCount`,
+ *   when empty). Subsequent patches are a line diff: drop the first `drop`
+ *   lines (only sent when the URL carries `shift=1`; covers the capture
+ *   window scrolling), then `from` = kept prefix count of the dropped buffer,
  *   `lines` = diverging tail. `q` rides on every patch (Question when an
  *   interactive menu is detected, else omitted/null). `w` is the pane's grid
  *   width in columns (omitted when unknown) — CopyLineBar uses it to tell
  *   terminal soft-wrap newlines from real ones when running a selection.
  * - "error": shown to the user but does NOT close the socket.
  *
- * Go json tags use `,omitempty` on `from`/`lines`/`s`/`q`/`w`, so a "patch" with
+ * Go json tags use `,omitempty` on `drop`/`from`/`lines`/`s`/`q`/`w`, so a "patch" with
  * `from:0` omits the `from` field entirely (decoded as 0) and an empty `lines`
  * tail omits `lines` (decoded as []). Optional markers reflect that.
  */
 export type OutMsg =
-  | { t: "patch"; from?: number; lines?: string[]; q?: Question | null; w?: number }
+  | {
+      t: "patch";
+      drop?: number;
+      from?: number;
+      lines?: string[];
+      q?: Question | null;
+      w?: number;
+    }
   | { t: "forked"; pane: string }
   | { t: "error"; s: string };

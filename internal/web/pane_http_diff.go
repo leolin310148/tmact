@@ -34,10 +34,13 @@ type paneDiffEntry struct {
 }
 
 type paneDiffMsg struct {
-	T      string           `json:"t"`
-	From   int              `json:"from"`
-	Lines  []string         `json:"lines"`
-	Q      *prompt.Question `json:"q,omitempty"`
+	T string `json:"t"`
+	// Drop mirrors outMsg.Drop and is only non-zero when the request carried
+	// ?shift=1.
+	Drop  int              `json:"drop,omitempty"`
+	From  int              `json:"from"`
+	Lines []string         `json:"lines"`
+	Q     *prompt.Question `json:"q,omitempty"`
 	// W mirrors outMsg.W: the pane's grid width in columns, 0 when unknown.
 	W      int    `json:"w,omitempty"`
 	Cursor string `json:"cursor"`
@@ -80,7 +83,8 @@ func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
 
 	cursor := paneDiffCursor(content)
 	lines := strings.Split(content, "\n")
-	from, tail, unchanged := s.paneDiff.diff(pane, r.URL.Query().Get("cursor"), lines, cursor)
+	allowShift := r.URL.Query().Get(panePatchShiftParam) == "1"
+	drop, from, tail, unchanged := s.paneDiff.diff(pane, r.URL.Query().Get("cursor"), lines, cursor, allowShift)
 	if unchanged {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -93,6 +97,7 @@ func (s *Server) handlePaneDiff(w http.ResponseWriter, r *http.Request) {
 	widthCancel()
 	writeJSON(w, http.StatusOK, paneDiffMsg{
 		T:      "patch",
+		Drop:   drop,
 		From:   from,
 		Lines:  tail,
 		Q:      prompt.DetectQuestion(content),
@@ -138,7 +143,7 @@ func (s *Server) handlePaneInput(w http.ResponseWriter, r *http.Request) {
 	}{OK: true, Pane: result.Pane})
 }
 
-func (c *paneDiffCache) diff(pane, requestCursor string, next []string, nextCursor string) (from int, tail []string, unchanged bool) {
+func (c *paneDiffCache) diff(pane, requestCursor string, next []string, nextCursor string, allowShift bool) (drop, from int, tail []string, unchanged bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.m == nil {
@@ -148,15 +153,12 @@ func (c *paneDiffCache) diff(pane, requestCursor string, next []string, nextCurs
 	c.m[pane] = paneDiffEntry{lines: append([]string(nil), next...), cursor: nextCursor}
 	if requestCursor != "" && ok && requestCursor == prev.cursor {
 		if requestCursor == nextCursor {
-			return 0, nil, true
+			return 0, 0, nil, true
 		}
-		p := 0
-		for p < len(prev.lines) && p < len(next) && prev.lines[p] == next[p] {
-			p++
-		}
-		return p, append([]string(nil), next[p:]...), false
+		drop, from, tail = linePatch(prev.lines, next, allowShift)
+		return drop, from, tail, false
 	}
-	return 0, append([]string(nil), next...), false
+	return 0, 0, append([]string(nil), next...), false
 }
 
 func paneDiffCursor(content string) string {
@@ -245,10 +247,11 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 		}
 	}()
 
-	s.pollPeerPaneDiff(ctx, peer, pane, write, inputSent, humanWake)
+	allowShift := r.URL.Query().Get(panePatchShiftParam) == "1"
+	s.pollPeerPaneDiff(ctx, peer, pane, allowShift, write, inputSent, humanWake)
 }
 
-func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane string, write func(outMsg) error, inputSent, humanWake <-chan struct{}) {
+func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane string, allowShift bool, write func(outMsg) error, inputSent, humanWake <-chan struct{}) {
 	cursor := ""
 	delay := time.Duration(0)
 	unchanged := 0
@@ -299,7 +302,7 @@ func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane s
 			}
 		}
 
-		patch, ok, err := s.getPeerPaneDiff(ctx, peer, pane, cursor)
+		patch, ok, err := s.getPeerPaneDiff(ctx, peer, pane, cursor, allowShift)
 		if err != nil {
 			_ = write(outMsg{T: "error", S: err.Error()})
 			delay = errBackoff
@@ -315,7 +318,7 @@ func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane s
 		if ok {
 			cursor = patch.Cursor
 			unchanged = 0
-			if write(outMsg{T: patch.T, From: patch.From, Lines: patch.Lines, Q: patch.Q, W: patch.W}) != nil {
+			if write(outMsg{T: patch.T, Drop: patch.Drop, From: patch.From, Lines: patch.Lines, Q: patch.Q, W: patch.W}) != nil {
 				return
 			}
 			delay = 200 * time.Millisecond
@@ -334,7 +337,7 @@ func (s *Server) pollPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane s
 	}
 }
 
-func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, cursor string) (paneDiffMsg, bool, error) {
+func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, cursor string, allowShift bool) (paneDiffMsg, bool, error) {
 	upstream, err := peerPaneURL(peer.URL, "/api/pane/diff", pane)
 	if err != nil {
 		return paneDiffMsg{}, false, fmt.Errorf("invalid peer URL %q: %v", peer.URL, err)
@@ -346,6 +349,11 @@ func (s *Server) getPeerPaneDiff(ctx context.Context, peer statusd.Peer, pane, c
 	q := u.Query()
 	if cursor != "" {
 		q.Set("cursor", cursor)
+	}
+	// Only ask the peer for drop patches when the browser can apply them;
+	// an older peer ignores the parameter and keeps sending plain patches.
+	if allowShift {
+		q.Set(panePatchShiftParam, "1")
 	}
 	u.RawQuery = q.Encode()
 

@@ -111,6 +111,57 @@ func TestRemotePaneWSPullsDiffAndPostsInput(t *testing.T) {
 	}
 }
 
+func TestRemotePaneWSForwardsShiftOptInAndDrop(t *testing.T) {
+	for _, tc := range []struct {
+		query     string
+		wantShift string
+	}{
+		{"remote@%257&shift=1", "1"},
+		{"remote@%257", ""},
+	} {
+		gotShift := make(chan string, 1)
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case gotShift <- r.URL.Query().Get("shift"):
+			default:
+			}
+			drop := 0
+			if r.URL.Query().Get("shift") == "1" {
+				drop = 3
+			}
+			writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", Drop: drop, From: 5, Lines: []string{"tail"}, Cursor: "c1"})
+		}))
+		t.Cleanup(upstream.Close)
+		local := httptest.NewServer((&Server{
+			Peers: []statusd.Peer{{Name: "remote", URL: upstream.URL}},
+		}).Handler())
+		t.Cleanup(local.Close)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		t.Cleanup(cancel)
+		c, _, err := websocket.Dial(ctx, wsURL(local.URL)+"/ws/pane?pane="+tc.query, nil)
+		if err != nil {
+			t.Fatalf("dial local: %v", err)
+		}
+		t.Cleanup(func() { c.CloseNow() })
+
+		if shift := <-gotShift; shift != tc.wantShift {
+			t.Fatalf("%s: upstream shift=%q, want %q", tc.query, shift, tc.wantShift)
+		}
+		var m outMsg
+		if err := wsjson.Read(ctx, c, &m); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		wantDrop := 0
+		if tc.wantShift == "1" {
+			wantDrop = 3
+		}
+		if m.Drop != wantDrop || m.From != 5 {
+			t.Fatalf("%s: patch %+v, want drop=%d from=5", tc.query, m, wantDrop)
+		}
+	}
+}
+
 func TestRemotePaneWSReturnsFederatedForkPane(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

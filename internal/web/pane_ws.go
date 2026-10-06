@@ -46,15 +46,18 @@ type inputResult struct {
 
 // outMsg is a server-to-client WebSocket message.
 //
-//   - "patch" — incremental pane update. Lines[From:] replaces the client's
-//     buffer from index From onwards. From=0 with the full line list is the
-//     initial snapshot; From=len(lastLines) with empty Lines means append
-//     nothing (used on connect when capture is empty).
+//   - "patch" — incremental pane update. The client first removes the first
+//     Drop lines of its buffer, then Lines replaces the buffer from index From
+//     onwards. From=0 with the full line list is the initial snapshot;
+//     From=len(lastLines) with empty Lines means append nothing (used on
+//     connect when capture is empty). Drop is only ever non-zero when the
+//     client opted in with ?shift=1.
 //   - "error" — server-side error text in S, no buffer change.
 type outMsg struct {
 	T     string   `json:"t"`
 	S     string   `json:"s,omitempty"`
 	Pane  string   `json:"pane,omitempty"`
+	Drop  int      `json:"drop,omitempty"`
 	From  int      `json:"from,omitempty"`
 	Lines []string `json:"lines,omitempty"`
 	// Q is the interactive menu the pane is waiting on, when one is detected.
@@ -84,6 +87,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 		s.handleRemotePaneWS(w, r, peer, localPane)
 		return
 	}
+	allowShift := r.URL.Query().Get(panePatchShiftParam) == "1"
 
 	conn, err := websocket.Accept(w, r, paneWSAcceptOptions)
 	if err != nil {
@@ -172,18 +176,15 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 		}
 		widthCancel()
 		next := strings.Split(content, "\n")
-		// Find longest common prefix line count; the client only needs the
-		// diverging tail. Typical AI-agent output advances one line per tick,
-		// so this collapses a 400-line capture to a 1-line patch.
-		p := 0
-		for p < len(lastLines) && p < len(next) && lastLines[p] == next[p] {
-			p++
-		}
-		tail := append([]string(nil), next[p:]...)
+		// The client only needs the diverging tail. Typical AI-agent output
+		// advances one line per tick, so this collapses a 2000-line capture
+		// to a few-line patch even once the capture window starts sliding.
+		drop, from, tail := linePatch(lastLines, next, allowShift)
 		lastLines = next
 		return write(outMsg{
 			T:     "patch",
-			From:  p,
+			Drop:  drop,
+			From:  from,
 			Lines: tail,
 			Q:     prompt.DetectQuestion(content),
 			W:     lastWidth,
