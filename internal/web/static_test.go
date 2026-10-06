@@ -172,11 +172,11 @@ func TestBundledStyleHasRuntimeClasses(t *testing.T) {
 	_, cssPath := builtAssetPaths(t, handler)
 	css := servedBody(t, handler, cssPath)
 
-	// Class names, keyframe ids and custom properties are not renamed by CSS
-	// minification, so these survive the build verbatim.
+	// Class names, attribute selectors and custom properties are not renamed by
+	// CSS minification, so these survive the build verbatim.
 	for _, want := range []string{
 		".agent-icon", "runtime-claude", "runtime-codex", "runtime-gemini",
-		"agent-shine", "agent-rainbow", "--pane-font",
+		"data-running-effect", "data-running-phase", "--pane-font",
 		"--tmact-vvh", ".image-preview", ".markdown-preview", ".image-path", ".markdown-path", ".selection-btn",
 		".qb-divider", ".effect-preview",
 	} {

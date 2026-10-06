@@ -592,11 +592,12 @@ html[data-pane-switcher-layout="office"] .statusline { display: none; }
   color: #1a1100;
   font: 800 calc(var(--ds) * 6px)/1 var(--mono);
   box-shadow: 0 0 6px rgba(210,153,34,0.8);
-  animation: desk-ask-pulse 1s ease-in-out infinite;
 }
-@keyframes desk-ask-pulse {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.18); }
+/* Stepped pulse on the shared running-phase clock (lib/runningBlink) instead
+   of an infinite animation, which kept the window redrawing at 120Hz. */
+html[data-running-phase="1"] .desk-ask,
+html[data-running-phase="3"] .desk-ask {
+  transform: translateX(-50%) scale(1.18);
 }
 /* Back-of-chair in front of the desk (someone seated, facing it). */
 .desk-chair {

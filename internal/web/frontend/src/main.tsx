@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./components/App";
 import "./app.css";
 import { initFrontendLogging } from "./lib/frontendLog";
+import { startRunningBlink } from "./lib/runningBlink";
 import { initSplitShell, wasSplitActive } from "./split";
 import { isMobile } from "./lib/dom";
 import { inSplitSlot } from "./lib/slot";
@@ -47,6 +48,7 @@ if (rootEl) {
   if (splitView) {
     initSplitShell(rootEl);
   } else {
+    startRunningBlink();
     createRoot(rootEl).render(<App />);
   }
 }

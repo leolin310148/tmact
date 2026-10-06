@@ -375,7 +375,10 @@ Key class names: `chip`/`chip.sel`/`chip.stale`, `chip-key`, `peer-badge`,
 `u-pace`/`reserve`/`deficit`/`u-time`/`u-err`, `qb-*`, `settings-status`,
 `help-open` (on body).
 
-`data-` attributes: `data-running-effect` (on `<html>`), `data-path`/`data-cwd`/
+`data-` attributes: `data-running-effect` (on `<html>`), `data-running-phase`
+(on `<html>`, 0–3, stepped every 700ms by `lib/runningBlink`; absent while
+hidden or under reduced motion — drives the running/asking/direct-ring looks
+instead of infinite keyframes), `data-path`/`data-cwd`/
 `data-peer` (on `.image-path`). CSS vars: `--pane-font`, `--tmact-vvh`.
 
 ---
