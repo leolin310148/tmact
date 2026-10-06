@@ -203,33 +203,6 @@ func TestPaneWSStreamsContent(t *testing.T) {
 	}
 }
 
-func TestPaneWSNegotiatesCompression(t *testing.T) {
-	srv := httptest.NewServer((&Server{
-		CapturePane: func(string, int) (string, error) { return strings.Repeat("pane body\n", 200), nil },
-	}).Handler())
-	defer srv.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	c, resp, err := websocket.Dial(ctx, wsURL(srv.URL)+"/ws/pane?pane=%2511", &websocket.DialOptions{
-		CompressionMode: websocket.CompressionContextTakeover,
-	})
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	defer c.CloseNow()
-	if ext := resp.Header.Get("Sec-WebSocket-Extensions"); !strings.Contains(ext, "permessage-deflate") {
-		t.Fatalf("Sec-WebSocket-Extensions = %q, want permessage-deflate", ext)
-	}
-	var m outMsg
-	if err := wsjson.Read(ctx, c, &m); err != nil {
-		t.Fatal(err)
-	}
-	if m.T != "patch" || len(m.Lines) != 201 {
-		t.Fatalf("got t=%q lines=%d, want patch with 201 lines", m.T, len(m.Lines))
-	}
-}
-
 func TestPaneWSPatchCarriesPaneWidth(t *testing.T) {
 	srv := httptest.NewServer((&Server{
 		CapturePane: func(string, int) (string, error) { return "pane body", nil },
