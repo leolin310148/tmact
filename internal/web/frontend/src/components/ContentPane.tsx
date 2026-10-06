@@ -3,9 +3,10 @@
 //
 // IMPERATIVE HTML RULE (ARCHITECTURE.md §7): React must NEVER reconcile the
 // pane output. The rendered HTML is produced by the PURE terminal renderer and
-// assigned to pre#content.innerHTML in a useLayoutEffect, then markPreviewablePaths
-// mutates the live DOM and the scroll position is restored — exactly as the
-// original terminal.js setContent did:
+// written to pre#content in a useLayoutEffect, then markPreviewablePaths
+// mutates the live DOM and the scroll position is restored — as the original
+// terminal.js setContent did (non-markdown frames now patch only the changed
+// top-level nodes via terminal/patch.ts instead of reassigning innerHTML):
 //
 //   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
 //   pre.innerHTML = html;
@@ -23,6 +24,7 @@ import type {
   UIEvent as ReactUIEvent,
 } from "react";
 import { render, markPreviewablePaths } from "../terminal/render";
+import { patchPaneHTML, type PaneDOMState } from "../terminal/patch";
 import { preserveRenderedMermaidBlocks, renderMermaidDiagrams } from "../lib/mermaid";
 
 // PREVIEW_LONG_PRESS_MS / _MOVE — verbatim from app.js image preview behavior.
@@ -115,6 +117,9 @@ export default function ContentPane({
   const lastInputFrameRef = useRef<PaneFrame | null>(null);
   const committedFrameRef = useRef<PaneFrame | null>(null);
   const pendingFrameRef = useRef<PaneFrame | null>(null);
+  // Node bookkeeping for incremental (non-markdown) commits; null forces a full
+  // rebuild on the next commit.
+  const domStateRef = useRef<PaneDOMState | null>(null);
   const [frameDeferred, setFrameDeferred] = useState(false);
   // The first layout-effect run is the mount, BEFORE App has called setContent
   // even once. index.html shipped pre#content with a static placeholder
@@ -147,9 +152,18 @@ export default function ContentPane({
       peer: frame.peer || undefined,
       markdown: frame.markdown,
     });
-    pre.innerHTML = frame.markdown ? preserveRenderedMermaidBlocks(pre, html) : html;
-    markPreviewablePaths(pre, frame.cwd, frame.peer);
-    if (frame.markdown) void renderMermaidDiagrams(pre);
+    if (frame.markdown) {
+      pre.innerHTML = preserveRenderedMermaidBlocks(pre, html);
+      markPreviewablePaths(pre, frame.cwd, frame.peer);
+      domStateRef.current = null;
+      void renderMermaidDiagrams(pre);
+    } else {
+      // Live frames mostly differ in a spinner/timer run: swap only the changed
+      // top-level nodes so layout + paint stay local (terminal/patch.ts).
+      domStateRef.current = patchPaneHTML(pre, html, domStateRef.current, (root) =>
+        markPreviewablePaths(root, frame.cwd, frame.peer),
+      );
+    }
     if (atBottom) pre.scrollTop = pre.scrollHeight;
     committedFrameRef.current = frame;
   }, []);

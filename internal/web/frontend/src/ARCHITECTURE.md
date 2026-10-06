@@ -333,6 +333,13 @@ then `markImagePaths(pre, cwd, peer)` then auto-scroll. In React:
   `dangerouslySetInnerHTML`), call `markImagePaths(pre, cwd, peer)`, then if
   `atBottom` set `pre.scrollTop = pre.scrollHeight`. React must NEVER receive
   the rendered HTML as JSX children — it is opaque imperative content.
+- Non-markdown frames do not reassign `innerHTML`: `terminal/patch.ts`
+  (`patchPaneHTML`) parses the HTML into a detached template, aligns its
+  top-level nodes with the previous frame's (common prefix/suffix plus a
+  scroll-shift anchor) and swaps only the changed run, marking paths on the
+  inserted nodes only. Live agents repaint a spinner every 200ms, so this keeps
+  layout/paint local. Any foreign write to `pre#content` makes the next commit
+  a full rebuild. Markdown frames keep the full `innerHTML` path (mermaid).
 - `ContentPane` must defer that imperative write while a pointer interaction,
   selection mode, or a non-collapsed Selection inside `pre#content` is active.
   It retains only the newest frame and commits it once after unlock. A pane-id
