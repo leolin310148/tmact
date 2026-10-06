@@ -109,8 +109,11 @@ tmact wait --session work --until input-ready --require-transition --settle 2s -
 The available conditions are `input-ready`, `working`, `needs-human`, and
 `gone`. JSON reports preserve the specific terminal reason:
 `condition_met`, `needs_human`, `timeout`, or `pane_gone`. Recognized
-permission, approval, trust, and blocked prompts return `needs_human`
-immediately; wait never sends keys or confirms them. A requested
+permission, approval, trust, and blocked prompts return `needs_human` once
+they stay on screen for `--needs-human-settle` (default 5s, independent of
+`--settle`); wait never sends keys or confirms them. A dialog that disappears
+sooner, such as one a Claude `PermissionRequest` hook auto-approves, does not
+end the wait. A requested
 `needs-human` or `gone` condition is considered met while retaining that
 specific reason. Otherwise timeouts and unexpected human/gone blockers print
 their report and return non-zero.
@@ -129,6 +132,8 @@ are explicitly unsupported.
 Waits use terminal attributes to distinguish dim Claude/Codex suggestions from
 unsent drafts. A suggestion can be input-ready; a real draft does not satisfy
 that condition.
+A live Claude spinner keeps the pane `working` even when tips or the todo list
+are drawn between the spinner and the input box.
 
 ### Privacy-safe log statistics
 

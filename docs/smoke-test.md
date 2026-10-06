@@ -138,6 +138,36 @@ isolated local tmux pane. Range text copied intact; the path node kept identity
 while frames arrived; selection collapse flushed the latest frame; and the
 preview opened before the deferred repaint replaced the clicked node.
 
+## wait against live Claude panes (read-only)
+
+Sample live Claude Code panes with read-only captures and classify each frame;
+`tmact wait --until input-ready` should never see a pane with a live spinner as
+input-ready, and a dialog a `PermissionRequest` hook approves within seconds
+should not end the wait.
+
+Last run 2026-10-07 (Claude Code 2.1.291, ~1s sampling for ~5 minutes, no keys
+sent):
+
+- A `⎿  Tip: …` row under the spinner (`✻ Crystallizing… (1m 7s · …)`) stayed
+  for 31 consecutive samples (~40s) while the agent was working. Before the
+  fix those frames classified `waiting_input` (signals `working_text`,
+  `empty_input`), long enough to satisfy `--settle 30s`. Panes whose spinner read
+  `Running SessionStart hooks… (27m 38s · …)` with nothing below it already
+  classified `working`.
+- An `accept edits` pane with a `PermissionRequest` hook showed a full
+  `This command requires approval / Do you want to proceed?` dialog for a single
+  1s sample before it was replaced by `⎿  Allowed by PermissionRequest hook`.
+  The dialog itself is indistinguishable from an unanswered one, so `wait` now
+  requires a blocker to persist for `--needs-human-settle` (default 5s).
+- A genuinely unanswered choice menu stayed `needs_human` for 20+ consecutive
+  samples, well past the 5s confirmation window.
+- With the fix, `wait --target <hook pane> --until input-ready
+  --require-transition --settle 30s --timeout 3m` ended with `timeout` /
+  `working` while the hook-approved dialog appeared twice during the window.
+
+Fixtures in `internal/panestate` and `internal/panewait` tests are synthesized
+from these frames; raw captures are not committed.
+
 ## Notes Template
 
 ```text

@@ -130,17 +130,104 @@ func TestWaitAcceptsImmediateConditionWithoutTransition(t *testing.T) {
 	}
 }
 
-func TestWaitPermissionPromptReturnsNeedsHumanImmediately(t *testing.T) {
+func TestWaitPermissionPromptPreemptsSettleAndTransition(t *testing.T) {
 	fake := &fakeWait{captures: []string{"Allow directory access\nThis action may read or write paths outside your allowed directory list.\nDo you want to allow this?\n  1. Yes\n❯ 2. Yes, and add these directories to the allowed list\n  3. No (Esc)\n"}}
 	options := baseOptions(UntilInputReady)
 	options.RequireTransition = true
-	options.Settle = 5 * time.Second
+	options.Settle = 30 * time.Second
+	options.NeedsHumanSettle = 2 * time.Second
 
 	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.ConditionMet || report.Reason != ReasonNeedsHuman || report.State != UntilNeedsHuman || report.Samples != 1 {
+	if report.ConditionMet || report.Reason != ReasonNeedsHuman || report.State != UntilNeedsHuman || report.Elapsed != 2*time.Second {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+const (
+	claudeWorkingFrame = "⏺ Bash(go test ./...)\n  ⎿  ok\n\n✻ Crystallizing… (1m 7s · ↓ 5.0k tokens)\n\n────────\n\x1b[39m❯ \x1b[0m\n────────\n  ⏵⏵ accept edits on · ← for agents\n"
+	claudeTipFrame     = "⏺ Bash(go test ./...)\n  ⎿  ok\n\n✻ Crystallizing… (1m 9s · ↓ 5.0k tokens)\n  ⎿  Tip: Use ctrl+v to paste images from your clipboard\n\n────────\n\x1b[39m❯ \x1b[0m\n────────\n  ⏵⏵ accept edits on · ← for agents\n"
+	claudeHookedFrame  = "⏺ Bash(python3 check.py)\n  ⎿  ok\n  ⎿  Allowed by PermissionRequest hook\n\n✻ Crystallizing… (1m 12s · ↓ 5.1k tokens)\n\n────────\n\x1b[39m❯ \x1b[0m\n────────\n  ⏵⏵ accept edits on · ← for agents\n"
+	claudeIdleFrame    = "⏺ Done.\n\n✻ Worked for 2m 3s\n\n────────\n\x1b[39m❯ \x1b[0m\n────────\n  ⏵⏵ accept edits on · ← for agents\n"
+	claudeDialogFrame  = "────────\n Bash command\n python3 check.py\n This command requires approval\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don’t ask again for: python3 *\n   3. No\n Esc to cancel · Tab to amend\n"
+)
+
+func TestWaitDoesNotTreatTipUnderSpinnerAsInputReady(t *testing.T) {
+	captures := []string{claudeWorkingFrame}
+	for range 60 {
+		captures = append(captures, claudeTipFrame)
+	}
+	captures = append(captures, claudeIdleFrame)
+	fake := &fakeWait{captures: captures}
+	options := baseOptions(UntilInputReady)
+	options.RequireTransition = true
+	options.Settle = 30 * time.Second
+	options.Timeout = 2 * time.Minute
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.ConditionMet || report.Elapsed < 90*time.Second {
+		t.Fatalf("input-ready accepted while the spinner was still live: %#v", report)
+	}
+}
+
+func TestWaitIgnoresPermissionDialogApprovedByHook(t *testing.T) {
+	fake := &fakeWait{captures: []string{
+		claudeWorkingFrame,
+		claudeDialogFrame,
+		claudeDialogFrame,
+		claudeHookedFrame,
+		claudeHookedFrame,
+		claudeIdleFrame,
+	}}
+	options := baseOptions(UntilInputReady)
+	options.RequireTransition = true
+	options.Settle = 2 * time.Second
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.ConditionMet || report.Reason != ReasonConditionMet {
+		t.Fatalf("transient hook-approved dialog ended the wait: %#v", report)
+	}
+}
+
+func TestWaitReportsPersistentPermissionDialogAfterConfirmation(t *testing.T) {
+	fake := &fakeWait{captures: []string{claudeWorkingFrame, claudeDialogFrame}}
+	options := baseOptions(UntilInputReady)
+	options.RequireTransition = true
+	options.Settle = 2 * time.Minute
+	options.Timeout = 5 * time.Minute
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.ConditionMet || report.Reason != ReasonNeedsHuman || report.State != UntilNeedsHuman {
+		t.Fatalf("report = %#v", report)
+	}
+	// One working sample, then the dialog must persist for the default
+	// confirmation window — not for the much longer input-ready settle.
+	if want := time.Second + DefaultNeedsHumanSettle; report.Elapsed != want {
+		t.Fatalf("elapsed = %s, want %s", report.Elapsed, want)
+	}
+}
+
+func TestWaitNeedsHumanSettleIsConfigurable(t *testing.T) {
+	fake := &fakeWait{captures: []string{claudeDialogFrame}}
+	options := baseOptions(UntilNeedsHuman)
+	options.NeedsHumanSettle = 2 * time.Second
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.ConditionMet || report.Reason != ReasonNeedsHuman || report.Elapsed != 2*time.Second {
 		t.Fatalf("report = %#v", report)
 	}
 }
@@ -377,6 +464,7 @@ func TestWaitValidatesOptionsAndDependencies(t *testing.T) {
 		func(options *Options) { options.Selector = "" },
 		func(options *Options) { options.Until = "done" },
 		func(options *Options) { options.Settle = -time.Second },
+		func(options *Options) { options.NeedsHumanSettle = -time.Second },
 		func(options *Options) { options.PollInterval = 0 },
 		func(options *Options) { options.Timeout = 0 },
 	} {

@@ -80,7 +80,7 @@ func TestHelpCommandsPrintRicherGuidance(t *testing.T) {
 		{
 			name: "wait",
 			args: []string{"wait", "--help"},
-			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--poll-interval DURATION", "wall-clock deadline", "condition_met", "needs_human", "does not prove", "never sends keys"},
+			want: []string{"bounded pane state transition", "--until CONDITION", "--require-transition", "--settle DURATION", "--needs-human-settle DURATION", "--poll-interval DURATION", "wall-clock deadline", "condition_met", "needs_human", "does not prove", "never sends keys"},
 		},
 		{
 			name: "log search",

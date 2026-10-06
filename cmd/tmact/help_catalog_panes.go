@@ -73,8 +73,8 @@ func paneCommandHelpCatalog() []commandHelp {
 			Command: "wait",
 			Summary: "Wait read-only for a bounded pane state transition or terminal blocker.",
 			Usage: []string{
-				"tmact wait --target TARGET --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]",
-				"tmact wait --session SESSION --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]",
+				"tmact wait --target TARGET --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--needs-human-settle 5s] [--poll-interval 500ms] [--timeout 5m] [--json]",
+				"tmact wait --session SESSION --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--needs-human-settle 5s] [--poll-interval 500ms] [--timeout 5m] [--json]",
 				"tmact -t TARGET wait --until input-ready|working|needs-human|gone [--json]",
 			},
 			Flags: []helpFlag{
@@ -83,6 +83,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--until", Value: "CONDITION", Description: "required condition: input-ready, working, needs-human, or gone", Required: true},
 				{Name: "--require-transition", Description: "do not accept the requested condition until a state change has been observed"},
 				{Name: "--settle", Value: "DURATION", Description: "continuous matching time required before returning; default 1s"},
+				{Name: "--needs-human-settle", Value: "DURATION", Description: "continuous time a permission or other blocker must stay on screen before returning needs_human; default 5s, independent of --settle"},
 				{Name: "--poll-interval", Value: "DURATION", Description: "delay between read-only observations; default 500ms"},
 				{Name: "--timeout", Value: "DURATION", Description: "wall-clock deadline covering target resolution, capture, settling, and polling; default 5m"},
 				{Name: "--json", Description: "print canonical pane, observed state, terminal reason, timings, and signals as JSON"},
@@ -94,7 +95,7 @@ func paneCommandHelpCatalog() []commandHelp {
 			},
 			Safety: []string{
 				"Read-only: wait captures and classifies pane output but never sends keys or answers prompts.",
-				"Permission, approval, trust, and other recognized blockers terminate with reason needs_human regardless of settling or transition flags.",
+				"Permission, approval, trust, and other recognized blockers terminate with reason needs_human once they persist for --needs-human-settle, regardless of --settle or transition flags. A dialog that disappears sooner, such as one a Claude PermissionRequest hook auto-approves, does not end the wait.",
 			},
 			Notes: []string{
 				"Exactly one --target, --session, or global -t selector is required. Peer targets and sessions are unsupported.",

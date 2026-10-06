@@ -134,7 +134,10 @@ func hasActiveInterruptIndicator(raw string) bool {
 	if promptIndex < 0 {
 		return false
 	}
-	for i := promptIndex - 1; i >= 0 && promptIndex-i <= 3; i-- {
+	// Claude can render tips and its todo list between the spinner and the
+	// input, so skip that attachment block. Any other line ends the search:
+	// transcript output below a spinner means the spinner is stale.
+	for i, seen := promptIndex-1, 0; i >= 0 && seen < maxSpinnerAttachmentLines; i-- {
 		line := lines[i]
 		if isAgentChromeLine(line) {
 			continue
@@ -143,7 +146,29 @@ func hasActiveInterruptIndicator(raw string) bool {
 		if strings.Contains(lower, "esc to interrupt") || strings.Contains(lower, "ctrl-c to interrupt") {
 			return true
 		}
-		return claudeSpinnerPattern.MatchString(strings.TrimSpace(line))
+		trimmed := strings.TrimSpace(line)
+		if claudeSpinnerPattern.MatchString(trimmed) {
+			return true
+		}
+		if !isSpinnerAttachmentLine(trimmed) {
+			return false
+		}
+		seen++
+	}
+	return false
+}
+
+// maxSpinnerAttachmentLines bounds how many tip/todo rows may separate the
+// spinner from the input before the spinner is no longer trusted.
+const maxSpinnerAttachmentLines = 20
+
+// isSpinnerAttachmentLine reports rows Claude draws under its live spinner:
+// the "⎿" continuation (tips, the first todo item) and todo checkbox rows.
+func isSpinnerAttachmentLine(text string) bool {
+	for _, prefix := range []string{"⎿", "☐", "☒", "◻", "◼", "✔", "□", "■"} {
+		if strings.HasPrefix(text, prefix) {
+			return true
+		}
 	}
 	return false
 }

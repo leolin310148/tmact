@@ -197,6 +197,34 @@ func TestClassifyTreatsClaudeSpinnerWithoutInterruptHintAsWorking(t *testing.T) 
 	}
 }
 
+// Claude renders tips and the todo list between the live spinner and the
+// steering input, sometimes for minutes during one tool call. Observed on
+// Claude Code 2.1.291 panes that `wait --until input-ready --settle 30s`
+// misreported as idle.
+func TestClassifyFindsClaudeSpinnerAboveTipsAndTodos(t *testing.T) {
+	for name, between := range map[string]string{
+		"tip":  "  ⎿  Tip: Use ctrl+v to paste images from your clipboard\n",
+		"todo": "  ⎿  ☒ Read reference flows\n     ◼ Move OData queries to receiver\n     ◻ Deploy to DEV\n",
+		"hook": "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			spinner := "✻ Crystallizing… (1m 7s · ↓ 5.0k tokens)\n"
+			if name == "hook" {
+				spinner = "· Running SessionStart hooks… (27m 38s · ↓ 22.2k tokens · still thinking)\n"
+			}
+			footer := "────────\n❯ \n────────\n  ⏵⏵ accept edits on · 1 shell · ← for agents\n"
+			raw := "⏺ Bash(go test ./...)\n  ⎿  ok\n\n" + spinner + between + "\n" + footer
+			ansi := strings.Replace(raw, "❯ \n", "\x1b[39m❯ \x1b[0m\n", 1)
+			if result := Classify(raw); result.State != StateWorking {
+				t.Fatalf("Classify state = %q, signals = %#v", result.State, result.Signals)
+			}
+			if result := ClassifyANSI(raw, ansi); result.State != StateWorking {
+				t.Fatalf("ClassifyANSI state = %q, signals = %#v", result.State, result.Signals)
+			}
+		})
+	}
+}
+
 func TestClassifyDoesNotReviveStaleClaudeSpinnerAfterCompletion(t *testing.T) {
 	result := Classify(`
 ✻ Frosting… (2m 51s)

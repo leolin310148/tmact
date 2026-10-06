@@ -18,7 +18,7 @@ Usage:
   tmact -t 0 send --keys C-u,Enter [--execute]
   tmact -t peer-a@%7 send --text "status?" --enter --execute
   tmact capture --target sample:0.0 [--lines 120] [--non-empty] [--after CURSOR] [--json]
-  tmact wait (--target sample:0.0 | --session sample) --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--poll-interval 500ms] [--timeout 5m] [--json]
+  tmact wait (--target sample:0.0 | --session sample) --until input-ready|working|needs-human|gone [--require-transition] [--settle 1s] [--needs-human-settle 5s] [--poll-interval 500ms] [--timeout 5m] [--json]
   tmact session create SESSION --dir DIR [--execute] [--json]
   tmact session close SESSION [--execute] [--json]
   tmact session closed [--json]

@@ -27,6 +27,13 @@ const (
 	StateGone    = "gone"
 
 	captureLines = 200
+
+	// DefaultNeedsHumanSettle is how long a blocker must stay on screen before
+	// a wait reports needs_human. Claude PermissionRequest hooks can approve a
+	// dialog within a second or two of it rendering; requiring persistence
+	// keeps those transient dialogs from ending the wait while still reporting
+	// a real, unanswered prompt promptly.
+	DefaultNeedsHumanSettle = 5 * time.Second
 )
 
 var validConditions = map[string]bool{
@@ -42,8 +49,11 @@ type Options struct {
 	Until             string
 	RequireTransition bool
 	Settle            time.Duration
-	PollInterval      time.Duration
-	Timeout           time.Duration
+	// NeedsHumanSettle is the continuous time a blocker must persist before
+	// the wait ends with needs_human. Zero selects DefaultNeedsHumanSettle.
+	NeedsHumanSettle time.Duration
+	PollInterval     time.Duration
+	Timeout          time.Duration
 }
 
 // Report is the terminal observation from a wait. ConditionMet means the
@@ -121,6 +131,35 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 	previousState := ""
 	conditionSince := time.Time{}
 	conditionActive := false
+	blockerSince := time.Time{}
+	blockerActive := false
+	needsHumanSettle := options.NeedsHumanSettle
+	if needsHumanSettle == 0 {
+		needsHumanSettle = DefaultNeedsHumanSettle
+	}
+
+	// waitNext sleeps one poll interval, shortened so the next sample lands
+	// on the overall deadline or on the end of a window started at since. It
+	// reports done when the wait must return report with the given error.
+	waitNext := func(since time.Time, window time.Duration) (bool, error) {
+		now := deps.Now()
+		delay := options.PollInterval
+		if remaining := deadline.Sub(now); remaining < delay {
+			delay = remaining
+		}
+		if window > 0 {
+			if remaining := window - now.Sub(since); remaining < delay {
+				delay = remaining
+			}
+		}
+		if err := deps.Wait(waitCtx, delay); err != nil {
+			if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
+				return true, contextErr
+			}
+			return true, err
+		}
+		return false, nil
+	}
 
 	for {
 		if done, err := finishContext(ctx, waitCtx, &report, deps.Now()); done {
@@ -195,16 +234,34 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			report.Reason = ReasonTimeout
 			return finish(report, now), nil
 		}
+		// A blocker counts only once it has persisted for the confirmation
+		// window: hooks can approve a permission dialog moments after it
+		// renders. Until then it neither ends the wait nor counts as a
+		// transition, and it interrupts any input-ready settling.
+		if state == UntilNeedsHuman {
+			conditionActive = false
+			if !blockerActive {
+				blockerSince = now
+				blockerActive = true
+			}
+			if now.Sub(blockerSince) >= needsHumanSettle {
+				if previousState != "" && state != previousState {
+					report.TransitionObserved = true
+				}
+				report.Reason = ReasonNeedsHuman
+				report.ConditionMet = options.Until == UntilNeedsHuman && (!options.RequireTransition || report.TransitionObserved)
+				return finish(report, now), nil
+			}
+			if done, err := waitNext(blockerSince, needsHumanSettle); done {
+				return report, err
+			}
+			continue
+		}
+		blockerActive = false
 		if previousState != "" && state != previousState {
 			report.TransitionObserved = true
 		}
 		previousState = state
-
-		if state == UntilNeedsHuman {
-			report.Reason = ReasonNeedsHuman
-			report.ConditionMet = options.Until == UntilNeedsHuman && (!options.RequireTransition || report.TransitionObserved)
-			return finish(report, now), nil
-		}
 
 		matches := state == options.Until
 		transitionSatisfied := !options.RequireTransition || report.TransitionObserved
@@ -222,19 +279,11 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			conditionActive = false
 		}
 
-		delay := options.PollInterval
-		if remaining := deadline.Sub(now); remaining < delay {
-			delay = remaining
-		}
+		since, window := time.Time{}, time.Duration(0)
 		if conditionActive {
-			if remaining := options.Settle - now.Sub(conditionSince); remaining < delay {
-				delay = remaining
-			}
+			since, window = conditionSince, options.Settle
 		}
-		if err := deps.Wait(waitCtx, delay); err != nil {
-			if done, contextErr := finishContext(ctx, waitCtx, &report, deps.Now()); done {
-				return report, contextErr
-			}
+		if done, err := waitNext(since, window); done {
 			return report, err
 		}
 	}
@@ -249,6 +298,9 @@ func validate(options Options, deps Dependencies) error {
 	}
 	if options.Settle < 0 {
 		return errors.New("wait settle cannot be negative")
+	}
+	if options.NeedsHumanSettle < 0 {
+		return errors.New("wait needs-human settle cannot be negative")
 	}
 	if options.PollInterval <= 0 {
 		return errors.New("wait poll interval must be positive")

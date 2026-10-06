@@ -34,6 +34,7 @@ type waitCommandReport struct {
 	RequireTransition  bool      `json:"require_transition"`
 	TransitionObserved bool      `json:"transition_observed"`
 	Settle             string    `json:"settle"`
+	NeedsHumanSettle   string    `json:"needs_human_settle"`
 	PollInterval       string    `json:"poll_interval"`
 	Timeout            string    `json:"timeout"`
 	Samples            int       `json:"samples"`
@@ -56,6 +57,7 @@ func runWait(args []string, globals globalOptions) error {
 	until := fs.String("until", "", "terminal condition: input-ready, working, needs-human, or gone")
 	requireTransition := fs.Bool("require-transition", false, "require an observed state change before matching the requested condition")
 	settle := fs.Duration("settle", defaultWaitSettle, "continuous matching time before returning")
+	needsHumanSettle := fs.Duration("needs-human-settle", panewait.DefaultNeedsHumanSettle, "continuous time a permission or other blocker must persist before returning needs_human")
 	pollInterval := fs.Duration("poll-interval", defaultWaitPollInterval, "delay between pane observations")
 	timeout := fs.Duration("timeout", defaultWaitTimeout, "wall-clock deadline including target resolution, capture, settling, and polling")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
@@ -85,6 +87,9 @@ func runWait(args []string, globals globalOptions) error {
 	}
 	if *settle < 0 {
 		return errors.New("--settle cannot be negative")
+	}
+	if *needsHumanSettle <= 0 {
+		return errors.New("--needs-human-settle must be positive")
 	}
 	if *pollInterval <= 0 {
 		return errors.New("--poll-interval must be positive")
@@ -128,6 +133,7 @@ func runWait(args []string, globals globalOptions) error {
 		Until:             *until,
 		RequireTransition: *requireTransition,
 		Settle:            *settle,
+		NeedsHumanSettle:  *needsHumanSettle,
 		PollInterval:      *pollInterval,
 		Timeout:           *timeout,
 	}
@@ -164,6 +170,7 @@ func newWaitCommandReport(report panewait.Report, options panewait.Options) wait
 		RequireTransition:  options.RequireTransition,
 		TransitionObserved: report.TransitionObserved,
 		Settle:             options.Settle.String(),
+		NeedsHumanSettle:   options.NeedsHumanSettle.String(),
 		PollInterval:       options.PollInterval.String(),
 		Timeout:            options.Timeout.String(),
 		Samples:            report.Samples,

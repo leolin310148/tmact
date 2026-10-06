@@ -19,7 +19,7 @@ func TestWaitJSONIncludesTerminalReasonAndOptions(t *testing.T) {
 		if options.Selector != "%7" || options.Until != panewait.UntilInputReady || !options.RequireTransition {
 			t.Fatalf("options = %#v", options)
 		}
-		if options.Settle != 2*time.Second || options.PollInterval != 250*time.Millisecond || options.Timeout != time.Minute {
+		if options.Settle != 2*time.Second || options.NeedsHumanSettle != 3*time.Second || options.PollInterval != 250*time.Millisecond || options.Timeout != time.Minute {
 			t.Fatalf("durations = %#v", options)
 		}
 		started := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
@@ -41,7 +41,7 @@ func TestWaitJSONIncludesTerminalReasonAndOptions(t *testing.T) {
 		}, nil
 	}
 
-	out, err := captureRun(t, "-t", "%7", "wait", "--until", "input-ready", "--require-transition", "--settle", "2s", "--poll-interval", "250ms", "--timeout", "1m", "--json")
+	out, err := captureRun(t, "-t", "%7", "wait", "--until", "input-ready", "--require-transition", "--settle", "2s", "--needs-human-settle", "3s", "--poll-interval", "250ms", "--timeout", "1m", "--json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestWaitJSONIncludesTerminalReasonAndOptions(t *testing.T) {
 	if report.Target != "work:0.0" || report.PaneID != "%7" || report.Reason != panewait.ReasonConditionMet || !report.ConditionMet {
 		t.Fatalf("report = %#v", report)
 	}
-	if report.Elapsed != "3s" || report.Settle != "2s" || report.PollInterval != "250ms" || report.Timeout != "1m0s" {
+	if report.Elapsed != "3s" || report.Settle != "2s" || report.NeedsHumanSettle != "3s" || report.PollInterval != "250ms" || report.Timeout != "1m0s" {
 		t.Fatalf("duration report = %#v", report)
 	}
 }
