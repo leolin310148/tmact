@@ -22,6 +22,13 @@ import (
 // be read as a URL component with surprising semantics.
 var paneIDPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.-]+@)?%[0-9]+$`)
 
+// paneWSAcceptOptions negotiates permessage-deflate for pane streams. Patches
+// are ANSI-heavy terminal text (a full 2000-line capture is ~400 KB raw) and
+// compress ~85-90%; browsers that don't offer the extension get plain frames.
+var paneWSAcceptOptions = &websocket.AcceptOptions{
+	CompressionMode: websocket.CompressionContextTakeover,
+}
+
 // inputMsg is a client-to-server WebSocket message.
 //
 // Older clients may still send "resize" frames; the server ignores them — the
@@ -78,7 +85,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, paneWSAcceptOptions)
 	if err != nil {
 		return
 	}

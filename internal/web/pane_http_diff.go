@@ -174,7 +174,7 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, paneWSAcceptOptions)
 	if err != nil {
 		return
 	}
