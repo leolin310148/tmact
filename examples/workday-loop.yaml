@@ -1,0 +1,32 @@
+# Weekday business-hours loop: nudge the agent every 15 minutes, but only start
+# a cycle Monday-Friday 09:30-18:00 Asia/Taipei. Outside the calendar nothing is
+# sent and no run/action counts are consumed; the next window resumes with one
+# normal cycle instead of a catch-up burst.
+target: sample-agent:0.0
+capture_lines: 160
+poll_interval: 30s
+idle_after: 30s
+max_runtime: 168h
+max_actions: 2016
+log_path: .tmact/workday-loop.jsonl
+log_skipped_actions: true
+stop_on_permission_prompt: true
+
+calendar:
+  timezone: Asia/Taipei          # explicit IANA zone; Local is rejected
+  weekdays: [mon, tue, wed, thu, fri]
+  windows:
+    - start: "09:30"             # inclusive
+      end: "18:00"               # exclusive
+
+actions:
+  - name: workday-check
+    type: send_text
+    every: 15m
+    initial_delay: 15m
+    only_when_idle: true
+    max_runs: 2016
+    enter: true
+    text: |
+      Check for new work items and handle at most one. If there is nothing new,
+      reply briefly and stop.

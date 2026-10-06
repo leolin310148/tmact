@@ -53,18 +53,52 @@ func runLoopValidate(args []string) error {
 	if err != nil {
 		return err
 	}
+	calendar, err := loopCalendarSummary(cfg, tmactNow())
+	if err != nil {
+		return err
+	}
 	result := struct {
-		Valid   bool   `json:"valid"`
-		Config  string `json:"config"`
-		Target  string `json:"target"`
-		Actions int    `json:"actions"`
-		Flows   int    `json:"flows"`
-	}{true, abs, cfg.Target, len(cfg.Actions), len(cfg.Flows)}
+		Valid    bool                   `json:"valid"`
+		Config   string                 `json:"config"`
+		Target   string                 `json:"target"`
+		Actions  int                    `json:"actions"`
+		Flows    int                    `json:"flows"`
+		Calendar map[string]interface{} `json:"calendar,omitempty"`
+	}{true, abs, cfg.Target, len(cfg.Actions), len(cfg.Flows), calendar}
 	if *jsonOutput {
 		return printJSON(result)
 	}
 	fmt.Printf("valid loop config: %s\ntarget: %s\nactions: %d\nflows: %d\n", abs, cfg.Target, len(cfg.Actions), len(cfg.Flows))
+	if calendar == nil {
+		fmt.Println("calendar: none (every/initial_delay only)")
+		return nil
+	}
+	fmt.Printf("calendar: %s %s %s\n", calendar["timezone"], strings.Join(calendar["weekdays"].([]string), ","), strings.Join(calendar["windows"].([]string), ","))
+	if open, _ := calendar["open_now"].(bool); open {
+		fmt.Printf("calendar now: open until %s\n", calendar["open_until"])
+	} else {
+		fmt.Printf("calendar now: closed; next eligible %s\n", calendar["next_eligible"])
+	}
 	return nil
+}
+
+// loopCalendarSummary describes a loop's calendar gate and its state at now,
+// or returns nil when the loop has no calendar.
+func loopCalendarSummary(cfg loop.Config, now time.Time) (map[string]interface{}, error) {
+	calendar, err := loop.CompileCalendar(cfg.Calendar)
+	if err != nil || calendar == nil {
+		return nil, err
+	}
+	summary := calendar.Describe()
+	summary["now"] = now.In(calendar.Location()).Format(time.RFC3339)
+	if until, open := calendar.OpenUntil(now); open {
+		summary["open_now"] = true
+		summary["open_until"] = until.Format(time.RFC3339)
+	} else {
+		summary["open_now"] = false
+		summary["next_eligible"] = calendar.NextOpen(now).Format(time.RFC3339)
+	}
+	return summary, nil
 }
 
 func runLoopStatus(args []string) error {

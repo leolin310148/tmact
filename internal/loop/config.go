@@ -31,22 +31,25 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Config struct {
-	Target                 string         `yaml:"target"`
-	Peer                   string         `yaml:"peer"`
-	StatusdConfig          string         `yaml:"statusd_config"`
-	CaptureLines           int            `yaml:"capture_lines"`
-	IdleIgnorePatterns     []string       `yaml:"idle_ignore_patterns"`
-	PollInterval           Duration       `yaml:"poll_interval"`
-	IdleAfter              Duration       `yaml:"idle_after"`
-	AssumeIdleOnStart      bool           `yaml:"assume_idle_on_start"`
-	MaxRuntime             Duration       `yaml:"max_runtime"`
-	MaxActions             int            `yaml:"max_actions"`
-	LogPath                string         `yaml:"log_path"`
-	LogSkippedActions      bool           `yaml:"log_skipped_actions"`
-	StopOnPermissionPrompt bool           `yaml:"stop_on_permission_prompt"`
-	Quota                  *QuotaConfig   `yaml:"quota"`
-	Actions                []ActionConfig `yaml:"actions"`
-	Flows                  []FlowConfig   `yaml:"flows"`
+	Target                 string       `yaml:"target"`
+	Peer                   string       `yaml:"peer"`
+	StatusdConfig          string       `yaml:"statusd_config"`
+	CaptureLines           int          `yaml:"capture_lines"`
+	IdleIgnorePatterns     []string     `yaml:"idle_ignore_patterns"`
+	PollInterval           Duration     `yaml:"poll_interval"`
+	IdleAfter              Duration     `yaml:"idle_after"`
+	AssumeIdleOnStart      bool         `yaml:"assume_idle_on_start"`
+	MaxRuntime             Duration     `yaml:"max_runtime"`
+	MaxActions             int          `yaml:"max_actions"`
+	LogPath                string       `yaml:"log_path"`
+	LogSkippedActions      bool         `yaml:"log_skipped_actions"`
+	StopOnPermissionPrompt bool         `yaml:"stop_on_permission_prompt"`
+	Quota                  *QuotaConfig `yaml:"quota"`
+	// Calendar restricts action/flow starts to weekday time windows in an
+	// explicit timezone. Absent means no restriction (every/initial_delay only).
+	Calendar *CalendarConfig `yaml:"calendar"`
+	Actions  []ActionConfig  `yaml:"actions"`
+	Flows    []FlowConfig    `yaml:"flows"`
 }
 
 // QuotaConfig makes the loop skip its scheduled actions/flows when the target
@@ -122,6 +125,9 @@ func LoadConfig(path string) (Config, error) {
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := rejectMisplacedCalendarKeys(data); err != nil {
 		return Config{}, err
 	}
 	applyDefaults(&cfg)
@@ -221,7 +227,64 @@ func validateConfig(cfg Config) error {
 	if err := validateQuota(cfg.Quota); err != nil {
 		return err
 	}
+	if _, err := CompileCalendar(cfg.Calendar); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+// misplacedCalendarKeys are keys that look like calendar settings but would be
+// silently ignored outside the calendar block, leaving the loop unrestricted.
+var misplacedCalendarKeys = map[string]bool{
+	"calender": true, "calendars": true, "timezone": true, "time_zone": true, "tz": true,
+	"weekdays": true, "days": true, "windows": true, "window": true,
+	"active_hours": true, "work_hours": true, "working_hours": true, "business_hours": true, "schedule": true,
+}
+
+func rejectMisplacedCalendarKeys(data []byte) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	top := root.Content[0]
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		key := top.Content[i].Value
+		if misplacedCalendarKeys[key] {
+			return fmt.Errorf("unknown top-level key %q: put timezone, weekdays, and windows under calendar:", key)
+		}
+		if key != "actions" && key != "flows" {
+			continue
+		}
+		for _, item := range top.Content[i+1].Content {
+			if err := rejectNestedCalendar(item, key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rejectNestedCalendar(node *yaml.Node, section string) error {
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if key == "calendar" || misplacedCalendarKeys[key] {
+			return fmt.Errorf("%s entry: %q is not supported here; calendar is a loop-wide top-level block", section, key)
+		}
+		if key == "steps" {
+			for _, step := range node.Content[i+1].Content {
+				if err := rejectNestedCalendar(step, "flow steps"); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
 

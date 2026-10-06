@@ -11,12 +11,14 @@ import (
 
 func TestLoopExamplePrintsValidYAML(t *testing.T) {
 	for _, tt := range []struct {
-		name      string
-		args      []string
-		wantQuota bool
+		name         string
+		args         []string
+		wantQuota    bool
+		wantCalendar bool
 	}{
 		{name: "basic"},
 		{name: "quota", args: []string{"--quota"}, wantQuota: true},
+		{name: "calendar", args: []string{"--calendar"}, wantCalendar: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			args := append([]string{"loop", "example"}, tt.args...)
@@ -43,6 +45,13 @@ func TestLoopExamplePrintsValidYAML(t *testing.T) {
 				}
 			} else if cfg.Quota != nil {
 				t.Fatalf("basic example unexpectedly enabled quota: %#v", cfg.Quota)
+			}
+			if tt.wantCalendar {
+				if cfg.Calendar == nil || cfg.Calendar.Timezone != "Asia/Taipei" || len(cfg.Calendar.Weekdays) != 5 {
+					t.Fatalf("calendar example parsed incorrectly: %#v", cfg.Calendar)
+				}
+			} else if cfg.Calendar != nil {
+				t.Fatalf("example unexpectedly enabled calendar: %#v", cfg.Calendar)
 			}
 		})
 	}

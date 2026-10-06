@@ -25,6 +25,9 @@ Common commands:
   Loops accept an optional `quota` block that skips cycles when the target
   agent lacks the configured 5-hour reserve or positive weekly pace headroom
   (see `examples/quota-aware-loop.yaml`).
+  An optional top-level `calendar` block (IANA `timezone`, `weekdays`,
+  `windows` of `HH:MM` start-inclusive/end-exclusive) limits when actions and
+  flows may start (see `examples/workday-loop.yaml`).
 - `tmact dispatch-work` starts or reuses a tmux session, launches an agent CLI,
   and sends it a prompt. For a configured remote machine, use
   `tmact dispatch-work SESSION --peer NAME ...`; this creates or reuses the

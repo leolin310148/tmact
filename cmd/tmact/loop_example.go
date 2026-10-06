@@ -14,22 +14,27 @@ func runLoopExample(args []string) error {
 	fs := flag.NewFlagSet("loop example", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	quota := fs.Bool("quota", false, "include 5-hour reserve and weekly headroom gates")
+	calendar := fs.Bool("calendar", false, "include a weekday/time-window calendar gate")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return errors.New("loop example does not accept positional arguments")
 	}
-	fmt.Print(renderLoopExampleYAML(*quota))
+	fmt.Print(renderLoopExampleYAML(*quota, *calendar))
 	return nil
 }
 
-func renderLoopExampleYAML(quota bool) string {
+func renderLoopExampleYAML(quota, calendar bool) string {
 	quotaBlock := ""
 	if quota {
 		quotaBlock = loopExampleQuotaBlock
 	}
-	return loopExampleHeader + quotaBlock + loopExampleFlow
+	calendarBlock := ""
+	if calendar {
+		calendarBlock = loopExampleCalendarBlock
+	}
+	return loopExampleHeader + quotaBlock + calendarBlock + loopExampleFlow
 }
 
 const loopExampleHeader = `# Generate this template with: tmact loop example
@@ -59,6 +64,21 @@ quota:
   weekly_skip_at_percent: 100        # optional absolute weekly ceiling
   refresh_interval: 5m
   fail_closed: false                 # false runs when quota/pace is unavailable
+
+`
+
+const loopExampleCalendarBlock = `# Calendar gate: actions/flows may only START on these weekdays inside these
+# windows, judged in an explicit IANA timezone (never the host's local zone).
+# Start is inclusive, end exclusive (24:00 allowed as an end). Outside the
+# calendar nothing is sent and no run/action counts are consumed; a schedule
+# that came due while closed fires once when the calendar reopens (no catch-up
+# burst). A flow that started inside a window finishes all of its steps.
+calendar:
+  timezone: Asia/Taipei
+  weekdays: [mon, tue, wed, thu, fri]
+  windows:
+    - start: "09:30"
+      end: "18:00"
 
 `
 

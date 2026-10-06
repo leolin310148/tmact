@@ -446,3 +446,30 @@ func TestLoopValidateJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopValidateReportsCalendar(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "loop.yaml")
+	body := "target: demo:0.0\ncalendar:\n  timezone: Asia/Taipei\n  weekdays: [mon, tue, wed, thu, fri]\n  windows:\n    - start: \"09:30\"\n      end: \"18:00\"\nactions:\n  - name: nudge\n    type: send_text\n    text: go\n    every: 15m\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "loop", "validate", "--config", path, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"timezone": "Asia/Taipei"`, `"09:30-18:00"`, `"open_now"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q: %s", want, out)
+		}
+	}
+	if !strings.Contains(out, `"next_eligible"`) && !strings.Contains(out, `"open_until"`) {
+		t.Fatalf("output missing calendar state: %s", out)
+	}
+	out, err = captureRun(t, "loop", "validate", "--config", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "calendar: Asia/Taipei mon,tue,wed,thu,fri 09:30-18:00") {
+		t.Fatalf("text output missing calendar: %s", out)
+	}
+}

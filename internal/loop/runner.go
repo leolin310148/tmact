@@ -45,6 +45,11 @@ type Runner struct {
 	sendKeys           func(string, []string) error
 	fetchUsage         func(context.Context, ...string) agentusage.Snapshot
 	idleIgnorePatterns []*regexp.Regexp
+	calendar           *Calendar
+	calendarErr        error
+	// calendarOpen remembers the last logged calendar state so open/closed
+	// transitions are logged once instead of on every poll.
+	calendarOpen *bool
 
 	// Cached quota snapshot. The provider endpoints are rate-limited, so
 	// fetchUsage runs at most once per Quota.RefreshInterval and the last
@@ -96,8 +101,11 @@ func NewRunner(cfg Config, options Options) *Runner {
 	for _, pattern := range cfg.IdleIgnorePatterns {
 		compiled = append(compiled, regexp.MustCompile(pattern))
 	}
+	calendar, calendarErr := CompileCalendar(cfg.Calendar)
 	return &Runner{
 		cfg:                cfg,
+		calendar:           calendar,
+		calendarErr:        calendarErr,
 		options:            options,
 		now:                time.Now,
 		capturePane:        tmux.CapturePane,
@@ -109,6 +117,10 @@ func NewRunner(cfg Config, options Options) *Runner {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	if r.calendarErr != nil {
+		// Never fall back to an unrestricted schedule.
+		return r.calendarErr
+	}
 	if err := r.configurePeerTarget(ctx); err != nil {
 		return err
 	}
@@ -193,9 +205,16 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		r.capacityPromptAnswered = false
 
-		quotaSkip, quotaReason, err := r.evaluateQuota(ctx, now)
+		calendarOpen, err := r.evaluateCalendar(now)
 		if err != nil {
 			return err
+		}
+		quotaSkip, quotaReason := false, ""
+		if calendarOpen {
+			quotaSkip, quotaReason, err = r.evaluateQuota(ctx, now)
+			if err != nil {
+				return err
+			}
 		}
 
 		executedThisCycle := 0
@@ -204,6 +223,9 @@ func (r *Runner) Run(ctx context.Context) error {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
+			if !calendarOpen {
+				continue
+			}
 			executed, err := r.maybeRunAction(ctx, now, state, &actions[i], quotaSkip, quotaReason)
 			if err != nil {
 				return err
@@ -218,6 +240,9 @@ func (r *Runner) Run(ctx context.Context) error {
 				return r.emit(event{Timestamp: now.Format(time.RFC3339), Type: "stop", Target: r.cfg.Target, Reason: "max_actions"})
 			}
 
+			if !calendarOpen {
+				continue
+			}
 			remaining := 0
 			if r.cfg.MaxActions > 0 {
 				remaining = r.cfg.MaxActions - actionCount
@@ -241,7 +266,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		phase := "sleeping"
-		if quotaSkip {
+		if !calendarOpen {
+			phase = "waiting_calendar"
+		} else if quotaSkip {
 			phase = "waiting_quota"
 		} else if executedThisCycle == 0 && !state.Idle {
 			phase = "waiting_idle"
@@ -472,6 +499,45 @@ func (r *Runner) maybeRunFlow(ctx context.Context, now time.Time, state paneStat
 		flow.config.MaxRuns = flow.runs
 	}
 	return executed, nil
+}
+
+// evaluateCalendar reports whether actions/flows may start at now. Outside the
+// calendar the cycle starts nothing, so no input is sent and no run/action
+// counts are consumed; a schedule that came due while closed stays due and
+// fires once when the calendar reopens. Open/closed transitions are logged
+// once each with the next eligible (or closing) time.
+func (r *Runner) evaluateCalendar(now time.Time) (bool, error) {
+	if r.calendar == nil {
+		return true, nil
+	}
+	open := r.calendar.Open(now)
+	if r.calendarOpen != nil && *r.calendarOpen == open {
+		return open, nil
+	}
+	if err := r.emit(r.calendarEvent(now, open)); err != nil {
+		return open, err
+	}
+	r.calendarOpen = &open
+	return open, nil
+}
+
+func (r *Runner) calendarEvent(now time.Time, open bool) event {
+	details := r.calendar.Describe()
+	details["now"] = now.In(r.calendar.Location()).Format(time.RFC3339)
+	e := event{Timestamp: now.Format(time.RFC3339), Type: "calendar", Target: r.cfg.Target}
+	if open {
+		until, _ := r.calendar.OpenUntil(now)
+		e.Status = "open"
+		e.Reason = "open_until=" + until.Format(time.RFC3339)
+		details["open_until"] = until.Format(time.RFC3339)
+	} else {
+		next := r.calendar.NextOpen(now)
+		e.Status = "closed"
+		e.Reason = "next_eligible=" + next.Format(time.RFC3339)
+		details["next_eligible"] = next.Format(time.RFC3339)
+	}
+	e.Details = details
+	return e
 }
 
 // evaluateQuota decides whether this cycle should be skipped because the target

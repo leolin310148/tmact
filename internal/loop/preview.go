@@ -21,9 +21,9 @@ func (r *Runner) previewSchedule(start time.Time) error {
 			Timestamp: start.Format(time.RFC3339), Type: "schedule_preview",
 			Target: r.cfg.Target, Action: name, DryRun: true, Status: "planned",
 			Details: map[string]interface{}{
-				"eligible_at": start.Add(delay).Format(time.RFC3339),
+				"eligible_at": r.previewEligibleAt(start.Add(delay)),
 				"every":       every.String(), "only_when_idle": idle, "max_runs": maxRuns,
-				"steps": steps,
+				"steps": steps, "calendar": r.previewCalendar(),
 			},
 		})
 	}
@@ -42,4 +42,20 @@ func (r *Runner) previewSchedule(start time.Time) error {
 		}
 	}
 	return nil
+}
+
+// previewEligibleAt shifts a first eligible time into the next calendar
+// window and renders it in the calendar's timezone when one is configured.
+func (r *Runner) previewEligibleAt(at time.Time) string {
+	if r.calendar == nil {
+		return at.Format(time.RFC3339)
+	}
+	return r.calendar.NextOpen(at).In(r.calendar.Location()).Format(time.RFC3339)
+}
+
+func (r *Runner) previewCalendar() interface{} {
+	if r.calendar == nil {
+		return nil
+	}
+	return r.calendar.Describe()
 }

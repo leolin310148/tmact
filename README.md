@@ -657,5 +657,33 @@ must pass before the cycle runs. `weekly_skip_at_percent` remains available as
 an absolute weekly ceiling. Quota checks fail open (keep running) when data or
 pace cannot be read unless `fail_closed: true` is configured.
 
+A loop can also be limited to working hours with a top-level `calendar` block
+(see [`examples/workday-loop.yaml`](examples/workday-loop.yaml), or
+`tmact loop example --calendar`):
+
+```yaml
+calendar:
+  timezone: Asia/Taipei             # explicit IANA zone; Local is rejected
+  weekdays: [mon, tue, wed, thu, fri]
+  windows:
+    - start: "09:30"                # inclusive
+      end: "18:00"                  # exclusive; 24:00 allowed as an end
+```
+
+The calendar gates only when actions and flows *start*. Outside it the loop
+keeps observing the pane (permission prompts still stop it) but sends nothing,
+does not consume `max_runs`/`max_actions`, and does not query quota. A schedule
+that came due while closed fires once when the calendar reopens, then resumes
+its normal `every` cadence — there is no catch-up burst. A flow that started
+inside a window runs all of its steps even if they cross the window end, and
+agent work already in progress is never interrupted. Each open/closed
+transition is logged as a `calendar` event with `open_until` or
+`next_eligible`; `loop status` shows phase `waiting_calendar` while closed, and
+`loop validate` / `loop run --dry-run --once` print the calendar and the next
+eligible time. Unknown zones, weekdays, malformed `HH:MM`, empty or reversed
+windows, overlapping windows, misspelled calendar keys, and calendar keys
+placed outside the top-level block all fail validation rather than leaving the
+loop unrestricted. Overnight windows are not supported; split them per day.
+
 For source builds, tests, examples, and release notes, see
 [`docs/development.md`](docs/development.md).
