@@ -127,17 +127,17 @@ func Inspect(options Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	return inspectPanesStyled(panes, options, tmux.CapturePane, tmux.CapturePaneANSI, time.Sleep, DetectChildProcessRuntime)
+	return inspectPanesStyled(panes, options, tmux.CapturePane, tmux.CapturePaneANSI, time.Sleep, newProcessTableRuntime())
 }
 
 func InspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, sleep sleepFunc) (Report, error) {
-	return inspectPanes(panes, options, capturePane, sleep, DetectChildProcessRuntime)
+	return inspectPanes(panes, options, capturePane, sleep, newProcessTableRuntime())
 }
 
 // InspectPanesStyled is InspectPanes with an additional ANSI-preserving
 // capture used to distinguish generated suggestions from operator drafts.
 func InspectPanesStyled(panes []tmux.Pane, options Options, capturePane, captureANSI captureFunc, sleep sleepFunc) (Report, error) {
-	return inspectPanesStyled(panes, options, capturePane, captureANSI, sleep, DetectChildProcessRuntime)
+	return inspectPanesStyled(panes, options, capturePane, captureANSI, sleep, newProcessTableRuntime())
 }
 
 func inspectPanes(panes []tmux.Pane, options Options, capturePane captureFunc, sleep sleepFunc, processRuntime processRuntimeFunc) (Report, error) {
