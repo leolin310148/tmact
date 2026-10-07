@@ -1,6 +1,7 @@
 package panestatus
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -464,5 +465,53 @@ func TestInspectPaneStillSkipsPlainShell(t *testing.T) {
 	sigs := report.Panes[0].Signals
 	if len(sigs) == 0 || sigs[len(sigs)-1] != "capture_skipped" {
 		t.Fatalf("signals = %#v", sigs)
+	}
+}
+
+func TestInspectPrefetchServesBatchedCapturesOnce(t *testing.T) {
+	panes := []tmux.Pane{
+		{Session: "work", PaneID: "%1", CurrentCommand: "claude"},
+		{Session: "work", PaneID: "%2", CurrentCommand: "zsh"},
+	}
+	var specs []tmux.CaptureSpec
+	liveCalls := 0
+	live := func(string, int) (string, error) { liveCalls++; return "live\n", nil }
+	report, err := inspectPanesStyled(
+		panes,
+		Options{
+			Samples:         2,
+			CaptureRuntimes: []string{RuntimeClaude},
+			PrefetchCaptures: func(s []tmux.CaptureSpec) map[int]string {
+				specs = s
+				out := map[int]string{}
+				for i := range s {
+					out[i] = "batched\n"
+				}
+				return out
+			},
+		},
+		live,
+		live,
+		func(time.Duration) {},
+		func(int) RuntimeDetection { return RuntimeDetection{Runtime: RuntimeUnknown} },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the claude pane is captured: one plain (-J) and one ANSI (-e) spec.
+	want := []tmux.CaptureSpec{
+		{PaneID: "%1", Lines: 120, JoinWrapped: true},
+		{PaneID: "%1", Lines: 120, Escapes: true},
+	}
+	if !reflect.DeepEqual(specs, want) {
+		t.Fatalf("specs = %#v, want %#v", specs, want)
+	}
+	// Sample 1 and the ANSI capture come from the batch; sample 2 must be a
+	// fresh live capture so idle detection still compares two moments.
+	if liveCalls != 1 {
+		t.Fatalf("live captures = %d, want 1", liveCalls)
+	}
+	if report.Panes[0].Runtime != RuntimeClaude {
+		t.Fatalf("status = %#v", report.Panes[0])
 	}
 }

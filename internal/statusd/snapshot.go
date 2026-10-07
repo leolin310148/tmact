@@ -159,6 +159,7 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 		},
 		RuntimeCache:        mem.runtimeCache,
 		ForceCapturePaneIDs: forceCapturePaneIDs,
+		PrefetchCaptures:    cfg.PrefetchCaptures,
 	}, cfg.CapturePane, cfg.CapturePaneANSI, cfg.Sleep)
 	if err != nil {
 		snapshot.addError("inspect", "", err)

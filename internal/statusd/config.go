@@ -83,6 +83,10 @@ type Config struct {
 	ListPanes        func() ([]tmux.Pane, error)
 	CapturePane      func(string, int) (string, error)
 	CapturePaneANSI  func(string, int) (string, error)
+	// PrefetchCaptures batches a cycle's captures into one tmux call. It is
+	// only defaulted alongside the stock capture functions so injected test
+	// captures are never bypassed.
+	PrefetchCaptures func([]tmux.CaptureSpec) map[int]string
 	SetSessionOption func(string, string, string) error
 	// ListWindowSizes and ResizeWindow are injection points for the pane-width
 	// sweep; default to the live tmux helpers.
@@ -135,6 +139,7 @@ func (c Config) withDefaults() Config {
 	if c.CapturePane == nil {
 		c.CapturePane = tmux.CapturePane
 		c.CapturePaneANSI = tmux.CapturePaneANSI
+		c.PrefetchCaptures = tmux.CapturePanesBatch
 	}
 	if c.SetSessionOption == nil {
 		c.SetSessionOption = tmux.SetSessionOption

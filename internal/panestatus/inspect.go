@@ -57,6 +57,12 @@ type Options struct {
 	// detection across inspect cycles so a repeated poller (statusd) need not
 	// re-walk every pane's process tree on every tick. nil disables caching.
 	RuntimeCache *RuntimeCache
+	// PrefetchCaptures, when non-nil, captures every pane the cycle will need
+	// in one batched tmux call up front (see tmux.CapturePanesBatch); the
+	// per-pane capture functions then only run for panes the batch missed.
+	// Callers set it only when their capture functions are the stock tmux
+	// ones, since the batch reproduces their exact flags.
+	PrefetchCaptures func([]tmux.CaptureSpec) map[int]string
 }
 
 // defaultMaxConcurrency is the worker-pool size when Options.MaxConcurrency is
@@ -171,6 +177,9 @@ func inspectPanesStyled(panes []tmux.Pane, options Options, capturePane, capture
 	if len(panes) == 0 {
 		return report, nil
 	}
+	if options.PrefetchCaptures != nil {
+		inspector.prefetch(panes)
+	}
 
 	workers := options.MaxConcurrency
 	if workers <= 0 {
@@ -264,6 +273,64 @@ func listPanes(options Options) ([]tmux.Pane, error) {
 		return tmux.ListPanes(options.Target)
 	default:
 		return tmux.ListAllPanes()
+	}
+}
+
+// prefetch batch-captures the panes inspectPane is going to capture and swaps
+// the inspector's capture functions for ones that serve each prefetched text
+// once before falling back to a live capture. It predicts with the same
+// first-round runtime detection inspectPane uses; a pane whose runtime only
+// becomes known from its text (an ssh-wrapped agent) simply misses the ANSI
+// prefetch and captures it individually.
+func (i *inspector) prefetch(panes []tmux.Pane) {
+	var specs []tmux.CaptureSpec
+	for _, pane := range panes {
+		runtime := i.detectRuntime(pane, "").Runtime
+		if !i.shouldCapture(runtime, pane) {
+			continue
+		}
+		specs = append(specs, tmux.CaptureSpec{PaneID: pane.PaneID, Lines: i.options.Lines, JoinWrapped: true})
+		if i.captureANSI != nil && (runtime == RuntimeClaude || runtime == RuntimeCodex) {
+			specs = append(specs, tmux.CaptureSpec{PaneID: pane.PaneID, Lines: i.options.Lines, Escapes: true})
+		}
+	}
+	if len(specs) == 0 {
+		return
+	}
+	results := i.options.PrefetchCaptures(specs)
+	plain := &prefetched{texts: map[string]string{}}
+	ansi := &prefetched{texts: map[string]string{}}
+	for idx, text := range results {
+		spec := specs[idx]
+		if spec.Escapes {
+			ansi.texts[spec.PaneID] = text
+		} else {
+			plain.texts[spec.PaneID] = text
+		}
+	}
+	i.capturePane = plain.wrap(i.capturePane)
+	if i.captureANSI != nil {
+		i.captureANSI = ansi.wrap(i.captureANSI)
+	}
+}
+
+// prefetched hands out each batch-captured text once; later samples of the
+// same pane (InitialSamples > 1) must see a fresh capture.
+type prefetched struct {
+	mu    sync.Mutex
+	texts map[string]string
+}
+
+func (p *prefetched) wrap(live captureFunc) captureFunc {
+	return func(target string, lines int) (string, error) {
+		p.mu.Lock()
+		text, ok := p.texts[target]
+		delete(p.texts, target)
+		p.mu.Unlock()
+		if ok {
+			return text, nil
+		}
+		return live(target, lines)
 	}
 }
 
