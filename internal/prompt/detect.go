@@ -561,8 +561,17 @@ func isBoxBorder(r rune) bool {
 }
 
 func stripANSI(text string) string {
+	// statusd runs every captured line through CleanLine several times per
+	// tick, and nearly all of them are plain -J captures with no escapes;
+	// skip the byte-by-byte copy for those.
+	start := strings.IndexByte(text, 0x1b)
+	if start < 0 {
+		return text
+	}
 	var b strings.Builder
-	for i := 0; i < len(text); i++ {
+	b.Grow(len(text))
+	b.WriteString(text[:start])
+	for i := start; i < len(text); i++ {
 		c := text[i]
 		if c != 0x1b {
 			b.WriteByte(c)
