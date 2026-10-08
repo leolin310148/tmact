@@ -44,6 +44,7 @@ const (
 	wsCaptureInterval  = 200 * time.Millisecond
 	wsCaptureTimeout   = 2 * time.Second
 	wsCaptureLines     = 2000
+	wsWidthRefresh     = 5 * time.Second
 	wsReadLimit        = 1 << 20
 	wsPingInterval     = 25 * time.Second
 	wsPingTimeout      = 10 * time.Second

@@ -220,6 +220,34 @@ func TestPaneWSPatchCarriesPaneWidth(t *testing.T) {
 	}
 }
 
+func TestPaneWSReadsPaneWidthOncePerRefresh(t *testing.T) {
+	var captures, widthReads atomic.Int32
+	srv := httptest.NewServer((&Server{
+		CapturePane: func(string, int) (string, error) {
+			return fmt.Sprintf("frame %d", captures.Add(1)), nil
+		},
+		PaneWidth: func(context.Context, string) (int, error) {
+			widthReads.Add(1)
+			return 120, nil
+		},
+	}).Handler())
+	defer srv.Close()
+
+	c, ctx := dialPane(t, srv, "%2511")
+	for n := 0; n < 4; n++ {
+		var m outMsg
+		if err := wsjson.Read(ctx, c, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.T != "patch" || m.W != 120 {
+			t.Fatalf("patch %d = %+v, want w=120", n, m)
+		}
+	}
+	if got := widthReads.Load(); got != 1 {
+		t.Fatalf("width read %d times across 4 changed patches, want 1 within %s", got, wsWidthRefresh)
+	}
+}
+
 func TestPaneWSPatchOmitsUnknownPaneWidth(t *testing.T) {
 	srv := httptest.NewServer((&Server{
 		CapturePane: func(string, int) (string, error) { return "pane body", nil },

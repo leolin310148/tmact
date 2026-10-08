@@ -148,6 +148,7 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 	last := ""
 	var lastLines []string
 	lastWidth := 0
+	var widthReadAt time.Time
 	push := func() bool {
 		captureCtx, captureCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
 		content, err := s.captureContext()(captureCtx, pane, wsCaptureLines)
@@ -160,14 +161,20 @@ func (s *Server) handlePaneWS(w http.ResponseWriter, r *http.Request) {
 			return true
 		}
 		last = content
-		// Refresh the pane width alongside each real patch; a failed read keeps
+		// Refresh the pane width alongside real patches, at most every
+		// wsWidthRefresh: a working agent changes the capture every tick, and
+		// a tmux fork per frame for a width that only moves on a split or
+		// resize was a measurable slice of statusd CPU. A failed read keeps
 		// the previous value rather than flapping the browser back to legacy
-		// join behavior.
-		widthCtx, widthCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
-		if width, widthErr := s.paneWidth()(widthCtx, pane); widthErr == nil {
-			lastWidth = width
+		// join behavior, and is retried on the next patch.
+		if widthReadAt.IsZero() || time.Since(widthReadAt) >= wsWidthRefresh {
+			widthCtx, widthCancel := context.WithTimeout(ctx, s.paneCaptureTimeout())
+			if width, widthErr := s.paneWidth()(widthCtx, pane); widthErr == nil {
+				lastWidth = width
+				widthReadAt = time.Now()
+			}
+			widthCancel()
 		}
-		widthCancel()
 		next := strings.Split(content, "\n")
 		// The client only needs the diverging tail. Typical AI-agent output
 		// advances one line per tick, so this collapses a 2000-line capture
