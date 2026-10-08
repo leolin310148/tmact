@@ -1,0 +1,7 @@
+/* Maps <html data-pane-font-family> (useSettings.applyPaneFontFamily) to the
+   pane <pre>'s font stack. Each named face falls back to the system mono
+   chain, so glyphs outside a subset still render. "system" sets nothing and
+   the pane keeps var(--mono). */
+:root[data-pane-font-family="maple-mono"] {
+  --pane-font-family: "Maple Mono", var(--mono);
+}

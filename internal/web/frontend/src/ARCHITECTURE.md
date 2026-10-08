@@ -285,7 +285,7 @@ by `bump()` rather than imperative DOM rebuilds), `applySnapshot`,
 | Key | Value | Owner |
 |---|---|---|
 | `tmact.selectedPane` | `JSON.stringify({ pane: <id>, session: <name> })` | App `rememberSelection`/`restoreSelection` |
-| `tmact.settings` | `JSON.stringify({ paneFont?: number, runningEffect?: string })` | useSettings |
+| `tmact.settings` | `JSON.stringify({ paneFont?: number, paneFontFamily?: string, runningEffect?: string, ... })` | useSettings |
 | `tmact.quickButtons` | `JSON.stringify({ common:[], claude:[], codex:[], shell:[] })` (each entry `{label,text}`) | useQuick |
 
 All reads are try/catch-guarded and tolerate malformed/absent values exactly as
@@ -396,7 +396,7 @@ This order is load-bearing (mirrors app.js bottom block + capture-phase
 constraints). App is the only place that knows the whole graph.
 
 1. **Synchronous, before first paint:** `loadClientSettings()` (apply
-   `--pane-font` + `data-running-effect` from `localStorage["tmact.settings"]`)
+   `--pane-font` + `data-pane-font-family` + `data-running-effect` from `localStorage["tmact.settings"]`)
    and `loadQuickConfig()` (seed `tmact.quickButtons`). The original calls these
    first, synchronously — do them in a `useLayoutEffect` that runs before the
    first content render, or via a module-level call equivalent to app.js's

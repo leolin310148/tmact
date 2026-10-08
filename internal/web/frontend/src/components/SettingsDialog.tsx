@@ -9,6 +9,7 @@
 //    e.target === overlay, and on Escape only while the overlay is not hidden
 //  - STT + version reloaded every open (useSettings.openSettings)
 //  - font slider/±1 buttons → applyPaneFont (clamp 9–22, --pane-font on <html>)
+//  - font-family select → applyPaneFontFamily (data-pane-font-family on <html>)
 //  - running-effect select → applyRunningEffect (data-running-effect on <html>,
 //    preview animates 4 agent icons via CSS)
 //  - STT save button → saveSTTSettings (disabled during save)
@@ -69,6 +70,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontInput,
     onFontDec,
     onFontInc,
+    onFontFamilyChange,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
     onVoiceDeviceChange,
@@ -287,6 +289,20 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               </span>
             </div>
           </div>
+          <label className="settings-field" htmlFor="font-family">
+            <span>Panel font</span>
+            <select
+              id="font-family"
+              aria-label="panel font"
+              ref={(el) => {
+                refs.current.fontFamily = el;
+              }}
+              onChange={(e) => onFontFamilyChange(e.currentTarget.value)}
+            >
+              <option value="system">System</option>
+              <option value="maple-mono">Maple Mono</option>
+            </select>
+          </label>
           <label className="settings-field" htmlFor="running-effect">
             <span>Running effect</span>
             <select

@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./components/App";
+import "./fonts";
 import "./app.css";
 import { initFrontendLogging } from "./lib/frontendLog";
 import { startRunningBlink } from "./lib/runningBlink";

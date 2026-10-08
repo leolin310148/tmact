@@ -1,7 +1,7 @@
 // useSettings — faithful port of static/js/settings.js (module-level, no
 // factory). Owns the settings overlay visibility plus the imperative
-// form-loading logic for STT config, version info, the panel-font slider, and
-// the running-effect select. State lives in localStorage["tmact.settings"] and
+// form-loading logic for STT config, version info, the panel-font slider and
+// font-family select, and the running-effect select. State lives in localStorage["tmact.settings"] and
 // on the server; there is no shared in-memory state with the rest of the app.
 //
 // Visibility: the original toggled `#settings-overlay.hidden`. Here openSettings
@@ -26,11 +26,14 @@ const FONT_MIN = 9,
   FONT_DEFAULT = 13;
 const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
+const PANE_FONT_FAMILY_DEFAULT = "system";
+const PANE_FONT_FAMILIES = ["system", "maple-mono"];
 const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
 const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
 
 interface ClientSettings {
   paneFont?: number;
+  paneFontFamily?: string;
   runningEffect?: string;
   paneSwitcherLayout?: string;
   voiceInputDeviceId?: string;
@@ -80,6 +83,12 @@ function clampFont(px: unknown): number {
   return clamp(n, FONT_MIN, FONT_MAX);
 }
 
+function normalizePaneFontFamily(family: string | undefined): string {
+  return family !== undefined && PANE_FONT_FAMILIES.includes(family)
+    ? family
+    : PANE_FONT_FAMILY_DEFAULT;
+}
+
 function normalizeRunningEffect(effect: string | undefined): string {
   return effect !== undefined && RUNNING_EFFECTS.includes(effect)
     ? effect
@@ -97,6 +106,7 @@ function normalizePaneSwitcherLayout(layout: string | undefined): string {
 export interface SettingsRefs {
   fontRange: HTMLInputElement | null;
   fontVal: HTMLElement | null;
+  fontFamily: HTMLSelectElement | null;
   runningEffect: HTMLSelectElement | null;
   paneSwitcherLayout: HTMLSelectElement | null;
   voiceDevice: HTMLSelectElement | null;
@@ -130,6 +140,7 @@ export interface UseSettingsResult {
   onFontInput: (value: string) => void;
   onFontDec: () => void;
   onFontInc: () => void;
+  onFontFamilyChange: (value: string) => void;
   onRunningEffectChange: (value: string) => void;
   onPaneSwitcherLayoutChange: (value: string) => void;
   onVoiceDeviceChange: (value: string) => void;
@@ -155,6 +166,7 @@ export function useSettings(): UseSettingsResult {
   const refs = useRef<SettingsRefs>({
     fontRange: null,
     fontVal: null,
+    fontFamily: null,
     runningEffect: null,
     paneSwitcherLayout: null,
     voiceDevice: null,
@@ -180,6 +192,15 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.fontRange) refs.current.fontRange.value = String(v);
     if (refs.current.fontVal) refs.current.fontVal.textContent = v + "px";
     saveClientSettings({ paneFont: v });
+  }, []);
+
+  // applyPaneFontFamily sets data-pane-font-family on <html>; app.css maps it
+  // to --pane-font-family, which only the pane <pre> reads (chrome keeps --mono).
+  const applyPaneFontFamily = useCallback((family: string | undefined) => {
+    const f = normalizePaneFontFamily(family);
+    document.documentElement.dataset.paneFontFamily = f;
+    if (refs.current.fontFamily) refs.current.fontFamily.value = f;
+    saveClientSettings({ paneFontFamily: f });
   }, []);
 
   const applyRunningEffect = useCallback((effect: string | undefined) => {
@@ -248,10 +269,11 @@ export function useSettings(): UseSettingsResult {
   const loadClientSettings = useCallback(() => {
     const saved = readClientSettings();
     applyPaneFont(saved.paneFont);
+    applyPaneFontFamily(saved.paneFontFamily);
     applyRunningEffect(saved.runningEffect);
     applyPaneSwitcherLayout(saved.paneSwitcherLayout);
     setSelectedVoiceDeviceId((saved.voiceInputDeviceId || "").trim());
-  }, [applyPaneFont, applyRunningEffect, applyPaneSwitcherLayout]);
+  }, [applyPaneFont, applyPaneFontFamily, applyRunningEffect, applyPaneSwitcherLayout]);
 
   const currentPaneFont = useCallback((): number => {
     return clampFont(
@@ -375,6 +397,10 @@ export function useSettings(): UseSettingsResult {
     () => applyPaneFont(currentPaneFont() + 1),
     [applyPaneFont, currentPaneFont],
   );
+  const onFontFamilyChange = useCallback(
+    (value: string) => applyPaneFontFamily(value),
+    [applyPaneFontFamily],
+  );
   const onRunningEffectChange = useCallback(
     (value: string) => applyRunningEffect(value),
     [applyRunningEffect],
@@ -401,6 +427,9 @@ export function useSettings(): UseSettingsResult {
     const px = clampFont(saved.paneFont);
     if (refs.current.fontRange) refs.current.fontRange.value = String(px);
     if (refs.current.fontVal) refs.current.fontVal.textContent = px + "px";
+    if (refs.current.fontFamily) {
+      refs.current.fontFamily.value = normalizePaneFontFamily(saved.paneFontFamily);
+    }
     if (refs.current.runningEffect) {
       refs.current.runningEffect.value = normalizeRunningEffect(saved.runningEffect);
     }
@@ -424,6 +453,7 @@ export function useSettings(): UseSettingsResult {
     onFontInput,
     onFontDec,
     onFontInc,
+    onFontFamilyChange,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
     onVoiceDeviceChange,

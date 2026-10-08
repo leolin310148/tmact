@@ -23,6 +23,7 @@ afterEach(cleanup);
 const emptyRefs = (): SettingsRefs => ({
   fontRange: null,
   fontVal: null,
+  fontFamily: null,
   runningEffect: null,
   paneSwitcherLayout: null,
   voiceDevice: null,
@@ -51,6 +52,7 @@ function Harness({ asyncStatus = "" }: { asyncStatus?: string }) {
     onFontInput: vi.fn(),
     onFontDec: vi.fn(),
     onFontInc: vi.fn(),
+    onFontFamilyChange: vi.fn(),
     onRunningEffectChange: vi.fn(),
     onPaneSwitcherLayoutChange: vi.fn(),
     onVoiceDeviceChange: vi.fn(),

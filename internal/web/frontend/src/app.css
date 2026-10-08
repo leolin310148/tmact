@@ -515,7 +515,8 @@
   pre#content {
     margin: 0; flex: 1 1 auto; overflow: hidden auto;
     padding: calc(10px + env(safe-area-inset-top, 0px) * 0.5) 14px 10px;
-    font-family: var(--mono); font-size: var(--pane-font); line-height: 1.4;
+    font-family: var(--pane-font-family, var(--mono)); font-size: var(--pane-font); line-height: 1.4;
+    font-variant-ligatures: none;
     white-space: pre-wrap; word-break: break-word;
     background: var(--bg); cursor: text;
     -webkit-user-select: none;
