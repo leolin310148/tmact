@@ -26,14 +26,17 @@ const FONT_MIN = 9,
   FONT_DEFAULT = 13;
 const RUNNING_EFFECT_DEFAULT = "shine";
 const RUNNING_EFFECTS = ["shine", "pulse", "rainbow", "scan", "none"];
-const PANE_FONT_FAMILY_DEFAULT = "system";
+const PANE_FONT_FAMILY_DEFAULT = "maple-mono";
 const PANE_FONT_FAMILIES = ["system", "maple-mono"];
 const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
 const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
 
 interface ClientSettings {
   paneFont?: number;
-  paneFontFamily?: string;
+  // Only written on an explicit pick, so a later default change still reaches
+  // clients that never chose. (Replaces paneFontFamily, which was saved on
+  // every load and so pinned everyone to the old "system" default.)
+  paneFontFace?: string;
   runningEffect?: string;
   paneSwitcherLayout?: string;
   voiceInputDeviceId?: string;
@@ -196,11 +199,11 @@ export function useSettings(): UseSettingsResult {
 
   // applyPaneFontFamily sets data-pane-font-family on <html>; app.css maps it
   // to --pane-font-family, which only the pane <pre> reads (chrome keeps --mono).
-  const applyPaneFontFamily = useCallback((family: string | undefined) => {
+  const applyPaneFontFamily = useCallback((family: string | undefined, persist = false) => {
     const f = normalizePaneFontFamily(family);
     document.documentElement.dataset.paneFontFamily = f;
     if (refs.current.fontFamily) refs.current.fontFamily.value = f;
-    saveClientSettings({ paneFontFamily: f });
+    if (persist) saveClientSettings({ paneFontFace: f });
   }, []);
 
   const applyRunningEffect = useCallback((effect: string | undefined) => {
@@ -269,7 +272,7 @@ export function useSettings(): UseSettingsResult {
   const loadClientSettings = useCallback(() => {
     const saved = readClientSettings();
     applyPaneFont(saved.paneFont);
-    applyPaneFontFamily(saved.paneFontFamily);
+    applyPaneFontFamily(saved.paneFontFace);
     applyRunningEffect(saved.runningEffect);
     applyPaneSwitcherLayout(saved.paneSwitcherLayout);
     setSelectedVoiceDeviceId((saved.voiceInputDeviceId || "").trim());
@@ -398,7 +401,7 @@ export function useSettings(): UseSettingsResult {
     [applyPaneFont, currentPaneFont],
   );
   const onFontFamilyChange = useCallback(
-    (value: string) => applyPaneFontFamily(value),
+    (value: string) => applyPaneFontFamily(value, true),
     [applyPaneFontFamily],
   );
   const onRunningEffectChange = useCallback(
@@ -428,7 +431,7 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.fontRange) refs.current.fontRange.value = String(px);
     if (refs.current.fontVal) refs.current.fontVal.textContent = px + "px";
     if (refs.current.fontFamily) {
-      refs.current.fontFamily.value = normalizePaneFontFamily(saved.paneFontFamily);
+      refs.current.fontFamily.value = normalizePaneFontFamily(saved.paneFontFace);
     }
     if (refs.current.runningEffect) {
       refs.current.runningEffect.value = normalizeRunningEffect(saved.runningEffect);

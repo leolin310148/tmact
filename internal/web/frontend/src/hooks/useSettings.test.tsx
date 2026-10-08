@@ -19,20 +19,36 @@ describe("useSettings pane font family", () => {
 
     expect(document.documentElement.dataset.paneFontFamily).toBe("maple-mono");
     expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toMatchObject({
-      paneFontFamily: "maple-mono",
+      paneFontFace: "maple-mono",
     });
   });
 
-  it("falls back to the system font for an unknown saved value", () => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ paneFontFamily: "comic-sans" }));
+  it("persists an explicit system pick across loads", () => {
+    const { result } = renderHook(() => useSettings());
+
+    act(() => result.current.onFontFamilyChange("system"));
+    act(() => result.current.loadClientSettings());
+
+    expect(document.documentElement.dataset.paneFontFamily).toBe("system");
+  });
+
+  it("defaults to Maple Mono CN without persisting the default", () => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ paneFontFace: "comic-sans" }));
     const { result } = renderHook(() => useSettings());
 
     act(() => result.current.loadClientSettings());
 
-    expect(document.documentElement.dataset.paneFontFamily).toBe("system");
-    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toMatchObject({
-      paneFontFamily: "system",
-    });
+    expect(document.documentElement.dataset.paneFontFamily).toBe("maple-mono");
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!).paneFontFace).toBe("comic-sans");
+  });
+
+  it("ignores the legacy auto-saved paneFontFamily value", () => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ paneFontFamily: "system" }));
+    const { result } = renderHook(() => useSettings());
+
+    act(() => result.current.loadClientSettings());
+
+    expect(document.documentElement.dataset.paneFontFamily).toBe("maple-mono");
   });
 });
 

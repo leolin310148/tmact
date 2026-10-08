@@ -285,7 +285,7 @@ by `bump()` rather than imperative DOM rebuilds), `applySnapshot`,
 | Key | Value | Owner |
 |---|---|---|
 | `tmact.selectedPane` | `JSON.stringify({ pane: <id>, session: <name> })` | App `rememberSelection`/`restoreSelection` |
-| `tmact.settings` | `JSON.stringify({ paneFont?: number, paneFontFamily?: string, runningEffect?: string, ... })` | useSettings |
+| `tmact.settings` | `JSON.stringify({ paneFont?: number, paneFontFace?: string, runningEffect?: string, ... })` | useSettings |
 | `tmact.quickButtons` | `JSON.stringify({ common:[], claude:[], codex:[], shell:[] })` (each entry `{label,text}`) | useQuick |
 
 All reads are try/catch-guarded and tolerate malformed/absent values exactly as
