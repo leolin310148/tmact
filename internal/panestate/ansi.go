@@ -47,7 +47,12 @@ func AnnotateDimSuggestion(raw, ansi string) (string, bool) {
 // dim, while text typed by the operator is non-dim. Keeping those states
 // separate prevents automation from clearing an unsent draft.
 func ClassifyANSI(raw, ansi string) Result {
-	result := Classify(raw)
+	return RefineANSI(Classify(raw), raw, ansi)
+}
+
+// RefineANSI is ClassifyANSI for a caller that already holds Classify(raw),
+// sparing a second plain-text classification of the same capture.
+func RefineANSI(result Result, raw, ansi string) Result {
 	if result.Asking || result.State == StateWaitingQuota || hasSignal(result.Signals, "usage_limit_unrecognized") || !strings.Contains(ansi, "\x1b[") {
 		return result
 	}
