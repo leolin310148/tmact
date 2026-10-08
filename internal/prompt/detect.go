@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -201,7 +202,7 @@ func DetectDirectoryAccess(raw string) *DirectoryAccess {
 	var detected *DirectoryAccess
 	lastOptionIndex := -1
 
-	lines := recentLines(cleanedLines(raw), 24)
+	lines := recentCleanedLines(raw, 24)
 	for index, text := range lines {
 		if strings.Contains(text, "Allow directory access") {
 			detected = &DirectoryAccess{Title: "Allow directory access"}
@@ -248,11 +249,10 @@ func DetectDirectoryAccess(raw string) *DirectoryAccess {
 }
 
 func detectGenericPrompt(raw string) *Prompt {
-	lines := cleanedLines(raw)
-	if len(lines) == 0 {
+	recent := recentCleanedLines(raw, 24)
+	if len(recent) == 0 {
 		return nil
 	}
-	recent := recentLines(lines, 24)
 	recent = trimMenuFooter(recent)
 	for index, line := range recent {
 		lower := strings.ToLower(line)
@@ -324,7 +324,7 @@ func genericPromptHeader(lower string) (string, string, bool) {
 // exact: any wording drift fails closed instead of auto-answering a screen
 // this code no longer recognizes.
 func detectClaudeWorkspaceTrust(raw string) *Prompt {
-	recent := trimMenuFooter(recentLines(cleanedLines(raw), 24))
+	recent := trimMenuFooter(recentCleanedLines(raw, 24))
 	if len(recent) < 3 {
 		return nil
 	}
@@ -460,6 +460,25 @@ func cleanedLines(raw string) []string {
 			lines = append(lines, text)
 		}
 	}
+	return lines
+}
+
+// recentCleanedLines equals recentLines(cleanedLines(raw), max) but cleans
+// from the bottom up and stops once it has max lines. The web stream feeds
+// 2000-line captures to detectors that only look at the last few dozen.
+func recentCleanedLines(raw string, max int) []string {
+	lines := make([]string, 0, max)
+	for rest := raw; len(lines) < max; {
+		index := strings.LastIndexByte(rest, '\n')
+		if text := CleanLine(rest[index+1:]); text != "" {
+			lines = append(lines, text)
+		}
+		if index < 0 {
+			break
+		}
+		rest = rest[:index]
+	}
+	slices.Reverse(lines)
 	return lines
 }
 

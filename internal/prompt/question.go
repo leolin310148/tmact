@@ -62,7 +62,7 @@ func choicesFromOptions(options []Option) []Choice {
 // numbered list never has, which keeps bulleted output from registering as a
 // question.
 func detectTrailingChoicePrompt(raw string) *Prompt {
-	recent := recentLines(cleanedLines(raw), 40)
+	recent := recentCleanedLines(raw, 40)
 	// Codex's structured questions print a hint footer ("tab to add notes |
 	// enter to submit answer", "←/→ to navigate questions | esc to interrupt")
 	// below the menu. Strip those so the trailing-distance check below sees
