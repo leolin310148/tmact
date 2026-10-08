@@ -219,6 +219,29 @@ func TestServedAssetsContentTypes(t *testing.T) {
 	}
 }
 
+// Hashed /assets/* files are cached forever (a change renames the file); the
+// app shell, sw.js, and a missing asset must not be.
+func TestHashedAssetsAreImmutable(t *testing.T) {
+	requireBuilt(t)
+	handler := (&Server{}).Handler()
+	jsPath, cssPath := builtAssetPaths(t, handler)
+
+	for _, path := range []string{jsPath, cssPath} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "immutable") {
+			t.Fatalf("%s Cache-Control = %q, want immutable", path, got)
+		}
+	}
+	for _, path := range []string{"/", "/index.html", "/sw.js", "/assets/missing-0000.js"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Header().Get("Cache-Control"); strings.Contains(got, "immutable") {
+			t.Fatalf("%s Cache-Control = %q, must not be immutable", path, got)
+		}
+	}
+}
+
 // The Go server rewrites sw.js's CACHE_NAME suffix to a content hash of every
 // embedded static file, so any rebuilt asset busts the offline cache without a
 // manual bump. Verify the rewrite fired and matches /api/version's asset_hash.

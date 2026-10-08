@@ -3,5 +3,5 @@
    chain, so glyphs outside a subset still render. "system" sets nothing and
    the pane keeps var(--mono). */
 :root[data-pane-font-family="maple-mono"] {
-  --pane-font-family: "Maple Mono", var(--mono);
+  --pane-font-family: "Maple Mono CN", var(--mono);
 }

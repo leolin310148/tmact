@@ -4,6 +4,16 @@
 // only what you see when reading the file on disk.
 const CACHE_NAME = "tmact-app-shell-vDEV";
 
+// Fonts live in their own unversioned cache so a deploy (which renames
+// CACHE_NAME) does not throw away multi-MB woff2 chunks that did not change.
+// Vite names them by content hash, so a cached URL never goes stale and is
+// served cache-first: each client downloads each chunk exactly once.
+const FONT_CACHE = "tmact-fonts-v1";
+
+function isFontPath(pathname) {
+  return pathname.startsWith("/assets/") && pathname.endsWith(".woff2");
+}
+
 // Stable, known-path shell entries to precache on install. The React build emits
 // content-hashed JS/CSS under /assets/ whose names change every build, so they
 // cannot be enumerated here; the fetch handler caches them opportunistically
@@ -38,7 +48,7 @@ self.addEventListener("activate", (event) => {
     caches.keys()
       .then((names) => Promise.all(
         names
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => name !== CACHE_NAME && name !== FONT_CACHE)
           .map((name) => caches.delete(name)),
       ))
       .then(() => self.clients.claim()),
@@ -59,6 +69,21 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/ws/")
   ) {
+    return;
+  }
+
+  if (isFontPath(url.pathname)) {
+    event.respondWith(
+      caches.open(FONT_CACHE).then((cache) =>
+        cache.match(request).then((hit) =>
+          hit ||
+          fetch(request).then((response) => {
+            if (response && response.ok) cache.put(request, response.clone());
+            return response;
+          }),
+        ),
+      ),
+    );
     return;
   }
 

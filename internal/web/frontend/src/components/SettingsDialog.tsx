@@ -300,7 +300,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               onChange={(e) => onFontFamilyChange(e.currentTarget.value)}
             >
               <option value="system">System</option>
-              <option value="maple-mono">Maple Mono</option>
+              <option value="maple-mono">Maple Mono CN</option>
             </select>
           </label>
           <label className="settings-field" htmlFor="running-effect">

@@ -34,7 +34,7 @@
 - Help coachmark overlay: rings + tip cards with collision-avoidance placement, visualViewport-aware.
 - Mobile viewport fit: `--tmact-vvh` from `visualViewport.height`, iOS Safari timing quirks (rAF + 80 ms + 260 ms).
 - Connection-status + mode-indicator + input-error strips.
-- PWA: service worker (network-first app-shell cache, hash-versioned `CACHE_NAME`), manifest, icons.
+- PWA: service worker (network-first app-shell cache, hash-versioned `CACHE_NAME`; hashed `/assets/*.woff2` fonts cache-first in the unversioned `tmact-fonts-v1`, which survives deploys), manifest, icons. The Go server serves existing `/assets/*` files with `Cache-Control: public, max-age=31536000, immutable`.
 - Window visibility lifecycle: stop polling/SSE/WS when hidden, resume when visible.
 
 ---

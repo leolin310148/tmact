@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -393,7 +394,7 @@ func (s *Server) Handler() http.Handler {
 	// embedded static asset busts the browser's service-worker cache without
 	// requiring a manual version bump.
 	mux.HandleFunc("/sw.js", s.handleServiceWorker)
-	mux.Handle("/", http.FileServer(http.FS(sub)))
+	mux.Handle("/", immutableAssets(sub, http.FileServer(http.FS(sub))))
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
 	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
@@ -459,6 +460,22 @@ func staticAssetHash() string {
 		staticHashVal = hex.EncodeToString(h.Sum(nil))[:12]
 	})
 	return staticHashVal
+}
+
+// immutableAssets marks Vite's content-hashed /assets/* files as cacheable
+// forever: a changed file always gets a new name, so a client never needs to
+// revalidate one it already has (embedded files carry no modtime or ETag, so
+// without this every load re-downloaded them — fonts included). Only existing
+// files get the header, so a stale hashed URL's 404 is not cached.
+func immutableAssets(static fs.FS, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name, ok := strings.CutPrefix(r.URL.Path, "/assets/"); ok && name != "" {
+			if info, err := fs.Stat(static, "assets/"+name); err == nil && !info.IsDir() {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
