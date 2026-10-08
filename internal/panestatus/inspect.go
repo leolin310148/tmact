@@ -117,7 +117,7 @@ type inspector struct {
 	captureANSI    captureFunc
 	sleep          sleepFunc
 	processRuntime processRuntimeFunc
-	ignore         []*regexp.Regexp
+	ignore         *idleMatcher
 	captureRuntime map[string]bool
 	runtimeCache   *RuntimeCache
 }
@@ -224,15 +224,53 @@ func inspectPanesStyled(panes []tmux.Pane, options Options, capturePane, capture
 	return report, nil
 }
 
-// idleRegexCache memoizes compiled idle-ignore patterns. The pattern set is
+// idleRegexCache memoizes idle matchers per pattern set. The pattern set is
 // fixed for a given daemon, so recompiling on every poll (twice a second) is
-// wasted work; compiled regexps are immutable and safe to share.
+// wasted work, and keeping one matcher lets its line memo span scans.
 var (
 	idleRegexMu    sync.Mutex
-	idleRegexCache = map[string][]*regexp.Regexp{}
+	idleRegexCache = map[string]*idleMatcher{}
 )
 
-func compileIdlePatterns(extra []string) ([]*regexp.Regexp, error) {
+// idleLineMemoLimit bounds the matcher's line memo; it is cleared rather
+// than evicted once full, which a scan's worth of lines refills cheaply.
+const idleLineMemoLimit = 8192
+
+// idleMatcher decides which capture lines the idle-ignore patterns drop.
+// The patterns start with (?i)\b, so the regexp engine has no literal to
+// skip ahead with and backtracks from every byte of every line. Captures
+// barely change between scans, so the per-line verdict is memoized.
+type idleMatcher struct {
+	patterns []*regexp.Regexp
+	mu       sync.Mutex
+	ignored  map[string]bool
+}
+
+func (m *idleMatcher) ignores(line string) bool {
+	m.mu.Lock()
+	ignored, ok := m.ignored[line]
+	m.mu.Unlock()
+	if ok {
+		return ignored
+	}
+	for _, pattern := range m.patterns {
+		if pattern.MatchString(line) {
+			ignored = true
+			break
+		}
+	}
+	m.mu.Lock()
+	if len(m.ignored) >= idleLineMemoLimit {
+		clear(m.ignored)
+	}
+	// Clone: line is a substring of the whole capture, which the memo key
+	// would otherwise keep alive.
+	m.ignored[strings.Clone(line)] = ignored
+	m.mu.Unlock()
+	return ignored
+}
+
+func compileIdlePatterns(extra []string) (*idleMatcher, error) {
 	patterns := append([]string{}, DefaultIdleIgnorePatterns...)
 	patterns = append(patterns, extra...)
 	key := strings.Join(patterns, "\x00")
@@ -252,11 +290,16 @@ func compileIdlePatterns(extra []string) ([]*regexp.Regexp, error) {
 		}
 		compiled = append(compiled, re)
 	}
+	matcher := &idleMatcher{patterns: compiled, ignored: map[string]bool{}}
 
 	idleRegexMu.Lock()
-	idleRegexCache[key] = compiled
+	if cached, ok := idleRegexCache[key]; ok {
+		matcher = cached
+	} else {
+		idleRegexCache[key] = matcher
+	}
 	idleRegexMu.Unlock()
-	return compiled, nil
+	return matcher, nil
 }
 
 func listPanes(options Options) ([]tmux.Pane, error) {
@@ -382,7 +425,7 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 			status.Signals = appendSignal(status.Signals, "ansi_capture_failed")
 			return status
 		}
-		classified = panestate.ClassifyANSI(raw, ansi)
+		classified = panestate.RefineANSI(classified, raw, ansi)
 	}
 	status.LastLine = classified.LastLine
 
@@ -511,7 +554,7 @@ func (i inspector) captureSamples(target string) (string, bool, string, error) {
 			return "", false, "", err
 		}
 		raw = captured
-		hash := hashText(i.idleText(captured))
+		hash := i.idleHash(captured)
 		if previous != "" && hash != previous {
 			changed = true
 		}
@@ -520,24 +563,28 @@ func (i inspector) captureSamples(target string) (string, bool, string, error) {
 	return raw, changed, previous, nil
 }
 
-func (i inspector) idleText(raw string) string {
-	if len(i.ignore) == 0 {
-		return raw
+// idleHash hashes raw with idle-ignore lines dropped, the same digest as
+// hashing strings.Join(keptLines, "\n").
+func (i inspector) idleHash(raw string) string {
+	if i.ignore == nil || len(i.ignore.patterns) == 0 {
+		return hashText(raw)
 	}
-	var kept []string
-	for _, line := range strings.Split(raw, "\n") {
-		ignored := false
-		for _, pattern := range i.ignore {
-			if pattern.MatchString(line) {
-				ignored = true
-				break
-			}
+	kept := make([]byte, 0, len(raw))
+	first := true
+	for rest, more := raw, true; more; {
+		var line string
+		line, rest, more = strings.Cut(rest, "\n")
+		if i.ignore.ignores(line) {
+			continue
 		}
-		if !ignored {
-			kept = append(kept, line)
+		if !first {
+			kept = append(kept, '\n')
 		}
+		kept = append(kept, line...)
+		first = false
 	}
-	return strings.Join(kept, "\n")
+	sum := sha256.Sum256(kept)
+	return hex.EncodeToString(sum[:])
 }
 
 func ClassifyRuntime(pane tmux.Pane, raw string) RuntimeDetection {
