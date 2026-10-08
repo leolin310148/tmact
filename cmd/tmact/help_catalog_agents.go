@@ -163,6 +163,7 @@ func statusdStartHelpFlags() []helpFlag {
 	return append([]helpFlag{
 		{Name: "--once", Description: "run one scan then exit"},
 		{Name: "--web-addr", Value: "ADDR", Description: "serve the read-only web UI on this address (e.g. 0.0.0.0:7890)"},
+		{Name: "--pprof-addr", Value: "ADDR", Description: "serve net/http/pprof on a loopback address (e.g. 127.0.0.1:6061); falls back to $TMACT_STATUSD_PPROF_ADDR"},
 		{Name: "--session-save", Value: "BOOL", Description: "periodically save tmux session layout and cwd"},
 		{Name: "--session-restore", Value: "BOOL", Description: "restore the last valid snapshot at startup only when tmux is empty"},
 		{Name: "--session-save-interval", Value: "DURATION", Description: "tmux session save interval; default 5m"},

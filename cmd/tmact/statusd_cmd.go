@@ -105,6 +105,7 @@ func runStatusdStart(args []string) error {
 	agentUsage := fs.Bool("agent-usage", true, "serve the web agent quota/rate-limit usage panel (reads agent OAuth creds read-only)")
 	agentCost := fs.Bool("agent-cost", true, "compute token-spend (cost) in the usage panel; disable on machines that should not compute/contribute cost")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file (JSON); auto-created with defaults if missing")
+	pprofFlag := fs.String("pprof-addr", "", "serve net/http/pprof on this loopback address (e.g. 127.0.0.1:6061); env "+statusdPprofEnv)
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -112,6 +113,10 @@ func runStatusdStart(args []string) error {
 
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	pprofAddr, err := resolvePprofAddr(*pprofFlag, set["pprof-addr"])
+	if err != nil {
+		return err
+	}
 
 	var fileCfg statusd.FileConfig
 	if !*once && *configPath != "" {
@@ -166,6 +171,9 @@ func runStatusdStart(args []string) error {
 	}
 	if *flags.JSON {
 		return errors.New("--json is only valid with --once for statusd start")
+	}
+	if pprofAddr != "" {
+		startPprofServer(ctx, pprofAddr, cfg.Logf)
 	}
 
 	// Always serve the unix socket so CLI read/status can reach the daemon.
