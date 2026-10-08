@@ -78,11 +78,11 @@ type Config struct {
 	UsageInterval time.Duration
 	SpendInterval time.Duration
 
-	Now              func() time.Time
-	Sleep            func(time.Duration)
-	ListPanes        func() ([]tmux.Pane, error)
-	CapturePane      func(string, int) (string, error)
-	CapturePaneANSI  func(string, int) (string, error)
+	Now             func() time.Time
+	Sleep           func(time.Duration)
+	ListPanes       func() ([]tmux.Pane, error)
+	CapturePane     func(string, int) (string, error)
+	CapturePaneANSI func(string, int) (string, error)
 	// PrefetchCaptures batches a cycle's captures into one tmux call. It is
 	// only defaulted alongside the stock capture functions so injected test
 	// captures are never bypassed.
@@ -90,16 +90,16 @@ type Config struct {
 	SetSessionOption func(string, string, string) error
 	// ListWindowSizes and ResizeWindow are injection points for the pane-width
 	// sweep; default to the live tmux helpers.
-	ListWindowSizes  func() ([]tmux.WindowSize, error)
-	ResizeWindow     func(target string, cols, rows int) error
+	ListWindowSizes func() ([]tmux.WindowSize, error)
+	ResizeWindow    func(target string, cols, rows int) error
 	// ListClientActivity returns attached tmux clients' last-input times for
 	// the human-activity clock; defaults to tmux.ListClientActivity.
 	ListClientActivity func() ([]time.Time, error)
 	ListSessionState   func() ([]tmux.SessionStatePane, error)
-	RestoreClient    tmux.RestoreClient
-	HomeDir          func() (string, error)
-	DirExists        func(string) bool
-	Logf             func(format string, args ...any)
+	RestoreClient      tmux.RestoreClient
+	HomeDir            func() (string, error)
+	DirExists          func(string) bool
+	Logf               func(format string, args ...any)
 }
 
 func (c Config) withDefaults() Config {
