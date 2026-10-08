@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,14 +214,13 @@ func TestRemotePaneWSReturnsFederatedForkPane(t *testing.T) {
 }
 
 func TestRemotePaneWSNoDuplicatePatchOnUnchanged(t *testing.T) {
-	var calls int
+	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/pane/diff" {
 			http.NotFound(w, r)
 			return
 		}
-		calls++
-		if calls == 1 {
+		if calls.Add(1) == 1 {
 			writeJSON(w, http.StatusOK, paneDiffMsg{T: "patch", From: 0, Lines: []string{"same"}, Cursor: "c1"})
 			return
 		}
@@ -255,20 +255,19 @@ func TestRemotePaneWSNoDuplicatePatchOnUnchanged(t *testing.T) {
 	if err := wsjson.Read(shortCtx, c, &dup); err == nil {
 		t.Fatalf("read duplicate patch %+v, want no message", dup)
 	}
-	if calls < 2 {
-		t.Fatalf("peer diff calls = %d, want at least 2", calls)
+	if n := calls.Load(); n < 2 {
+		t.Fatalf("peer diff calls = %d, want at least 2", n)
 	}
 }
 
 func TestRemotePaneWSHTTPFailureEmitsErrorAndRetries(t *testing.T) {
-	var calls int
+	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/pane/diff" {
 			http.NotFound(w, r)
 			return
 		}
-		calls++
-		if calls == 1 {
+		if calls.Add(1) == 1 {
 			writeJSONError(w, http.StatusInternalServerError, "temporary")
 			return
 		}
