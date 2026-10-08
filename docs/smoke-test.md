@@ -168,6 +168,18 @@ sent):
 Fixtures in `internal/panestate` and `internal/panewait` tests are synthesized
 from these frames; raw captures are not committed.
 
+## Workspace Trust Screens (2026-10-08)
+
+- Claude 2.1.293 asks trust in every new folder, fresh git repos included,
+  with the cursor-only menu (`❯ No, exit` / `Yes, I trust this folder`).
+  Already detected; `dispatch-work --trust-folder` accepted it end to end.
+- Codex 0.161.0 replaced its trust screen with a `Folder access` header,
+  `Trust this folder? Codex can read, edit, and run files here, ...` and
+  `› 1. Trust and continue` / `2. Back to Agent Command Center`. It was
+  classified as a generic `choice_prompt`, so `--trust-folder` refused it;
+  now detected as `trust_folder`. `dispatch-work --trust-folder` with both
+  agents in fresh git repos reached `send-prompt: ok` and got a reply.
+
 ## Notes Template
 
 ```text
