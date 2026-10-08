@@ -305,6 +305,8 @@ func genericPromptHeader(lower string) (string, string, bool) {
 		return TypeTrustFolder, "Do you trust the contents of this directory?", true
 	case strings.Contains(text, "do you trust this folder?"):
 		return TypeTrustFolder, "Do you trust this folder?", true
+	case strings.HasPrefix(text, "trust this folder? codex can"):
+		return TypeTrustFolder, "Trust this folder?", true
 	case strings.Contains(text, "confirm folder trust"):
 		return TypeTrustFolder, "Confirm folder trust", true
 	default:

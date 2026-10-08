@@ -247,6 +247,31 @@ func TestDetectCodexTrustDirectoryPrompt(t *testing.T) {
 	}
 }
 
+// TestDetectCodexFolderAccessTrustPrompt pins the screen Codex 0.161 renders
+// for an untrusted folder: the question shares its line with the explanation
+// and the decline row returns to the command center instead of quitting.
+func TestDetectCodexFolderAccessTrustPrompt(t *testing.T) {
+	raw := `
+  Folder access
+  /private/tmp/tmact-trust-probe
+
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code
+  automatically, even without a model request. Continue only if you trust these files. Your trust decision will be saved.
+
+› 1. Trust and continue
+  2. Back to Agent Command Center
+
+  enter continue · esc back
+`
+	detected := Detect(raw)
+	if detected == nil || detected.Type != TypeTrustFolder {
+		t.Fatalf("detected = %#v", detected)
+	}
+	if len(detected.Options) != 2 || detected.SelectedOption == nil || detected.SelectedOption.Label != "Trust and continue" {
+		t.Fatalf("options = %#v selected = %#v", detected.Options, detected.SelectedOption)
+	}
+}
+
 func TestDetectClaudeQuickSafetyCheckTrustPrompt(t *testing.T) {
 	raw := `
 Accessing workspace:

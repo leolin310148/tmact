@@ -68,6 +68,25 @@ func TestAcceptPromptAcceptsSelectedCodexTrustForExactDirectory(t *testing.T) {
 	}
 }
 
+func TestAcceptPromptAcceptsCodexFolderAccessTrust(t *testing.T) {
+	dir := t.TempDir()
+	raw := "  Folder access\n  " + dir + "\n\n  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings.\n  automatically, even without a model request.\n\n› 1. Trust and continue\n  2. Back to Agent Command Center\n\n  enter continue · esc back\n"
+	var gotKeys []string
+	result, err := AcceptPrompt(Options{Target: "%7", Dir: dir, Agent: panestatus.RuntimeCodex}, tmux.Pane{CurrentPath: dir}, raw, panestatus.RuntimeCodex, func(target string, keys []string) error {
+		gotKeys = append([]string(nil), keys...)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Accepted || result.OptionLabel != "Trust and continue" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(gotKeys) != 1 || gotKeys[0] != "Enter" {
+		t.Fatalf("keys = %#v", gotKeys)
+	}
+}
+
 func TestAcceptPromptSelectsUnselectedClaudeTrustOptionByNumber(t *testing.T) {
 	dir := t.TempDir()
 	var gotKeys []string
