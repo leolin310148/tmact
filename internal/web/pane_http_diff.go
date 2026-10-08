@@ -182,7 +182,9 @@ func (s *Server) handleRemotePaneWS(w http.ResponseWriter, r *http.Request, peer
 	}
 	started := time.Now()
 	s.logf("peer pane stream open peer=%s pane=%s", peer.Name, pane)
-	defer s.logf("peer pane stream closed peer=%s pane=%s duration=%s", peer.Name, pane, time.Since(started).Round(time.Millisecond))
+	defer func() {
+		s.logf("peer pane stream closed peer=%s pane=%s duration=%s", peer.Name, pane, time.Since(started).Round(time.Millisecond))
+	}()
 	defer conn.CloseNow()
 	conn.SetReadLimit(wsReadLimit)
 
