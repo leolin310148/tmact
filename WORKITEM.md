@@ -65,7 +65,7 @@ arch. These are repair targets, not acceptable stylistic variants.
   present, keep the item unchecked even when all automated tests pass.
 - Run targeted Vitest during implementation. Before completion run the full
   frontend suite and production build; run `make test` when shared behavior or
-  embedded web output is affected. Run `rtk git diff --check`.
+  embedded web output is affected. Run `git diff --check`.
 - Complete exactly one item atomically: implementation, tests, evidence notes
   or assets, and only that item's checkbox belong in one commit. Do not push.
 - If blocked, do not check or commit partial work. Preserve and report the
@@ -237,4 +237,4 @@ the measured current rectangle rather than hard-coding that coordinate.
   but do not cite test success as visual proof. If any enumerated defect remains
   visible, fix it within this integration item or leave TRAIN-061 unchecked and
   report the exact screenshots. Run the full frontend suite, production build,
-  `make test`, and `rtk git diff --check`.
+  `make test`, and `git diff --check`.
