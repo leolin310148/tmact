@@ -290,7 +290,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             </div>
           </div>
           <label className="settings-field" htmlFor="font-family">
-            <span>Panel font</span>
+            <span>Font</span>
             <select
               id="font-family"
               aria-label="panel font"

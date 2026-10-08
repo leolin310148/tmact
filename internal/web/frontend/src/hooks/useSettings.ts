@@ -197,8 +197,8 @@ export function useSettings(): UseSettingsResult {
     saveClientSettings({ paneFont: v });
   }, []);
 
-  // applyPaneFontFamily sets data-pane-font-family on <html>; app.css maps it
-  // to --pane-font-family, which only the pane <pre> reads (chrome keeps --mono).
+  // applyPaneFontFamily sets data-pane-font-family on <html>; fonts/fonts.css
+  // maps it onto the page-wide --mono/--sans stacks (pane, tables, chrome).
   const applyPaneFontFamily = useCallback((family: string | undefined, persist = false) => {
     const f = normalizePaneFontFamily(family);
     document.documentElement.dataset.paneFontFamily = f;

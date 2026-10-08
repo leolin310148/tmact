@@ -1,7 +1,9 @@
 /* Maps <html data-pane-font-family> (useSettings.applyPaneFontFamily) to the
-   pane <pre>'s font stack. Each named face falls back to the system mono
-   chain, so glyphs outside a subset still render. "system" sets nothing and
-   the pane keeps var(--mono). */
+   page-wide font stacks: the chosen face is prepended to both --mono and
+   --sans, so the pane, tables, and chrome all use it. Glyphs outside a subset
+   fall back to the system chain. "system" sets nothing and the app.css
+   defaults apply. */
 :root[data-pane-font-family="maple-mono"] {
-  --pane-font-family: "Maple Mono CN", var(--mono);
+  --mono: "Maple Mono CN", var(--mono-system);
+  --sans: "Maple Mono CN", var(--sans-system);
 }
