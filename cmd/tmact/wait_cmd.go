@@ -40,6 +40,7 @@ type waitCommandReport struct {
 	Samples            int       `json:"samples"`
 	LastLine           string    `json:"last_line,omitempty"`
 	Signals            []string  `json:"signals,omitempty"`
+	Tail               []string  `json:"tail,omitempty"`
 	StartedAt          time.Time `json:"started_at"`
 	FinishedAt         time.Time `json:"finished_at"`
 	Elapsed            string    `json:"elapsed"`
@@ -176,6 +177,7 @@ func newWaitCommandReport(report panewait.Report, options panewait.Options) wait
 		Samples:            report.Samples,
 		LastLine:           report.LastLine,
 		Signals:            report.Signals,
+		Tail:               report.Tail,
 		StartedAt:          report.StartedAt,
 		FinishedAt:         report.FinishedAt,
 		Elapsed:            report.Elapsed.String(),

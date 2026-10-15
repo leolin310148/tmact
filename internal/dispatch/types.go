@@ -121,6 +121,7 @@ type WaitOutcome struct {
 	Samples            int      `json:"samples"`
 	LastLine           string   `json:"last_line,omitempty"`
 	Signals            []string `json:"signals,omitempty"`
+	Tail               []string `json:"tail,omitempty"`
 	Elapsed            string   `json:"elapsed"`
 }
 

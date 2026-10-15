@@ -107,6 +107,7 @@ func newWaitOutcome(report panewait.Report) *WaitOutcome {
 		Samples:            report.Samples,
 		LastLine:           report.LastLine,
 		Signals:            append([]string(nil), report.Signals...),
+		Tail:               append([]string(nil), report.Tail...),
 		Elapsed:            report.Elapsed.String(),
 	}
 }

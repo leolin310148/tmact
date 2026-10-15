@@ -480,3 +480,56 @@ func TestWaitValidatesOptionsAndDependencies(t *testing.T) {
 		t.Fatal("expected incomplete dependency error")
 	}
 }
+
+// Codex hides its "Working" line while streaming the final answer, so the pane
+// reads input-ready for a few seconds while text is still arriving. The wait
+// must not settle until that transcript stops changing.
+func TestWaitDoesNotSettleWhileTranscriptStreams(t *testing.T) {
+	const footer = "\n\x1b[1m›\x1b[0m \x1b[2mAsk Codex to do anything\x1b[0m\n  \x1b[38;2;171;223;167m~/work\x1b[39m · main · Context 0% used\n"
+	fake := &fakeWait{captures: []string{
+		"› write a poem\n• Working (1s • esc to interrupt)" + footer,
+		"› write a poem\n• tmux keeps" + footer,
+		"› write a poem\n• tmux keeps sessions alive" + footer,
+		"› write a poem\n• tmux keeps sessions alive\n  across SSH drops." + footer,
+		"› write a poem\n• tmux keeps sessions alive\n  across SSH drops.\n  Worked for 5s" + footer,
+		"› write a poem\n• tmux keeps sessions alive\n  across SSH drops.\n  Worked for 5s" + footer,
+		"› write a poem\n• tmux keeps sessions alive\n  across SSH drops.\n  Worked for 5s" + footer,
+	}}
+	options := baseOptions(UntilInputReady)
+	options.RequireTransition = true
+	options.Settle = 2 * time.Second
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.ConditionMet || report.Samples != 7 {
+		t.Fatalf("settled before the transcript stopped changing: %#v", report)
+	}
+	if len(report.Tail) == 0 || report.Tail[len(report.Tail)-1] == "" {
+		t.Fatalf("tail = %#v", report.Tail)
+	}
+}
+
+// A pane whose working indicator the classifier never recognises still shows
+// a moving transcript; that counts as the transition --require-transition
+// waits for instead of timing out.
+func TestWaitTreatsTranscriptChangeAsTransition(t *testing.T) {
+	fake := &fakeWait{captures: []string{
+		"⏺ step one\n❯ \n",
+		"⏺ step one\n⏺ step two\n❯ \n",
+		"⏺ step one\n⏺ step two\n❯ \n",
+		"⏺ step one\n⏺ step two\n❯ \n",
+	}}
+	options := baseOptions(UntilInputReady)
+	options.RequireTransition = true
+	options.Settle = 2 * time.Second
+
+	report, err := RunWithDependencies(context.Background(), options, fake.dependencies())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.ConditionMet || !report.TransitionObserved || report.Samples != 4 {
+		t.Fatalf("report = %#v", report)
+	}
+}

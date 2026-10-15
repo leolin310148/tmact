@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panestate"
@@ -27,6 +28,10 @@ const (
 	StateGone    = "gone"
 
 	captureLines = 200
+
+	// tailLines is how much of the final capture a report keeps, so a wait
+	// that ended in the wrong state can be diagnosed after the fact.
+	tailLines = 30
 
 	// DefaultNeedsHumanSettle is how long a blocker must stay on screen before
 	// a wait reports needs_human. Claude PermissionRequest hooks can approve a
@@ -71,9 +76,11 @@ type Report struct {
 	Samples            int
 	LastLine           string
 	Signals            []string
-	StartedAt          time.Time
-	FinishedAt         time.Time
-	Elapsed            time.Duration
+	// Tail holds the last cleaned lines of the final capture.
+	Tail       []string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Elapsed    time.Duration
 }
 
 // Dependencies isolates tmux reads and time so waits can be tested without a
@@ -129,6 +136,7 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 	lookupTarget := options.Selector
 	resolved := false
 	previousState := ""
+	previousTranscript := ""
 	conditionSince := time.Time{}
 	conditionActive := false
 	blockerSince := time.Time{}
@@ -230,6 +238,10 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 		report.RawState = classified.State
 		report.LastLine = classified.LastLine
 		report.Signals = append(report.Signals[:0], classified.Signals...)
+		report.Tail = captureTail(raw)
+		transcript := transcriptAbovePrompt(raw)
+		transcriptChanged := report.Samples > 1 && transcript != previousTranscript
+		previousTranscript = transcript
 		if !now.Before(deadline) {
 			report.Reason = ReasonTimeout
 			return finish(report, now), nil
@@ -261,11 +273,22 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 		if previousState != "" && state != previousState {
 			report.TransitionObserved = true
 		}
+		// Agents do not always show a working indicator while busy: Codex
+		// drops its "Working" line while it streams the final answer, and a
+		// layout the classifier misses leaves only the transcript moving. A
+		// transcript that changes between samples therefore counts as
+		// activity, and input-ready settles only once it holds still.
+		if transcriptChanged && state == UntilInputReady {
+			report.TransitionObserved = true
+		}
 		previousState = state
 
 		matches := state == options.Until
 		transitionSatisfied := !options.RequireTransition || report.TransitionObserved
 		if matches && transitionSatisfied {
+			if conditionActive && transcriptChanged && state == UntilInputReady {
+				conditionActive = false
+			}
 			if !conditionActive {
 				conditionSince = now
 				conditionActive = true
@@ -287,6 +310,28 @@ func RunWithDependencies(ctx context.Context, options Options, deps Dependencies
 			return report, err
 		}
 	}
+}
+
+// transcriptAbovePrompt returns the cleaned lines above the agent's input
+// line. The input line and the footer below it are excluded because they
+// change with typing and status updates, not with agent output.
+func transcriptAbovePrompt(raw string) string {
+	lines := panestate.CleanedLines(raw)
+	for i := len(lines) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "❯") || strings.HasPrefix(trimmed, "›") {
+			return strings.Join(lines[:i], "\n")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func captureTail(raw string) []string {
+	lines := panestate.CleanedLines(raw)
+	if len(lines) > tailLines {
+		lines = lines[len(lines)-tailLines:]
+	}
+	return lines
 }
 
 func validate(options Options, deps Dependencies) error {
