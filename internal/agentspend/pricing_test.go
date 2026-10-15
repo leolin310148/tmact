@@ -231,3 +231,42 @@ func TestUnknownModelIsFree(t *testing.T) {
 		t.Fatalf("unknown model should be $0/unpriced, got cost=%v ok=%v", cost, ok)
 	}
 }
+
+// claude-opus-5-5 must not fall back to the claude-opus-5 prefix ($5/$25).
+func TestOpus55ManualPricing(t *testing.T) {
+	cost, ok := calculateCost("claude-opus-5-5", 1_000_000, 1_000_000, 0, 1_000_000, 0, "standard", 0)
+	if !ok {
+		t.Fatal("claude-opus-5-5 unpriced")
+	}
+	// input $4 + output $20 + read $0.20.
+	approx(t, "claude opus 5.5 line", cost, 24.2)
+	fast, _ := calculateCost("claude-opus-5-5", 1_000_000, 0, 0, 0, 0, "fast", 0)
+	approx(t, "claude opus 5.5 fast", fast, 8)
+	dotted, _ := calculateCost("claude-opus-5.5", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	approx(t, "claude opus 5.5 dotted alias", dotted, 4)
+	bedrock, _ := calculateCost("anthropic.claude-opus-5-5-v1:0", 1_000_000, 0, 0, 0, 0, "standard", 0)
+	approx(t, "anthropic claude opus 5.5", bedrock, 4)
+}
+
+func TestSonnet5FamilyPricing(t *testing.T) {
+	for _, model := range []string{"claude-sonnet-5-5", "claude-sonnet-5"} {
+		cost, ok := calculateCost(model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 0, "standard", 0)
+		if !ok {
+			t.Fatalf("%s unpriced", model)
+		}
+		// input $2 + output $10 + 5m cache write $2.50 + read $0.20.
+		approx(t, model, cost, 14.7)
+	}
+}
+
+func TestHaiku55LongContextTier(t *testing.T) {
+	short, ok := calculateCost("claude-haiku-5-5", 50_000, 10_000, 0, 50_000, 0, "standard", 0)
+	if !ok {
+		t.Fatal("claude-haiku-5-5 unpriced")
+	}
+	// Exactly 100K prompt tokens stays on the base tier:
+	// 50K*$0.10 + 10K*$0.50 + 50K*$0.01 per MTok.
+	approx(t, "haiku 5.5 at threshold", short, 0.0105)
+	long, _ := calculateCost("claude-haiku-5-5", 50_001, 10_000, 0, 50_000, 0, "standard", 0)
+	approx(t, "haiku 5.5 above threshold", long, (50_001*0.1e-6+10_000*0.5e-6+50_000*0.01e-6)*5)
+}

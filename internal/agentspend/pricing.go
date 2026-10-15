@@ -33,6 +33,11 @@ type modelCosts struct {
 	cacheReadPerToken  float64
 	webSearchPerReq    float64
 	fastMultiplier     float64
+	// When a call's prompt (input + cache write + cache read) exceeds
+	// longContextThreshold tokens, every rate is scaled by
+	// longContextMultiplier. Zero threshold means flat pricing.
+	longContextThreshold  int
+	longContextMultiplier float64
 }
 
 const (
@@ -89,6 +94,73 @@ var manualPricing = map[string]modelCosts{
 		cacheWritePerToken: 1.25e-6,
 		cacheReadPerToken:  0.1e-6,
 		webSearchPerReq:    webSearchCost,
+	},
+	// Claude 5.5 family rates per the claude-api skill model table (cached
+	// 2026-10-06). The 5.5 ids need explicit entries: claude-opus-5-5 would
+	// otherwise prefix-match claude-opus-5 and price at Opus 5's $5/$25.
+	"claude-opus-5-5": {
+		inputPerToken:      4e-6,
+		outputPerToken:     20e-6,
+		cacheWritePerToken: 5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
+	"anthropic.claude-opus-5-5": {
+		inputPerToken:      4e-6,
+		outputPerToken:     20e-6,
+		cacheWritePerToken: 5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
+	"claude-sonnet-5-5": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"anthropic.claude-sonnet-5-5": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"claude-sonnet-5": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	"anthropic.claude-sonnet-5": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+	},
+	// Claude Haiku 5.5: $0.10/$0.50 for prompts up to 100K tokens, and
+	// $0.50/$2.50 (5x) above that.
+	"claude-haiku-5-5": {
+		inputPerToken:         0.1e-6,
+		outputPerToken:        0.5e-6,
+		cacheWritePerToken:    0.125e-6,
+		cacheReadPerToken:     0.01e-6,
+		webSearchPerReq:       webSearchCost,
+		longContextThreshold:  100_000,
+		longContextMultiplier: 5,
+	},
+	"anthropic.claude-haiku-5-5": {
+		inputPerToken:         0.1e-6,
+		outputPerToken:        0.5e-6,
+		cacheWritePerToken:    0.125e-6,
+		cacheReadPerToken:     0.01e-6,
+		webSearchPerReq:       webSearchCost,
+		longContextThreshold:  100_000,
+		longContextMultiplier: 5,
 	},
 	"claude-opus-5": {
 		inputPerToken:      5e-6,
@@ -163,6 +235,9 @@ var manualPricing = map[string]modelCosts{
 // manual-pricing keys before longest-prefix fallback runs.
 var builtinAliases = map[string]string{
 	"claude-fable-5.1":  "claude-fable-5-1",
+	"claude-opus-5.5":   "claude-opus-5-5",
+	"claude-sonnet-5.5": "claude-sonnet-5-5",
+	"claude-haiku-5.5":  "claude-haiku-5-5",
 	"claude-opus-4.8":   "claude-opus-4-8",
 	"claude-opus-4.7":   "claude-opus-4-7",
 	"claude-opus-4.6":   "claude-opus-4-6",
@@ -309,6 +384,11 @@ func calculateCost(
 	oneHour := safeCount(oneHourCacheCreation)
 	totalCacheCreation := math.Max(safeCount(cacheCreation), oneHour)
 	fiveMinCacheCreation := math.Max(0, totalCacheCreation-oneHour)
+
+	if costs.longContextThreshold > 0 &&
+		safeCount(input)+totalCacheCreation+safeCount(cacheRead) > float64(costs.longContextThreshold) {
+		multiplier *= costs.longContextMultiplier
+	}
 
 	cost := multiplier * (safeCount(input)*costs.inputPerToken +
 		safeCount(output)*costs.outputPerToken +
