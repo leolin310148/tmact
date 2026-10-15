@@ -159,6 +159,8 @@ type Report struct {
 	Steps           []Step        `json:"steps"`
 	Wait            *WaitReport   `json:"wait,omitempty"`
 	Result          *ResultReport `json:"result,omitempty"`
+	// Error is set only by --json callers reporting a failed dispatch.
+	Error string `json:"error,omitempty"`
 }
 
 // Deps holds the tmux side effects so callers can be tested without a live session.

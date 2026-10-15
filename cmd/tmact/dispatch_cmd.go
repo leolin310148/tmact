@@ -129,6 +129,10 @@ func runDispatch(args []string) error {
 		report, err = dispatchRun(opts)
 	}
 	if err != nil {
+		if *jsonOutput {
+			report.Error = err.Error()
+			return jsonFailure(report, err)
+		}
 		if opts.Wait && report.Wait != nil && report.Wait.Baseline != nil {
 			if outputErr := printDispatchOutput(report, *jsonOutput); outputErr != nil {
 				return outputErr

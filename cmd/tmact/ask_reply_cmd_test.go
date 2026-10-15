@@ -675,3 +675,32 @@ func TestAskAwaitRefusesClosedThread(t *testing.T) {
 		t.Fatalf("err = %v, want closed-thread refusal", err)
 	}
 }
+
+func TestAskJSONFailurePrintsSingleDocumentWithError(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{Session: opts.Session}, errors.New("claude trust prompt is waiting; pass --trust-folder")
+	}
+	for _, execute := range []bool{false, true} {
+		args := []string{"ask", "answerer", "--dir", t.TempDir(), "--agent", "claude", "--prompt", "look", "--store-dir", t.TempDir(), "--json"}
+		if execute {
+			args = append(args, "--execute")
+		}
+		out, err := captureRun(t, args...)
+		var reported reportedError
+		if !errors.As(err, &reported) {
+			t.Fatalf("execute=%v err = %v, want reportedError", execute, err)
+		}
+		var got askReport
+		decoder := json.NewDecoder(strings.NewReader(out))
+		if err := decoder.Decode(&got); err != nil {
+			t.Fatalf("execute=%v stdout is not JSON: %v\n%s", execute, err, out)
+		}
+		if decoder.More() {
+			t.Fatalf("execute=%v stdout has more than one JSON document: %s", execute, out)
+		}
+		if got.Status != dispatch.StatusFailed || !strings.Contains(got.Error, "--trust-folder") {
+			t.Fatalf("execute=%v report = %#v", execute, got)
+		}
+	}
+}

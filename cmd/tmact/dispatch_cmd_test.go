@@ -225,3 +225,26 @@ func writeText(t *testing.T, path, text string) {
 		t.Fatal(err)
 	}
 }
+
+func TestDispatchJSONFailurePrintsSingleDocumentWithError(t *testing.T) {
+	defer stubCLIHooks(t)()
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		return dispatch.Report{Session: opts.Session, Steps: []dispatch.Step{{Name: "accept-trust", Status: dispatch.StatusFailed}}}, errors.New("trust prompt not accepted")
+	}
+	out, err := captureRun(t, "dispatch-work", "work", "--dir", t.TempDir(), "--agent", "claude", "--prompt", "go", "--trust-folder", "--execute", "--json")
+	var reported reportedError
+	if !errors.As(err, &reported) || err.Error() != "trust prompt not accepted" {
+		t.Fatalf("err = %v, want reportedError", err)
+	}
+	var got dispatch.Report
+	decoder := json.NewDecoder(strings.NewReader(out))
+	if err := decoder.Decode(&got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, out)
+	}
+	if decoder.More() {
+		t.Fatalf("stdout has more than one JSON document: %s", out)
+	}
+	if got.Error != "trust prompt not accepted" || len(got.Steps) != 1 {
+		t.Fatalf("report = %#v", got)
+	}
+}

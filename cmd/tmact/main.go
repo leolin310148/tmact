@@ -30,7 +30,10 @@ func (r *repeatedStrings) Set(value string) error {
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		var reported reportedError
+		if !errors.As(err, &reported) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }

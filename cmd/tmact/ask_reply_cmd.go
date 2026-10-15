@@ -41,6 +41,7 @@ type askReport struct {
 	Reply           *askreply.Message `json:"reply,omitempty"`
 	AnswererWaiting bool              `json:"answerer_waiting"`
 	Closed          bool              `json:"closed"`
+	Error           string            `json:"error,omitempty"`
 }
 
 type replyReport struct {
@@ -49,6 +50,7 @@ type replyReport struct {
 	Closed   bool              `json:"closed"`
 	Timeout  string            `json:"timeout,omitempty"`
 	FollowUp *askreply.Message `json:"follow_up,omitempty"`
+	Error    string            `json:"error,omitempty"`
 }
 
 type askFlags struct {
@@ -187,10 +189,9 @@ func runAskNew(f askFlags) error {
 	if err != nil {
 		if f.execute {
 			_ = store.Cancel(request.ID, "dispatch failed")
-			report.Status = dispatch.StatusFailed
-			if outputErr := printAskOutput(report, f.jsonOutput); outputErr != nil {
-				return outputErr
-			}
+		}
+		if f.execute || f.jsonOutput {
+			return askFailure(report, err, f.jsonOutput)
 		}
 		return err
 	}
@@ -204,7 +205,7 @@ func runAskNew(f askFlags) error {
 		// A very fast final reply may already have closed the thread; the
 		// await below still returns it. Any other failure is a broken mailbox.
 		_ = store.Cancel(request.ID, "record dispatch failed")
-		return fmt.Errorf("record dispatched prompt: %w", err)
+		return askFailureIfJSON(report, fmt.Errorf("record dispatched prompt: %w", err), f.jsonOutput)
 	}
 	return awaitAskAnswer(ctx, store, report, request.ID, 0, f.timeout, f.jsonOutput)
 }
@@ -335,11 +336,8 @@ func runAskThread(f askFlags) error {
 		report.Dispatch = &dispatchReport
 		if err != nil {
 			// Leave the thread open: the asker can retry once the pane is idle.
-			if f.execute {
-				report.Status = dispatch.StatusFailed
-				if outputErr := printAskOutput(report, f.jsonOutput); outputErr != nil {
-					return outputErr
-				}
+			if f.execute || f.jsonOutput {
+				return askFailure(report, err, f.jsonOutput)
 			}
 			return err
 		}
@@ -350,7 +348,7 @@ func runAskThread(f askFlags) error {
 			From: askreply.RoleAsker, Kind: askreply.KindPrompt,
 			Delivery: askreply.DeliveryPane, Target: dispatchReport.Target,
 		}, waitUntil); err != nil && !errors.Is(err, askreply.ErrAlreadyFinalized) {
-			return fmt.Errorf("record dispatched follow-up: %w", err)
+			return askFailureIfJSON(report, fmt.Errorf("record dispatched follow-up: %w", err), f.jsonOutput)
 		}
 	}
 	return awaitAskAnswer(ctx, store, report, f.thread, lastAnswerSeq, f.timeout, f.jsonOutput)
@@ -389,11 +387,7 @@ func awaitAskAnswer(ctx context.Context, store *askreply.Store, report askReport
 	defer cancel()
 	reply, err := store.AwaitAnswer(waitCtx, id, afterSeq)
 	if err != nil {
-		report.Status = dispatch.StatusFailed
-		if outputErr := printAskOutput(report, jsonOutput); outputErr != nil {
-			return outputErr
-		}
-		return err
+		return askFailure(report, err, jsonOutput)
 	}
 	report.Status = askStatusAnswered
 	report.Reply = &reply
@@ -488,11 +482,15 @@ func runReply(args []string) error {
 	followUp, err := store.AwaitPrompt(waitCtx, questionID, message.Seq)
 	if err != nil {
 		report.Status = dispatch.StatusFailed
-		if outputErr := printReplyOutput(report, *jsonOutput); outputErr != nil {
-			return outputErr
-		}
 		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("no follow-up within %s; finish this turn normally, the asker can still continue in this pane", *timeout)
+			err = fmt.Errorf("no follow-up within %s; finish this turn normally, the asker can still continue in this pane", *timeout)
+		}
+		if *jsonOutput {
+			report.Error = err.Error()
+			return jsonFailure(report, err)
+		}
+		if outputErr := printReplyOutput(report, false); outputErr != nil {
+			return outputErr
 		}
 		return err
 	}
@@ -544,6 +542,27 @@ func quoteShellArg(value string) string {
 		return value
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+// askFailure reports a failed ask: in --json mode the error goes into the
+// single JSON document, otherwise the text report precedes the stderr error.
+func askFailure(report askReport, err error, jsonOutput bool) error {
+	report.Status = dispatch.StatusFailed
+	if jsonOutput {
+		report.Error = err.Error()
+		return jsonFailure(report, err)
+	}
+	if outputErr := printAskOutput(report, false); outputErr != nil {
+		return outputErr
+	}
+	return err
+}
+
+func askFailureIfJSON(report askReport, err error, jsonOutput bool) error {
+	if jsonOutput {
+		return askFailure(report, err, true)
+	}
+	return err
 }
 
 func printAskOutput(report askReport, jsonOutput bool) error {
