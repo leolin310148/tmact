@@ -304,9 +304,21 @@ func (d *Daemon) logf(format string, args ...any) {
 	}
 }
 
+// snapshotLogMaxBytes caps the opt-in snapshot log. A full snapshot is
+// appended every tick, so without a cap it grows by gigabytes a day (configs
+// seeded before log_path became opt-in still enable it). Once the file
+// reaches the cap it is renamed to path+".1", replacing the previous backup,
+// so the log never takes more than about twice the cap.
+var snapshotLogMaxBytes int64 = 64 << 20
+
 func appendLog(path string, snapshot Snapshot) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
+	}
+	if info, err := os.Stat(path); err == nil && info.Size() >= snapshotLogMaxBytes {
+		if err := os.Rename(path, path+".1"); err != nil {
+			return err
+		}
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
