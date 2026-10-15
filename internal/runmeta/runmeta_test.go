@@ -232,3 +232,47 @@ func TestRegistryListsRunsAcrossDirectoriesAndIgnoresStaleLocators(t *testing.T)
 		}
 	}
 }
+
+func TestWriteAllowsConcurrentWritersForSameRun(t *testing.T) {
+	dir := t.TempDir()
+	run := Run{ID: "loop-demo-1", Kind: "loop", Status: "running"}
+	errs := make(chan error, 16)
+	for i := 0; i < cap(errs); i++ {
+		go func() { errs <- Write(dir, run) }()
+	}
+	for i := 0; i < cap(errs); i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "loop-demo-1.json" {
+		t.Fatalf("entries = %v", entries)
+	}
+}
+
+func TestEnsureLocatorSkipsUnchangedLocator(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	registryDir := t.TempDir()
+	runDir := t.TempDir()
+	run := Run{ID: "loop-demo-1", Kind: "loop"}
+	if err := RegisterLocator(registryDir, runDir, run); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(registryDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(registryDir, 0o755) }()
+
+	if err := EnsureLocator(registryDir, runDir, run); err != nil {
+		t.Fatalf("unchanged locator should not be rewritten: %v", err)
+	}
+	if err := EnsureLocator(registryDir, t.TempDir(), run); err == nil {
+		t.Fatal("moved run dir should rewrite the locator and fail on a read-only registry")
+	}
+}

@@ -473,3 +473,46 @@ func TestLoopValidateReportsCalendar(t *testing.T) {
 		t.Fatalf("text output missing calendar: %s", out)
 	}
 }
+
+func TestLoopListSucceedsWithReadOnlyRegistry(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	restore := stubCLIHooks(t)
+	defer restore()
+	registryDir := t.TempDir()
+	loopRegistryDir = func() (string, error) { return registryDir, nil }
+	listSessionTmuxPanes = func(string) ([]tmux.Pane, error) { return nil, errors.New("missing") }
+	oldCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldCWD) }()
+
+	// A legacy run in the default local run dir has no locator yet, so the
+	// listing tries to backfill one into the unwritable registry.
+	run, err := runmeta.Register(runmeta.DefaultDir, runmeta.RegisterOptions{
+		Kind:       "loop",
+		ConfigPath: "legacy.yaml",
+		Target:     "demo:0.0",
+		Now:        time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(registryDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(registryDir, 0o755) }()
+
+	out, err := captureRun(t, "loop", "list", "--json")
+	if err != nil {
+		t.Fatalf("read-only list failed: %v", err)
+	}
+	if !strings.Contains(out, run.ID) {
+		t.Fatalf("output missing %s: %s", run.ID, out)
+	}
+}

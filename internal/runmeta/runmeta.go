@@ -217,12 +217,35 @@ func Write(dir string, run Run) error {
 	if err != nil {
 		return err
 	}
-	path := Path(dir, run.ID)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	return writeFileAtomic(Path(dir, run.ID), append(data, '\n'), 0o644)
+}
+
+// writeFileAtomic writes through a uniquely named temp file in the target
+// directory, so concurrent writers never rename each other's temp file away.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func Path(dir string, id string) string {
@@ -253,12 +276,7 @@ func WriteControl(dir string, id string, control Control) error {
 	if err != nil {
 		return err
 	}
-	path := ControlPath(dir, id)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomic(ControlPath(dir, id), append(data, '\n'), 0o644)
 }
 
 func ReadControl(dir string, id string) (Control, error) {
@@ -359,12 +377,28 @@ func RegisterLocator(registryDir, runDir string, run Run) error {
 	if err := os.MkdirAll(registryDir, 0o755); err != nil {
 		return err
 	}
-	path := filepath.Join(registryDir, run.ID+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	return writeFileAtomic(locatorPath(registryDir, run.ID), append(data, '\n'), 0o644)
+}
+
+// EnsureLocator registers run only when the registry does not already point
+// at runDir, so read-only callers that backfill legacy runs do not rewrite
+// unchanged locators on every query.
+func EnsureLocator(registryDir, runDir string, run Run) error {
+	absRunDir, err := filepath.Abs(runDir)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if data, err := os.ReadFile(locatorPath(registryDir, run.ID)); err == nil {
+		var existing Locator
+		if json.Unmarshal(data, &existing) == nil && existing.RunID == run.ID && existing.Kind == run.Kind && existing.RunDir == absRunDir {
+			return nil
+		}
+	}
+	return RegisterLocator(registryDir, runDir, run)
+}
+
+func locatorPath(registryDir, id string) string {
+	return filepath.Join(registryDir, id+".json")
 }
 
 // ListRegistry resolves every registered runtime through its owning run_dir.

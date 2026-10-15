@@ -223,9 +223,10 @@ func listLoopStatuses(runDir string, machineWide bool) ([]runmeta.Status, error)
 		}
 		for _, status := range local {
 			if runmeta.Active(status) {
-				if err := runmeta.RegisterLocator(registryDir, status.RunDir, status.Run); err != nil {
-					return nil, err
-				}
+				// Best-effort backfill for runs started before the registry
+				// existed. A read-only query must still succeed when the
+				// registry is not writable (for example inside a sandbox).
+				_ = runmeta.EnsureLocator(registryDir, status.RunDir, status.Run)
 			}
 		}
 		statuses = append(statuses, local...)
@@ -374,6 +375,9 @@ func runLoopStart(args []string) error {
 		}
 	}
 	release, err := acquireLoopStartLock(lockDir, absConfig)
+	if errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("loop start needs write access to the runtime registry %s; allow writes there (sandboxed agents must request that permission): %w", lockDir, err)
+	}
 	if err != nil {
 		return err
 	}
