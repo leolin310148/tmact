@@ -189,6 +189,14 @@ func TestRunRejectsUnknownModelForAgent(t *testing.T) {
 	}
 }
 
+func TestValidateModelAcceptsClaudeFiveFamilyIDs(t *testing.T) {
+	for _, model := range []string{"claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5"} {
+		if got, err := dispatch.ValidateModel("claude", model); err != nil || got != model {
+			t.Fatalf("ValidateModel(%q) = %q, %v", model, got, err)
+		}
+	}
+}
+
 func TestSupportedModelsReturnsCopy(t *testing.T) {
 	models := dispatch.SupportedModels("codex")
 	if len(models) == 0 {
