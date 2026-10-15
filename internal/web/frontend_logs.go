@@ -81,6 +81,36 @@ type frontendLogEntryOut struct {
 	Event   string         `json:"event,omitempty"`
 	Message string         `json:"message,omitempty"`
 	Data    map[string]any `json:"data,omitempty"`
+	// Repeat counts identical entries folded into this one; omitted when 1.
+	Repeat int `json:"repeat,omitempty"`
+}
+
+// condenseFrontendLogEntries keeps only warn/error entries for the daemon log
+// and folds identical ones together. Browsers queue entries while the server
+// is unreachable and flush them on reconnect, so one outage otherwise lands as
+// a hundred copies of "snapshot request failed"; info-level connection
+// chatter made up most of the remaining volume. stderr is not rotated, so the
+// daemon log keeps only what is worth reading.
+func condenseFrontendLogEntries(entries []frontendLogEntryOut) []frontendLogEntryOut {
+	out := make([]frontendLogEntryOut, 0, len(entries))
+	index := make(map[string]int, len(entries))
+	for _, entry := range entries {
+		if entry.Level == "info" {
+			continue
+		}
+		data, _ := json.Marshal(entry.Data)
+		key := entry.Level + "\x00" + entry.Event + "\x00" + entry.Message + "\x00" + string(data)
+		if i, ok := index[key]; ok {
+			if out[i].Repeat == 0 {
+				out[i].Repeat = 1
+			}
+			out[i].Repeat++
+			continue
+		}
+		index[key] = len(out)
+		out = append(out, entry)
+	}
+	return out
 }
 
 func (s *Server) handleFrontendLogs(w http.ResponseWriter, r *http.Request) {
@@ -113,9 +143,11 @@ func (s *Server) handleFrontendLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := sanitizeFrontendLogPayload(in)
-	compact, err := json.Marshal(out)
-	if err == nil {
-		s.logf("frontend log: %s", compact)
+	out.Entries = condenseFrontendLogEntries(out.Entries)
+	if len(out.Entries) > 0 {
+		if compact, err := json.Marshal(out); err == nil {
+			s.logf("frontend log: %s", compact)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

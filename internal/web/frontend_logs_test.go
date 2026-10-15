@@ -91,7 +91,7 @@ func TestHandleFrontendLogsLimitsEntriesAndSanitizesFields(t *testing.T) {
 			blob = strings.Repeat("d", 5000)
 		}
 		entries = append(entries, fmt.Sprintf(
-			`{"ts":"now","level":"bad","event":"api_error","message":"%s\n%s","data":{"blob":"%s","n":%d}}`,
+			`{"ts":"now","level":"error","event":"api_error","message":"%s\n%s","data":{"blob":"%s","n":%d}}`,
 			strings.Repeat("m", frontendLogMaxMessage),
 			strings.Repeat("z", 50),
 			blob,
@@ -111,8 +111,8 @@ func TestHandleFrontendLogsLimitsEntriesAndSanitizesFields(t *testing.T) {
 		t.Fatalf("entry count = %d", len(gotEntries))
 	}
 	entry := gotEntries[0].(map[string]any)
-	if entry["level"] != "info" {
-		t.Fatalf("level = %#v", entry["level"])
+	if got := sanitizeFrontendLogLevel("bad"); got != "info" {
+		t.Fatalf("unknown level sanitized to %q, want info", got)
 	}
 	msg := entry["message"].(string)
 	if strings.Contains(msg, "\n") || len([]rune(msg)) != frontendLogMaxMessage {
@@ -135,4 +135,43 @@ func decodeLoggedFrontendPayload(t *testing.T, line string) map[string]any {
 		t.Fatalf("logged JSON did not decode: %v\n%s", err, raw)
 	}
 	return got
+}
+
+func TestHandleFrontendLogsDropsInfoAndFoldsRepeats(t *testing.T) {
+	var lines []string
+	s := &Server{
+		Logf: func(format string, args ...any) {
+			lines = append(lines, fmt.Sprintf(format, args...))
+		},
+	}
+	failed := `{"ts":"t","level":"error","event":"api_error","message":"snapshot request failed","data":{"url":"api/snapshot"}}`
+	body := `{"entries":[` +
+		`{"ts":"t","level":"info","event":"pane_ws","message":"open"},` +
+		failed + `,` + failed + `,` + failed + `,` +
+		`{"ts":"t","level":"warn","event":"pane_ws","message":"reconnecting"}]}`
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/frontend-logs", strings.NewReader(body)))
+	if rec.Code != http.StatusOK || len(lines) != 1 {
+		t.Fatalf("status = %d logs = %#v", rec.Code, lines)
+	}
+	entries := decodeLoggedFrontendPayload(t, lines[0])["entries"].([]any)
+	if len(entries) != 2 {
+		t.Fatalf("entries = %#v", entries)
+	}
+	first := entries[0].(map[string]any)
+	if first["message"] != "snapshot request failed" || first["repeat"] != float64(3) {
+		t.Fatalf("first entry = %#v", first)
+	}
+	second := entries[1].(map[string]any)
+	if second["level"] != "warn" || second["repeat"] != nil {
+		t.Fatalf("second entry = %#v", second)
+	}
+
+	lines = nil
+	rec = httptest.NewRecorder()
+	infoOnly := `{"entries":[{"ts":"t","level":"info","event":"app_lifecycle","message":"visible"}]}`
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/frontend-logs", strings.NewReader(infoOnly)))
+	if rec.Code != http.StatusOK || len(lines) != 0 {
+		t.Fatalf("info-only batch: status = %d logs = %#v", rec.Code, lines)
+	}
 }
