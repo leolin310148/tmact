@@ -55,6 +55,7 @@ const (
 	messagePrefix = "msg-"
 	messageSuffix = ".json"
 	ackPrefix     = "ack-"
+	askerReadFile = "asker-read.json"
 )
 
 var (
@@ -123,6 +124,11 @@ type closedRecord struct {
 type waiterRecord struct {
 	PID   int       `json:"pid"`
 	Until time.Time `json:"until"`
+}
+
+type readCursorRecord struct {
+	Seq int       `json:"seq"`
+	At  time.Time `json:"at"`
 }
 
 type ackRecord struct {
@@ -569,6 +575,45 @@ func (s *Store) Acknowledged(id string, seq int) (bool, error) {
 	return true, nil
 }
 
+// MarkAnswerRead records that the asker has been handed the answerer message
+// with the given seq. The cursor only moves forward.
+func (s *Store) MarkAnswerRead(id string, seq int) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	current, _, err := s.AnswerReadSeq(id)
+	if err != nil {
+		return err
+	}
+	if seq <= current {
+		return nil
+	}
+	if err := writeFileAtomicJSON(filepath.Join(s.questionDir(id), askerReadFile), readCursorRecord{Seq: seq, At: s.now()}); err != nil {
+		return fmt.Errorf("record read answer: %w", err)
+	}
+	return nil
+}
+
+// AnswerReadSeq returns the highest answerer seq the asker has been handed.
+// ok is false for threads created before the cursor existed.
+func (s *Store) AnswerReadSeq(id string) (seq int, ok bool, err error) {
+	if err := validateID(id); err != nil {
+		return 0, false, err
+	}
+	data, err := os.ReadFile(filepath.Join(s.questionDir(id), askerReadFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read answer cursor: %w", err)
+	}
+	var record readCursorRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return 0, false, fmt.Errorf("decode answer cursor: %w", err)
+	}
+	return record.Seq, true, nil
+}
+
 func (s *Store) ackPath(id string, seq int) string {
 	return filepath.Join(s.questionDir(id), fmt.Sprintf("%s%06d%s", ackPrefix, seq, messageSuffix))
 }
@@ -754,6 +799,37 @@ func writeExclusiveJSON(path string, value any) error {
 // truncate-and-write is acceptable.
 func writePrivateJSON(path string, value any) error {
 	return writeJSONFile(path, value, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+}
+
+// writeFileAtomicJSON replaces path through a uniquely named temp file so a
+// concurrent reader never sees a partial cursor.
+func writeFileAtomicJSON(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := file.Name()
+	writeErr := writeAll(file, append(data, '\n'))
+	if writeErr == nil {
+		writeErr = file.Chmod(0o600)
+	}
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	if closeErr := file.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr == nil {
+		writeErr = os.Rename(tmp, path)
+	}
+	if writeErr != nil {
+		_ = os.Remove(tmp)
+	}
+	return writeErr
 }
 
 func writeJSONFile(path string, value any, flags int) error {

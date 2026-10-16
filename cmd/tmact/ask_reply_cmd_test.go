@@ -664,6 +664,72 @@ func TestAskAwaitRejectsPromptCloseAndMissingThread(t *testing.T) {
 	}
 }
 
+func TestAskAwaitReturnsRepliesPostedWhileNobodyWaited(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	store, request := seedThread(t, storeDir)
+	// The asker was handed "first answer" (seq 2); two more interim replies
+	// land before it calls --await.
+	if err := store.MarkAnswerRead(request.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"step one done", "step two done"} {
+		if _, err := store.Post(request.ID, askreply.Message{
+			From: askreply.RoleAnswerer, Kind: askreply.KindAnswer, Text: text, Delivery: askreply.DeliveryMailbox,
+		}, time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, want := range []string{"step one done", "step two done"} {
+		out, err := captureRun(t, "ask", "--thread", request.ID, "--await", "--store-dir", storeDir, "--timeout", "2s", "--json")
+		if err != nil {
+			t.Fatalf("await for %q: %v", want, err)
+		}
+		var report askReport
+		if err := json.Unmarshal([]byte(out), &report); err != nil {
+			t.Fatal(err)
+		}
+		if report.Reply == nil || report.Reply.Text != want {
+			t.Fatalf("reply = %#v, want %q", report.Reply, want)
+		}
+	}
+	if seq, ok, err := store.AnswerReadSeq(request.ID); err != nil || !ok || seq != 4 {
+		t.Fatalf("read cursor = %d, %v, %v; want 4", seq, ok, err)
+	}
+}
+
+func TestAskAwaitReturnsUnreadFinalOnClosedThread(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	store, request := seedThread(t, storeDir)
+	if err := store.MarkAnswerRead(request.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Post(request.ID, askreply.Message{
+		From: askreply.RoleAnswerer, Kind: askreply.KindFinal, Text: "all done", Delivery: askreply.DeliveryMailbox,
+	}, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(request.ID, askreply.RoleAnswerer, "final reply"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "ask", "--thread", request.ID, "--await", "--store-dir", storeDir, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report askReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Reply == nil || report.Reply.Text != "all done" || !report.Closed {
+		t.Fatalf("report = %#v", report)
+	}
+	// Once read, the closed thread is refused as before.
+	if _, err := captureRun(t, "ask", "--thread", request.ID, "--await", "--store-dir", storeDir, "--json"); err == nil || !strings.Contains(err.Error(), "is closed") {
+		t.Fatalf("second await err = %v, want closed-thread refusal", err)
+	}
+}
+
 func TestAskAwaitRefusesClosedThread(t *testing.T) {
 	defer stubCLIHooks(t)()
 	storeDir := t.TempDir()

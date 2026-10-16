@@ -363,7 +363,25 @@ func runAskAwait(f askFlags, store *askreply.Store) error {
 	if err != nil {
 		return err
 	}
+	// Resume after the last reply this asker was handed, so a reply posted
+	// while nobody was waiting is returned instead of waited past. Threads
+	// from before the cursor existed fall back to the newest reply.
+	afterSeq, ok, err := store.AnswerReadSeq(f.thread)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		afterSeq = thread.LastSeq(askreply.RoleAnswerer)
+	}
 	if thread.Closed != nil {
+		if hasAnswerAfter(thread, afterSeq) {
+			// The answerer closed the thread with a reply the asker never saw.
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer stop()
+			report := askReport{Status: dispatch.StatusPlanned, QuestionID: f.thread, Session: thread.Request.Session, Timeout: f.timeout.String(), Delivery: askreply.DeliveryMailbox}
+			report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(f.thread, store.Dir, f.storeDir != "")
+			return awaitAskAnswer(ctx, store, report, f.thread, afterSeq, f.timeout, f.jsonOutput)
+		}
 		return fmt.Errorf("question %s is closed (%s by %s); start a new ask", f.thread, thread.Closed.Reason, thread.Closed.By)
 	}
 	if err := store.Extend(f.thread, time.Now().Add(f.timeout)); err != nil {
@@ -379,7 +397,11 @@ func runAskAwait(f askFlags, store *askreply.Store) error {
 	report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(f.thread, store.Dir, f.storeDir != "")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return awaitAskAnswer(ctx, store, report, f.thread, thread.LastSeq(askreply.RoleAnswerer), f.timeout, f.jsonOutput)
+	return awaitAskAnswer(ctx, store, report, f.thread, afterSeq, f.timeout, f.jsonOutput)
+}
+
+func hasAnswerAfter(thread askreply.Thread, afterSeq int) bool {
+	return thread.LastSeq(askreply.RoleAnswerer) > afterSeq
 }
 
 func awaitAskAnswer(ctx context.Context, store *askreply.Store, report askReport, id string, afterSeq int, timeout time.Duration, jsonOutput bool) error {
@@ -388,6 +410,9 @@ func awaitAskAnswer(ctx context.Context, store *askreply.Store, report askReport
 	reply, err := store.AwaitAnswer(waitCtx, id, afterSeq)
 	if err != nil {
 		return askFailure(report, err, jsonOutput)
+	}
+	if err := store.MarkAnswerRead(id, reply.Seq); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 	}
 	report.Status = askStatusAnswered
 	report.Reply = &reply

@@ -472,3 +472,22 @@ func TestAwaitPromptAcknowledgesConsumedFollowUp(t *testing.T) {
 		t.Fatalf("ack marker must not be read as a message: %#v", thread.Messages)
 	}
 }
+
+func TestAnswerReadCursorOnlyMovesForward(t *testing.T) {
+	store := newTestStore(t)
+	request, err := store.Create("answerer", "/repo", "codex", "", DefaultTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.AnswerReadSeq(request.ID); err != nil || ok {
+		t.Fatalf("fresh thread cursor ok=%v err=%v, want none", ok, err)
+	}
+	for _, seq := range []int{4, 2} {
+		if err := store.MarkAnswerRead(request.ID, seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if seq, ok, err := store.AnswerReadSeq(request.ID); err != nil || !ok || seq != 4 {
+		t.Fatalf("cursor = %d, %v, %v; want 4", seq, ok, err)
+	}
+}
