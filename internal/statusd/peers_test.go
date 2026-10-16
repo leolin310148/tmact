@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leolin310148/tmact/internal/credreq"
 )
 
 func TestMergePeersPrefixesIDsAndSetsPeer(t *testing.T) {
@@ -341,5 +343,35 @@ func TestPeerFetcherIdlePacing(t *testing.T) {
 	f.IdleInterval = 500 * time.Millisecond
 	if got := f.currentInterval(); got != time.Second {
 		t.Fatalf("idle interval below fast interval = %v, want clamp to 1s", got)
+	}
+}
+
+func TestMergePeersPrefixesCredRequestsAndSkipsStalePeers(t *testing.T) {
+	local := Snapshot{
+		Panes:        map[string]PaneStatus{"main:0.0": {Target: "main:0.0", PaneID: "%5"}},
+		CredRequests: []credreq.Request{{ID: "c_local", Name: "local-token"}},
+	}
+	peerPanes := map[string]PaneStatus{"probe:0.0": {Target: "probe:0.0", PaneID: "%0"}}
+	peers := map[string]PeerSnapshot{
+		"mini": {Reachable: true, Snapshot: Snapshot{
+			Panes:        peerPanes,
+			CredRequests: []credreq.Request{{ID: "c_remote", Name: "github-pat"}},
+		}},
+		"stale": {Reachable: true, Err: errors.New("timeout"), Snapshot: Snapshot{
+			Panes:        peerPanes,
+			CredRequests: []credreq.Request{{ID: "c_old", Name: "old"}},
+		}},
+	}
+
+	merged := MergePeers(local, peers)
+
+	if len(merged.CredRequests) != 2 {
+		t.Fatalf("cred requests = %+v", merged.CredRequests)
+	}
+	if got := merged.CredRequests[0]; got.ID != "c_local" || got.Peer != "" {
+		t.Fatalf("local request = %+v", got)
+	}
+	if got := merged.CredRequests[1]; got.ID != "mini@c_remote" || got.Peer != "mini" || got.Name != "github-pat" {
+		t.Fatalf("peer request = %+v", got)
 	}
 }

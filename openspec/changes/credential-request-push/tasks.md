@@ -12,10 +12,10 @@
 
 ## 3. statusd Requests
 
-- [ ] In-memory request registry with timeout and one-shot transitions.
-- [ ] Socket-only create and wait routes; metadata, submit, decline routes.
-- [ ] `Snapshot.CredRequests` and peer-prefixed merge.
-- [ ] Tests: TCP create rejected, double submit 409, expiry, no value in
+- [x] In-memory request registry with timeout and one-shot transitions.
+- [x] Socket-only create and wait routes; metadata, submit, decline routes.
+- [x] `Snapshot.CredRequests` and peer-prefixed merge.
+- [x] Tests: TCP create rejected, double submit 409, expiry, no value in
       snapshot/metadata/logs.
 
 ## 4. Push and Peer Forwarding

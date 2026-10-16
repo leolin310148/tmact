@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/credreq"
+	"github.com/leolin310148/tmact/internal/credstore"
 	"github.com/leolin310148/tmact/internal/statusd"
 	"github.com/leolin310148/tmact/internal/stt"
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -209,6 +211,13 @@ func runStatusdStart(args []string) error {
 	// Adaptive idle pacing: the daemon reads the web tracker's clock each
 	// tick, wakes early on fresh web activity, and ingests the human-idle
 	// header fetching hubs attach to /api/snapshot requests.
+	if credStore, err := credstore.Default(); err == nil {
+		credRequests := credreq.NewRegistry(credStore)
+		server.CredRequests = credRequests
+		daemon.SetCredRequests(credRequests.Pending)
+	} else {
+		cfg.Logf("credential requests disabled: %v", err)
+	}
 	daemon.SetWebActivity(server.HumanLastActivity)
 	server.OnHumanActivity = daemon.NoteHumanActivity
 	server.RecordPeerHumanIdle = daemon.RecordFederatedActivity

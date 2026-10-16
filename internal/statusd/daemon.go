@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/shellhook"
 )
 
@@ -29,6 +30,9 @@ type Daemon struct {
 	wake        chan struct{}
 
 	closed *ClosedSessionLog
+	// credRequests supplies pending credential request metadata for the
+	// snapshot; nil leaves the field empty.
+	credRequests func() []credreq.Request
 	// prevSessions is the last poll's local session set (name → reopen info)
 	// used to detect sessions that disappeared; nil until the first poll so a
 	// daemon restart never mass-records sessions it simply hasn't seen yet.
@@ -210,6 +214,9 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 	// PublishTmuxOptions / EnforcePaneSize run before the merge so they only
 	// ever touch local tmux. Merging remote peers afterwards keeps /api/snapshot
 	// and the web UI in sync without confusing the local tmux integration.
+	if d.credRequests != nil {
+		snapshot.CredRequests = d.credRequests()
+	}
 	if d.peers != nil {
 		snapshot = MergePeers(snapshot, d.peers.Latest())
 	}
@@ -218,6 +225,12 @@ func (d *Daemon) RunOnce(ctx context.Context) (Snapshot, error) {
 		_ = appendLog(d.cfg.LogPath, snapshot)
 	}
 	return snapshot, scanErr
+}
+
+// SetCredRequests installs the source of pending credential requests that
+// each published snapshot carries. Call before Start.
+func (d *Daemon) SetCredRequests(fn func() []credreq.Request) {
+	d.credRequests = fn
 }
 
 func (d *Daemon) Start(ctx context.Context) error {

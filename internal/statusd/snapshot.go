@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/prompt"
@@ -35,7 +36,10 @@ type Snapshot struct {
 	Summary          Summary                  `json:"summary"`
 	Sessions         map[string]SessionStatus `json:"sessions"`
 	Panes            map[string]PaneStatus    `json:"panes"`
-	Errors           []SnapshotError          `json:"errors,omitempty"`
+	// CredRequests lists pending credential requests (metadata only, never
+	// values) so a push hub can notify for local and peer requests.
+	CredRequests []credreq.Request `json:"cred_requests,omitempty"`
+	Errors       []SnapshotError   `json:"errors,omitempty"`
 }
 
 type Summary struct {
@@ -466,6 +470,15 @@ func MergePeers(local Snapshot, peers map[string]PeerSnapshot) Snapshot {
 				session.ActiveTarget = prefix + session.ActiveTarget
 			}
 			local.Sessions[prefix+k] = session
+		}
+		// A stale peer's requests may already be resolved there; leave them
+		// out rather than notify for them again.
+		if !peerStale {
+			for _, req := range ps.Snapshot.CredRequests {
+				req.ID = prefix + req.ID
+				req.Peer = name
+				local.CredRequests = append(local.CredRequests, req)
+			}
 		}
 		for _, e := range ps.Snapshot.Errors {
 			scope := "peer:" + name

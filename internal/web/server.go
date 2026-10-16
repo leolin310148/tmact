@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/dispatch"
 	"github.com/leolin310148/tmact/internal/shellhook"
 	"github.com/leolin310148/tmact/internal/statusd"
@@ -189,6 +190,9 @@ type Server struct {
 	// IPC-only /api/hook-state read endpoint (typically the daemon's shellhook
 	// store States method). Nil disables the endpoint.
 	HookStates func() map[string]shellhook.PaneState
+	// CredRequests holds pending credential requests; nil disables the
+	// /api/cred/* routes.
+	CredRequests *credreq.Registry
 	// WebPushVAPIDPublicKey / WebPushVAPIDPrivateKey / WebPushVAPIDSubject
 	// configure same-origin PWA Web Push. Empty values fall back to
 	// TMACT_WEBPUSH_VAPID_* environment variables.
@@ -430,6 +434,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
 	mux.HandleFunc(paneCapturePath, s.handlePaneCapture)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
+	mux.HandleFunc(credRequestsPath, s.handleCredRequests)
+	mux.HandleFunc(credRequestsPath+"/", s.handleCredRequest)
 	mux.HandleFunc("/api/human-active", s.handleHumanActive)
 	mux.HandleFunc("/api/human-activity", s.handleHumanActivity)
 	mux.HandleFunc("/ws/pane", s.handlePaneWS)
