@@ -31,7 +31,14 @@ func (r *repeatedStrings) Set(value string) error {
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		var reported reportedError
-		if !errors.As(err, &reported) {
+		var exitCode exitCodeError
+		switch {
+		case errors.As(err, &exitCode):
+			if !exitCode.reported {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			os.Exit(exitCode.code)
+		case !errors.As(err, &reported):
 			fmt.Fprintln(os.Stderr, err)
 		}
 		os.Exit(1)
@@ -175,6 +182,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runTrustFolder(args[1:])
+	case "cred":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runCred(args[1:])
 	case "hook":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")

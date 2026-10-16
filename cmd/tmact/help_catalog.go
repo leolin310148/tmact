@@ -8,6 +8,7 @@ func commandHelpCatalog() []commandHelp {
 		loopCommandHelpCatalog(),
 		workflowV2CommandHelpCatalog(),
 		hookCommandHelpCatalog(),
+		credCommandHelpCatalog(),
 		logCommandHelpCatalog(),
 		llmCommandHelpCatalog(),
 		paneUtilityCommandHelpCatalog(),

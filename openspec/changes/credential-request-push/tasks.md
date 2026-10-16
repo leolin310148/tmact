@@ -28,9 +28,9 @@
 
 ## 5. CLI
 
-- [ ] `tmact cred request|path|ls|rm|run` in `cmd/tmact/cred_cmd.go`, wired in
+- [x] `tmact cred request|path|ls|rm|run` in `cmd/tmact/cred_cmd.go`, wired in
       `main.go` and the help catalog.
-- [ ] Tests for exit codes, `--refresh`, and `cred run` env injection.
+- [x] Tests for exit codes, `--refresh`, and `cred run` env injection.
 
 ## 6. Web UI
 
