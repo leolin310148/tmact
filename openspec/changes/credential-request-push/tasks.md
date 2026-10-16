@@ -34,8 +34,8 @@
 
 ## 6. Web UI
 
-- [ ] `?cred=` boot param and `OPEN_CRED` service-worker message.
-- [ ] `CredentialDialog` and pending-request badge; top-level window only.
+- [x] `?cred=` boot param and `OPEN_CRED` service-worker message.
+- [x] `CredentialDialog` and pending-request badge; top-level window only.
 
 ## 7. Skill and Docs
 

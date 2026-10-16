@@ -83,6 +83,7 @@ import { QuickEditor } from "./QuickEditor";
 import { RecOverlay } from "./RecOverlay";
 import UsagePanel from "./UsagePanel";
 import SettingsDialog from "./SettingsDialog";
+import CredentialRequests from "./CredentialRequests";
 import { HelpOverlay } from "./HelpOverlay";
 import { UploadControls } from "./UploadControls";
 
@@ -1337,6 +1338,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         </Suspense>
       ) : null}
       <DownloadList state={downloadList} onClose={closeDownloadList} />
+      {/* Credential entry is top-level only: split slots are iframes. */}
+      {!inSplitSlot && <CredentialRequests pending={state.snapshot?.cred_requests ?? []} />}
     </>
   );
 }

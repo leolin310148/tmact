@@ -46,6 +46,23 @@ export interface Snapshot {
   panes: Record<string, PaneStatus>;
   /** Up to 32 collection errors; absent (omitempty) when none. */
   errors?: SnapshotError[];
+  /** Pending credential requests, metadata only (never a value). */
+  cred_requests?: CredRequest[];
+}
+
+/** Go: credreq.Request. Peer-owned ids are "peer@c_...". */
+export interface CredRequest {
+  id: string;
+  name: string;
+  reason?: string;
+  pane_id?: string;
+  cwd?: string;
+  host?: string;
+  created_at: string;
+  expires_at: string;
+  state: "pending" | "submitted" | "declined" | "expired";
+  path?: string;
+  peer?: string;
 }
 
 export interface Summary {

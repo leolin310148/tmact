@@ -13,6 +13,7 @@ import type {
   SnapshotHeartbeat,
   AgentUsage,
   ClosedSession,
+  CredRequest,
   STTSettings,
   STTSettingsInput,
   VersionInfo,
@@ -351,4 +352,32 @@ function errorSummary(err: unknown): string {
   } catch {
     return String(err);
   }
+}
+
+// Credential requests. The value travels only in the submit body; jsonResponse
+// logs the URL and status on failure, never a body.
+export type CredResult = Partial<CredRequest> & { error?: string };
+
+function credURL(id: string, action = ""): string {
+  return "/api/cred/requests/" + encodeURIComponent(id) + (action ? "/" + action : "");
+}
+
+export function loadCredRequest(id: string): Promise<JsonResponse<CredResult>> {
+  return jsonResponse(credURL(id), { cache: "no-store" });
+}
+
+export function submitCredRequest(id: string, value: string): Promise<JsonResponse<CredResult>> {
+  return jsonResponse(credURL(id, "submit"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
+}
+
+export function declineCredRequest(id: string): Promise<JsonResponse<CredResult>> {
+  return jsonResponse(credURL(id, "decline"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
 }

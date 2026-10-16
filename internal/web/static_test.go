@@ -144,6 +144,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 		"/api/agent-usage", "/api/settings/stt", "/api/transcribe",
 		"/api/vapid-public-key", "/api/subscribe", "/api/unsubscribe",
 		"/api/paste-image", "/api/upload-file", "/api/image", "/api/markdown", "/api/file", "/ws/pane",
+		"/api/cred/requests/",
 	} {
 		if !strings.Contains(allJS, want) {
 			t.Fatalf("bundled app missing endpoint %q", want)
@@ -154,6 +155,7 @@ func TestBundledAppContainsControlsAndEndpoints(t *testing.T) {
 		"record-btn", "rec-send", "upload-btn", "selection-btn",
 		"file-upload", "gear-btn", "settings-overlay", "running-effect", "build-time",
 		"qb-fab", "help-btn", "conn-status", "option-bar", "direct-input", "copyline-run",
+		"cred-badge", "cred-overlay", "cred-value", "OPEN_CRED",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("bundled app missing control id %q", want)
@@ -178,7 +180,7 @@ func TestBundledStyleHasRuntimeClasses(t *testing.T) {
 		".agent-icon", "runtime-claude", "runtime-codex", "runtime-gemini",
 		"data-running-effect", "data-running-phase", "--pane-font",
 		"--tmact-vvh", ".image-preview", ".markdown-preview", ".image-path", ".markdown-path", ".selection-btn",
-		".qb-divider", ".effect-preview",
+		".qb-divider", ".effect-preview", ".cred-badge", ".cred-meta",
 	} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("bundled stylesheet missing %q", want)
@@ -302,6 +304,8 @@ func TestServiceWorkerHandlesWebPushSameOriginClicks(t *testing.T) {
 		`self.clients.openWindow(targetURL)`,
 		`url.searchParams.set("pane", paneId)`,
 		`url.origin !== self.location.origin`,
+		`postMessage({ type: "OPEN_CRED"`,
+		`client.frameType !== "nested"`,
 	} {
 		if !strings.Contains(sw, want) {
 			t.Fatalf("service worker missing web push behavior %q", want)

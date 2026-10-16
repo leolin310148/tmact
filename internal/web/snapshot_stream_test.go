@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/prompt"
 	"github.com/leolin310148/tmact/internal/statusd"
@@ -117,6 +118,17 @@ func TestWebSnapshotStreamStateDeduplicatesAndHeartbeats(t *testing.T) {
 	event, _, emit, err = state.next(snap)
 	if err != nil || !emit || event != "snapshot" {
 		t.Fatalf("changed next = event %q emit %v err %v", event, emit, err)
+	}
+
+	// A new pending credential request is a UI change on its own.
+	snap.CredRequests = []credreq.Request{{ID: "mini@c_abc", Name: "github-pat", State: credreq.StatePending}}
+	snap.Timestamp = base.Add(6 * time.Second)
+	event, payload, emit, err = state.next(snap)
+	if err != nil || !emit || event != "snapshot" {
+		t.Fatalf("cred next = event %q emit %v err %v", event, emit, err)
+	}
+	if got := payload.(webSnapshot).CredRequests; len(got) != 1 || got[0].ID != "mini@c_abc" {
+		t.Fatalf("projected cred requests = %+v", got)
 	}
 }
 

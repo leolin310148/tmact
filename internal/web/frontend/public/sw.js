@@ -154,6 +154,12 @@ self.addEventListener("notificationclick", (event) => {
   const paneId = normalizePaneID(notificationData.paneId);
   const targetURL = normalizeAppURL(notificationData.url, paneId);
 
+  const credId = credIDFromAppURL(targetURL);
+  if (credId) {
+    event.waitUntil(openCredRequest(credId, targetURL));
+    return;
+  }
+
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const sameOriginClient = clients.find((client) => {
@@ -173,6 +179,38 @@ self.addEventListener("notificationclick", (event) => {
     }),
   );
 });
+
+// Credential requests open the entry dialog in a top-level app window. The
+// split shell (/split.html) and its slot iframes do not handle OPEN_CRED, so
+// they are skipped; without a suitable window a new one opens the deep link.
+function openCredRequest(credId, targetURL) {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    const appClient = clients.find((client) => {
+      try {
+        const url = new URL(client.url);
+        return url.origin === self.location.origin &&
+          client.frameType !== "nested" &&
+          url.pathname !== "/split.html";
+      } catch (err) {
+        return false;
+      }
+    });
+    if (appClient) {
+      appClient.postMessage({ type: "OPEN_CRED", id: credId, url: targetURL });
+      return appClient.focus();
+    }
+    return self.clients.openWindow(targetURL);
+  });
+}
+
+function credIDFromAppURL(appURL) {
+  try {
+    const id = new URL(appURL, self.location.origin).searchParams.get("cred") || "";
+    return /^(?:[A-Za-z0-9_.-]+@)?c_[a-z2-7]{26}$/.test(id) ? id : "";
+  } catch (err) {
+    return "";
+  }
+}
 
 function normalizeAppURL(rawURL, paneId) {
   let url;

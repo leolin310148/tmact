@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/prompt"
 	"github.com/leolin310148/tmact/internal/statusd"
 )
@@ -23,6 +24,8 @@ type webSnapshot struct {
 	IntervalMS   int64                    `json:"interval_ms"`
 	StaleAfterMS int64                    `json:"stale_after_ms"`
 	Panes        map[string]webPaneStatus `json:"panes"`
+	// CredRequests is the pending-credential badge source (metadata only).
+	CredRequests []credreq.Request `json:"cred_requests,omitempty"`
 }
 
 type webPaneStatus struct {
@@ -74,6 +77,7 @@ func projectWebSnapshot(snap statusd.Snapshot) webSnapshot {
 		IntervalMS:   snap.IntervalMS,
 		StaleAfterMS: snap.StaleAfterMS,
 		Panes:        panes,
+		CredRequests: snap.CredRequests,
 	}
 }
 
@@ -95,9 +99,10 @@ type webSnapshotStreamState struct {
 func (s *webSnapshotStreamState) next(snap statusd.Snapshot) (string, any, bool, error) {
 	projected := projectWebSnapshot(snap)
 	semantic, err := json.Marshal(struct {
-		Version int                      `json:"version"`
-		Panes   map[string]webPaneStatus `json:"panes"`
-	}{Version: projected.Version, Panes: projected.Panes})
+		Version      int                      `json:"version"`
+		Panes        map[string]webPaneStatus `json:"panes"`
+		CredRequests []credreq.Request        `json:"cred_requests,omitempty"`
+	}{Version: projected.Version, Panes: projected.Panes, CredRequests: projected.CredRequests})
 	if err != nil {
 		return "", nil, false, err
 	}
