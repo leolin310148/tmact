@@ -100,6 +100,8 @@ func peerPaneRows(snap statusd.Snapshot, peerName string, now time.Time) []listP
 			PaneIndex:      pane.PaneIndex,
 			CurrentCommand: pane.CurrentCommand,
 			CurrentPath:    pane.CWD,
+			Runtime:        pane.Runtime,
+			State:          pane.State,
 			GeneratedAt:    now,
 		})
 	}

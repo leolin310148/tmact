@@ -45,9 +45,25 @@ func printDetectResult(result detectResult, jsonOutput bool) {
 
 func printPaneRows(rows []listPaneRow) {
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "#\ttarget\tsession\twindow\tpane\tcommand\tcwd")
+	// Only peer rows carry agent state; keep the local table unchanged.
+	withState := false
+	for _, row := range rows {
+		if row.State != "" {
+			withState = true
+			break
+		}
+	}
+	if withState {
+		fmt.Fprintln(writer, "#\ttarget\tsession\twindow\tpane\tcommand\tstate\tcwd")
+	} else {
+		fmt.Fprintln(writer, "#\ttarget\tsession\twindow\tpane\tcommand\tcwd")
+	}
 	for _, row := range rows {
 		window := fmt.Sprintf("%d:%s", row.WindowIndex, row.WindowName)
+		if withState {
+			fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n", row.Index, row.Target, row.Session, window, row.PaneIndex, row.CurrentCommand, row.State, row.CurrentPath)
+			continue
+		}
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%d\t%s\t%s\n", row.Index, row.Target, row.Session, window, row.PaneIndex, row.CurrentCommand, row.CurrentPath)
 	}
 	_ = writer.Flush()

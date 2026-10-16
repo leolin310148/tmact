@@ -17,7 +17,7 @@ func peerTestSnapshot() statusd.Snapshot {
 	return statusd.Snapshot{
 		Panes: map[string]statusd.PaneStatus{
 			"%40": {Target: "%40", Session: "puni-gw", WindowIndex: 0, Window: "main", PaneIndex: 0, CurrentCommand: "zsh", CWD: "/repo/gw"},
-			"%12": {Target: "%12", Session: "alpha", WindowIndex: 1, Window: "edit", PaneIndex: 2, CurrentCommand: "claude", CWD: "/repo/alpha"},
+			"%12": {Target: "%12", Session: "alpha", WindowIndex: 1, Window: "edit", PaneIndex: 2, CurrentCommand: "claude", CWD: "/repo/alpha", Runtime: "claude", State: "working"},
 			"%99": {Target: "%99", Session: "beta", CurrentCommand: "codex", CWD: "/repo/beta", Peer: "downstream"},
 		},
 	}
@@ -51,6 +51,9 @@ func TestPeerPaneRowsQualifiesTargetsAndSortsStably(t *testing.T) {
 	}
 	if rows[1].WindowName != "main" || rows[1].CurrentCommand != "zsh" || rows[1].CurrentPath != "/repo/gw" {
 		t.Fatalf("row fields not carried over: %#v", rows[1])
+	}
+	if rows[0].Runtime != "claude" || rows[0].State != "working" {
+		t.Fatalf("agent state not carried over: %#v", rows[0])
 	}
 	// A peer-qualified target must survive cache resolution without a local
 	// tmux probe, which is what makes `-t N` usable after `ls --peer`.

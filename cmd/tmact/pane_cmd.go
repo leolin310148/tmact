@@ -24,17 +24,21 @@ type detectResult struct {
 }
 
 type listPaneRow struct {
-	Index          int       `json:"index"`
-	Target         string    `json:"target"`
-	Session        string    `json:"session"`
-	WindowIndex    int       `json:"window_index"`
-	WindowName     string    `json:"window_name"`
-	PaneIndex      int       `json:"pane_index"`
-	CurrentCommand string    `json:"current_command"`
-	CurrentPath    string    `json:"current_path"`
-	Active         bool      `json:"active"`
-	InMode         bool      `json:"in_mode"`
-	GeneratedAt    time.Time `json:"-"`
+	Index          int    `json:"index"`
+	Target         string `json:"target"`
+	Session        string `json:"session"`
+	WindowIndex    int    `json:"window_index"`
+	WindowName     string `json:"window_name"`
+	PaneIndex      int    `json:"pane_index"`
+	CurrentCommand string `json:"current_command"`
+	CurrentPath    string `json:"current_path"`
+	Active         bool   `json:"active"`
+	InMode         bool   `json:"in_mode"`
+	// Runtime and State come from a peer's statusd snapshot; local `ls`
+	// leaves them empty.
+	Runtime     string    `json:"runtime,omitempty"`
+	State       string    `json:"state,omitempty"`
+	GeneratedAt time.Time `json:"-"`
 }
 
 func runList(args []string) error {
