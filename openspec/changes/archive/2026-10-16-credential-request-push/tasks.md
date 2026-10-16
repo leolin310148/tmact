@@ -45,5 +45,5 @@
 
 ## 8. Live Check
 
-- [ ] Request from a studio pane and from a mini pane, submit from the phone,
+- [x] Request from a studio pane and from a mini pane, submit from the phone,
       confirm one notification each and that `cred run` works.

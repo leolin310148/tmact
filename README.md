@@ -446,7 +446,7 @@ credential files — pane text is visible to statusd, the web UI, and peers —
 and should use `cred run`, which puts the value only into the child's
 environment. The `tmact-cred` skill spells out these rules. The design and
 threat model are in
-[`openspec/changes/credential-request-push`](openspec/changes/credential-request-push).
+[`openspec/changes/archive/2026-10-16-credential-request-push`](openspec/changes/archive/2026-10-16-credential-request-push).
 
 ## Tmux Session Persistence
 
