@@ -543,3 +543,41 @@ What do you want to do?
 		}
 	}
 }
+
+// Claude's default-setting nudges end in an unnumbered "Yes, ..." / "No, keep
+// ..." cursor menu. Undetected, the cursor row read as an operator draft and
+// dispatch timed out as draft_input instead of reporting the dialog.
+func TestDetectClaudeDefaultNudges(t *testing.T) {
+	for _, tc := range []struct{ name, question, yes, no string }{
+		{"auto mode", "Make auto mode your default permission mode?", "Yes, set auto mode as my default permission mode", "No, keep accept edits"},
+		{"effort", "Switch your default effort to medium?", "Yes, use medium effort by default", "No, keep high"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := "\n────────────────────────────────────────────\n " + tc.question + "\n\n" +
+				"   Auto mode lets Claude handle permission prompts automatically. Claude checks each\n" +
+				"   tool call for risky actions before executing.\n\n" +
+				"   ❯ " + tc.yes + "\n     " + tc.no + "\n\n Enter to confirm · Esc to cancel\n"
+			detected := Detect(raw)
+			if detected == nil || detected.Type != TypeChoicePrompt || detected.Question != tc.question {
+				t.Fatalf("detected=%#v", detected)
+			}
+			if len(detected.Options) != 2 || !detected.Options[0].Selected || detected.Options[1].Label != tc.no {
+				t.Fatalf("options=%#v", detected.Options)
+			}
+			for _, option := range detected.Options {
+				if option.Number != 0 {
+					t.Fatalf("option %q carries number %d", option.Label, option.Number)
+				}
+			}
+		})
+	}
+}
+
+// An agent reply that merely ends with a "Yes, ..." line above the input is not
+// a nudge: the menu needs exactly one cursor row and the "No, keep" partner.
+func TestDetectIgnoresYesLineWithoutNudgeMenu(t *testing.T) {
+	raw := "⏺ Should this be the default?\n  Yes, set it as default\n❯ no thanks, keep going\n"
+	if detected := Detect(raw); detected != nil {
+		t.Fatalf("detected=%#v", detected)
+	}
+}

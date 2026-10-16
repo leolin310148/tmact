@@ -165,6 +165,9 @@ func Detect(raw string) *Prompt {
 	if detected := detectClaudeWorkspaceTrust(raw); detected != nil {
 		return detected
 	}
+	if detected := detectClaudeDefaultNudge(raw); detected != nil {
+		return detected
+	}
 	return detectTrailingChoicePrompt(raw)
 }
 
@@ -380,6 +383,63 @@ func detectClaudeWorkspaceTrust(raw string) *Prompt {
 		detected.SelectedOption = selected
 	}
 	return detected
+}
+
+// detectClaudeDefaultNudge finds the dialogs Claude opens to offer changing a
+// saved default ("Make auto mode your default permission mode?", "Switch your
+// default effort to medium?"). Like the workspace-trust screen they end in an
+// unnumbered two-row cursor menu, here "Yes, ..." / "No, keep ...", which
+// otherwise reads as an operator draft in the input line. They change saved
+// settings, so this only reports them as a choice for a human; nothing here
+// may answer them.
+func detectClaudeDefaultNudge(raw string) *Prompt {
+	recent := trimMenuFooter(recentCleanedLines(raw, 24))
+	if len(recent) < 3 {
+		return nil
+	}
+	menu := len(recent) - 2
+	options := make([]Option, 0, 2)
+	cursors := 0
+	for _, row := range recent[menu:] {
+		option := parseCursorOption(row)
+		if option.Selected {
+			cursors++
+		}
+		options = append(options, option)
+	}
+	if cursors != 1 || !isClaudeDefaultNudgeMenu(options) {
+		return nil
+	}
+	question := ""
+	for index := menu - 1; index >= 0; index-- {
+		lower := strings.ToLower(recent[index])
+		if strings.HasSuffix(lower, "?") && strings.Contains(lower, "default") {
+			question = recent[index]
+			break
+		}
+	}
+	if question == "" {
+		return nil
+	}
+	return &Prompt{
+		Type:           TypeChoicePrompt,
+		Title:          question,
+		Question:       question,
+		Options:        options,
+		SelectedOption: selectedOption(options),
+		Confidence:     "high",
+	}
+}
+
+func isClaudeDefaultNudgeMenu(options []Option) bool {
+	if len(options) != 2 {
+		return false
+	}
+	first := normalizePromptText(options[0].Label)
+	second := normalizePromptText(options[1].Label)
+	isYes := func(label string) bool { return strings.HasPrefix(label, "yes, ") }
+	isNo := func(label string) bool { return strings.HasPrefix(label, "no, keep ") }
+	return (isYes(first) && isNo(second)) || (isNo(first) && isYes(second))
 }
 
 const claudeWorkspaceTrustQuestion = "is this a project you created or one you trust"

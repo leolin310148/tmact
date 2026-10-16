@@ -1408,3 +1408,36 @@ func TestExistingSessionReuseNoClearSkipsClear(t *testing.T) {
 		t.Fatalf("send-prompt status = %q", got)
 	}
 }
+
+// Claude can open "Make auto mode your default permission mode?" right after
+// launch. Dispatch must report that dialog instead of timing out on it, and
+// must never answer it — not even with --trust-folder.
+func TestExecuteNewSessionRefusesClaudeDefaultNudge(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	pane := claudePane()
+	pane.CurrentPath = dir
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		return " Make auto mode your default permission mode?\n\n   Auto mode lets Claude handle permission prompts automatically.\n\n" +
+			"   ❯ Yes, set auto mode as my default permission mode\n     No, keep accept edits\n\n Enter to confirm · Esc to cancel\n", nil
+	}
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Execute = true
+	opts.TrustFolder = true
+
+	report, err := dispatch.RunWithDeps(opts, deps)
+	if err == nil || !strings.Contains(err.Error(), "Make auto mode your default permission mode?") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := stepStatus(t, report, "wait-ready"); got != dispatch.StatusFailed {
+		t.Fatalf("wait-ready status = %q, want failed", got)
+	}
+	if len(rec.pastes) != 1 || len(rec.keys) != 0 {
+		t.Fatalf("nudge received input: pastes=%+v keys=%#v", rec.pastes, rec.keys)
+	}
+}

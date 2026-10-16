@@ -136,8 +136,11 @@ func isAgentRuntime(runtime string) bool {
 }
 
 func promptKind(classified panestate.Result) string {
-	if classified.InteractivePrompt != nil && classified.InteractivePrompt.Type != "" {
-		return classified.InteractivePrompt.Type
+	if detected := classified.InteractivePrompt; detected != nil && detected.Type != "" {
+		if detected.Title != "" {
+			return fmt.Sprintf("%s: %q", detected.Type, detected.Title)
+		}
+		return detected.Type
 	}
 	return "interactive prompt"
 }
