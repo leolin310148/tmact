@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/statusd"
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 // peerListTimeout bounds the single read-only snapshot fetch. `ls --peer` is an
@@ -20,7 +22,7 @@ const peerListTimeout = 10 * time.Second
 // so a dispatch-only peer is listable without granting it snapshot federation.
 func resolvePeerConfig(peerName, configPath string) (statusd.PeerFileConfig, error) {
 	if configPath == "" {
-		return statusd.PeerFileConfig{}, fmt.Errorf("ls --peer requires --config or a default statusd config path")
+		return statusd.PeerFileConfig{}, fmt.Errorf("peer %q requires --config or a default statusd config path", peerName)
 	}
 	cfg, err := statusd.LoadFileConfig(configPath)
 	if err != nil {
@@ -35,6 +37,14 @@ func resolvePeerConfig(peerName, configPath string) (statusd.PeerFileConfig, err
 		}
 	}
 	return statusd.PeerFileConfig{}, fmt.Errorf("peer %q not found in dispatch_peers or peers in %s", peerName, configPath)
+}
+
+// localPaneIDPattern matches the pane half of a peer@%N target.
+var localPaneIDPattern = regexp.MustCompile(`^%[0-9]+$`)
+
+// fetchPeerPaneCapture reads a peer pane read-only; tests replace it.
+var fetchPeerPaneCapture = func(ctx context.Context, peerName, baseURL, pane string, lines int, modes ...string) (web.PaneCapture, error) {
+	return web.FetchPeerCapture(ctx, nil, peerName, baseURL, pane, lines, modes...)
 }
 
 func fetchPeerSnapshot(ctx context.Context, client *http.Client, peerName, baseURL string) (statusd.Snapshot, error) {

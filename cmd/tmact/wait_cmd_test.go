@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/leolin310148/tmact/internal/panewait"
 	"github.com/leolin310148/tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 func TestWaitJSONIncludesTerminalReasonAndOptions(t *testing.T) {
@@ -175,7 +178,6 @@ func TestWaitValidation(t *testing.T) {
 		{"wait", "--target", "%7"},
 		{"wait", "--target", "work", "--until", "working"},
 		{"wait", "--target", "work:0", "--until", "working"},
-		{"wait", "--target", "peer-a@%7", "--until", "working"},
 		{"wait", "--session", "peer-a@work", "--until", "working"},
 		{"wait", "--session", "work:0.0", "--until", "working"},
 		{"wait", "--target", "%7", "--session", "work", "--until", "working"},
@@ -190,5 +192,73 @@ func TestWaitValidation(t *testing.T) {
 		if _, err := captureRun(t, args...); err == nil {
 			t.Errorf("expected validation error for %v", args)
 		}
+	}
+}
+
+func TestWaitPeerTargetObservesThePeerThroughItsCaptureEndpoint(t *testing.T) {
+	defer stubCLIHooks(t)()
+	paneWaitRun = func(context.Context, panewait.Options) (panewait.Report, error) {
+		t.Fatal("peer wait must not use the local tmux wait")
+		return panewait.Report{}, nil
+	}
+	fetchPeerPaneCapture = func(_ context.Context, peerName, baseURL, pane string, lines int, modes ...string) (web.PaneCapture, error) {
+		if peerName != "mini" || pane != "%7" || strings.Join(modes, ",") != "ansi" {
+			t.Fatalf("fetch got (%q, %q, %v)", peerName, pane, modes)
+		}
+		return web.PaneCapture{Target: "work:0.0", PaneID: "%7", Captures: map[string]string{"ansi": "remote screen"}}, nil
+	}
+	paneWaitRunWithDependencies = func(ctx context.Context, options panewait.Options, deps panewait.Dependencies) (panewait.Report, error) {
+		if options.Selector != "mini@%7" {
+			t.Fatalf("selector = %q", options.Selector)
+		}
+		info, err := deps.ResolveTarget(ctx, options.Selector)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := deps.CapturePane(ctx, info.PaneID, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Target != "mini@work:0.0" || info.PaneID != "mini@%7" || raw != "remote screen" {
+			t.Fatalf("info = %#v raw = %q", info, raw)
+		}
+		return panewait.Report{Target: info.Target, PaneID: info.PaneID, Reason: panewait.ReasonConditionMet, ConditionMet: true}, nil
+	}
+
+	out, err := captureRun(t, "wait", "--target", "mini@%7", "--until", "input-ready", "--config", writePeerConfig(t), "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"target": "mini@work:0.0"`) {
+		t.Fatalf("output = %s", out)
+	}
+}
+
+func TestPeerWaitDependenciesReportGonePaneAndRetryTransientErrors(t *testing.T) {
+	defer stubCLIHooks(t)()
+	calls := 0
+	fetchPeerPaneCapture = func(context.Context, string, string, string, int, ...string) (web.PaneCapture, error) {
+		calls++
+		if calls < 3 {
+			return web.PaneCapture{}, errors.New("connection reset")
+		}
+		return web.PaneCapture{}, fmt.Errorf("%w: mini@%%7", web.ErrPeerPaneGone)
+	}
+	waits := 0
+	deps := peerWaitDependenciesWithWait("mini", "http://mini.example:7890", func(context.Context, time.Duration) error {
+		waits++
+		return nil
+	})
+	_, err := deps.ResolveTarget(context.Background(), "mini@%7")
+	if !deps.IsTargetGone(err) {
+		t.Fatalf("err = %v, want gone", err)
+	}
+	if calls != 3 || waits != 2 {
+		t.Fatalf("calls = %d waits = %d, want 3 and 2", calls, waits)
+	}
+
+	calls = -10
+	if _, err := deps.ResolveTarget(context.Background(), "mini@%7"); err == nil || deps.IsTargetGone(err) || !strings.Contains(err.Error(), "after 6 attempts") {
+		t.Fatalf("err = %v, want transient failure after retries", err)
 	}
 }

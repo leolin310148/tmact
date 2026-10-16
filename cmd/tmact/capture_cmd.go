@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/statusd"
+	"github.com/leolin310148/tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 type captureReport struct {
@@ -39,6 +42,7 @@ func runCapture(args []string, globals globalOptions) error {
 	nonEmpty := fs.Bool("non-empty", false, "omit blank rows from captured text")
 	after := fs.String("after", "", "opaque cursor from a previous JSON capture")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
+	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file containing the peer for a peer@%N target")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -76,24 +80,48 @@ func runCapture(args []string, globals globalOptions) error {
 	if err != nil {
 		return err
 	}
-	if peer, _ := statusd.SplitPeerTarget(target); peer != "" {
-		return fmt.Errorf("capture does not support peer targets; %q refers to peer %q", target, peer)
-	}
-	if !isExactPaneTarget(target) {
-		return fmt.Errorf("capture requires an exact pane target like %%7 or session:0.0, got %q", target)
-	}
-
-	info, err := captureTmuxPaneInfo(target)
-	if err != nil {
-		return err
-	}
-	text, err := captureTmuxPane(info.PaneID, *lines)
-	if err != nil {
-		return err
-	}
-	styled, err := captureTmuxPaneStyled(info.PaneID, *lines)
-	if err != nil {
-		return err
+	var (
+		info         tmux.CapturePaneInfo
+		text, styled string
+	)
+	if peer, remotePane := statusd.SplitPeerTarget(target); peer != "" {
+		if !localPaneIDPattern.MatchString(remotePane) {
+			return fmt.Errorf("peer capture requires a pane id like %s@%%7, got %q", peer, target)
+		}
+		if afterProvided {
+			// The cursor is tied to one machine's pane history.
+			return errors.New("--after is not supported for peer targets")
+		}
+		peerCfg, err := resolvePeerConfig(peer, *configPath)
+		if err != nil {
+			return err
+		}
+		capture, err := fetchPeerPaneCapture(context.Background(), peer, peerCfg.URL, remotePane, *lines, web.CaptureModePlain, web.CaptureModeStyled)
+		if err != nil {
+			return err
+		}
+		info = tmux.CapturePaneInfo{
+			Target:      peer + statusd.PeerSeparator + capture.Target,
+			PaneID:      peer + statusd.PeerSeparator + capture.PaneID,
+			HistorySize: capture.HistorySize,
+		}
+		text, styled = capture.Captures[web.CaptureModePlain], capture.Captures[web.CaptureModeStyled]
+	} else {
+		if !isExactPaneTarget(target) {
+			return fmt.Errorf("capture requires an exact pane target like %%7 or session:0.0, got %q", target)
+		}
+		info, err = captureTmuxPaneInfo(target)
+		if err != nil {
+			return err
+		}
+		text, err = captureTmuxPane(info.PaneID, *lines)
+		if err != nil {
+			return err
+		}
+		styled, err = captureTmuxPaneStyled(info.PaneID, *lines)
+		if err != nil {
+			return err
+		}
 	}
 	text, inputPlaceholder := panestate.AnnotateDimSuggestion(text, styled)
 	if *nonEmpty {

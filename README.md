@@ -126,8 +126,13 @@ an operator interrupt remains a distinct cancellation.
 `--require-transition` prevents an already-matching initial state from ending
 the wait, and `--settle` requires the requested state to remain continuously
 matched. `condition_met` means only that the pane state was observed; an
-input-ready or idle-looking pane does not prove its task succeeded. Peer waits
-are explicitly unsupported.
+input-ready or idle-looking pane does not prove its task succeeded.
+
+`capture` and `wait` also accept a peer pane target such as `mini@%7` (as
+printed by `ls --peer`, which now shows each peer pane's agent state). They
+read the pane through the peer statusd's read-only `/api/pane/capture`
+endpoint, so the peer must run a tmact that has it; `capture --after` and
+`wait --session` stay local-only.
 
 Waits use terminal attributes to distinguish dim Claude/Codex suggestions from
 unsent drafts. A suggestion can be input-ready; a real draft does not satisfy

@@ -79,6 +79,12 @@ type Server struct {
 	// PaneCaptureTimeout bounds each pane-stream capture; defaults to
 	// wsCaptureTimeout.
 	PaneCaptureTimeout time.Duration
+	// PaneInfo resolves a pane's canonical target and history size for
+	// /api/pane/capture; defaults to tmux.CapturePaneInfoForTargetContext.
+	PaneInfo func(ctx context.Context, target string) (tmux.CapturePaneInfo, error)
+	// CapturePaneMode captures a pane in one of the CaptureMode* flavors for
+	// /api/pane/capture; defaults to the matching tmux helper.
+	CapturePaneMode func(ctx context.Context, target string, lines int, mode string) (string, error)
 	// PaneWidth reports a pane's grid width in columns; defaults to
 	// tmux.PaneWidthContext. Rides on pane patches so the browser can tell
 	// terminal soft-wrap newlines from real ones when running a selection.
@@ -422,6 +428,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/hook-event", s.handleHookEvent)
 	mux.HandleFunc("/api/hook-state", s.handleHookState)
 	mux.HandleFunc("/api/pane/diff", s.handlePaneDiff)
+	mux.HandleFunc(paneCapturePath, s.handlePaneCapture)
 	mux.HandleFunc("/api/pane/input", s.handlePaneInput)
 	mux.HandleFunc("/api/human-active", s.handleHumanActive)
 	mux.HandleFunc("/api/human-activity", s.handleHumanActivity)

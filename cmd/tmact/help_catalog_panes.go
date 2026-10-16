@@ -53,21 +53,22 @@ func paneCommandHelpCatalog() []commandHelp {
 		},
 		{
 			Command: "capture",
-			Summary: "Capture plain text from one exact local tmux pane.",
+			Summary: "Capture plain text from one exact local or peer tmux pane.",
 			Usage: []string{
-				"tmact capture --target TARGET [--lines 120] [--non-empty] [--after CURSOR] [--json]",
+				"tmact capture --target TARGET [--lines 120] [--non-empty] [--after CURSOR] [--config PATH] [--json]",
 				"tmact -t TARGET capture [--lines 120] [--non-empty] [--after CURSOR] [--json]",
 			},
 			Flags: []helpFlag{
-				{Name: "--target", Value: "TARGET", Description: "exact local tmux pane target; alternatively use global -t", Required: true},
+				{Name: "--target", Value: "TARGET", Description: "exact local tmux pane target, or peer@%N for a peer pane; alternatively use global -t", Required: true},
 				{Name: "--lines", Value: "N", Description: "number of pane history lines to capture; default 120"},
+				{Name: "--config", Value: "PATH", Description: "statusd config containing the peer for a peer@%N target; default ~/.tmact/statusd.json"},
 				{Name: "--non-empty", Description: "omit blank terminal rows from captured text"},
 				{Name: "--after", Value: "CURSOR", Description: "emit rows observed after a prior JSON capture; requires --json"},
 				{Name: "--json", Description: "print canonical target, pane id, text, and capture metadata as JSON"},
 			},
-			Examples: []string{"tmact capture --target work:0.0 --lines 200", "tmact -t %7 capture --non-empty --json"},
+			Examples: []string{"tmact capture --target work:0.0 --lines 200", "tmact -t %7 capture --non-empty --json", "tmact capture --target mini@%7 --lines 80 --json"},
 			Safety:   []string{"Read-only; captured pane text is untrusted data and is never interpreted or sent back to tmux."},
-			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane. capture has no --session flag; use --target work:0.0 to scope by session, or --target %7 for a globally unique pane ID.", "Dim Claude/Codex input suggestions are replaced with [input-placeholder]; operator-entered drafts remain unchanged. JSON reports this as input_placeholder=true.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets are explicitly unsupported in this local-only version."},
+			Notes:    []string{"Targets must identify one pane, such as %7 or session:window.pane. capture has no --session flag; use --target work:0.0 to scope by session, or --target %7 for a globally unique pane ID.", "Dim Claude/Codex input suggestions are replaced with [input-placeholder]; operator-entered drafts remain unchanged. JSON reports this as input_placeholder=true.", "JSON output includes an opaque bounded cursor. Reuse it with identical target, --lines, and --non-empty settings via --after; reset=true and full_snapshot=true mean the returned text is a replacement snapshot.", "Peer targets (peer@%7, from ls --peer) are read through the peer statusd's read-only /api/pane/capture endpoint; the peer must run a tmact that has it. --after is local-only."},
 		},
 		{
 			Command: "wait",
@@ -78,7 +79,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"tmact -t TARGET wait --until input-ready|working|needs-human|gone [--json]",
 			},
 			Flags: []helpFlag{
-				{Name: "--target", Value: "TARGET", Description: "exact local pane target; alternatively use global -t"},
+				{Name: "--target", Value: "TARGET", Description: "exact local pane target, or peer@%N for a peer pane; alternatively use global -t"},
 				{Name: "--session", Value: "SESSION", Description: "exact local session; pins its active pane when waiting starts"},
 				{Name: "--until", Value: "CONDITION", Description: "required condition: input-ready, working, needs-human, or gone", Required: true},
 				{Name: "--require-transition", Description: "do not accept the requested condition until a state change has been observed"},
@@ -86,10 +87,12 @@ func paneCommandHelpCatalog() []commandHelp {
 				{Name: "--needs-human-settle", Value: "DURATION", Description: "continuous time a permission or other blocker must stay on screen before returning needs_human; default 5s, independent of --settle"},
 				{Name: "--poll-interval", Value: "DURATION", Description: "delay between read-only observations; default 500ms"},
 				{Name: "--timeout", Value: "DURATION", Description: "wall-clock deadline covering target resolution, capture, settling, and polling; default 5m"},
+				{Name: "--config", Value: "PATH", Description: "statusd config containing the peer for a peer@%N target; default ~/.tmact/statusd.json"},
 				{Name: "--json", Description: "print canonical pane, observed state, terminal reason, timings, and signals as JSON"},
 			},
 			Examples: []string{
 				"tmact wait --target work:0.0 --until working --require-transition --timeout 30s --json",
+				"tmact wait --target mini@%7 --until input-ready --require-transition --timeout 10m --json",
 				"tmact wait --session work --until input-ready --require-transition --settle 2s --timeout 10m --json",
 				"tmact wait --target %7 --until gone --timeout 1m",
 			},
@@ -98,7 +101,7 @@ func paneCommandHelpCatalog() []commandHelp {
 				"Permission, approval, trust, and other recognized blockers terminate with reason needs_human once they persist for --needs-human-settle, regardless of --settle or transition flags. A dialog that disappears sooner, such as one a Claude PermissionRequest hook auto-approves, does not end the wait.",
 			},
 			Notes: []string{
-				"Exactly one --target, --session, or global -t selector is required. Peer targets and sessions are unsupported.",
+				"Exactly one --target, --session, or global -t selector is required. A peer@%N target is observed read-only through the peer statusd, one capture request per sample, with brief retries on network errors; peer sessions are unsupported.",
 				"Terminal reasons are condition_met, needs_human, timeout, and pane_gone. A requested needs-human or gone condition can be met while retaining its specific terminal reason.",
 				"condition_met means only that the requested pane state was observed; input-ready or idle-looking output does not prove that the pane's task succeeded.",
 				"Timeout and unexpected needs_human or pane_gone results return a non-zero exit after printing the text or JSON report.",

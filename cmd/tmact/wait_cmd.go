@@ -62,6 +62,7 @@ func runWait(args []string, globals globalOptions) error {
 	pollInterval := fs.Duration("poll-interval", defaultWaitPollInterval, "delay between pane observations")
 	timeout := fs.Duration("timeout", defaultWaitTimeout, "wall-clock deadline including target resolution, capture, settling, and polling")
 	jsonOutput := fs.Bool("json", false, "print JSON output")
+	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file containing the peer for a peer@%N target")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -108,16 +109,23 @@ func runWait(args []string, globals globalOptions) error {
 		selector = *sessionFlag
 		selectorKind = "session"
 	}
+	var peerDeps panewait.Dependencies
 	if selectorKind == "target" {
 		resolved, err := resolveWaitTarget(selector)
 		if err != nil {
 			return err
 		}
 		selector = resolved
-		if peer, _ := statusd.SplitPeerTarget(selector); peer != "" {
-			return fmt.Errorf("wait does not support peer targets; %q refers to peer %q", selector, peer)
-		}
-		if !isExactPaneTarget(selector) {
+		if peer, remotePane := statusd.SplitPeerTarget(selector); peer != "" {
+			if !localPaneIDPattern.MatchString(remotePane) {
+				return fmt.Errorf("peer wait requires a pane id like %s@%%7, got %q", peer, selector)
+			}
+			peerCfg, err := resolvePeerConfig(peer, *configPath)
+			if err != nil {
+				return err
+			}
+			peerDeps = peerWaitDependencies(peer, peerCfg.URL)
+		} else if !isExactPaneTarget(selector) {
 			return fmt.Errorf("wait --target requires an exact pane like %%7 or session:0.0, got %q", selector)
 		}
 	} else {
@@ -140,7 +148,13 @@ func runWait(args []string, globals globalOptions) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	report, err := paneWaitRun(ctx, options)
+	var report panewait.Report
+	var err error
+	if peerDeps.ResolveTarget != nil {
+		report, err = paneWaitRunWithDependencies(ctx, options, peerDeps)
+	} else {
+		report, err = paneWaitRun(ctx, options)
+	}
 	if err != nil {
 		return err
 	}

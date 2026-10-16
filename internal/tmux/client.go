@@ -789,7 +789,12 @@ func CapturePaneANSIContext(ctx context.Context, target string, lines int) (stri
 // CapturePaneStyled keeps terminal attributes like CapturePaneANSI, but joins
 // wrapped rows like CapturePane so callers can safely compare the two forms.
 func CapturePaneStyled(target string, lines int) (string, error) {
-	return capturePaneContext(context.Background(), target, lines, true, true)
+	return CapturePaneStyledContext(context.Background(), target, lines)
+}
+
+// CapturePaneStyledContext is CapturePaneStyled within the caller's deadline.
+func CapturePaneStyledContext(ctx context.Context, target string, lines int) (string, error) {
+	return capturePaneContext(ctx, target, lines, true, true)
 }
 
 func capturePaneContext(ctx context.Context, target string, lines int, escapes, joinWrapped bool) (string, error) {

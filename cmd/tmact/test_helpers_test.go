@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 func captureRun(t *testing.T, args ...string) (string, error) {
@@ -60,6 +64,12 @@ func stubCLIHooks(t *testing.T) func() {
 	oldDispatchRemoteRun := dispatchRemoteRun
 	oldSendPeerPaneInput := sendPeerPaneInput
 	oldPaneWaitRun := paneWaitRun
+	oldPaneWaitRunWithDependencies := paneWaitRunWithDependencies
+	oldFetchPeerPaneCapture := fetchPeerPaneCapture
+	// Tests must never reach a real peer from the user's statusd config.
+	fetchPeerPaneCapture = func(_ context.Context, peerName, _, pane string, _ int, _ ...string) (web.PaneCapture, error) {
+		return web.PaneCapture{}, fmt.Errorf("test made an unstubbed peer capture request to %s@%s", peerName, pane)
+	}
 
 	return func() {
 		listAllTmuxPanes = oldListAllTmuxPanes
@@ -82,5 +92,7 @@ func stubCLIHooks(t *testing.T) func() {
 		dispatchRemoteRun = oldDispatchRemoteRun
 		sendPeerPaneInput = oldSendPeerPaneInput
 		paneWaitRun = oldPaneWaitRun
+		paneWaitRunWithDependencies = oldPaneWaitRunWithDependencies
+		fetchPeerPaneCapture = oldFetchPeerPaneCapture
 	}
 }

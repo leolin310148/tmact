@@ -64,8 +64,11 @@ nothing locally, starts no polling, and lists only panes local to that peer.
 - For local work, `--wait` proves prompt acceptance, then waits read-only for a
   stable input-ready pane or a terminal blocker. It does not prove task success
   or return an explicit agent answer; use `tmact-ask` for that.
-- `--wait` is unavailable with `--peer`; fail explicitly instead of monitoring
-  a peer through local tmux commands.
+- `--wait` is unavailable with `--peer`. Instead, take the peer-qualified
+  target from the dispatch report (for example `mini@%7`) and observe it with
+  `tmact wait --target mini@%7 --until input-ready --require-transition` and
+  `tmact capture --target mini@%7`; `tmact ls --peer mini` shows each pane's
+  agent state.
 - `--trust-folder` is the only opt-in trust exception. It supports Claude and
   Codex only and requires exact canonical pane-cwd/`--dir` equality.
 

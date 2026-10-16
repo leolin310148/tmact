@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/leolin310148/tmact/internal/tmux"
+	"github.com/leolin310148/tmact/internal/web"
 )
 
 func TestCapturePrintsOnlyCapturedText(t *testing.T) {
@@ -184,7 +187,14 @@ func TestCapturePreservesOperatorDraft(t *testing.T) {
 	}
 }
 
-func TestCaptureRejectsPeerBeforeLocalTmux(t *testing.T) {
+func writePeerConfig(t *testing.T) string {
+	t.Helper()
+	configPath := filepath.Join(t.TempDir(), "statusd.json")
+	writeText(t, configPath, `{"dispatch_peers":[{"name":"mini","url":"http://mini.example:7890"}]}`)
+	return configPath
+}
+
+func TestCapturePeerTargetReadsThePeerNotLocalTmux(t *testing.T) {
 	resetCLIHooks := stubCLIHooks(t)
 	defer resetCLIHooks()
 
@@ -196,10 +206,42 @@ func TestCaptureRejectsPeerBeforeLocalTmux(t *testing.T) {
 		t.Fatal("peer capture must not capture local tmux")
 		return "", nil
 	}
+	fetchPeerPaneCapture = func(_ context.Context, peerName, baseURL, pane string, lines int, modes ...string) (web.PaneCapture, error) {
+		if peerName != "mini" || baseURL != "http://mini.example:7890" || pane != "%7" || lines != 40 {
+			t.Fatalf("fetch got (%q, %q, %q, %d)", peerName, baseURL, pane, lines)
+		}
+		if strings.Join(modes, ",") != "plain,styled" {
+			t.Fatalf("modes = %v", modes)
+		}
+		return web.PaneCapture{Target: "work:0.0", PaneID: "%7", HistorySize: 300, Captures: map[string]string{
+			"plain": "remote output\n", "styled": "remote output\n",
+		}}, nil
+	}
 
-	_, err := captureRun(t, "capture", "--target", "mini@%7")
-	if err == nil || !strings.Contains(err.Error(), "does not support peer targets") {
-		t.Fatalf("err = %v", err)
+	out, err := captureRun(t, "capture", "--target", "mini@%7", "--lines", "40", "--config", writePeerConfig(t), "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report captureReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Target != "mini@work:0.0" || report.PaneID != "mini@%7" || report.Text != "remote output\n" || !report.Truncated {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestCapturePeerTargetRejectsAfterAndSessionTargets(t *testing.T) {
+	resetCLIHooks := stubCLIHooks(t)
+	defer resetCLIHooks()
+	configPath := writePeerConfig(t)
+	for _, args := range [][]string{
+		{"capture", "--target", "mini@%7", "--after", "cursor", "--json", "--config", configPath},
+		{"capture", "--target", "mini@work:0.0", "--config", configPath},
+	} {
+		if _, err := captureRun(t, args...); err == nil {
+			t.Fatalf("expected error for %v", args)
+		}
 	}
 }
 
