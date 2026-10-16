@@ -687,3 +687,42 @@ html[data-running-phase="3"] .desk-ask {
     bottom: calc(var(--ds) * 1px + 16px);
   }
 }
+
+/* "Jump to question" button: shown while any non-selected pane is asking. The
+   zero-width anchor is the last flex item of the scroll viewport, kept at its
+   right edge with sticky so the button stays put while the room pans. */
+.office-ask-jump-anchor {
+  position: sticky;
+  right: 0;
+  flex: 0 0 0;
+  width: 0;
+  align-self: stretch;
+  z-index: 300;
+}
+.office-ask-jump {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(26,17,0,0.35);
+  border-radius: 15px;
+  background: var(--amber);
+  color: #1a1100;
+  font: 800 15px/1 var(--mono);
+  box-shadow: 0 0 8px rgba(210,153,34,0.75), 0 2px 6px rgba(0,0,0,0.45);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.office-ask-jump:active { transform: translateY(1px); }
+.office-ask-jump:focus-visible { outline: 2px solid var(--fg, #fff); outline-offset: 2px; }
+.office-ask-jump-count {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(26,17,0,0.2);
+}

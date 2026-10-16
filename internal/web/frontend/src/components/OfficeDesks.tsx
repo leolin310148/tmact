@@ -124,6 +124,7 @@ function Desk({
       title={title}
       aria-label={"Select pane " + (peer ? peer + " " : "") + label + ", " + paneStateLabel(pane)}
       aria-pressed={selected}
+      data-pane-id={paneID}
       onPointerDown={onPointerDownNoBlur}
       onClick={() => onSelect(paneID)}
     >
@@ -231,7 +232,28 @@ function LampMore({
   );
 }
 
+// nextAskingPane picks the desk the "jump to question" button should go to:
+// the first asking pane after the current selection in desk order (wrapping),
+// so repeated taps cycle through every waiting agent. The selected pane itself
+// is skipped — the user is already looking at it.
+export function nextAskingPane(items: PaneListItem[], selected: string | null): string | null {
+  const ids = items.map((item) => item.pane.pane_id ?? "");
+  const asking = items
+    .filter((item) => item.pane.asking && !item.pane.stale)
+    .map((item) => item.pane.pane_id ?? "")
+    .filter((id) => id !== "" && id !== selected);
+  if (asking.length === 0) return null;
+  const start = selected ? ids.indexOf(selected) : -1;
+  if (start < 0) return asking[0]!;
+  for (let i = 1; i <= ids.length; i++) {
+    const id = ids[(start + i) % ids.length]!;
+    if (asking.includes(id)) return id;
+  }
+  return asking[0]!;
+}
+
 export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
+  const rootRef = useRef<HTMLElement | null>(null);
   const labelHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [labelsVisible, setLabelsVisible] = useState(false);
   // Easter egg: clicking the floor-to-ceiling window forces a scene mode, an
@@ -289,8 +311,32 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
     if (labelHideTimer.current) clearTimeout(labelHideTimer.current);
   }, []);
 
+  // Panes asking a question other than the one already selected. On a phone
+  // only a few desks fit, so the button saves scrolling the room to find the "?".
+  const askingCount = visible.filter(
+    (item) => item.pane.asking && !item.pane.stale && (item.pane.pane_id ?? "") !== selected,
+  ).length;
+  const jumpToAsking = () => {
+    const target = nextAskingPane(visible, selected);
+    if (!target) return;
+    const desk = Array.from(
+      rootRef.current?.querySelectorAll<HTMLElement>("[data-pane-id]") ?? [],
+    ).find((el) => el.dataset.paneId === target);
+    desk?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+    onSelect(target);
+  };
+  const jumpLabel =
+    askingCount === 1
+      ? "Jump to the pane asking a question"
+      : "Jump to the next of " + askingCount + " panes asking a question";
+
   return (
-    <aside className={rootClass} style={rootStyle} aria-label="Office desks pane switcher">
+    <aside
+      ref={rootRef}
+      className={rootClass}
+      style={rootStyle}
+      aria-label="Office desks pane switcher"
+    >
       <div
         className="office-desks-floor"
         onPointerDownCapture={showMobileLabels}
@@ -398,6 +444,22 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
           </div>
         )}
       </div>
+      {/* Pinned to the viewport's right edge (sticky) while the room scrolls. */}
+      {askingCount > 0 ? (
+        <span className="office-ask-jump-anchor">
+          <button
+            type="button"
+            className="office-ask-jump"
+            title={jumpLabel}
+            aria-label={jumpLabel}
+            onPointerDown={onPointerDownNoBlur}
+            onClick={jumpToAsking}
+          >
+            <span className="office-ask-jump-mark" aria-hidden="true">?</span>
+            {askingCount > 1 ? <span className="office-ask-jump-count">{askingCount}</span> : null}
+          </button>
+        </span>
+      ) : null}
     </aside>
   );
 }

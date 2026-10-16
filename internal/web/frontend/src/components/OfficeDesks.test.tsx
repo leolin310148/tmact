@@ -141,3 +141,72 @@ describe("OfficeDesks overflow", () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+describe("OfficeDesks jump-to-question button", () => {
+  const desks = () => [
+    pane({ pane_id: "%1", target: "a:0.0", session: "a", runtime: "claude" }),
+    pane({ pane_id: "%2", target: "b:0.0", session: "b", runtime: "codex", asking: true }),
+    pane({ pane_id: "%3", target: "c:0.0", session: "c", runtime: "claude" }),
+    pane({ pane_id: "%4", target: "d:0.0", session: "d", runtime: "claude", asking: true }),
+  ];
+
+  it("is hidden when no pane is asking", () => {
+    render(
+      <OfficeDesks
+        panes={[pane({ runtime: "claude" })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /asking a question/ })).toBeNull();
+  });
+
+  it("is hidden when the only asking pane is already selected", () => {
+    render(
+      <OfficeDesks
+        panes={[pane({ runtime: "claude", asking: true })]}
+        selected="%1"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /asking a question/ })).toBeNull();
+  });
+
+  it("ignores stale asking panes", () => {
+    render(
+      <OfficeDesks
+        panes={[pane({ runtime: "claude", asking: true, stale: true })]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /asking a question/ })).toBeNull();
+  });
+
+  it("scrolls to and selects the next asking pane", async () => {
+    const scrolled: string[] = [];
+    const orig = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      scrolled.push(this.dataset.paneId ?? "");
+    };
+    try {
+      const onSelect = vi.fn();
+      render(<OfficeDesks panes={desks()} selected="%1" onSelect={onSelect} />);
+      const btn = screen.getByRole("button", { name: /next of 2 panes asking a question/ });
+      expect(btn.textContent).toContain("2");
+      await userEvent.click(btn);
+      expect(onSelect).toHaveBeenCalledWith("%2");
+      expect(scrolled).toEqual(["%2"]);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = orig;
+    }
+  });
+
+  it("cycles past the selected asking pane and wraps", async () => {
+    const onSelect = vi.fn();
+    render(<OfficeDesks panes={desks()} selected="%4" onSelect={onSelect} />);
+    // %4 is selected, so only %2 counts and is the wrap-around target.
+    await userEvent.click(screen.getByRole("button", { name: "Jump to the pane asking a question" }));
+    expect(onSelect).toHaveBeenCalledWith("%2");
+  });
+});
