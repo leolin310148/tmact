@@ -1,0 +1,4 @@
+interface:
+  display_name: "tmact Cred"
+  short_description: "Ask the user for a credential and use it unprinted"
+  default_prompt: "Use $tmact-cred to get a credential from the user and run a command with it."

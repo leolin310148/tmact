@@ -39,9 +39,9 @@
 
 ## 7. Skill and Docs
 
-- [ ] `skills/tmact-cred/SKILL.md` + `agents/openai.yaml`; run
+- [x] `skills/tmact-cred/SKILL.md` + `agents/openai.yaml`; run
       `quick_validate.py` and `scripts/install-skills.sh --check`.
-- [ ] README section.
+- [x] README section.
 
 ## 8. Live Check
 

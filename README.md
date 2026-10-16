@@ -39,6 +39,10 @@ Use the CLI when you want scriptable tmux control:
   process receives that answer without scraping pane output. A question is a
   thread: `ask --thread` sends a follow-up, `reply --wait` lets the answerer
   block for one, and `reply --final` or `ask --close` ends it.
+- `tmact cred request NAME --reason TEXT` asks the user for a credential by
+  web push and prints only the stored file's path; `tmact cred run --env
+  VAR=NAME -- cmd` runs a command with it, so the value never reaches agent
+  output or a pane.
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.
 - `tmact hook init zsh|bash|fish` prints an opt-in shell snippet whose
@@ -413,6 +417,36 @@ changes the code identity and causes privacy permissions to be requested again.
 On WSL, statusd auto-start requires `systemd` (set `systemd=true` in
 `/etc/wsl.conf` and `wsl --shutdown`); without it the binary still installs
 fine and you can launch statusd manually with `tmact statusd start &`.
+
+### Credential requests
+
+An agent that needs a secret it does not have asks the user instead of
+reading one from chat or a pane:
+
+```sh
+tmact cred request github-pat --reason "push the release tag"
+tmact cred run --env GITHUB_TOKEN=github-pat -- gh release create v1.2.0
+```
+
+`cred request` goes to the local statusd over its IPC socket (TCP callers are
+rejected) and blocks until the user answers, up to `--timeout` (default 10m,
+max 1h). The push hub — the statusd with VAPID keys, studio here — sends one
+notification per request, including requests made on a peer, which reach it
+through the peer snapshot. Tapping it opens the web UI's credential dialog
+(`/?cred=<id>`); a 🔑 badge lists pending requests if a push was missed. The
+submitted value is written as a 0600 file under `~/.tmact/.cred/NAME` on the
+machine that asked; for a peer request the hub forwards the submit and keeps
+no copy.
+
+The command prints only the path and exits 0 when stored, 3 when declined, 4
+when expired. An already stored name returns at once without a push;
+`--refresh` asks again. `cred path`, `cred ls`, and `cred rm` never print a
+value, and no HTTP endpoint returns one. Agents must not `cat` or echo
+credential files — pane text is visible to statusd, the web UI, and peers —
+and should use `cred run`, which puts the value only into the child's
+environment. The `tmact-cred` skill spells out these rules. The design and
+threat model are in
+[`openspec/changes/credential-request-push`](openspec/changes/credential-request-push).
 
 ## Tmux Session Persistence
 
