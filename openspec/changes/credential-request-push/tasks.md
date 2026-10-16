@@ -20,11 +20,11 @@
 
 ## 4. Push and Peer Forwarding
 
-- [ ] Notifier that pushes once per request id when VAPID and subscriptions
+- [x] Notifier that pushes once per request id when VAPID and subscriptions
       exist.
-- [ ] Forward metadata/submit/decline with `?peer=`; never proxy socket-only
+- [x] Forward metadata/submit/decline with `?peer=`; never proxy socket-only
       routes.
-- [ ] Tests with a fake push client and a fake peer.
+- [x] Tests with a fake push client and a fake peer.
 
 ## 5. CLI
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/credstore"
+	"github.com/leolin310148/tmact/internal/statusd"
 )
 
 const (
@@ -68,6 +69,10 @@ func (s *Server) handleCredRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	rest := strings.TrimPrefix(r.URL.Path, credRequestsPath+"/")
 	id, action, _ := strings.Cut(rest, "/")
+	if peer, localID := statusd.SplitPeerTarget(id); peer != "" {
+		s.proxyPeerCredRequest(w, r, peer, localID, action)
+		return
+	}
 	if !credreq.ValidID(id) {
 		writeJSONError(w, http.StatusNotFound, credreq.ErrUnknown.Error())
 		return
@@ -119,6 +124,38 @@ func (s *Server) handleCredRequest(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSONError(w, http.StatusNotFound, "not found")
 	}
+}
+
+// proxyPeerCredRequest forwards a request for a peer-owned credential
+// request ("peer@c_...") to that peer. The browser guard runs here first and
+// again on the peer; the wait route stays socket-only and is never forwarded.
+func (s *Server) proxyPeerCredRequest(w http.ResponseWriter, r *http.Request, peer, localID, action string) {
+	if !credreq.ValidID(localID) {
+		writeJSONError(w, http.StatusNotFound, credreq.ErrUnknown.Error())
+		return
+	}
+	switch action {
+	case "":
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+	case "submit", "decline":
+		if !requireMethod(w, r, http.MethodPost) || !requireSessionMutationRequest(w, r) {
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, credSubmitMaxBodyBytes)
+	default:
+		writeJSONError(w, http.StatusNotFound, "not found")
+		return
+	}
+	path := credRequestsPath + "/" + localID
+	if action != "" {
+		path += "/" + action
+	}
+	q := r.URL.Query()
+	q.Set("peer", peer)
+	r.URL.RawQuery = q.Encode()
+	s.maybeProxyPeerHTTP(w, r, path)
 }
 
 func (s *Server) credEnabled(w http.ResponseWriter) bool {

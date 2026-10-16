@@ -626,6 +626,9 @@ func (s *Server) Serve(ctx context.Context) error {
 	if s.SpendEnabled {
 		go s.runSpendRefresh(serveCtx)
 	}
+	if s.Store != nil && s.pushConfigured() {
+		go s.runCredPushNotifier(serveCtx)
+	}
 
 	errCh := make(chan error, 2)
 	var wg sync.WaitGroup

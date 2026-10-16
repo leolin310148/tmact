@@ -108,14 +108,11 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	privateKey := s.webPushVAPIDPrivateKey()
-	publicKey := s.webPushVAPIDPublicKey()
-	subject := s.webPushVAPIDSubject()
-	if privateKey == "" || publicKey == "" {
+	if s.webPushVAPIDPrivateKey() == "" || s.webPushVAPIDPublicKey() == "" {
 		writeJSONError(w, http.StatusServiceUnavailable, "web push VAPID keys are not configured")
 		return
 	}
-	if err := validateVAPIDSubject(subject); err != nil {
+	if err := validateVAPIDSubject(s.webPushVAPIDSubject()); err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
@@ -139,25 +136,45 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	if msg.Body == "" {
 		msg.Body = msg.Title
 	}
-	topic := normalizeWebPushTopic(msg.Tag, msg.PaneID)
+	result, err := s.sendPush(r.Context(), msg, normalizeWebPushTopic(msg.Tag, msg.PaneID))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"sent": result.Sent, "failed": result.Failed, "total": result.Total})
+}
 
+type pushResult struct {
+	Sent, Failed, Total int
+}
+
+// pushConfigured reports whether VAPID keys and subject are usable.
+func (s *Server) pushConfigured() bool {
+	return s.webPushVAPIDPrivateKey() != "" && s.webPushVAPIDPublicKey() != "" &&
+		validateVAPIDSubject(s.webPushVAPIDSubject()) == nil
+}
+
+// sendPush delivers msg to every stored subscription and prunes expired
+// ones. Callers check pushConfigured first.
+func (s *Server) sendPush(ctx context.Context, msg pushMessage, topic string) (pushResult, error) {
+	privateKey := s.webPushVAPIDPrivateKey()
+	publicKey := s.webPushVAPIDPublicKey()
+	subject := s.webPushVAPIDSubject()
 	payload, err := json.Marshal(msg)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "encode push payload failed")
-		return
+		return pushResult{}, errors.New("encode push payload failed")
 	}
 	subs, err := s.loadPushSubscriptions()
 	if err != nil {
 		s.logf("load web push subscriptions: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "load subscriptions failed")
-		return
+		return pushResult{}, errors.New("load subscriptions failed")
 	}
 
 	total := len(subs)
 	sent, failed := 0, 0
 	expired := make([]string, 0)
 	for endpoint, sub := range subs {
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		resp, err := webpush.SendNotificationWithContext(ctx, payload, &sub, &webpush.Options{
 			HTTPClient:      s.webPushHTTPClient(),
 			Subscriber:      subject,
@@ -199,7 +216,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 			s.logf("delete expired web push subscriptions: %v", err)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"sent": sent, "failed": failed, "total": total})
+	return pushResult{Sent: sent, Failed: failed, Total: total}, nil
 }
 
 func normalizeWebPushTopic(rawTag, rawPaneID string) string {
