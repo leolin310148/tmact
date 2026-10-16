@@ -2,13 +2,13 @@
 
 ## 1. Proposal Review
 
-- [ ] User reviews proposal, design, and spec.
+- [x] User reviews proposal, design, and spec.
 
 ## 2. Credential Store
 
-- [ ] Add `internal/credstore` with name validation, atomic 0600 write, list,
+- [x] Add `internal/credstore` with name validation, atomic 0600 write, list,
       remove, path, and owner/symlink checks.
-- [ ] Unit tests for invalid names, symlinked root/file, permissions.
+- [x] Unit tests for invalid names, symlinked root/file, permissions.
 
 ## 3. statusd Requests
 
