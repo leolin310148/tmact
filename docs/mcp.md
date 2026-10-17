@@ -66,7 +66,44 @@ panes present in the current snapshot.
   advances the asker read cursor and extends the question deadline (2h) instead
   of closing it when the wait ends, because ChatGPT cannot block for long.
 
-Not exposed: kill, close, fork, raw keys, `/api/command`.
+### CLI bridge (`tmact_*` tools)
+
+Allowlisted CLI commands are also exposed one tool per command, generated from
+the help catalog (`tmact help --json`) in `cmd/tmact/mcp_bridge.go`. A call
+runs this same binary (`os.Executable()`, no shell) from the user's home with
+an 80s cap; `--json` is added automatically when the command supports it and
+the parsed JSON is returned as `result`, otherwise stdout/stderr are wrapped as
+untrusted observed output. Non-zero exit or timeout sets `isError`.
+
+- Read (always): `ls`, `capture`, `status`, `inspect`, `detect`, `summarize`,
+  `session closed`, `loop list/status/logs`, `workflow status/logs`,
+  `statusd read/status`, `cred ls`.
+- Write (only with dispatch roots): `send`, `dispatch-work`,
+  `session create/close/reopen/resume`, `broadcast`,
+  `loop start/pause/resume/stop/restart`,
+  `workflow start/pause/resume/stop/retry/acknowledge`.
+- Never bridged: `cred run/rm/request`, `trust-folder`, `hook *`,
+  `statusd start/once`, `stt-set`, `panels`, `ask`/`reply` (use the ask tools;
+  killing `tmact ask` at the time cap would close its thread), `workflow report`
+  (an answerer-side command), and anything else not in the allowlist.
+- CLI defaults are kept: `send`, `dispatch-work`, `session *`, `broadcast`, and
+  `workflow start` only print a plan unless `execute: true`.
+- Removed flags: `--trust-folder(s)`, `--socket-path`, `--follow`, and
+  `dispatch-work --wait*`/`--result-lines` (use `wait_pane`). `--config` is
+  hidden on `ls`/`capture`/`send`/`dispatch-work` (statusd config default).
+- `--dir`, `--config`, `--run-dir` must be `~/` paths under the dispatch roots,
+  symlink-resolved on the hub; `dispatch-work --peer` keeps `~/` for the peer.
+- Positionals are validated (session names, no leading `-`); unknown
+  parameters are rejected; `send`'s target is emitted as the global `-t`.
+- The child runs with cwd = home, so cwd-relative defaults (`.tmact/runs`,
+  `examples/agents.yaml`) resolve under home; tool descriptions tell the
+  client to pass `run_dir`/`config` explicitly.
+
+Unlike `send_text`, `tmact_send` can type `--command`/`--key` into any pane,
+including shells — that is the CLI's own surface, gated by `execute` and the
+ChatGPT confirmation.
+
+Not exposed: kill/close/fork via the web input API, `/api/command`.
 
 ## Authentication
 

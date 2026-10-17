@@ -36,8 +36,9 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
   `panestatus`, `state`, `agents`, `runmeta`, `tmux`, `web`).
 - Configs: `examples/*.yaml` (agents, loops, watches, workflows).
 - Run metadata for long processes: `.tmact/runs/`.
-- MCP server for ChatGPT/Codex: `internal/mcp` (`tmact mcp serve`, read tools
-  plus allowlisted dispatch/send, Cloudflare Access JWT gate); setup in `docs/mcp.md`.
+- MCP server for ChatGPT/Codex: `internal/mcp` (`tmact mcp serve`, read tools,
+  allowlisted dispatch/send/ask, and the `tmact_*` CLI bridge built from the
+  help catalog, Cloudflare Access JWT gate); setup in `docs/mcp.md`.
 - Status daemon IPC socket: `/tmp/tmact-statusd.sock` (`tmact statusd read`);
   snapshots live in daemon memory, not a file.
 - Closed-session history (web UI reopen): `~/.tmact/closed-sessions.json`.
@@ -74,7 +75,10 @@ agents. The safety design is intentional — do not weaken it:
   per-call confirmation (tools annotated `destructiveHint`) is the gate, like
   the web UI's live-send exception. Keep the `--dispatch-root` allowlist,
   never put `trust_folder` on the MCP wire, and keep `send_text` limited to
-  idle agent panes. See `docs/mcp.md`.
+  idle agent panes. The `tmact_*` CLI bridge keeps CLI defaults (plan unless
+  `execute`), is limited to the allowlist in `cmd/tmact/mcp_bridge.go`, and
+  must never gain `cred run/rm/request`, `trust-folder`, or trust flags. See
+  `docs/mcp.md`.
 
 ## Running Background Work
 
