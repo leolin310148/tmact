@@ -88,5 +88,9 @@ removes them.
 - **ChatGPT** (Developer mode on): Plugins → New → Add custom MCP server, URL
   `https://tmact-mcp.puni.tw/mcp`, OAuth with client id left empty (DCR). No
   plugin package upload is needed for personal use.
+  ChatGPT freezes the tool list when the plugin is created: after adding or
+  changing tools, use Settings → Plugins → tmact → **Refresh tools** (the
+  plugin page itself has no refresh). The server log then shows
+  `server/discover` and `tools/list` from the Access user.
 - **Codex**: `[mcp_servers.tmact] url = "https://tmact-mcp.puni.tw/mcp"` in
   `~/.codex/config.toml`, then `codex mcp login tmact`.
