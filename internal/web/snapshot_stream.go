@@ -43,6 +43,8 @@ type webPaneStatus struct {
 	Stale       bool           `json:"stale,omitempty"`
 	Prompt      *prompt.Prompt `json:"prompt,omitempty"`
 	Peer        string         `json:"peer,omitempty"`
+	// LastChangedAt drives the "recently working" group of activity order.
+	LastChangedAt *time.Time `json:"last_changed_at,omitempty"`
 }
 
 type webSnapshotHeartbeat struct {
@@ -69,6 +71,8 @@ func projectWebSnapshot(snap statusd.Snapshot) webSnapshot {
 			Stale:       pane.Stale,
 			Prompt:      pane.Prompt,
 			Peer:        pane.Peer,
+
+			LastChangedAt: pane.LastChangedAt,
 		}
 	}
 	return webSnapshot{

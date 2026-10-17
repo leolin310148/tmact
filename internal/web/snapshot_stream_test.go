@@ -48,6 +48,7 @@ func TestProjectWebSnapshotKeepsOnlyBrowserPaneFields(t *testing.T) {
 				Signals:        []string{"pane_text"},
 				Prompt:         question,
 				LastLine:       "ready",
+				LastChangedAt:  &now,
 				UpdatedAt:      now,
 			},
 		},
@@ -71,7 +72,7 @@ func TestProjectWebSnapshotKeepsOnlyBrowserPaneFields(t *testing.T) {
 			t.Fatalf("compact Web pane unexpectedly contains %q", field)
 		}
 	}
-	for _, field := range []string{"pane_id", "session", "cwd", "runtime", "state", "idle", "running", "asking", "prompt"} {
+	for _, field := range []string{"pane_id", "session", "cwd", "runtime", "state", "idle", "running", "asking", "prompt", "last_changed_at"} {
 		if _, ok := pane[field]; !ok {
 			t.Fatalf("compact Web pane is missing %q", field)
 		}
