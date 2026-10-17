@@ -1441,3 +1441,14 @@ func TestExecuteNewSessionRefusesClaudeDefaultNudge(t *testing.T) {
 		t.Fatalf("nudge received input: pastes=%+v keys=%#v", rec.pastes, rec.keys)
 	}
 }
+
+func TestExpandHome(t *testing.T) {
+	t.Setenv("HOME", "/home/u")
+	for in, want := range map[string]string{
+		"~/w/repo": "/home/u/w/repo", "~": "/home/u", "/abs": "/abs", "rel": "rel", "~other/x": "~other/x",
+	} {
+		if got := dispatch.ExpandHome(in); got != want {
+			t.Errorf("ExpandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -54,7 +54,7 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	if strings.TrimSpace(opts.Dir) == "" {
 		return report, fmt.Errorf("dir is required")
 	}
-	dir, err := filepath.Abs(opts.Dir)
+	dir, err := filepath.Abs(ExpandHome(opts.Dir))
 	if err != nil {
 		return report, fmt.Errorf("resolve dir: %w", err)
 	}
@@ -438,4 +438,17 @@ func launchCommand(opts Options) string {
 // shell syntax.
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+// ExpandHome resolves a leading "~/" against this machine's home directory so
+// a peer request like "~/w/repo" lands under the peer's own home.
+func ExpandHome(dir string) string {
+	if dir != "~" && !strings.HasPrefix(dir, "~/") {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return dir
+	}
+	return filepath.Join(home, strings.TrimPrefix(dir, "~"))
 }
