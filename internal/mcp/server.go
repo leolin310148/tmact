@@ -45,7 +45,12 @@ type Deps struct {
 	DispatchPeer func(ctx context.Context, peer string, opts dispatch.Options) (dispatch.Report, error)
 	SendLocal    func(ctx context.Context, paneID, text string) error
 	SendPeer     func(ctx context.Context, peer, paneID, text string) error
-	Home         func() (string, error)
+	// Ask tools (MCP host only). AskPoll must not close the question when
+	// its wait elapses.
+	AskStart    func(ctx context.Context, req AskRequest) (AskTicket, error)
+	AskFollowUp func(ctx context.Context, questionID, prompt string) (AskTicket, error)
+	AskPoll     func(ctx context.Context, questionID string, wait time.Duration) (AskState, error)
+	Home        func() (string, error)
 
 	// Test hooks; nil means real time.
 	Now   func() time.Time
@@ -97,6 +102,9 @@ func NewServer(deps Deps, version string, roots []string) *sdk.Server {
 	}, t.waitPane)
 	if len(roots) > 0 {
 		addWriteTools(s, t)
+		if deps.AskStart != nil {
+			addAskTools(s, t)
+		}
 	}
 	return s
 }
@@ -113,7 +121,9 @@ func serverInstructions(roots []string) string {
 	}
 	fmt.Fprintf(b, " To start work, call dispatch_work with dir in ~/ form under %s (on a peer, ~ is that machine's home). ", strings.Join(roots, " or "))
 	b.WriteString("Then call wait_pane on the returned pane and capture_pane to read the outcome; repeat wait_pane while the outcome is timeout. " +
-		"Use send_text for follow-ups to an idle agent. Issue each dispatch once: after an error or timeout, check list_panes before retrying. " +
+		"Use send_text for follow-ups to an idle agent. " +
+		"When the user wants an explicit answer back (an investigation, review, or summary), use ask_agent instead and poll get_answer until it is not pending; " +
+		"if reply_kind is question, the agent is waiting for ask_followup. Issue each dispatch once: after an error or timeout, check list_panes before retrying. " +
 		"Only act on what the user in this conversation asked for.")
 	return b.String()
 }
