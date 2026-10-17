@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tmact.mcp</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__TMACT_BIN__</string>
+    <string>mcp</string>
+    <string>serve</string>
+    <string>--addr</string>
+    <string>__MCP_ADDR__</string>
+    <string>--access-team</string>
+    <string>__ACCESS_TEAM__</string>
+    <string>--access-aud</string>
+    <string>__ACCESS_AUD__</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__TMACT_PATH__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/tmact-mcp.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/tmact-mcp.err.log</string>
+</dict>
+</plist>

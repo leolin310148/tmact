@@ -36,6 +36,8 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
   `panestatus`, `state`, `agents`, `runmeta`, `tmux`, `web`).
 - Configs: `examples/*.yaml` (agents, loops, watches, workflows).
 - Run metadata for long processes: `.tmact/runs/`.
+- MCP server for ChatGPT/Codex: `internal/mcp` (`tmact mcp serve`, read-only
+  tools, Cloudflare Access JWT gate); setup in `docs/mcp.md`.
 - Status daemon IPC socket: `/tmp/tmact-statusd.sock` (`tmact statusd read`);
   snapshots live in daemon memory, not a file.
 - Closed-session history (web UI reopen): `~/.tmact/closed-sessions.json`.
