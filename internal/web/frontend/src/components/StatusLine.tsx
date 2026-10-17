@@ -70,7 +70,7 @@ export interface PaneListItem {
 
 // PaneSortMode picks the chip order: "name" is peer → session → window → pane;
 // "activity" floats asking, then working, then recently-changed panes ahead of
-// the rest, keeping the name order inside each group.
+// the rest, newest change first inside each group.
 export type PaneSortMode = "name" | "activity";
 
 // RECENT_ACTIVITY_MS is the default for how long after its last screen change
@@ -78,9 +78,15 @@ export type PaneSortMode = "name" | "activity";
 // working window" setting overrides it per browser).
 export const RECENT_ACTIVITY_MS = 10 * 60 * 1000;
 
+// paneChangedAt is the pane's last screen change in ms, or 0 when unknown (so
+// panes without history sort after those with it).
+function paneChangedAt(p: PaneStatus): number {
+  const t = p.last_changed_at ? Date.parse(p.last_changed_at) : NaN;
+  return Number.isFinite(t) ? t : 0;
+}
+
 // paneActivityRank buckets a pane for "activity" order (lower sorts first).
-// Buckets — not raw timestamps — so a working pane whose screen changes every
-// second keeps its slot instead of reshuffling the chips under the pointer.
+// Inside a bucket the most recently changed pane comes first, then name.
 export function paneActivityRank(
   p: PaneStatus,
   now: number,
@@ -110,6 +116,7 @@ export function sortedPaneList(
   if (mode !== "activity") return panes.slice().sort(compareByName);
   return panes.slice().sort((a, b) =>
     paneActivityRank(a, now, recentMs) - paneActivityRank(b, now, recentMs) ||
+    paneChangedAt(b) - paneChangedAt(a) ||
     compareByName(a, b));
 }
 

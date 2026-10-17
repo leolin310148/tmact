@@ -11,6 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppStateProvider, useAppStateStore } from "../store/AppStateContext";
 import type { PaneStatus, Snapshot } from "../types/server";
 import {
+  paneActivityRank,
   RECENT_ACTIVITY_MS,
   shouldPinPane,
   sortedPaneList,
@@ -96,21 +97,24 @@ describe("sortedPaneList", () => {
   it("puts asking, working, then recently changed panes first in activity order", () => {
     expect(ids(sortedPaneList(panes, "activity", now))).toEqual([
       "%3", // asking
-      "%2", "%5", // working, name order (not by last change)
+      "%2", "%5", // working, newest change first
       "%4", // changed 2 min ago
-      "%1", "%6", "%7", // the rest: old change, stale, just past the window
+      "%7", "%1", "%6", // the rest, newest first: just past the window, 1 h ago, no history
     ]);
   });
 
   it("honors a custom recently-working window", () => {
     // 1 minute: delta (2 min ago) drops out of the recent group.
     expect(ids(sortedPaneList(panes, "activity", now, 60 * 1000))).toEqual([
-      "%3", "%2", "%5", "%1", "%4", "%6", "%7",
+      "%3", "%2", "%5", "%4", "%7", "%1", "%6",
     ]);
     // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it.
     expect(ids(sortedPaneList(panes, "activity", now, 2 * 60 * 60 * 1000))).toEqual([
-      "%3", "%2", "%5", "%1", "%4", "%7", "%6",
+      "%3", "%2", "%5", "%4", "%7", "%1", "%6",
     ]);
+    // Same order, but alpha (1 h ago) only counts as recent in the wide window.
+    expect(paneActivityRank(panes[0]!, now, 60 * 1000)).toBe(3);
+    expect(paneActivityRank(panes[0]!, now, 2 * 60 * 60 * 1000)).toBe(2);
   });
 });
 
