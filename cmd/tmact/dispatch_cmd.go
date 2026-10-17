@@ -124,7 +124,7 @@ func runDispatch(args []string) error {
 	var report dispatch.Report
 	var err error
 	if *peerName != "" {
-		report, err = runRemoteDispatch(*peerName, *configPath, opts)
+		report, err = runRemoteDispatch(context.Background(), *peerName, *configPath, opts)
 	} else {
 		report, err = dispatchRun(opts)
 	}
@@ -157,7 +157,7 @@ func dispatchModelHelp() string {
 		strings.Join(dispatch.SupportedModels("codex"), "|"))
 }
 
-func runRemoteDispatch(peerName, configPath string, opts dispatch.Options) (dispatch.Report, error) {
+func runRemoteDispatch(ctx context.Context, peerName, configPath string, opts dispatch.Options) (dispatch.Report, error) {
 	if configPath == "" {
 		return dispatch.Report{}, errors.New("dispatch-work --peer requires --config or a default statusd config path")
 	}
@@ -169,13 +169,13 @@ func runRemoteDispatch(peerName, configPath string, opts dispatch.Options) (disp
 		if p.URL == "" {
 			return dispatch.Report{}, fmt.Errorf("peer %q has empty url in %s", peerName, configPath)
 		}
-		return dispatchRemoteRun(context.Background(), &http.Client{}, p.Name, p.URL, opts)
+		return dispatchRemoteRun(ctx, &http.Client{}, p.Name, p.URL, opts)
 	}
 	if p, ok := findPeerConfig(cfg.Peers, peerName); ok {
 		if p.URL == "" {
 			return dispatch.Report{}, fmt.Errorf("peer %q has empty url in %s", peerName, configPath)
 		}
-		return dispatchRemoteRun(context.Background(), &http.Client{}, p.Name, p.URL, opts)
+		return dispatchRemoteRun(ctx, &http.Client{}, p.Name, p.URL, opts)
 	}
 	return dispatch.Report{}, fmt.Errorf("peer %q not found in dispatch_peers or peers in %s", peerName, configPath)
 }

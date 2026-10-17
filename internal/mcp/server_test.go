@@ -37,9 +37,14 @@ type captureCall struct {
 
 func connect(t *testing.T, deps Deps) *sdk.ClientSession {
 	t.Helper()
+	return connectRoots(t, deps, nil)
+}
+
+func connectRoots(t *testing.T, deps Deps, roots []string) *sdk.ClientSession {
+	t.Helper()
 	ctx := context.Background()
 	st, ct := sdk.NewInMemoryTransports()
-	if _, err := NewServer(deps, "test").Connect(ctx, st, nil); err != nil {
+	if _, err := NewServer(deps, "test", roots).Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	cs, err := sdk.NewClient(&sdk.Implementation{Name: "test"}, nil).Connect(ctx, ct, nil)
@@ -92,7 +97,7 @@ func TestToolsAreReadOnly(t *testing.T) {
 			t.Fatalf("%s is not marked read-only", tool.Name)
 		}
 	}
-	if got := strings.Join(names, ","); got != "capture_pane,list_panes,list_sessions" {
+	if got := strings.Join(names, ","); got != "capture_pane,list_panes,list_sessions,wait_pane" {
 		t.Fatalf("tools = %s", got)
 	}
 }

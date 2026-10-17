@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/dispatch"
 	"github.com/leolin310148/tmact/internal/mcp"
 	"github.com/leolin310148/tmact/internal/peerpane"
 	"github.com/leolin310148/tmact/internal/statusd"
@@ -48,13 +50,23 @@ func runMCPServe(args []string) error {
 	noAccess := fs.Bool("no-access", false, "skip Access JWT verification (loopback-only local testing)")
 	socketPath := fs.String("socket-path", statusd.DefaultSocketPath, "statusd IPC unix socket")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config with peers")
+	var rootFlags repeatedStrings
+	fs.Var(&rootFlags, "dispatch-root", "allow dispatch_work/send_text under this ~/ path (repeatable or comma-separated); none keeps the server read-only")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-	opts := mcp.Options{Version: version}
+	var rawRoots []string
+	for _, r := range rootFlags {
+		rawRoots = append(rawRoots, strings.Split(r, ",")...)
+	}
+	roots, err := mcp.NormalizeRoots(rawRoots)
+	if err != nil {
+		return err
+	}
+	opts := mcp.Options{Version: version, DispatchRoots: roots}
 	switch {
 	case *noAccess:
 		if !isLoopbackAddr(*addr) {
@@ -76,7 +88,7 @@ func runMCPServe(args []string) error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	log.Printf("mcp: listening on %s (access=%v)", *addr, opts.Verifier != nil)
+	log.Printf("mcp: listening on %s (access=%v dispatch_roots=%v)", *addr, opts.Verifier != nil, roots)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -108,6 +120,27 @@ func mcpDeps(socketPath, configPath string) mcp.Deps {
 			}
 			return capture.Captures[web.CaptureModePlain], nil
 		},
+		Dispatch: func(_ context.Context, opts dispatch.Options) (dispatch.Report, error) {
+			return dispatch.Run(opts)
+		},
+		DispatchPeer: func(ctx context.Context, peer string, opts dispatch.Options) (dispatch.Report, error) {
+			return runRemoteDispatch(ctx, peer, configPath, opts)
+		},
+		SendLocal: func(_ context.Context, paneID, text string) error {
+			return tmux.PasteText(paneID, text, true)
+		},
+		SendPeer: func(ctx context.Context, peer, paneID, text string) error {
+			cfg, err := statusd.LoadFileConfig(configPath)
+			if err != nil {
+				return err
+			}
+			p, ok := peerpane.LookupConfigPeer(cfg, peer)
+			if !ok {
+				return fmt.Errorf("peer %q is not configured in %s", peer, configPath)
+			}
+			return peerpane.Client{Peer: p}.SendText(ctx, paneID, text, true)
+		},
+		Home: os.UserHomeDir,
 	}
 }
 
