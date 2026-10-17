@@ -13,6 +13,9 @@
 #   TMACT_BIN          tmact binary (default: ~/.local/bin/tmact)
 #   TMACT_MCP_ADDR     listen address (default: 127.0.0.1:7895)
 #   TMACT_MCP_TOKEN    tunnel token file (default: ~/.tmact/mcp-tunnel.token)
+#   TMACT_MCP_DISPATCH_ROOTS
+#                      comma-separated ~/ roots for dispatch_work/send_text
+#                      (default: ~/w,~/ops; empty keeps the server read-only)
 #   CLOUDFLARED_BIN    cloudflared binary (default: from PATH)
 
 set -euo pipefail
@@ -21,6 +24,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMACT_BIN="${TMACT_BIN:-$HOME/.local/bin/tmact}"
 MCP_ADDR="${TMACT_MCP_ADDR:-127.0.0.1:7895}"
 TOKEN_FILE="${TMACT_MCP_TOKEN:-$HOME/.tmact/mcp-tunnel.token}"
+DISPATCH_ROOTS="${TMACT_MCP_DISPATCH_ROOTS-~/w,~/ops}"
 SERVICE_PATH="${TMACT_PATH:-$(dirname "$TMACT_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 AGENTS_DIR="$HOME/Library/LaunchAgents"
 domain="gui/$(id -u)"
@@ -31,7 +35,7 @@ while [ $# -gt 0 ]; do
     --access-team) team="$2"; shift 2 ;;
     --access-aud) aud="$2"; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
-    -h|--help) sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -84,6 +88,7 @@ sed \
   -e "s|__MCP_ADDR__|$MCP_ADDR|g" \
   -e "s|__ACCESS_TEAM__|$team|g" \
   -e "s|__ACCESS_AUD__|$aud|g" \
+  -e "s|__DISPATCH_ROOTS__|$DISPATCH_ROOTS|g" \
   -e "s|__TMACT_PATH__|$SERVICE_PATH|g" \
   "$REPO_DIR/launchd/com.tmact.mcp.plist.in" >"$AGENTS_DIR/com.tmact.mcp.plist"
 sed \

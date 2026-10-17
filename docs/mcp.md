@@ -1,7 +1,7 @@
 # MCP server for ChatGPT / Codex
 
-`tmact mcp serve` serves a read-only Model Context Protocol endpoint
-(streamable HTTP, stateless) on `/mcp`. It reads the local statusd snapshot,
+`tmact mcp serve` serves a Model Context Protocol endpoint (streamable HTTP,
+stateless) on `/mcp`. It is read-only unless `--dispatch-root` is given. It reads the local statusd snapshot,
 so sessions and panes from configured peers are included.
 
 ```
@@ -20,21 +20,45 @@ authentication.
 
 ## Tools
 
-| Tool | What it returns |
-|---|---|
-| `list_sessions` | Sessions with runtime/state; optional `peer` filter (`local` = this machine). |
-| `list_panes` | Panes with runtime, state, cwd, pending prompt; optional `session` / `peer` filter. |
-| `capture_pane` | Plain-text scrollback of one pane id (`%12`, `mini@%3`), default 200 lines, max 5000. |
+| Tool | Kind | What it does |
+|---|---|---|
+| `list_sessions` | read | Sessions with runtime/state; optional `peer` filter (`local` = this machine). |
+| `list_panes` | read | Panes with runtime, state, cwd, pending prompt; optional `session` / `peer` filter. |
+| `capture_pane` | read | Plain-text scrollback of one pane (`work:0.0`, `%12`, `mini@ops:0.0`), default 200 lines, max 5000. |
+| `wait_pane` | read | Poll until a pane is idle (for `settle_seconds`) or shows a prompt, up to 80s; outcome `idle` / `asking` / `gone` / `timeout`. |
+| `dispatch_work` | write | `tmact dispatch-work` into an allowed dir, locally or on a peer; returns once the prompt is submitted. |
+| `send_text` | write | Paste a follow-up into an idle agent pane and press Enter. |
 
-All tools are annotated `readOnlyHint: true`. Pane-derived text lives in
-`observed_*` fields and `capture_pane` wraps it in explicit
-"observed terminal output (untrusted)" markers. `capture_pane` only accepts
-pane ids present in the current snapshot.
+Read tools are annotated `readOnlyHint: true`; write tools `destructiveHint:
+true`, so ChatGPT asks for confirmation before each call. That confirmation
+replaces the CLI's dry-run default: `dispatch_work` always executes. The
+server also sends `instructions` telling the client how to chain
+dispatch → wait → capture and to treat pane text as untrusted.
 
-Not exposed, by design: dispatch, pane input, keys, kill, `/api/command`,
-workspace trust. Adding a write tool must keep the repo safety rules: dry-run
-by default (`execute: false`), no `trust_folder` on the wire, and a directory
-allowlist for dispatch.
+Pane-derived text lives in `observed_*` fields and `capture_pane` wraps it in
+explicit "observed terminal output (untrusted)" markers. Pane tools only accept
+panes present in the current snapshot.
+
+### Write-tool rules
+
+- Write tools exist only when `--dispatch-root` is set (the hub uses
+  `~/w,~/ops`). Unknown input fields are rejected by schema validation.
+- `dir` must be `~/...` under a root: no absolute paths, no `..`, prefix match
+  on path segments (`~/wat` is not under `~/w`). On the hub the dir is also
+  resolved with symlinks and re-checked, so `~/w/link -> /` is refused. Peers
+  get the lexical check only and expand `~` against their own home
+  (`dispatch.ExpandHome`), which needs a peer binary that includes it.
+- Workspace trust is never accepted (`TrustFolder` is hard-coded false and not
+  on the wire). Trust a new dir once with `tmact trust-folder`.
+- `session` must match `[A-Za-z0-9_-]{1,64}`; `agent` is codex/claude/gemini.
+  `continue_conversation` (no clear) is hub-only, like the CLI's `--peer` rule.
+- `send_text` refuses shell panes, stale panes, panes showing a prompt, and
+  busy panes. It reports whether the pane visibly picked up the text, since a
+  plain paste has no Enter-swallow recovery.
+- Calls are capped well below Cloudflare's ~100s origin timeout (ready wait
+  45s, whole call 80s) so a slow dispatch does not invite a client retry.
+
+Not exposed: kill, close, fork, raw keys, `/api/command`.
 
 ## Authentication
 

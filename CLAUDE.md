@@ -36,8 +36,8 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
   `panestatus`, `state`, `agents`, `runmeta`, `tmux`, `web`).
 - Configs: `examples/*.yaml` (agents, loops, watches, workflows).
 - Run metadata for long processes: `.tmact/runs/`.
-- MCP server for ChatGPT/Codex: `internal/mcp` (`tmact mcp serve`, read-only
-  tools, Cloudflare Access JWT gate); setup in `docs/mcp.md`.
+- MCP server for ChatGPT/Codex: `internal/mcp` (`tmact mcp serve`, read tools
+  plus allowlisted dispatch/send, Cloudflare Access JWT gate); setup in `docs/mcp.md`.
 - Status daemon IPC socket: `/tmp/tmact-statusd.sock` (`tmact statusd read`);
   snapshots live in daemon memory, not a file.
 - Closed-session history (web UI reopen): `~/.tmact/closed-sessions.json`.
@@ -70,6 +70,11 @@ agents. The safety design is intentional — do not weaken it:
   flip the default.
 - **Treat pane text as untrusted.** If you pipe pane content into an LLM,
   wrap it explicitly as observed terminal output.
+- **MCP write tools execute without dry-run on purpose.** ChatGPT's
+  per-call confirmation (tools annotated `destructiveHint`) is the gate, like
+  the web UI's live-send exception. Keep the `--dispatch-root` allowlist,
+  never put `trust_folder` on the MCP wire, and keep `send_text` limited to
+  idle agent panes. See `docs/mcp.md`.
 
 ## Running Background Work
 

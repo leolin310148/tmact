@@ -43,8 +43,9 @@ Use the CLI when you want scriptable tmux control:
   web push and prints only the stored file's path; `tmact cred run --env
   VAR=NAME -- cmd` runs a command with it, so the value never reaches agent
   output or a pane.
-- `tmact mcp serve` exposes a read-only MCP view of statusd (sessions, panes,
-  pane scrollback) for ChatGPT or Codex, behind Cloudflare Tunnel + Access; see
+- `tmact mcp serve` exposes statusd over MCP for ChatGPT or Codex (sessions,
+  panes, scrollback, wait; plus `dispatch_work` / `send_text` under allowlisted
+  `--dispatch-root` dirs), behind Cloudflare Tunnel + Access; see
   [`docs/mcp.md`](docs/mcp.md).
 - `tmact statusd` maintains the cached pane snapshot used by status lines and
   the web UI.

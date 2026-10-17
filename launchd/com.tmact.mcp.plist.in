@@ -16,6 +16,8 @@
     <string>__ACCESS_TEAM__</string>
     <string>--access-aud</string>
     <string>__ACCESS_AUD__</string>
+    <string>--dispatch-root</string>
+    <string>__DISPATCH_ROOTS__</string>
   </array>
 
   <key>EnvironmentVariables</key>
