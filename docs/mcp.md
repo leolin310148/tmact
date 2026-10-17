@@ -28,6 +28,7 @@ authentication.
 | `wait_pane` | read | Poll until a pane is idle (for `settle_seconds`) or shows a prompt, up to 80s; outcome `idle` / `asking` / `gone` / `timeout`. |
 | `dispatch_work` | write | `tmact dispatch-work` into an allowed dir, locally or on a peer; returns once the prompt is submitted. |
 | `send_text` | write | Paste a follow-up into an idle agent pane and press Enter. |
+| `answer_prompt` | write | Press one numbered option of the prompt an agent is showing (choice, command/patch approval, directory access); never workspace trust. |
 | `ask_agent` | write | `tmact ask` on the hub without blocking: dispatches with the reply protocol and returns a `question_id`. |
 | `get_answer` | read | Wait up to 80s for the next unread reply; `pending` / `answered` (with `reply_kind`) / `closed` / `expired`. |
 | `ask_followup` | write | `tmact ask --thread` follow-up, delivered to a waiting agent's mailbox or its pane. |
@@ -58,6 +59,14 @@ panes present in the current snapshot.
 - `send_text` refuses shell panes, stale panes, panes showing a prompt, and
   busy panes. It reports whether the pane visibly picked up the text, since a
   plain paste has no Enter-swallow recovery.
+- `answer_prompt` decides from a fresh capture, not the cached snapshot. The
+  caller must pass `expected_question` and `expected_option_label` copied from
+  the prompt it saw; both are compared (case and whitespace insensitive) with
+  what `prompt.Detect` finds on screen now, and any drift refuses the call. It
+  only presses the option's digit, so cursor-only menus without numbers cannot
+  be answered. Permission prompts are allowed on purpose (the user answers
+  them through ChatGPT's per-call confirmation); `trust_folder` prompts are
+  always refused, keeping workspace trust on the `tmact trust-folder` path.
 - Calls are capped well below Cloudflare's ~100s origin timeout (ready wait
   45s, whole call 80s) so a slow dispatch does not invite a client retry.
 

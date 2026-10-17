@@ -75,7 +75,9 @@ agents. The safety design is intentional — do not weaken it:
   per-call confirmation (tools annotated `destructiveHint`) is the gate, like
   the web UI's live-send exception. Keep the `--dispatch-root` allowlist,
   never put `trust_folder` on the MCP wire, and keep `send_text` limited to
-  idle agent panes. The `tmact_*` CLI bridge keeps CLI defaults (plan unless
+  idle agent panes. `answer_prompt` may answer permission prompts (a human
+  confirms each call), but only digit options re-verified against a fresh
+  capture, and never workspace-trust prompts. The `tmact_*` CLI bridge keeps CLI defaults (plan unless
   `execute`), is limited to the allowlist in `cmd/tmact/mcp_bridge.go`, and
   must never gain `cred run/rm/request`, `trust-folder`, or trust flags. See
   `docs/mcp.md`.
