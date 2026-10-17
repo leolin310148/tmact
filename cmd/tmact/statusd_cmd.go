@@ -156,6 +156,7 @@ func runStatusdStart(args []string) error {
 		fmt.Fprintf(os.Stderr, "statusd: "+format+"\n", args...)
 	}
 
+	cfg.PaneMemoryPath = statusd.DefaultPaneMemoryPath()
 	daemon := statusd.NewDaemon(cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

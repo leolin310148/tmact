@@ -62,6 +62,13 @@ type Config struct {
 	ClosedSessionsPath string
 	ClosedSessionsMax  int
 
+	// PaneMemoryPath persists per-pane change history (screen hash + last
+	// change time) across daemon restarts so last_changed_at survives a
+	// deploy. Empty disables it; only the long-running daemon (Start) reads
+	// or writes it. PaneMemorySaveInterval paces the periodic save.
+	PaneMemoryPath         string
+	PaneMemorySaveInterval time.Duration
+
 	// Peers is the list of remote statusd instances whose snapshots are
 	// merged into the local one. Empty disables federation.
 	Peers []Peer
@@ -164,6 +171,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.SessionSnapshotDir == "" {
 		c.SessionSnapshotDir = DefaultSessionSnapshotDir()
+	}
+	if c.PaneMemorySaveInterval <= 0 {
+		c.PaneMemorySaveInterval = DefaultPaneMemorySaveInterval
 	}
 	if c.ClosedSessionsPath == "" {
 		c.ClosedSessionsPath = DefaultClosedSessionsPath()

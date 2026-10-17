@@ -42,6 +42,8 @@ React app speaks the same `/api/*` + `/ws/pane` endpoints. See
 - Status daemon IPC socket: `/tmp/tmact-statusd.sock` (`tmact statusd read`);
   snapshots live in daemon memory, not a file.
 - Closed-session history (web UI reopen): `~/.tmact/closed-sessions.json`.
+- Pane change history (keeps `last_changed_at` across statusd restarts):
+  `~/.tmact/statusd-pane-memory.json`, saved every 30s and on shutdown.
 - Agent-inbox handoff files: `.agent-inbox/features/<name>/`.
 - Canonical tmact-owned agent skills: `skills/`; provider discovery paths are
   symlinks and must not become separate edited copies.

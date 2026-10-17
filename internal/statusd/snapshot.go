@@ -108,6 +108,9 @@ type SnapshotError struct {
 type paneMemory struct {
 	Hash          string
 	LastChangedAt time.Time
+	// restored marks an entry loaded from the previous run (LoadPaneMemory)
+	// that no scan has confirmed yet.
+	restored bool
 }
 
 // runtimeCacheTTL bounds how long statusd reuses a pane's cached process-tree
@@ -120,6 +123,9 @@ const runtimeCacheTTL = 5 * time.Second
 type Memory struct {
 	panes        map[string]paneMemory
 	runtimeCache *panestatus.RuntimeCache
+	// scanned is set after the first scan; until then panes are multi-sampled
+	// (InitialSamples) even when restored history pre-populates panes.
+	scanned bool
 }
 
 func NewMemory() *Memory {
@@ -149,7 +155,7 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 	panes = filterPanes(panes, cfg.IncludeSessions, cfg.ExcludeSessions)
 
 	samples := 1
-	if len(mem.panes) == 0 {
+	if !mem.scanned {
 		samples = cfg.InitialSamples
 	}
 	report, err := panestatus.InspectPanesStyled(panes, panestatus.Options{
@@ -188,6 +194,7 @@ func buildSnapshot(ctx context.Context, cfg Config, mem *Memory, forceCapturePan
 			delete(mem.panes, paneID)
 		}
 	}
+	mem.scanned = true
 
 	snapshot.Sessions = buildSessions(snapshot.Panes, now)
 	snapshot.Summary = summarize(snapshot)
@@ -267,6 +274,22 @@ func runningState(pane panestatus.PaneStatus, cfg Config, mem *Memory, now time.
 		}
 		mem.panes[pane.PaneID] = paneMemory{Hash: pane.NormalizedHash, LastChangedAt: lastChangedAt}
 		return pane.State == panestate.StateWorking, lastChangedAt, false
+	}
+
+	if previous.restored {
+		// First look at a pane since restart. Same screen: keep the saved
+		// history. Different screen: it changed while statusd was down (or the
+		// pane id was reused). Stamp the change just outside the running
+		// debounce and judge running from this scan alone, so a stale hash
+		// doesn't flash every such pane as working for the next few seconds.
+		if previous.Hash != pane.NormalizedHash {
+			lastChangedAt = now.Add(-cfg.RunningDebounce - time.Millisecond)
+		}
+		mem.panes[pane.PaneID] = paneMemory{Hash: pane.NormalizedHash, LastChangedAt: lastChangedAt}
+		if previous.Hash != pane.NormalizedHash {
+			return pane.State == panestate.StateWorking, lastChangedAt, false
+		}
+		return now.Sub(lastChangedAt) <= cfg.RunningDebounce, lastChangedAt, true
 	}
 
 	if previous.Hash != pane.NormalizedHash {

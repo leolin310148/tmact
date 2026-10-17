@@ -22,6 +22,7 @@ type Daemon struct {
 	hooks           *shellhook.Store
 	sessions        SessionPersistence
 	nextSessionSave time.Time
+	nextMemorySave  time.Time
 
 	// activity feeds the adaptive scan interval; webActivity is the injected
 	// web-UI tracker clock and wake nudges the Start loop out of a slow tick.
@@ -235,6 +236,8 @@ func (d *Daemon) SetCredRequests(fn func() []credreq.Request) {
 
 func (d *Daemon) Start(ctx context.Context) error {
 	d.restoreSessionsAtStartup()
+	d.loadPaneMemory()
+	defer d.savePaneMemory()
 	if d.peers != nil {
 		d.peers.Start(ctx)
 	}
@@ -242,6 +245,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		snapshot, scanErr := d.RunOnce(ctx)
 		d.trackClosedSessions(snapshot, scanErr)
 		d.maybeSaveSessions()
+		d.maybeSavePaneMemory()
 
 		timer := time.NewTimer(d.effectiveInterval(d.cfg.Now()))
 		select {
@@ -309,6 +313,30 @@ func (d *Daemon) maybeSaveSessions() {
 		return
 	}
 	d.logf("saved tmux sessions to %s", path)
+}
+
+func (d *Daemon) loadPaneMemory() {
+	if err := LoadPaneMemory(d.cfg.PaneMemoryPath, d.mem); err != nil {
+		d.logf("pane memory restore skipped: %v", err)
+	}
+}
+
+func (d *Daemon) maybeSavePaneMemory() {
+	if d.cfg.PaneMemoryPath == "" {
+		return
+	}
+	now := d.cfg.Now()
+	if !d.nextMemorySave.IsZero() && now.Before(d.nextMemorySave) {
+		return
+	}
+	d.nextMemorySave = now.Add(d.cfg.PaneMemorySaveInterval)
+	d.savePaneMemory()
+}
+
+func (d *Daemon) savePaneMemory() {
+	if err := SavePaneMemory(d.cfg.PaneMemoryPath, d.mem); err != nil {
+		d.logf("pane memory save failed: %v", err)
+	}
 }
 
 func (d *Daemon) logf(format string, args ...any) {
