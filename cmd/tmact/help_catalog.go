@@ -9,6 +9,7 @@ func commandHelpCatalog() []commandHelp {
 		workflowV2CommandHelpCatalog(),
 		hookCommandHelpCatalog(),
 		credCommandHelpCatalog(),
+		mcpCommandHelpCatalog(),
 		logCommandHelpCatalog(),
 		llmCommandHelpCatalog(),
 		paneUtilityCommandHelpCatalog(),

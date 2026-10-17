@@ -187,6 +187,11 @@ func run(args []string) error {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
 		}
 		return runCred(args[1:])
+	case "mcp":
+		if globals.Target != "" {
+			return errors.New("global -t/--target is currently supported with send, capture, and wait")
+		}
+		return runMCP(args[1:])
 	case "hook":
 		if globals.Target != "" {
 			return errors.New("global -t/--target is currently supported with send, capture, and wait")
