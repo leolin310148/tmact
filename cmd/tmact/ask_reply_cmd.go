@@ -145,6 +145,53 @@ func runAskNew(f askFlags) error {
 	if err != nil {
 		return err
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	report, err := startAsk(ctx, store, f)
+	if err != nil {
+		return askStageFailure(report, err, f)
+	}
+	if !f.execute {
+		return printAskOutput(report, f.jsonOutput)
+	}
+	return awaitAskAnswer(ctx, store, report, report.QuestionID, 0, f.timeout, f.jsonOutput)
+}
+
+// askDispatchError marks a failure of the dispatch itself; report.Dispatch
+// describes how far it got.
+type askDispatchError struct{ err error }
+
+func (e askDispatchError) Error() string { return e.err.Error() }
+func (e askDispatchError) Unwrap() error { return e.err }
+
+// askRecordError marks a mailbox write that failed after a successful dispatch.
+type askRecordError struct{ err error }
+
+func (e askRecordError) Error() string { return e.err.Error() }
+func (e askRecordError) Unwrap() error { return e.err }
+
+// askStageFailure renders a startAsk / deliverAskFollowUp error the way the
+// CLI always has: dispatch failures with the report, record failures with the
+// report only in JSON mode, anything earlier as a plain error.
+func askStageFailure(report askReport, err error, f askFlags) error {
+	var dispatchErr askDispatchError
+	var recordErr askRecordError
+	switch {
+	case errors.As(err, &dispatchErr):
+		if f.execute || f.jsonOutput {
+			return askFailure(report, dispatchErr.err, f.jsonOutput)
+		}
+		return dispatchErr.err
+	case errors.As(err, &recordErr):
+		return askFailureIfJSON(report, recordErr.err, f.jsonOutput)
+	default:
+		return err
+	}
+}
+
+// startAsk creates the question (when executing), dispatches the prompt, and
+// records the delivery. It does not wait for the answer.
+func startAsk(ctx context.Context, store *askreply.Store, f askFlags) (askReport, error) {
 	questionID := "<question-id>"
 	report := askReport{
 		Status:   dispatch.StatusPlanned,
@@ -155,15 +202,13 @@ func runAskNew(f askFlags) error {
 	}
 	report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(questionID, store.Dir, f.storeDir != "")
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
 	var request askreply.Request
+	var err error
 	if f.execute {
 		expiry := f.timeout + f.readyTimeout + f.readySettle + askExpiryDispatchAllowance
 		request, err = store.Create(f.session, f.dir, f.agent, os.Getenv("TMUX_PANE"), expiry)
 		if err != nil {
-			return err
+			return report, err
 		}
 		questionID = request.ID
 		report.QuestionID = questionID
@@ -190,24 +235,21 @@ func runAskNew(f askFlags) error {
 		if f.execute {
 			_ = store.Cancel(request.ID, "dispatch failed")
 		}
-		if f.execute || f.jsonOutput {
-			return askFailure(report, err, f.jsonOutput)
-		}
-		return err
+		return report, askDispatchError{err}
 	}
 	if !f.execute {
-		return printAskOutput(report, f.jsonOutput)
+		return report, nil
 	}
 	if _, err := store.Post(request.ID, askreply.Message{
 		From: askreply.RoleAsker, Kind: askreply.KindPrompt,
 		Delivery: askreply.DeliveryPane, Target: dispatchReport.Target,
 	}, time.Time{}); err != nil && !errors.Is(err, askreply.ErrAlreadyFinalized) {
 		// A very fast final reply may already have closed the thread; the
-		// await below still returns it. Any other failure is a broken mailbox.
+		// await still returns it. Any other failure is a broken mailbox.
 		_ = store.Cancel(request.ID, "record dispatch failed")
-		return askFailureIfJSON(report, fmt.Errorf("record dispatched prompt: %w", err), f.jsonOutput)
+		return report, askRecordError{fmt.Errorf("record dispatched prompt: %w", err)}
 	}
-	return awaitAskAnswer(ctx, store, report, request.ID, 0, f.timeout, f.jsonOutput)
+	return report, nil
 }
 
 // runAskThread continues or closes an existing question. Session, directory,
@@ -254,18 +296,34 @@ func runAskThread(f askFlags) error {
 	if strings.TrimSpace(f.prompt) == "" {
 		return errors.New("ask --thread requires --prompt (or --close / --await)")
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	report, lastAnswerSeq, err := deliverAskFollowUp(ctx, store, f)
+	if err != nil {
+		return askStageFailure(report, err, f)
+	}
+	if !f.execute {
+		return printAskOutput(report, f.jsonOutput)
+	}
+	return awaitAskAnswer(ctx, store, report, f.thread, lastAnswerSeq, f.timeout, f.jsonOutput)
+}
 
+// deliverAskFollowUp sends a follow-up on an open thread: through the mailbox
+// when the answerer is blocked in `reply --wait`, otherwise into its pane. It
+// returns the last answerer seq seen before sending, so the caller can wait
+// for the next reply. It does not wait itself.
+func deliverAskFollowUp(ctx context.Context, store *askreply.Store, f askFlags) (askReport, int, error) {
 	thread, err := store.Load(f.thread)
 	if err != nil {
-		return err
+		return askReport{}, 0, err
 	}
 	if thread.Closed != nil {
-		return fmt.Errorf("question %s is closed (%s by %s); start a new ask", f.thread, thread.Closed.Reason, thread.Closed.By)
+		return askReport{}, 0, fmt.Errorf("question %s is closed (%s by %s); start a new ask", f.thread, thread.Closed.Reason, thread.Closed.By)
 	}
 	lastAnswerSeq := thread.LastSeq(askreply.RoleAnswerer)
 	hasWaiter, err := store.HasWaiter(f.thread)
 	if err != nil {
-		return err
+		return askReport{}, 0, err
 	}
 	report := askReport{
 		Status:     dispatch.StatusPlanned,
@@ -275,38 +333,35 @@ func runAskThread(f askFlags) error {
 		Timeout:    f.timeout.String(),
 	}
 	report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(f.thread, store.Dir, f.storeDir != "")
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 	waitUntil := tmactNow().Add(f.timeout + f.readyTimeout + f.readySettle + askExpiryDispatchAllowance)
 
 	if hasWaiter {
 		report.Delivery = askreply.DeliveryMailbox
 		if !f.execute {
-			return printAskOutput(report, f.jsonOutput)
+			return report, lastAnswerSeq, nil
 		}
 		posted, err := store.Post(f.thread, askreply.Message{
 			From: askreply.RoleAsker, Kind: askreply.KindPrompt,
 			Text: f.prompt, Delivery: askreply.DeliveryMailbox,
 		}, waitUntil)
 		if err != nil {
-			return err
+			return report, 0, err
 		}
 		tmactSleep(askWaiterRecheckDelay)
 		stillWaiting, err := store.HasWaiter(f.thread)
 		if err != nil {
-			return err
+			return report, 0, err
 		}
 		if !stillWaiting {
 			// The waiter removes its marker as soon as it returns, so a
 			// missing marker also means "consumed"; the ack tells them apart.
 			acked, err := store.Acknowledged(f.thread, posted.Seq)
 			if err != nil {
-				return err
+				return report, 0, err
 			}
 			current, err := store.Load(f.thread)
 			if err != nil {
-				return err
+				return report, 0, err
 			}
 			if !acked && current.LastSeq(askreply.RoleAnswerer) == lastAnswerSeq && current.Closed == nil {
 				// The waiter gave up between our check and our post. Fall back
@@ -336,22 +391,19 @@ func runAskThread(f askFlags) error {
 		report.Dispatch = &dispatchReport
 		if err != nil {
 			// Leave the thread open: the asker can retry once the pane is idle.
-			if f.execute || f.jsonOutput {
-				return askFailure(report, err, f.jsonOutput)
-			}
-			return err
+			return report, 0, askDispatchError{err}
 		}
 		if !f.execute {
-			return printAskOutput(report, f.jsonOutput)
+			return report, lastAnswerSeq, nil
 		}
 		if _, err := store.Post(f.thread, askreply.Message{
 			From: askreply.RoleAsker, Kind: askreply.KindPrompt,
 			Delivery: askreply.DeliveryPane, Target: dispatchReport.Target,
 		}, waitUntil); err != nil && !errors.Is(err, askreply.ErrAlreadyFinalized) {
-			return askFailureIfJSON(report, fmt.Errorf("record dispatched follow-up: %w", err), f.jsonOutput)
+			return report, 0, askRecordError{fmt.Errorf("record dispatched follow-up: %w", err)}
 		}
 	}
-	return awaitAskAnswer(ctx, store, report, f.thread, lastAnswerSeq, f.timeout, f.jsonOutput)
+	return report, lastAnswerSeq, nil
 }
 
 // runAskAwait waits for the answerer's next reply on an open thread without
