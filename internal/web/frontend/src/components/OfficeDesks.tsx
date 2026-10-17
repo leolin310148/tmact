@@ -39,6 +39,8 @@ import character5Url from "../assets/pixel-agents/characters/char_5.webp";
 import {
   RUNTIME_ICON,
   paneListItems,
+  RECENT_ACTIVITY_MS,
+  type PaneSortMode,
   panePeer,
   paneRuntime,
   paneStateClass,
@@ -51,6 +53,10 @@ interface OfficeDesksProps {
   panes: PaneStatus[];
   selected: string | null;
   onSelect: (paneID: string) => void;
+  /** Desk order; same "Panel list order" setting as the chip list. */
+  sortMode?: PaneSortMode;
+  /** Recently-working window for "activity" order, in ms. */
+  recentMs?: number;
 }
 
 const characterUrls = [
@@ -252,7 +258,13 @@ export function nextAskingPane(items: PaneListItem[], selected: string | null): 
   return asking[0]!;
 }
 
-export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
+export function OfficeDesks({
+  panes,
+  selected,
+  onSelect,
+  sortMode = "name",
+  recentMs = RECENT_ACTIVITY_MS,
+}: OfficeDesksProps) {
   const rootRef = useRef<HTMLElement | null>(null);
   const labelHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [labelsVisible, setLabelsVisible] = useState(false);
@@ -261,7 +273,7 @@ export function OfficeDesks({ panes, selected, onSelect }: OfficeDesksProps) {
   // it resets on reload.
   const [modeOverride, setModeOverride] = useState<SceneMode | null>(null);
 
-  const items = paneListItems(panes);
+  const items = paneListItems(panes, sortMode, recentMs);
   const { visible, overflow } = splitPaneItems(items, selected);
   // Chunk the visible desks into groups of three so one ceiling pendant hangs
   // centered over each group (ceil(n/3) pendants — the middle desk of each).

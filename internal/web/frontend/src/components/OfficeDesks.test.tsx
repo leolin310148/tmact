@@ -210,3 +210,27 @@ describe("OfficeDesks jump-to-question button", () => {
     expect(onSelect).toHaveBeenCalledWith("%2");
   });
 });
+
+describe("OfficeDesks order", () => {
+  const panes = [
+    pane({ target: "a", pane_id: "%1", session: "alpha", runtime: "claude" }),
+    pane({ target: "b", pane_id: "%2", session: "bravo", runtime: "codex", running: true }),
+    pane({ target: "c", pane_id: "%3", session: "charlie", runtime: "claude", asking: true }),
+  ];
+  const deskOrder = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLElement>("[data-pane-id]")).map(
+      (el) => el.dataset.paneId,
+    );
+
+  it("seats desks by name by default", () => {
+    const { container } = render(<OfficeDesks panes={panes} selected={null} onSelect={() => {}} />);
+    expect(deskOrder(container)).toEqual(["%1", "%2", "%3"]);
+  });
+
+  it("seats asking, then working desks first in activity order", () => {
+    const { container } = render(
+      <OfficeDesks panes={panes} selected={null} onSelect={() => {}} sortMode="activity" />,
+    );
+    expect(deskOrder(container)).toEqual(["%3", "%2", "%1"]);
+  });
+});

@@ -3,7 +3,8 @@
 // Parity notes (MIGRATION_SPEC §6 items 7,8,9; ARCHITECTURE §8/§10):
 //   - One chip per pane in snapshot.panes, sorted
 //     peer → sessionLabel → window_index → pane_index (or activity-first when
-//     the "Panel list order" setting says so; see sortedPaneList).
+//     the "Panel list order" setting says so; see sortedPaneList — the office
+//     layout shares the same order).
 //   - Duplicate (baseLabel + session) keys append ":" + window_index.
 //   - state.paneOrder is FROZEN to the rendered pane_id order so the Option+key
 //     hotkey indices map to the same chips left-to-right (app.js mutated

@@ -1281,6 +1281,8 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
             panes={paneSwitcherPanes}
             selected={state.selected}
             onSelect={callbacks.selectPane}
+            sortMode={settings.paneSortMode}
+            recentMs={settings.paneRecentMinutes * 60 * 1000}
           />
         </Suspense>
       ) : null}
