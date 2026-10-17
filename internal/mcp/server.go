@@ -45,6 +45,8 @@ type Deps struct {
 	DispatchPeer func(ctx context.Context, peer string, opts dispatch.Options) (dispatch.Report, error)
 	SendLocal    func(ctx context.Context, paneID, text string) error
 	SendPeer     func(ctx context.Context, peer, paneID, text string) error
+	KeysLocal    func(ctx context.Context, paneID string, keys []string) error
+	KeysPeer     func(ctx context.Context, peer, paneID string, keys []string) error
 	// CLI bridge: allowlisted tmact subcommands run as a child process.
 	Bridge []BridgeCommand
 	RunCLI func(ctx context.Context, argv []string) (CLIResult, error)
@@ -108,6 +110,7 @@ func NewServer(deps Deps, version string, roots []string) *sdk.Server {
 	}
 	if len(roots) > 0 {
 		addWriteTools(s, t)
+		addAnswerTool(s, t)
 		if deps.RunCLI != nil {
 			addBridgeTools(s, t, deps.Bridge, true)
 		}
@@ -133,6 +136,7 @@ func serverInstructions(roots []string) string {
 	fmt.Fprintf(b, " To start work, call dispatch_work with dir in ~/ form under %s (on a peer, ~ is that machine's home). ", strings.Join(roots, " or "))
 	b.WriteString("Then call wait_pane on the returned pane and capture_pane to read the outcome; repeat wait_pane while the outcome is timeout. " +
 		"Use send_text for follow-ups to an idle agent. " +
+		"When wait_pane or list_panes shows a prompt, read it (capture_pane if unsure), get the user's decision for approvals, then answer_prompt with the question and option label copied verbatim. " +
 		"When the user wants an explicit answer back (an investigation, review, or summary), use ask_agent instead and poll get_answer until it is not pending; " +
 		"if reply_kind is question, the agent is waiting for ask_followup. Issue each dispatch once: after an error or timeout, check list_panes before retrying. " +
 		"Prefer dispatch_work, send_text, and ask_agent for driving agents; tmact_send and tmact_dispatch_work mirror the CLI and only print a plan unless execute is true. " +

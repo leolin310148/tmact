@@ -135,6 +135,20 @@ func mcpDeps(socketPath, configPath string) mcp.Deps {
 		SendLocal: func(_ context.Context, paneID, text string) error {
 			return tmux.PasteText(paneID, text, true)
 		},
+		KeysLocal: func(_ context.Context, paneID string, keys []string) error {
+			return tmux.SendKeys(paneID, keys)
+		},
+		KeysPeer: func(ctx context.Context, peer, paneID string, keys []string) error {
+			cfg, err := statusd.LoadFileConfig(configPath)
+			if err != nil {
+				return err
+			}
+			p, ok := peerpane.LookupConfigPeer(cfg, peer)
+			if !ok {
+				return fmt.Errorf("peer %q is not configured in %s", peer, configPath)
+			}
+			return peerpane.Client{Peer: p}.SendKeys(ctx, paneID, keys)
+		},
 		SendPeer: func(ctx context.Context, peer, paneID, text string) error {
 			cfg, err := statusd.LoadFileConfig(configPath)
 			if err != nil {

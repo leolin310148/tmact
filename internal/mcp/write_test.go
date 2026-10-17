@@ -81,7 +81,7 @@ func TestWriteToolsOnlyWithRoots(t *testing.T) {
 	var names []string
 	for _, tool := range res.Tools {
 		names = append(names, tool.Name)
-		if tool.Name == "dispatch_work" || tool.Name == "send_text" {
+		if tool.Name == "dispatch_work" || tool.Name == "send_text" || tool.Name == "answer_prompt" {
 			a := tool.Annotations
 			if a == nil || a.ReadOnlyHint || a.DestructiveHint == nil || !*a.DestructiveHint {
 				t.Fatalf("%s annotations = %+v", tool.Name, a)
@@ -91,7 +91,7 @@ func TestWriteToolsOnlyWithRoots(t *testing.T) {
 			}
 		}
 	}
-	if got := strings.Join(names, ","); got != "capture_pane,dispatch_work,list_panes,list_sessions,send_text,wait_pane" {
+	if got := strings.Join(names, ","); got != "answer_prompt,capture_pane,dispatch_work,list_panes,list_sessions,send_text,wait_pane" {
 		t.Fatalf("tools = %s", got)
 	}
 }
