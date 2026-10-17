@@ -74,6 +74,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
     onPaneSortModeChange,
+    onPaneRecentMinutesChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,
@@ -357,6 +358,22 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
               <option value="name">Machine, then name</option>
               <option value="activity">Asking / working first</option>
             </select>
+          </label>
+          <label className="settings-field" htmlFor="pane-recent-minutes">
+            <span>Recently working window (minutes)</span>
+            <input
+              id="pane-recent-minutes"
+              type="number"
+              min={1}
+              max={240}
+              step={1}
+              inputMode="numeric"
+              aria-label="recently working window in minutes"
+              ref={(el) => {
+                refs.current.paneRecentMinutes = el;
+              }}
+              onChange={(e) => onPaneRecentMinutesChange(e.currentTarget.value)}
+            />
           </label>
           {typeof window.matchMedia === "function" && !isMobile() && window === window.top && (
             <div className="settings-field">

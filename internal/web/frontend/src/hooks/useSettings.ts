@@ -33,6 +33,9 @@ const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
 const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
 const PANE_SORT_MODE_DEFAULT: PaneSortMode = "name";
 const PANE_SORT_MODES: PaneSortMode[] = ["name", "activity"];
+const RECENT_MINUTES_MIN = 1,
+  RECENT_MINUTES_MAX = 240,
+  RECENT_MINUTES_DEFAULT = 10;
 
 interface ClientSettings {
   paneFont?: number;
@@ -44,6 +47,9 @@ interface ClientSettings {
   paneSwitcherLayout?: string;
   // chip order in the panel list: "name" (default) or "activity".
   paneSortMode?: string;
+  // "activity" order: minutes since the last screen change that still count
+  // as recently working.
+  paneRecentMinutes?: number;
   voiceInputDeviceId?: string;
   // markdown view toggle (pane output rendered with pipe tables); global,
   // persisted, default off. Owned by App's React state, not the overlay form —
@@ -115,6 +121,12 @@ function normalizePaneSortMode(mode: string | undefined): PaneSortMode {
     : PANE_SORT_MODE_DEFAULT;
 }
 
+function clampRecentMinutes(v: unknown): number {
+  const n = parseInt(v as string, 10);
+  if (!Number.isFinite(n)) return RECENT_MINUTES_DEFAULT;
+  return clamp(n, RECENT_MINUTES_MIN, RECENT_MINUTES_MAX);
+}
+
 // Refs the SettingsDialog attaches to its form elements, so the imperative
 // helpers can touch the live DOM exactly like settings.js did via $().
 export interface SettingsRefs {
@@ -124,6 +136,7 @@ export interface SettingsRefs {
   runningEffect: HTMLSelectElement | null;
   paneSwitcherLayout: HTMLSelectElement | null;
   paneSortMode: HTMLSelectElement | null;
+  paneRecentMinutes: HTMLInputElement | null;
   voiceDevice: HTMLSelectElement | null;
   voiceDeviceStatus: HTMLElement | null;
   sttModel: HTMLInputElement | null;
@@ -145,6 +158,8 @@ export interface UseSettingsResult {
   paneSwitcherLayout: string;
   /** Current panel-list chip order ("name" | "activity"). */
   paneSortMode: PaneSortMode;
+  /** Recently-working window for "activity" order, in minutes. */
+  paneRecentMinutes: number;
   /** Apply localStorage settings before first paint (App calls synchronously). */
   loadClientSettings: () => void;
   /** Show overlay + reload STT and version (callbacks.openSettings). */
@@ -161,6 +176,7 @@ export interface UseSettingsResult {
   onRunningEffectChange: (value: string) => void;
   onPaneSwitcherLayoutChange: (value: string) => void;
   onPaneSortModeChange: (value: string) => void;
+  onPaneRecentMinutesChange: (value: string) => void;
   onVoiceDeviceChange: (value: string) => void;
   onRefreshVoiceDevices: () => void;
   onSaveSTT: () => void;
@@ -184,6 +200,9 @@ export function useSettings(): UseSettingsResult {
   const [paneSortMode, setPaneSortMode] = useState<PaneSortMode>(() =>
     normalizePaneSortMode(readClientSettings().paneSortMode),
   );
+  const [paneRecentMinutes, setPaneRecentMinutes] = useState(() =>
+    clampRecentMinutes(readClientSettings().paneRecentMinutes),
+  );
   const refs = useRef<SettingsRefs>({
     fontRange: null,
     fontVal: null,
@@ -191,6 +210,7 @@ export function useSettings(): UseSettingsResult {
     runningEffect: null,
     paneSwitcherLayout: null,
     paneSortMode: null,
+    paneRecentMinutes: null,
     voiceDevice: null,
     voiceDeviceStatus: null,
     sttModel: null,
@@ -245,6 +265,15 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.paneSortMode) refs.current.paneSortMode.value = v;
     saveClientSettings({ paneSortMode: v });
     setPaneSortMode(v);
+  }, []);
+
+  // Only persist/apply a parseable value, so clearing the field while typing
+  // doesn't snap it back to the default mid-edit.
+  const applyPaneRecentMinutes = useCallback((value: string) => {
+    if (!Number.isFinite(parseInt(value, 10))) return;
+    const v = clampRecentMinutes(value);
+    saveClientSettings({ paneRecentMinutes: v });
+    setPaneRecentMinutes(v);
   }, []);
 
   const applyVoiceDevice = useCallback((deviceId: string | undefined) => {
@@ -442,6 +471,10 @@ export function useSettings(): UseSettingsResult {
     (value: string) => applyPaneSortMode(value),
     [applyPaneSortMode],
   );
+  const onPaneRecentMinutesChange = useCallback(
+    (value: string) => applyPaneRecentMinutes(value),
+    [applyPaneRecentMinutes],
+  );
   const onVoiceDeviceChange = useCallback(
     (value: string) => applyVoiceDevice(value),
     [applyVoiceDevice],
@@ -474,6 +507,9 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.paneSortMode) {
       refs.current.paneSortMode.value = normalizePaneSortMode(saved.paneSortMode);
     }
+    if (refs.current.paneRecentMinutes) {
+      refs.current.paneRecentMinutes.value = String(clampRecentMinutes(saved.paneRecentMinutes));
+    }
     const voiceID = (saved.voiceInputDeviceId || "").trim();
     setSelectedVoiceDeviceId(voiceID);
     if (refs.current.voiceDevice) refs.current.voiceDevice.value = voiceID;
@@ -483,6 +519,7 @@ export function useSettings(): UseSettingsResult {
     visible,
     paneSwitcherLayout,
     paneSortMode,
+    paneRecentMinutes,
     loadClientSettings,
     openSettings,
     closeSettings,
@@ -494,6 +531,7 @@ export function useSettings(): UseSettingsResult {
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
     onPaneSortModeChange,
+    onPaneRecentMinutesChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,

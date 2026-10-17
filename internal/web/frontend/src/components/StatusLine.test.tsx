@@ -101,6 +101,17 @@ describe("sortedPaneList", () => {
       "%1", "%6", "%7", // the rest: old change, stale, just past the window
     ]);
   });
+
+  it("honors a custom recently-working window", () => {
+    // 1 minute: delta (2 min ago) drops out of the recent group.
+    expect(ids(sortedPaneList(panes, "activity", now, 60 * 1000))).toEqual([
+      "%3", "%2", "%5", "%1", "%4", "%6", "%7",
+    ]);
+    // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it.
+    expect(ids(sortedPaneList(panes, "activity", now, 2 * 60 * 60 * 1000))).toEqual([
+      "%3", "%2", "%5", "%1", "%4", "%7", "%6",
+    ]);
+  });
 });
 
 describe("splitPaneItems", () => {

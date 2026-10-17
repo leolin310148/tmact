@@ -1270,7 +1270,10 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       />
 
       <nav className="statusline">
-        <StatusLine sortMode={settings.paneSortMode} />
+        <StatusLine
+          sortMode={settings.paneSortMode}
+          recentMs={settings.paneRecentMinutes * 60 * 1000}
+        />
       </nav>
       {settings.paneSwitcherLayout === "office" ? (
         <Suspense fallback={null}>
