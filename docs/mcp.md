@@ -28,6 +28,9 @@ authentication.
 | `wait_pane` | read | Poll until a pane is idle (for `settle_seconds`) or shows a prompt, up to 80s; outcome `idle` / `asking` / `gone` / `timeout`. |
 | `dispatch_work` | write | `tmact dispatch-work` into an allowed dir, locally or on a peer; returns once the prompt is submitted. |
 | `send_text` | write | Paste a follow-up into an idle agent pane and press Enter. |
+| `ask_agent` | write | `tmact ask` on the hub without blocking: dispatches with the reply protocol and returns a `question_id`. |
+| `get_answer` | read | Wait up to 80s for the next unread reply; `pending` / `answered` (with `reply_kind`) / `closed` / `expired`. |
+| `ask_followup` | write | `tmact ask --thread` follow-up, delivered to a waiting agent's mailbox or its pane. |
 
 Read tools are annotated `readOnlyHint: true`; write tools `destructiveHint:
 true`, so ChatGPT asks for confirmation before each call. That confirmation
@@ -57,6 +60,11 @@ panes present in the current snapshot.
   plain paste has no Enter-swallow recovery.
 - Calls are capped well below Cloudflare's ~100s origin timeout (ready wait
   45s, whole call 80s) so a slow dispatch does not invite a client retry.
+
+- Ask tools are hub-only (the ask store is local). They reuse the CLI's ask
+  delivery code; only the wait differs: `get_answer` is a bounded poll that
+  advances the asker read cursor and extends the question deadline (2h) instead
+  of closing it when the wait ends, because ChatGPT cannot block for long.
 
 Not exposed: kill, close, fork, raw keys, `/api/command`.
 

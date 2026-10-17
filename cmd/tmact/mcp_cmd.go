@@ -96,7 +96,7 @@ func runMCPServe(args []string) error {
 }
 
 func mcpDeps(socketPath, configPath string) mcp.Deps {
-	return mcp.Deps{
+	deps := mcp.Deps{
 		Snapshot: func(context.Context) (statusd.Snapshot, error) {
 			return statusd.FetchSnapshot(socketPath)
 		},
@@ -142,6 +142,8 @@ func mcpDeps(socketPath, configPath string) mcp.Deps {
 		},
 		Home: os.UserHomeDir,
 	}
+	deps.AskStart, deps.AskFollowUp, deps.AskPoll = mcpAskDeps(45 * time.Second)
+	return deps
 }
 
 func isLoopbackAddr(addr string) bool {
