@@ -78,7 +78,13 @@ func runMCPServe(args []string) error {
 		opts.Verifier = mcp.NewAccessVerifier(*team, *aud)
 	}
 
-	handler := mcp.Handler(mcpDeps(*socketPath, *configPath), opts)
+	deps := mcpDeps(*socketPath, *configPath)
+	bridge, err := mcpBridgeCommands()
+	if err != nil {
+		return err
+	}
+	deps.Bridge = bridge
+	handler := mcp.Handler(deps, opts)
 	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -143,6 +149,7 @@ func mcpDeps(socketPath, configPath string) mcp.Deps {
 		Home: os.UserHomeDir,
 	}
 	deps.AskStart, deps.AskFollowUp, deps.AskPoll = mcpAskDeps(45 * time.Second)
+	deps.RunCLI = runTmactCLI
 	return deps
 }
 
