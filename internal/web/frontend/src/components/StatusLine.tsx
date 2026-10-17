@@ -2,7 +2,8 @@
 //
 // Parity notes (MIGRATION_SPEC §6 items 7,8,9; ARCHITECTURE §8/§10):
 //   - One chip per pane in snapshot.panes, sorted
-//     peer → sessionLabel → window_index → pane_index.
+//     peer → sessionLabel → window_index → pane_index (or activity-first when
+//     the "Panel list order" setting says so; see sortedPaneList).
 //   - Duplicate (baseLabel + session) keys append ":" + window_index.
 //   - state.paneOrder is FROZEN to the rendered pane_id order so the Option+key
 //     hotkey indices map to the same chips left-to-right (app.js mutated
@@ -66,12 +67,42 @@ export interface PaneListItem {
   label: string;
 }
 
-export function sortedPaneList(panes: PaneStatus[]): PaneStatus[] {
-  return panes.slice().sort((a, b) =>
-    panePeer(a).localeCompare(panePeer(b)) ||
+// PaneSortMode picks the chip order: "name" is peer → session → window → pane;
+// "activity" floats asking, then working, then recently-changed panes ahead of
+// the rest, keeping the name order inside each group.
+export type PaneSortMode = "name" | "activity";
+
+// RECENT_ACTIVITY_MS is how long after its last screen change a pane still
+// counts as recently working in "activity" order.
+export const RECENT_ACTIVITY_MS = 10 * 60 * 1000;
+
+// paneActivityRank buckets a pane for "activity" order (lower sorts first).
+// Buckets — not raw timestamps — so a working pane whose screen changes every
+// second keeps its slot instead of reshuffling the chips under the pointer.
+export function paneActivityRank(p: PaneStatus, now: number): number {
+  if (p.stale) return 3;
+  if (p.asking) return 0;
+  if (p.running) return 1;
+  const changed = p.last_changed_at ? Date.parse(p.last_changed_at) : NaN;
+  if (Number.isFinite(changed) && now - changed <= RECENT_ACTIVITY_MS) return 2;
+  return 3;
+}
+
+function compareByName(a: PaneStatus, b: PaneStatus): number {
+  return panePeer(a).localeCompare(panePeer(b)) ||
     sessionLabel(a).localeCompare(sessionLabel(b)) ||
     a.window_index - b.window_index ||
-    a.pane_index - b.pane_index);
+    a.pane_index - b.pane_index;
+}
+
+export function sortedPaneList(
+  panes: PaneStatus[],
+  mode: PaneSortMode = "name",
+  now: number = Date.now(),
+): PaneStatus[] {
+  if (mode !== "activity") return panes.slice().sort(compareByName);
+  return panes.slice().sort((a, b) =>
+    paneActivityRank(a, now) - paneActivityRank(b, now) || compareByName(a, b));
 }
 
 // shouldPinPane decides which panes stay as always-visible chips vs. collapse
@@ -104,8 +135,8 @@ export function splitPaneItems(items: PaneListItem[], selectedId: string | null)
   return { visible, overflow };
 }
 
-export function paneListItems(panes: PaneStatus[]): PaneListItem[] {
-  const sorted = sortedPaneList(panes);
+export function paneListItems(panes: PaneStatus[], mode: PaneSortMode = "name"): PaneListItem[] {
+  const sorted = sortedPaneList(panes, mode);
   const perSession: Record<string, number> = {};
   for (const p of sorted) {
     const k = panePeer(p) + "\0" + sessionLabel(p);
@@ -123,7 +154,7 @@ export function paneListItems(panes: PaneStatus[]): PaneListItem[] {
   });
 }
 
-export function StatusLine() {
+export function StatusLine({ sortMode = "name" }: { sortMode?: PaneSortMode } = {}) {
   const { state, callbacks } = useAppState();
   const snap = state.snapshot;
   const panes: PaneStatus[] = snap && snap.panes ? Object.values(snap.panes) : [];
@@ -142,7 +173,7 @@ export function StatusLine() {
     );
   }
 
-  const items = paneListItems(panes);
+  const items = paneListItems(panes, sortMode);
   const { visible, overflow } = splitPaneItems(items, state.selected);
 
   // Freeze the rendered order so Option+key hotkeys map to the same chips, in

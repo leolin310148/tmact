@@ -10,7 +10,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AppStateProvider, useAppStateStore } from "../store/AppStateContext";
 import type { PaneStatus, Snapshot } from "../types/server";
-import { shouldPinPane, splitPaneItems, StatusLine } from "./StatusLine";
+import {
+  RECENT_ACTIVITY_MS,
+  shouldPinPane,
+  sortedPaneList,
+  splitPaneItems,
+  StatusLine,
+} from "./StatusLine";
 
 beforeAll(() => {
   // jsdom has no layout; the selected Chip calls scrollIntoView on mount.
@@ -66,6 +72,34 @@ describe("shouldPinPane", () => {
   it("collapses idle agent-less panes", () => {
     expect(shouldPinPane(pane(), null)).toBe(false);
     expect(shouldPinPane(pane({ pane_id: "%1" }), "%2")).toBe(false);
+  });
+});
+
+describe("sortedPaneList", () => {
+  const now = Date.parse("2026-10-18T12:00:00Z");
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+  const panes = [
+    pane({ pane_id: "%1", session: "alpha", last_changed_at: ago(60 * 60 * 1000) }),
+    pane({ pane_id: "%2", session: "bravo", running: true, last_changed_at: ago(1000) }),
+    pane({ pane_id: "%3", session: "charlie", asking: true }),
+    pane({ pane_id: "%4", session: "delta", last_changed_at: ago(2 * 60 * 1000) }),
+    pane({ pane_id: "%5", session: "echo", running: true, last_changed_at: ago(5000) }),
+    pane({ pane_id: "%6", session: "foxtrot", running: true, stale: true }),
+    pane({ pane_id: "%7", session: "golf", peer: "mini", last_changed_at: ago(RECENT_ACTIVITY_MS + 1) }),
+  ];
+  const ids = (list: PaneStatus[]) => list.map((p) => p.pane_id);
+
+  it("defaults to machine then name order", () => {
+    expect(ids(sortedPaneList(panes))).toEqual(["%1", "%2", "%3", "%4", "%5", "%6", "%7"]);
+  });
+
+  it("puts asking, working, then recently changed panes first in activity order", () => {
+    expect(ids(sortedPaneList(panes, "activity", now))).toEqual([
+      "%3", // asking
+      "%2", "%5", // working, name order (not by last change)
+      "%4", // changed 2 min ago
+      "%1", "%6", "%7", // the rest: old change, stale, just past the window
+    ]);
   });
 });
 

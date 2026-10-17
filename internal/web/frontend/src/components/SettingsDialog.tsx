@@ -73,6 +73,7 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
     onFontFamilyChange,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
+    onPaneSortModeChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,
@@ -341,6 +342,20 @@ export default function SettingsDialog({ settings, quickEditor }: SettingsDialog
             >
               <option value="bottom">Panel list (chips)</option>
               <option value="office">Office layout</option>
+            </select>
+          </label>
+          <label className="settings-field" htmlFor="pane-sort-mode">
+            <span>Panel list order</span>
+            <select
+              id="pane-sort-mode"
+              aria-label="panel list order"
+              ref={(el) => {
+                refs.current.paneSortMode = el;
+              }}
+              onChange={(e) => onPaneSortModeChange(e.currentTarget.value)}
+            >
+              <option value="name">Machine, then name</option>
+              <option value="activity">Asking / working first</option>
             </select>
           </label>
           {typeof window.matchMedia === "function" && !isMobile() && window === window.top && (

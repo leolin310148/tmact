@@ -26,6 +26,7 @@ const emptyRefs = (): SettingsRefs => ({
   fontFamily: null,
   runningEffect: null,
   paneSwitcherLayout: null,
+  paneSortMode: null,
   voiceDevice: null,
   voiceDeviceStatus: null,
   sttModel: null,
@@ -45,6 +46,7 @@ function Harness({ asyncStatus = "" }: { asyncStatus?: string }) {
   const settings: UseSettingsResult = {
     visible,
     paneSwitcherLayout: "bottom",
+    paneSortMode: "name",
     loadClientSettings: vi.fn(),
     openSettings: () => setVisible(true),
     closeSettings: () => setVisible(false),
@@ -55,6 +57,7 @@ function Harness({ asyncStatus = "" }: { asyncStatus?: string }) {
     onFontFamilyChange: vi.fn(),
     onRunningEffectChange: vi.fn(),
     onPaneSwitcherLayoutChange: vi.fn(),
+    onPaneSortModeChange: vi.fn(),
     onVoiceDeviceChange: vi.fn(),
     onRefreshVoiceDevices: vi.fn(),
     onSaveSTT: vi.fn(),

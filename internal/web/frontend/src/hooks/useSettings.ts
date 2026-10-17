@@ -19,6 +19,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from "react";
 import { clamp } from "../lib/dom";
 import { loadSTTConfig, loadVersion, saveSTTConfig } from "../api/client";
 import { FRONTEND_BUILD } from "../lib/buildInfo";
+import type { PaneSortMode } from "../components/StatusLine";
 
 const SETTINGS_KEY = "tmact.settings";
 const FONT_MIN = 9,
@@ -30,6 +31,8 @@ const PANE_FONT_FAMILY_DEFAULT = "maple-mono";
 const PANE_FONT_FAMILIES = ["system", "maple-mono"];
 const PANE_SWITCHER_LAYOUT_DEFAULT = "bottom";
 const PANE_SWITCHER_LAYOUTS = ["bottom", "office"];
+const PANE_SORT_MODE_DEFAULT: PaneSortMode = "name";
+const PANE_SORT_MODES: PaneSortMode[] = ["name", "activity"];
 
 interface ClientSettings {
   paneFont?: number;
@@ -39,6 +42,8 @@ interface ClientSettings {
   paneFontFace?: string;
   runningEffect?: string;
   paneSwitcherLayout?: string;
+  // chip order in the panel list: "name" (default) or "activity".
+  paneSortMode?: string;
   voiceInputDeviceId?: string;
   // markdown view toggle (pane output rendered with pipe tables); global,
   // persisted, default off. Owned by App's React state, not the overlay form —
@@ -104,6 +109,12 @@ function normalizePaneSwitcherLayout(layout: string | undefined): string {
     : PANE_SWITCHER_LAYOUT_DEFAULT;
 }
 
+function normalizePaneSortMode(mode: string | undefined): PaneSortMode {
+  return mode !== undefined && (PANE_SORT_MODES as string[]).includes(mode)
+    ? (mode as PaneSortMode)
+    : PANE_SORT_MODE_DEFAULT;
+}
+
 // Refs the SettingsDialog attaches to its form elements, so the imperative
 // helpers can touch the live DOM exactly like settings.js did via $().
 export interface SettingsRefs {
@@ -112,6 +123,7 @@ export interface SettingsRefs {
   fontFamily: HTMLSelectElement | null;
   runningEffect: HTMLSelectElement | null;
   paneSwitcherLayout: HTMLSelectElement | null;
+  paneSortMode: HTMLSelectElement | null;
   voiceDevice: HTMLSelectElement | null;
   voiceDeviceStatus: HTMLElement | null;
   sttModel: HTMLInputElement | null;
@@ -131,6 +143,8 @@ export interface UseSettingsResult {
   /** Current pane switcher layout ("bottom" | "office") — drives which
    *  layout-specific settings fields the dialog shows. */
   paneSwitcherLayout: string;
+  /** Current panel-list chip order ("name" | "activity"). */
+  paneSortMode: PaneSortMode;
   /** Apply localStorage settings before first paint (App calls synchronously). */
   loadClientSettings: () => void;
   /** Show overlay + reload STT and version (callbacks.openSettings). */
@@ -146,6 +160,7 @@ export interface UseSettingsResult {
   onFontFamilyChange: (value: string) => void;
   onRunningEffectChange: (value: string) => void;
   onPaneSwitcherLayoutChange: (value: string) => void;
+  onPaneSortModeChange: (value: string) => void;
   onVoiceDeviceChange: (value: string) => void;
   onRefreshVoiceDevices: () => void;
   onSaveSTT: () => void;
@@ -166,12 +181,16 @@ export function useSettings(): UseSettingsResult {
   const [paneSwitcherLayout, setPaneSwitcherLayout] = useState(() =>
     normalizePaneSwitcherLayout(readClientSettings().paneSwitcherLayout),
   );
+  const [paneSortMode, setPaneSortMode] = useState<PaneSortMode>(() =>
+    normalizePaneSortMode(readClientSettings().paneSortMode),
+  );
   const refs = useRef<SettingsRefs>({
     fontRange: null,
     fontVal: null,
     fontFamily: null,
     runningEffect: null,
     paneSwitcherLayout: null,
+    paneSortMode: null,
     voiceDevice: null,
     voiceDeviceStatus: null,
     sttModel: null,
@@ -219,6 +238,13 @@ export function useSettings(): UseSettingsResult {
     if (refs.current.paneSwitcherLayout) refs.current.paneSwitcherLayout.value = v;
     saveClientSettings({ paneSwitcherLayout: v });
     setPaneSwitcherLayout(v);
+  }, []);
+
+  const applyPaneSortMode = useCallback((mode: string | undefined) => {
+    const v = normalizePaneSortMode(mode);
+    if (refs.current.paneSortMode) refs.current.paneSortMode.value = v;
+    saveClientSettings({ paneSortMode: v });
+    setPaneSortMode(v);
   }, []);
 
   const applyVoiceDevice = useCallback((deviceId: string | undefined) => {
@@ -412,6 +438,10 @@ export function useSettings(): UseSettingsResult {
     (value: string) => applyPaneSwitcherLayout(value),
     [applyPaneSwitcherLayout],
   );
+  const onPaneSortModeChange = useCallback(
+    (value: string) => applyPaneSortMode(value),
+    [applyPaneSortMode],
+  );
   const onVoiceDeviceChange = useCallback(
     (value: string) => applyVoiceDevice(value),
     [applyVoiceDevice],
@@ -441,6 +471,9 @@ export function useSettings(): UseSettingsResult {
         saved.paneSwitcherLayout,
       );
     }
+    if (refs.current.paneSortMode) {
+      refs.current.paneSortMode.value = normalizePaneSortMode(saved.paneSortMode);
+    }
     const voiceID = (saved.voiceInputDeviceId || "").trim();
     setSelectedVoiceDeviceId(voiceID);
     if (refs.current.voiceDevice) refs.current.voiceDevice.value = voiceID;
@@ -449,6 +482,7 @@ export function useSettings(): UseSettingsResult {
   return {
     visible,
     paneSwitcherLayout,
+    paneSortMode,
     loadClientSettings,
     openSettings,
     closeSettings,
@@ -459,6 +493,7 @@ export function useSettings(): UseSettingsResult {
     onFontFamilyChange,
     onRunningEffectChange,
     onPaneSwitcherLayoutChange,
+    onPaneSortModeChange,
     onVoiceDeviceChange,
     onRefreshVoiceDevices,
     onSaveSTT,

@@ -1270,7 +1270,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
       />
 
       <nav className="statusline">
-        <StatusLine />
+        <StatusLine sortMode={settings.paneSortMode} />
       </nav>
       {settings.paneSwitcherLayout === "office" ? (
         <Suspense fallback={null}>
