@@ -94,6 +94,36 @@ export function paneActivityRank(
   return 3;
 }
 
+// paneSortDebug summarizes how "activity" order bucketed the panes, shown in
+// Settings so a device that sorts unexpectedly can be diagnosed on screen.
+export function paneSortDebug(
+  panes: PaneStatus[],
+  recentMs: number,
+  now: number = Date.now(),
+): string {
+  const counts = [0, 0, 0, 0];
+  let noTime = 0;
+  let badTime = 0;
+  const recent: string[] = [];
+  for (const p of panes) {
+    const rank = paneActivityRank(p, now, recentMs);
+    counts[rank] = (counts[rank] ?? 0) + 1;
+    if (!p.last_changed_at) noTime++;
+    else if (!Number.isFinite(Date.parse(p.last_changed_at))) badTime++;
+    if (rank === 2) {
+      const peer = panePeer(p);
+      recent.push((peer ? peer + "@" : "") + sessionLabel(p) + ":" + p.window_index);
+    }
+  }
+  return [
+    "window " + Math.round(recentMs / 60000) + " min",
+    "now " + new Date(now).toISOString(),
+    "asking " + counts[0] + " · working " + counts[1] + " · recent " + counts[2] + " · other " + counts[3],
+    "no time " + noTime + " · unparsable time " + badTime,
+    "recent: " + (recent.join(", ") || "(none)"),
+  ].join("\n");
+}
+
 function compareByName(a: PaneStatus, b: PaneStatus): number {
   return panePeer(a).localeCompare(panePeer(b)) ||
     sessionLabel(a).localeCompare(sessionLabel(b)) ||
