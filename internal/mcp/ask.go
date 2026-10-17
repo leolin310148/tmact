@@ -57,7 +57,7 @@ func addAskTools(s *sdk.Server, t tools) {
 		Name: "ask_agent",
 		Description: "Ask a coding agent on the MCP host for an explicit answer (investigation result, review, summary). " +
 			"Like dispatch_work, but the agent is told to reply through tmact's reply protocol. Returns a question_id immediately; " +
-			"collect the reply with get_answer. Not available for peers.",
+			"collect the reply with get_answer. Not available for peers. Use for 問 agent / 請 agent 查一下並回報.",
 		Annotations: writeAnnotations,
 	}, t.askAgent)
 	sdk.AddTool(s, &sdk.Tool{

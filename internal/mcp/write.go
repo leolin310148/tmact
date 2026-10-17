@@ -107,12 +107,12 @@ func addWriteTools(s *sdk.Server, t tools) {
 		Name: "dispatch_work",
 		Description: "Start work for a coding agent: create or reuse a tmux session in an allowed directory, launch the agent if needed, and submit the prompt. " +
 			"Returns as soon as the prompt is accepted; follow up with wait_pane and capture_pane. " +
-			"Reusing an idle session clears its conversation unless continue_conversation is true.",
+			"Reusing an idle session clears its conversation unless continue_conversation is true. Use for 派工 / 叫 agent 做 X / 開一個 agent.",
 		Annotations: writeAnnotations,
 	}, t.dispatchWork)
 	sdk.AddTool(s, &sdk.Tool{
 		Name:        "send_text",
-		Description: "Type a follow-up message into an idle coding-agent pane and press Enter. Refused for shell panes, busy agents, and agents showing a prompt.",
+		Description: "Type a follow-up message into an idle coding-agent pane and press Enter. Refused for shell panes, busy agents, and agents showing a prompt. Use for 跟它說 / 補一句 / 追問.",
 		Annotations: writeAnnotations,
 	}, t.sendText)
 }

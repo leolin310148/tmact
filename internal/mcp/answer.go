@@ -20,7 +20,7 @@ func addAnswerTool(s *sdk.Server, t tools) {
 		Name: "answer_prompt",
 		Description: "Answer the menu a coding agent is showing (choice, command/patch approval, directory access) by pressing one numbered option. " +
 			"Copy expected_question and expected_option_label exactly from the prompt in list_panes or wait_pane; the server re-reads the pane and refuses if the prompt changed. " +
-			"Workspace-trust prompts are never answered here.",
+			"Workspace-trust prompts are never answered here. Use for 回答它 / 幫我選 / 允許 / 拒絕.",
 		Annotations: writeAnnotations,
 	}, t.answerPrompt)
 }
