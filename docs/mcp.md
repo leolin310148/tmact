@@ -125,13 +125,13 @@ Cloudflare edge before reaching the tunnel.
 
 `--no-access` disables the check and is refused unless `--addr` is loopback.
 
-## Cloudflare setup (as deployed for tmact-mcp.puni.tw)
+## Cloudflare setup
 
 1. **Tunnel**: remote-managed tunnel `tmact-mcp`, ingress
-   `tmact-mcp.puni.tw → http://127.0.0.1:7895`, catch-all `http_status:404`.
+   `tmact-mcp.example.com → http://127.0.0.1:7895`, catch-all `http_status:404`.
    Proxied CNAME `tmact-mcp` → `<tunnel-id>.cfargotunnel.com`. Save the
    connector token to `~/.tmact/mcp-tunnel.token` (0600).
-2. **Access application**: self-hosted, domain `tmact-mcp.puni.tw`, policy
+2. **Access application**: self-hosted, domain `tmact-mcp.example.com`, policy
    allowing only the owner's email (One-time PIN login).
 3. **Managed OAuth** on that application, with dynamic client registration
    allowing:
@@ -141,7 +141,7 @@ Cloudflare edge before reaching the tunnel.
      `http://127.0.0.1:<port>/callback`). Changes take about a minute.
 4. **WAF**: the zone's custom rule `tw only` blocks non-TW countries. OpenAI
    connects from US Azure IPs, so the rule carries
-   `and http.host ne "tmact-mcp.puni.tw"`; Access is the gate for that host.
+   `and http.host ne "tmact-mcp.example.com"`; Access is the gate for that host.
    (Free plan allows 5 custom rules, so this is an exclusion in the existing
    rule rather than a separate skip rule.)
 5. Note the Zero Trust team name (`<team>.cloudflareaccess.com`) and the
@@ -151,7 +151,7 @@ Cloudflare edge before reaching the tunnel.
 
 ```sh
 scripts/install.sh                       # tmact binary + statusd
-scripts/install-mcp.sh --access-team puni-tw --access-aud <aud-tag>
+scripts/install-mcp.sh --access-team <team> --access-aud <aud-tag>
 ```
 
 This installs `com.tmact.mcp` and `com.tmact.mcp-tunnel` launchd agents. Logs:
@@ -164,11 +164,11 @@ removes them.
 ## Connecting
 
 - **ChatGPT** (Developer mode on): Plugins → New → Add custom MCP server, URL
-  `https://tmact-mcp.puni.tw/mcp`, OAuth with client id left empty (DCR). No
+  `https://tmact-mcp.example.com/mcp`, OAuth with client id left empty (DCR). No
   plugin package upload is needed for personal use.
   ChatGPT freezes the tool list when the plugin is created: after adding or
   changing tools, use Settings → Plugins → tmact → **Refresh tools** (the
   plugin page itself has no refresh). The server log then shows
   `server/discover` and `tools/list` from the Access user.
-- **Codex**: `[mcp_servers.tmact] url = "https://tmact-mcp.puni.tw/mcp"` in
+- **Codex**: `[mcp_servers.tmact] url = "https://tmact-mcp.example.com/mcp"` in
   `~/.codex/config.toml`, then `codex mcp login tmact`.

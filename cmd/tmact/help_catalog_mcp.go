@@ -8,7 +8,7 @@ func mcpCommandHelpCatalog() []commandHelp {
 			Usage:       []string{"tmact mcp serve --access-team TEAM --access-aud AUD [--dispatch-root ~/w,~/ops] [--addr 127.0.0.1:7895]"},
 			Subcommands: []string{"serve"},
 			Examples: []string{
-				"tmact mcp serve --access-team puni-tw --access-aud <aud-tag> --dispatch-root ~/w,~/ops",
+				"tmact mcp serve --access-team <team> --access-aud <aud-tag> --dispatch-root ~/w,~/ops",
 				"tmact mcp serve --no-access",
 			},
 			Safety: []string{

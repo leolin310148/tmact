@@ -19,7 +19,7 @@ func TestResolvePprofAddr(t *testing.T) {
 		{name: "explicit empty flag beats env", flag: "", flagSet: true, env: "127.0.0.1:6062", want: ""},
 		{name: "wildcard rejected", flag: "0.0.0.0:6061", flagSet: true, wantErr: true},
 		{name: "empty host rejected", flag: ":6061", flagSet: true, wantErr: true},
-		{name: "lan ip rejected", env: "100.120.181.54:6061", wantErr: true},
+		{name: "lan ip rejected", env: "100.101.102.103:6061", wantErr: true},
 		{name: "missing port rejected", flag: "127.0.0.1", flagSet: true, wantErr: true},
 	}
 	for _, tc := range cases {

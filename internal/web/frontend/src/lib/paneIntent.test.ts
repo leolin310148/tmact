@@ -20,7 +20,7 @@ describe("pane notification intents", () => {
   });
 
   it("reads pane from a same-page URL query", () => {
-    expect(paneIDFromURL("https://vibe.puni.tw/?pane=%2560")).toBe("%60");
+    expect(paneIDFromURL("https://statusd.example.com/?pane=%2560")).toBe("%60");
     expect(paneIDFromURL("/?pane=%2561")).toBe("%61");
     expect(paneIDFromURL("/?pane=peer-a%40%2562")).toBe("peer-a@%62");
     expect(paneIDFromURL("/")).toBe("");

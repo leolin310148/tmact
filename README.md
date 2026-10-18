@@ -524,7 +524,7 @@ Only bind it to `0.0.0.0` on a trusted network.
 
 The web UI ships a same-origin PWA Service Worker at `/sw.js`. Web Push
 notifications are shown by that worker, and notification clicks focus an
-existing same-origin `vibe.puni.tw` window or open `/`, so installed PWA clients
+existing same-origin `statusd.example.com` window or open `/`, so installed PWA clients
 are woken by the vibe origin itself.
 
 Generate a VAPID key pair for this app, separate from any other notification
