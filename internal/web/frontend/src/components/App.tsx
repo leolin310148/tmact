@@ -56,7 +56,7 @@ import { reportHumanActivity } from "../api/client";
 import { translateKey } from "../lib/keymap";
 import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
-import { StatusLine, panePeer, paneSortDebug } from "./StatusLine";
+import { StatusLine, panePeer } from "./StatusLine";
 import { ConnStatus } from "./ConnStatus";
 import { OptionBar } from "./OptionBar";
 import ContentPane from "./ContentPane";
@@ -1329,13 +1329,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
 
       <HelpOverlay help={help} renderButton={false} />
 
-      <SettingsDialog
-        settings={settings}
-        quickEditor={<QuickEditor quick={quick} />}
-        paneSortDebug={settings.visible
-          ? paneSortDebug(paneSwitcherPanes, settings.paneRecentMinutes * 60 * 1000)
-          : undefined}
-      />
+      <SettingsDialog settings={settings} quickEditor={<QuickEditor quick={quick} />} />
 
       <ImagePreview
         src={imageSrc}

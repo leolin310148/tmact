@@ -1264,11 +1264,6 @@
   /* The second section (Server) gets breathing room above it. */
   .settings-section ~ .settings-section { margin-top: 22px; }
   .settings-field { display: block; margin-bottom: 12px; }
-  .settings-debug {
-    margin: -4px 0 12px; padding: 6px 8px; font-size: 11px; line-height: 1.4;
-    white-space: pre-wrap; word-break: break-all; opacity: 0.75;
-    background: rgba(127,127,127,0.12); border-radius: 4px;
-  }
   .settings-field > span {
     display: block; margin-bottom: 5px;
     font-size: 12px; color: var(--fg-dim);

@@ -40,8 +40,6 @@ export interface SettingsDialogProps {
   settings: UseSettingsResult;
   /** QuickEditor element rendered into the #qb-editor slot (from useQuick unit). */
   quickEditor?: ReactNode;
-  /** Diagnostic text for the activity sort (bucket counts, window, clock). */
-  paneSortDebug?: string;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -59,7 +57,7 @@ function focusableElements(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
-export default function SettingsDialog({ settings, quickEditor, paneSortDebug }: SettingsDialogProps) {
+export default function SettingsDialog({ settings, quickEditor }: SettingsDialogProps) {
   const push = usePushNotifications();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -377,9 +375,6 @@ export default function SettingsDialog({ settings, quickEditor, paneSortDebug }:
               onChange={(e) => onPaneRecentMinutesChange(e.currentTarget.value)}
             />
           </label>
-          {paneSortDebug ? (
-            <pre className="settings-debug" aria-label="activity sort debug">{paneSortDebug}</pre>
-          ) : null}
           {typeof window.matchMedia === "function" && !isMobile() && window === window.top && (
             <div className="settings-field">
               <span>Split view</span>
