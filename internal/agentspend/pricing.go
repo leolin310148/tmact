@@ -67,6 +67,26 @@ var manualPricing = map[string]modelCosts{
 		webSearchPerReq:    webSearchCost,
 		fastMultiplier:     2,
 	},
+	// GPT-6 Sol / GPT-6.1 Sol rates, verified 2026-10-19:
+	// https://developers.openai.com/api/docs/models/gpt-6-sol
+	// https://developers.openai.com/api/docs/models/gpt-6.1-sol
+	// Both differ only in cached input ($0.20 vs $0.10/MTok).
+	"gpt-6-sol": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.2e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
+	"gpt-6.1-sol": {
+		inputPerToken:      2e-6,
+		outputPerToken:     10e-6,
+		cacheWritePerToken: 2.5e-6,
+		cacheReadPerToken:  0.1e-6,
+		webSearchPerReq:    webSearchCost,
+		fastMultiplier:     2,
+	},
 	"gpt-5.6": {
 		inputPerToken:      5e-6,
 		outputPerToken:     30e-6,
@@ -245,16 +265,23 @@ var builtinAliases = map[string]string{
 	"claude-sonnet-4.6": "claude-sonnet-4-6",
 	"claude-sonnet-4.5": "claude-sonnet-4-5",
 	"claude-haiku-4.5":  "claude-haiku-4-5",
+	// Claude Code logs its bare family aliases for some calls; they resolve
+	// to the current release of each family.
+	"opus":   "claude-opus-5-5",
+	"sonnet": "claude-sonnet-5-5",
+	"haiku":  "claude-haiku-5-5",
 	// Codex emits these display-name forms in some logs.
 	"gpt-5.3-codex":      "gpt-5.3-codex",
 	"gpt-5.1-codex-high": "gpt-5.3-codex",
 }
 
 var (
-	pricing      map[string]modelCosts
-	pricingKeys  []string // sorted longest-first for prefix matching
-	pricingOnce  sync.Once
-	atSuffixRe   = regexp.MustCompile(`@.*$`)
+	pricing     map[string]modelCosts
+	pricingKeys []string // sorted longest-first for prefix matching
+	pricingOnce sync.Once
+	atSuffixRe  = regexp.MustCompile(`@.*$`)
+	// Claude Code tags context-window variants as claude-opus-5-5[1m].
+	bracketSfxRe = regexp.MustCompile(`\[[^\]]*\]$`)
 	dateSuffixRe = regexp.MustCompile(`-\d{8}$`)
 	providerPfx  = regexp.MustCompile(`^[^/]+/`)
 )
@@ -320,9 +347,11 @@ func resolveAlias(model string) string {
 // canonicalName strips pins, date suffixes, and provider prefixes:
 // claude-sonnet-4-6@20250929 → claude-sonnet-4-6,
 // claude-sonnet-4-20250514   → claude-sonnet-4,
-// anthropic/foo              → foo.
+// anthropic/foo              → foo,
+// claude-opus-5-5[1m]        → claude-opus-5-5.
 func canonicalName(model string) string {
-	s := atSuffixRe.ReplaceAllString(model, "")
+	s := bracketSfxRe.ReplaceAllString(model, "")
+	s = atSuffixRe.ReplaceAllString(s, "")
 	s = dateSuffixRe.ReplaceAllString(s, "")
 	s = providerPfx.ReplaceAllString(s, "")
 	return s

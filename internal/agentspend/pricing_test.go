@@ -214,6 +214,52 @@ func TestCodexGPT56LongContextPricing(t *testing.T) {
 	approx(t, "gpt-5.6 long context", long, 2*(72_001*5e-6+200_000*0.5e-6)+1.5*(10_000*30e-6))
 }
 
+func TestGPT6SolPricing(t *testing.T) {
+	for _, tc := range []struct {
+		model     string
+		cacheRead float64
+	}{
+		{"gpt-6-sol", 0.2},
+		{"gpt-6.1-sol", 0.1},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			cost, ok := calculateCost(tc.model, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 0, "standard", 0)
+			if !ok {
+				t.Fatal("unpriced")
+			}
+			// Input $2 + output $10 + cache write $2.50 + cache read.
+			approx(t, "standard", cost, 14.5+tc.cacheRead)
+
+			long, ok := calculateCodexTokenCost(tc.model, 272_001, 200_000, 10_000)
+			if !ok {
+				t.Fatal("unpriced")
+			}
+			// Above 272K, all input is 2x and output is 1.5x.
+			approx(t, "long context", long, 2*(72_001*2e-6+200_000*tc.cacheRead*1e-6)+1.5*(10_000*10e-6))
+		})
+	}
+}
+
+// Claude Code's [1m] context tag and bare family aliases must price as the
+// current model, not fall back to an older prefix or $0.
+func TestClaudeAliasAndContextTagPricing(t *testing.T) {
+	want, _ := calculateCost("claude-opus-5-5", 1000, 1000, 0, 0, 0, "standard", 0)
+	got, ok := calculateCost("claude-opus-5-5[1m]", 1000, 1000, 0, 0, 0, "standard", 0)
+	if !ok {
+		t.Fatal("claude-opus-5-5[1m] unpriced")
+	}
+	approx(t, "[1m] prices as opus 5.5", got, want)
+
+	for alias, model := range map[string]string{"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5"} {
+		want, _ := calculateCost(model, 1000, 1000, 0, 0, 0, "standard", 0)
+		got, ok := calculateCost(alias, 1000, 1000, 0, 0, 0, "standard", 0)
+		if !ok {
+			t.Fatalf("%s unpriced", alias)
+		}
+		approx(t, alias, got, want)
+	}
+}
+
 // Opus 4.8 fast tier is billed at 2x standard. Older 4.6/4.7 fast tiers remain
 // at 6x through the vendored codeburn multiplier table.
 func TestFastMultiplier(t *testing.T) {
