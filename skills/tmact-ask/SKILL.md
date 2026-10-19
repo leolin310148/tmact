@@ -105,8 +105,9 @@ Delivery is decided for you and reported as `delivery`:
   the mailbox and its `reply` prints it. No tmux input happens.
 - `pane`: the answerer is idle, so the follow-up is dispatched into the recorded
   pane without `/clear`, keeping its conversation. The same idle, prompt, and
-  workspace-lease checks as `dispatch-work` apply; a busy pane is a refusal,
-  not a queue. Retry once the pane is idle.
+  workspace-lease checks as `dispatch-work` apply; a busy pane is a refusal
+  unless `--queue` is passed, in which case Claude queues the follow-up for
+  after the current turn and Codex may steer it into the running turn. Otherwise retry once the pane is idle.
 - `mailbox+pane`: the waiter vanished right after the post, so the text was
   re-delivered through the pane. Expect one answer.
 

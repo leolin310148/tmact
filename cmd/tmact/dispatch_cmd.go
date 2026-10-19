@@ -47,6 +47,7 @@ func runDispatch(args []string) error {
 	resultLines := fs.Int("result-lines", dispatch.DefaultResultLines, "pane lines to capture after waiting")
 	trustFolder := fs.Bool("trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")
 	noClear := fs.Bool("no-clear", false, "when reusing an idle same-agent pane, continue its conversation instead of sending /clear first")
+	queue := fs.Bool("queue", false, "if the same-agent pane is busy working, type the prompt anyway so the agent queues it (claude/codex; implies --no-clear)")
 	execute := fs.Bool("execute", false, "actually create, launch, and send; default is dry-run")
 	peerName := fs.String("peer", "", "dispatch on the named statusd dispatch_peer from config")
 	configPath := fs.String("config", statusd.DefaultFileConfigPath(), "statusd config file containing dispatch_peers")
@@ -97,6 +98,12 @@ func runDispatch(args []string) error {
 	if *peerName != "" && *noClear {
 		return errors.New("dispatch-work --no-clear is not supported with --peer; older peers would silently clear the pane")
 	}
+	if *peerName != "" && *queue {
+		return errors.New("dispatch-work --queue is not supported with --peer; older peers would refuse or clear a busy pane")
+	}
+	if *queue && *wait {
+		return errors.New("dispatch-work --queue does not support --wait; the pane can look idle between the current turn and the queued one")
+	}
 	if *peerName != "" && *target != "" {
 		return errors.New("dispatch-work --target is not supported with --peer; older peers would silently ignore it and dispatch into the active pane")
 	}
@@ -114,7 +121,8 @@ func runDispatch(args []string) error {
 		ReadyTimeout: *readyTimeout,
 		ReadySettle:  *readySettle,
 		TrustFolder:  *trustFolder,
-		NoClear:      *noClear,
+		NoClear:      *noClear || *queue,
+		Queue:        *queue,
 		Wait:         *wait,
 		WaitTimeout:  *waitTimeout,
 		WaitSettle:   *waitSettle,

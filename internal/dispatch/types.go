@@ -70,7 +70,13 @@ type Options struct {
 	TrustFolder  bool
 	// NoClear reuses an idle same-agent pane without sending /clear first, so
 	// the new prompt continues the pane's current conversation.
-	NoClear             bool
+	NoClear bool
+	// Queue lets a prompt be typed into a same-agent pane that is busy
+	// working, so Claude queues it and Codex holds it for its next tool call
+	// or steers it into the current turn.
+	// It requires NoClear, is limited to Claude and Codex, and never applies
+	// to a pane showing a prompt.
+	Queue               bool
 	Wait                bool
 	WaitTimeout         time.Duration
 	WaitSettle          time.Duration

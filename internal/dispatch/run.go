@@ -48,6 +48,19 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 	if opts.TrustFolder && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
 		return report, fmt.Errorf("trust-folder only supports claude or codex, got %q", opts.Agent)
 	}
+	if opts.Queue {
+		if opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
+			return report, fmt.Errorf("queue only supports claude or codex, got %q", opts.Agent)
+		}
+		if !opts.NoClear {
+			// A /clear typed into a busy pane would itself be queued and wipe
+			// the conversation once the current turn ends.
+			return report, fmt.Errorf("queue requires no-clear")
+		}
+		if opts.Wait {
+			return report, fmt.Errorf("queue does not support wait; the pane can look idle between the current turn and the queued one")
+		}
+	}
 	if strings.TrimSpace(opts.Prompt) == "" {
 		return report, fmt.Errorf("prompt is required")
 	}
@@ -222,7 +235,7 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 			if err := validateQuotaResume(opts, deps, classified); err != nil {
 				return report, fmt.Errorf("session %s is running %s but %w", opts.Session, opts.Agent, err)
 			}
-		} else if classified.State == panestate.StateWorking {
+		} else if classified.State == panestate.StateWorking && !opts.Queue {
 			return report, fmt.Errorf("session %s is already running %s but it is busy working; refusing to dispatch", opts.Session, opts.Agent)
 		}
 		if classified.Asking {
@@ -242,6 +255,12 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 				return dispatchReuse(opts, deps, report, target)
 			}
 			return report, fmt.Errorf("session %s is running %s but it is waiting on a prompt (%s); resolve it first", opts.Session, opts.Agent, promptKind(classified))
+		}
+		if opts.Queue && (classified.State == panestate.StateWorking || classified.State == panestate.StateWaitingInput || classified.State == panestate.StateIdle) {
+			// Skip the idle settle: an agent that is mid-turn, or flickers
+			// between turns, queues the prompt itself.
+			report.AgentWasRunning = true
+			return dispatchQueue(opts, deps, report, target)
 		}
 		if classified.State != panestate.StateWaitingInput && classified.State != panestate.StateIdle && classified.State != panestate.StateWaitingQuota {
 			return report, fmt.Errorf("session %s is running %s but pane state is %s; refusing to clear or dispatch until it is explicitly input-ready", opts.Session, opts.Agent, classified.State)

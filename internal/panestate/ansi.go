@@ -80,6 +80,14 @@ func RefineANSI(result Result, raw, ansi string) Result {
 	return result
 }
 
+// HasInputDraft reports whether the live input line holds operator-typed
+// (non-dim) text. Unlike RefineANSI it ignores the pane's working state, so
+// it also catches a draft typed while the agent is busy.
+func HasInputDraft(ansi string) bool {
+	input, ok := currentStyledInput(ansi)
+	return ok && len(input) > 0 && !allInputDim(input)
+}
+
 func allInputDim(input []styledRune) bool {
 	for _, char := range input {
 		if !unicode.IsSpace(char.value) && !char.dim {

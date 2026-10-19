@@ -112,7 +112,8 @@ Session behavior:
 | Existing idle shell | Starts the requested agent, waits, sends the prompt |
 | Existing same idle agent | Sends `/clear`, then the new prompt (`--no-clear` skips the clear) |
 | Existing different agent | Refuses |
-| Existing busy agent or prompt wait | Refuses |
+| Existing busy agent | Refuses; with `--queue` (Claude/Codex) types the prompt so the agent queues it |
+| Existing prompt wait | Refuses, even with `--queue` |
 | Permission or approval prompt | Refuses |
 | Trust prompt without valid opt-in | Refuses |
 
@@ -170,7 +171,11 @@ aggregate or coverage questions; their plain-file index remains privacy-safe.
   bypass the lease with raw tmux input or a different session; inspect and
   finish or stop the owning workflow. Pausing intentionally keeps its lease.
 - Do not interrupt busy agents, hijack a session running a different agent, or
-  bypass permission and approval prompts.
+  bypass permission and approval prompts. With `--queue`, Claude queues the message
+  for after the current turn; Codex may hold it until its next tool call or
+  inject it into the running turn, so treat it as steering that turn. Use it
+  only when the follow-up should land in that same conversation; it implies `--no-clear` and is not supported with
+  `--wait` or `--peer`.
 - Never broaden `--trust-folder` beyond its exact-directory contract.
 - Confirm session, directory, agent, model, peer, and prompt when ambiguous.
 - Treat `needs_human`, timeout, or pane disappearance as terminal blockers; do

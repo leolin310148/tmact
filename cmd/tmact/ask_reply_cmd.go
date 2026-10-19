@@ -68,6 +68,7 @@ type askFlags struct {
 	timeout      time.Duration
 	trustFolder  bool
 	noClear      bool
+	queue        bool
 	storeDir     string
 	execute      bool
 	jsonOutput   bool
@@ -98,6 +99,7 @@ func runAsk(args []string) error {
 	fs.DurationVar(&f.timeout, "timeout", askreply.DefaultTimeout, "max wait for the next explicit tmact reply")
 	fs.BoolVar(&f.trustFolder, "trust-folder", false, "accept a Claude/Codex trust prompt only when pane cwd exactly matches --dir")
 	fs.BoolVar(&f.noClear, "no-clear", false, "preserve the existing agent context instead of sending /clear")
+	fs.BoolVar(&f.queue, "queue", false, "if the answering claude/codex pane is busy working, type the prompt anyway so the agent queues it (implies --no-clear)")
 	fs.StringVar(&f.storeDir, "store-dir", "", "ask mailbox directory; defaults to a private temporary runtime directory")
 	fs.BoolVar(&f.execute, "execute", false, "actually dispatch and wait; default is dry-run")
 	fs.BoolVar(&f.jsonOutput, "json", false, "print JSON output")
@@ -226,7 +228,8 @@ func startAsk(ctx context.Context, store *askreply.Store, f askFlags) (askReport
 		ReadyTimeout: f.readyTimeout,
 		ReadySettle:  f.readySettle,
 		TrustFolder:  f.trustFolder,
-		NoClear:      f.noClear,
+		NoClear:      f.noClear || f.queue,
+		Queue:        f.queue,
 		Context:      ctx,
 	}
 	dispatchReport, err := dispatchRun(opts)
@@ -264,6 +267,8 @@ func runAskThread(f askFlags) error {
 		return errors.New("--thread continues in the question's recorded pane; do not pass --target")
 	case f.trustFolder:
 		return errors.New("--trust-folder only applies when launching a new agent, not with --thread")
+	case f.queue && (f.closeThread || f.await):
+		return errors.New("--queue only applies when sending a prompt; --close and --await send nothing")
 	}
 	store, err := askreply.New(f.storeDir)
 	if err != nil {
@@ -385,6 +390,7 @@ func deliverAskFollowUp(ctx context.Context, store *askreply.Store, f askFlags) 
 			ReadyTimeout: f.readyTimeout,
 			ReadySettle:  f.readySettle,
 			NoClear:      true,
+			Queue:        f.queue,
 			Context:      ctx,
 		}
 		dispatchReport, err := dispatchRun(opts)
