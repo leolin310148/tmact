@@ -70,7 +70,7 @@ export interface PaneListItem {
 }
 
 // PaneSortMode picks the chip order: "name" is peer → session → window → pane;
-// "activity" floats asking, then working, then recently-changed panes ahead of
+// "activity" floats asking/working, then recently-changed panes ahead of
 // the rest; recently-changed panes go newest first, other groups keep name order.
 export type PaneSortMode = "name" | "activity";
 
@@ -88,8 +88,9 @@ export function paneActivityRank(
   recentMs: number = RECENT_ACTIVITY_MS,
 ): number {
   if (p.stale) return 3;
-  if (p.asking) return 0;
-  if (p.running) return 1;
+  // Asking and working share a bucket: a pane flips between them often, and
+  // separate buckets would make its chip jump each time.
+  if (p.asking || p.running) return 1;
   const changed = p.last_changed_at ? Date.parse(p.last_changed_at) : NaN;
   if (Number.isFinite(changed) && now - changed <= recentMs) return 2;
   return 3;

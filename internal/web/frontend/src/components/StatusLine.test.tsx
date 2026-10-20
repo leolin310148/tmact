@@ -94,10 +94,9 @@ describe("sortedPaneList", () => {
     expect(ids(sortedPaneList(panes))).toEqual(["%1", "%2", "%3", "%4", "%5", "%6", "%7"]);
   });
 
-  it("puts asking, working, then recently changed panes first in activity order", () => {
+  it("puts asking/working, then recently changed panes first in activity order", () => {
     expect(ids(sortedPaneList(panes, "activity", now))).toEqual([
-      "%3", // asking
-      "%2", "%5", // working, name order (not by last change)
+      "%2", "%3", "%5", // asking + working, name order (not by last change)
       "%4", // changed 2 min ago
       "%1", "%6", "%7", // the rest: old change, stale, just past the window
     ]);
@@ -106,12 +105,12 @@ describe("sortedPaneList", () => {
   it("honors a custom recently-working window", () => {
     // 1 minute: delta (2 min ago) drops out of the recent group.
     expect(ids(sortedPaneList(panes, "activity", now, 60 * 1000))).toEqual([
-      "%3", "%2", "%5", "%1", "%4", "%6", "%7",
+      "%2", "%3", "%5", "%1", "%4", "%6", "%7",
     ]);
     // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it, and the
     // recent group runs newest first rather than by name.
     expect(ids(sortedPaneList(panes, "activity", now, 2 * 60 * 60 * 1000))).toEqual([
-      "%3", "%2", "%5", "%4", "%7", "%1", "%6",
+      "%2", "%3", "%5", "%4", "%7", "%1", "%6",
     ]);
   });
 });

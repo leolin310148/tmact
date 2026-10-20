@@ -227,10 +227,10 @@ describe("OfficeDesks order", () => {
     expect(deskOrder(container)).toEqual(["%1", "%2", "%3"]);
   });
 
-  it("seats asking, then working desks first in activity order", () => {
+  it("seats asking/working desks first in activity order", () => {
     const { container } = render(
       <OfficeDesks panes={panes} selected={null} onSelect={() => {}} sortMode="activity" />,
     );
-    expect(deskOrder(container)).toEqual(["%3", "%2", "%1"]);
+    expect(deskOrder(container)).toEqual(["%2", "%3", "%1"]);
   });
 });
