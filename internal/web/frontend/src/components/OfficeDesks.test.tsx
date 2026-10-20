@@ -111,6 +111,8 @@ describe("OfficeDesks overflow", () => {
     expect(trigger).toHaveAttribute("aria-controls", menu.id);
     expect(menu).toHaveAttribute("aria-labelledby", trigger.id);
     const menuItems = screen.getAllByRole("menuitem");
+    expect(screen.getByRole("searchbox", { name: "Filter sessions" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
     expect(menuItems[0]).toHaveFocus();
     await user.keyboard("{End}");
     expect(menuItems[2]).toHaveFocus();
@@ -134,7 +136,7 @@ describe("OfficeDesks overflow", () => {
     const trigger = screen.getByRole("button", { name: /show 1 more pane/i });
     trigger.focus();
     await user.keyboard(" ");
-    expect(screen.getByRole("menuitem")).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Filter sessions" })).toHaveFocus();
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();

@@ -454,6 +454,14 @@ status clear `4000`, usage poll `60000`, viewport schedule `0/rAF/80/260` ms.
 
 ## 10. Re-render coordination summary
 
+Desktop More menus focus a real search input on open, including the Office
+portal. Filtering is local to the mounted shared menu content, matches session
+labels and peer names without case sensitivity, and resets on close. Search
+uses native text/IME editing; arrows navigate filtered rows and Enter selects.
+Escape clears a nonempty query before dismissing the menu. Search editing keys
+must never reach pane input or arm a row's destructive action. Mobile menus
+retain their no-blur touch behavior without autofocus or a search field.
+
 The More menu's exit control closes the window owning the row's stable pane ID,
 using the same CloseWindow operation as the pane's close action. Display labels
 are not mutation targets: ops:0 and ops:1 are separate windows in one session.

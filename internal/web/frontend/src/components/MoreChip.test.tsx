@@ -20,7 +20,7 @@ vi.mock("../api/client", () => ({
   reportHumanActivity: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function pane(paneID: string, session: string): PaneStatus {
   return {
@@ -47,6 +47,43 @@ const items = [
 ];
 
 describe("MoreChip keyboard menu", () => {
+  it("filters immediately, resumes typing from results, and selects with Enter", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<MoreChip items={items} onSelect={onSelect} />);
+    await user.click(screen.getByRole("button", { name: /Show 3 more panes/ }));
+    const search = screen.getByRole("searchbox", { name: "Filter sessions" });
+    expect(search).toHaveFocus();
+    await user.keyboard("SeCo");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
+    expect(screen.getByRole("menuitem", { name: "Select pane second" })).toBeInTheDocument();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem")).toHaveFocus();
+    await user.keyboard("n");
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue("SeCon");
+    await user.keyboard("{Backspace}{Enter}");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("%2");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("shows no matches and clears the filter before Escape closes the menu", async () => {
+    const user = userEvent.setup();
+    render(<MoreChip items={items} onSelect={vi.fn()} />);
+    const trigger = screen.getByRole("button", { name: /Show 3 more panes/ });
+    await user.click(trigger);
+    await user.keyboard("missing");
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent("沒有符合的 session");
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(3);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+  });
   it("shifts a right-aligned menu back inside a narrow viewport", () => {
     expect(overflowMenuShiftX({ left: -128, right: 212 }, 504)).toBe(136);
     expect(overflowMenuShiftX({ left: 508, right: 848 }, 1_008)).toBe(0);
@@ -84,6 +121,8 @@ describe("MoreChip keyboard menu", () => {
     await user.keyboard("{ArrowDown}");
 
     const menuItems = screen.getAllByRole("menuitem");
+    expect(screen.getByRole("searchbox", { name: "Filter sessions" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
     expect(menuItems[0]).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(menuItems[1]).toHaveFocus();
@@ -105,9 +144,9 @@ describe("MoreChip keyboard menu", () => {
     const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     trigger.focus();
     await user.keyboard(" ");
-    expect(screen.getAllByRole("menuitem")[0]).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Filter sessions" })).toHaveFocus();
 
-    await user.keyboard("{ArrowDown}{Enter}");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(onSelect).toHaveBeenCalledWith("%2");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
@@ -125,6 +164,8 @@ describe("MoreChip keyboard menu", () => {
     const trigger = screen.getByRole("button", { name: "Show 3 more panes and recently closed sessions" });
     trigger.focus();
     await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("searchbox", { name: "Filter sessions" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
     expect(screen.getAllByRole("menuitem")[2]).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -139,6 +180,7 @@ describe("MoreChip keyboard menu", () => {
   });
 
   it("preserves no-blur pointer selection for touch input", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     const onSelect = vi.fn();
     render(
       <>

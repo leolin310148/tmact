@@ -29,7 +29,7 @@ import {
   reopenSession,
   reportHumanActivity,
 } from "../api/client";
-import { focusMenuEdge, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
+import { focusMenuEdge, isMobile, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
 import type { ClosedSession } from "../types/server";
 import {
   RUNTIME_ICON,
@@ -57,7 +57,9 @@ export function useMenuPopover(menuReady: unknown) {
 
   useLayoutEffect(() => {
     if (!open || !pendingFocusRef.current || !menuRef.current) return;
-    focusMenuEdge(menuRef.current, pendingFocusRef.current);
+    const search = menuRef.current.querySelector<HTMLInputElement>("[data-overflow-search]");
+    if (search) search.focus();
+    else focusMenuEdge(menuRef.current, pendingFocusRef.current);
     pendingFocusRef.current = null;
   }, [open, menuReady]);
 
@@ -151,6 +153,13 @@ interface OverflowMenuContentProps {
 }
 
 export function OverflowMenuContent({ items, onSelect, closeRestoring }: OverflowMenuContentProps) {
+  const [desktop] = useState(() => typeof window.matchMedia !== "function" || !isMobile());
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matches = (text: string) => text.toLocaleLowerCase().includes(normalizedQuery);
+  const filteredItems = items.filter(({ pane, label }) => matches(label) || matches(pane.session) || matches(panePeer(pane) + " " + label));
   const [closed, setClosed] = useState<ClosedSession[] | null>(null);
   const [closedExpanded, setClosedExpanded] = useState(false);
   const [error, setError] = useState("");
@@ -159,6 +168,38 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
   // busy = pane/history keys with an in-flight close/reopen (rows render dimmed).
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useLayoutEffect(() => {
+    if (desktop) searchRef.current?.focus();
+  }, [desktop]);
+
+  // Resume search from a result before pane input handlers can receive text.
+  useEffect(() => {
+    if (!desktop) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === "Escape" && query) {
+        event.preventDefault();
+        event.stopPropagation();
+        setQuery("");
+        setArmed(null);
+        searchRef.current?.focus();
+        return;
+      }
+      if (event.target === searchRef.current || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.matches("input, textarea") || target.isContentEditable)) return;
+      if (event.key.length === 1 || (event.key === "Backspace" && query)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setQuery((previous) => event.key === "Backspace" ? previous.slice(0, -1) : previous + event.key);
+        setArmed(null);
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [desktop, query]);
 
   // The content only exists while the popover is open, so fetch-on-mount is
   // fetch-on-open. History is best-effort: failures leave the section empty.
@@ -237,13 +278,41 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
   };
 
   const paneRowKey = (item: PaneListItem, i: number) => item.pane.pane_id || "overflow-" + i;
+  const filteredClosed = (closed ?? []).filter((entry) => matches(entry.session) || matches((entry.peer ?? "") + " " + entry.session));
 
   return (
-    <>
-      {items.length === 0 && (closed?.length ?? 0) === 0 ? (
+    <div className="ovf-content" ref={contentRef}>
+      {desktop ? <input
+        ref={searchRef}
+        data-overflow-search
+        className="ovf-search"
+        type="search"
+        aria-label="Filter sessions"
+        placeholder="輸入名稱篩選…"
+        autoComplete="off"
+        spellCheck={false}
+        value={query}
+        onChange={(event) => { setQuery(event.target.value); setArmed(null); }}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            event.stopPropagation();
+            focusMenuEdge(contentRef.current, event.key === "ArrowDown" ? "first" : "last");
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            contentRef.current?.querySelector<HTMLButtonElement>('.ovf-main[role="menuitem"]:not(:disabled)')?.click();
+          } else if (["Home", "End", "Backspace", "Delete", " "].includes(event.key)) {
+            event.stopPropagation();
+          }
+        }}
+      /> : null}
+      {normalizedQuery && filteredItems.length === 0 && filteredClosed.length === 0 ? <div className="ovf-empty" role="status">沒有符合的 session</div> : null}
+      {!normalizedQuery && items.length === 0 && (closed?.length ?? 0) === 0 ? (
         <div className="ovf-empty">{closed === null ? "loading…" : "no hidden panes"}</div>
       ) : null}
-      {items.map((item, i) => {
+      {filteredItems.map((item, i) => {
         const { pane, label } = item;
         const key = paneRowKey(item, i);
         const runtime = paneRuntime(pane);
@@ -315,7 +384,7 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
           </div>
         );
       })}
-      {closed && closed.length > 0 ? (
+      {filteredClosed.length > 0 ? (
         <>
           <button
             type="button"
@@ -325,9 +394,9 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
             aria-expanded={closedExpanded}
             aria-label={
               (closedExpanded ? "Hide " : "Show ") +
-              closed.length +
+              filteredClosed.length +
               " recently closed session" +
-              (closed.length === 1 ? "" : "s")
+              (filteredClosed.length === 1 ? "" : "s")
             }
             onPointerDown={onPointerDownNoBlur}
             onClick={() => setClosedExpanded((expanded) => !expanded)}
@@ -337,11 +406,11 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
             </span>
             <span>recently closed</span>
             <span className="ovf-sep-count" aria-hidden="true">
-              {closed.length}
+              {filteredClosed.length}
             </span>
           </button>
           {closedExpanded
-            ? closed.map((entry) => {
+            ? filteredClosed.map((entry) => {
                 const key = closedKey(entry);
                 const icon = RUNTIME_ICON[(entry.runtime ?? "").toLowerCase()];
                 const isBusy = !!busy[key];
@@ -378,6 +447,6 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
         </>
       ) : null}
       {error ? <div className="ovf-error">{error}</div> : null}
-    </>
+    </div>
   );
 }

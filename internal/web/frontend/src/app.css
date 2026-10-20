@@ -153,6 +153,16 @@
     border-radius: 7px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
   }
+  .ovf-content { display: flex; flex-direction: column; gap: 2px; }
+  .ovf-search {
+    position: sticky; top: 0; z-index: 1;
+    box-sizing: border-box; width: 100%; min-width: 0;
+    padding: 8px 10px; margin-bottom: 4px;
+    color: var(--fg); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 5px;
+    font: inherit;
+  }
+  .ovf-search:focus { outline: 1px solid var(--green); }
   .ovf-row { display: flex; align-items: stretch; gap: 2px; min-width: 0; }
   .ovf-row.busy { opacity: 0.5; pointer-events: none; }
   .ovf-main {

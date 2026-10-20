@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +46,50 @@ function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
 }
 
 const items = [{ pane: pane(), label: "work" }];
+
+describe("OverflowMenuContent search", () => {
+  it("filters closed history too while preserving its explicit expand action", async () => {
+    const user = userEvent.setup();
+    api.loadClosedSessions.mockResolvedValue({ res: { ok: true } as Response, data: { sessions: [
+      { session: "ops-old", peer: "mini", closed_at: "2026-10-20T00:00:00Z" },
+      { session: "unrelated", closed_at: "2026-10-20T00:00:00Z" },
+    ] } });
+    render(<OverflowMenuContent items={items} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
+    await screen.findByRole("menuitem", { name: "Show 2 recently closed sessions" });
+    await user.keyboard("OPS");
+    expect(screen.queryByRole("menuitem", { name: "Select pane work" })).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(api.reopenSession).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("menuitem", { name: "Show 1 recently closed session" }));
+    expect(screen.getByRole("menuitem", { name: "Reopen session ops-old" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Reopen session unrelated" })).not.toBeInTheDocument();
+  });
+  it("matches peer names and Chinese labels and does not select while composing", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<OverflowMenuContent items={[
+      { pane: pane({ peer: "mini", session: "mini@部署", pane_id: "mini@%1" }), label: "部署" },
+      { pane: pane({ pane_id: "%2" }), label: "work" },
+    ]} onSelect={onSelect} closeRestoring={vi.fn()} />);
+    const search = screen.getByRole("searchbox");
+    await user.keyboard("MINI");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
+    fireEvent.change(search, { target: { value: "部署" } });
+    fireEvent.keyDown(search, { key: "Enter", isComposing: true, keyCode: 229 });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("menuitem", { name: "Select pane mini 部署" })).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith("mini@%1");
+  });
+
+  it("keeps editing keys in the search field from arming or closing windows", async () => {
+    const user = userEvent.setup();
+    render(<OverflowMenuContent items={items} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
+    await user.keyboard("work{Backspace}{Delete}");
+    expect(api.closePaneWindow).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Close window work" })).toHaveTextContent("✕");
+  });
+});
 
 describe("OverflowMenuContent exit button", () => {
   it("closing ops:1 never targets ops:0 or the whole session", async () => {
