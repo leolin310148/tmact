@@ -1,5 +1,5 @@
 // Session lifecycle endpoints for the web UI's pane-switcher overflow menu:
-// killing a session outright (the menu's exit button) and listing / reopening
+// closing an individual window and listing / reopening
 // recently closed sessions. Reopening recreates the session at its old cwd
 // with a plain shell — it deliberately does NOT relaunch any agent runtime.
 package web
@@ -25,6 +25,55 @@ import (
 // peerClosedSessionsTimeout bounds each peer's contribution to the merged
 // closed-sessions list so one unreachable peer can't stall the menu.
 const peerClosedSessionsTimeout = 3 * time.Second
+
+// handleWindowClose uses a stable pane ID to close only its owning window.
+// Never resolve a display label or fall back to killing the whole session.
+func (s *Server) handleWindowClose(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !requireSessionMutationRequest(w, r) {
+		return
+	}
+	if s.maybeProxyPeerSessionMutation(w, r, "/api/window/close") {
+		return
+	}
+	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var req struct {
+		Pane string `json:"pane"`
+	}
+	if !decodeSessionMutationJSON(w, r, &req) {
+		return
+	}
+	if !localPaneIDPattern.MatchString(req.Pane) {
+		writeJSONError(w, http.StatusBadRequest, "expected a local pane id like %12")
+		return
+	}
+	found := false
+	if s.Store != nil {
+		if snap, ok := s.Store.Latest(); ok {
+			for _, pane := range snap.Panes {
+				if pane.Peer == "" && pane.PaneID == req.Pane {
+					found = true
+					break
+				}
+			}
+		}
+	}
+	if !found {
+		writeJSONError(w, http.StatusNotFound, "unknown local pane")
+		return
+	}
+	if err := s.closeWindow()(req.Pane); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "close window: "+err.Error())
+		return
+	}
+	s.logf("closed window containing pane %q via web UI", req.Pane)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
 
 func (s *Server) killSession() func(string) error {
 	if s.KillSession != nil {

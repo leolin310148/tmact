@@ -7,7 +7,7 @@ import { OverflowMenuContent } from "./OverflowMenu";
 
 const api = vi.hoisted(() => ({
   loadClosedSessions: vi.fn(),
-  killSession: vi.fn(),
+  closePaneWindow: vi.fn(),
   reopenSession: vi.fn(),
   reportHumanActivity: vi.fn(),
 }));
@@ -20,7 +20,7 @@ beforeEach(() => {
     res: { ok: true } as Response,
     data: { sessions: [] },
   });
-  api.killSession.mockResolvedValue({ res: { ok: true } as Response, data: { ok: true } });
+  api.closePaneWindow.mockResolvedValue({ res: { ok: true } as Response, data: { ok: true } });
   api.reopenSession.mockResolvedValue({ res: { ok: true } as Response, data: { ok: true } });
 });
 
@@ -48,25 +48,36 @@ function pane(overrides: Partial<PaneStatus> = {}): PaneStatus {
 const items = [{ pane: pane(), label: "work" }];
 
 describe("OverflowMenuContent exit button", () => {
-  it("kills the session only on the confirming second press", async () => {
+  it("closing ops:1 never targets ops:0 or the whole session", async () => {
+    const user = userEvent.setup();
+    render(<OverflowMenuContent items={[
+      { pane: pane({ session: "ops", pane_id: "%10", window_index: 0 }), label: "ops:0" },
+      { pane: pane({ session: "ops", pane_id: "%11", window_index: 1 }), label: "ops:1" },
+    ]} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Close window ops:1" }));
+    expect(screen.getByRole("button", { name: "Close window ops:0" })).toHaveTextContent("✕");
+    await user.click(screen.getByRole("button", { name: "Confirm closing window ops:1" }));
+    expect(api.closePaneWindow).toHaveBeenCalledExactlyOnceWith("%11", undefined);
+  });
+  it("closes only the window on the confirming second press", async () => {
     const user = userEvent.setup();
     render(<OverflowMenuContent items={items} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
 
-    const kill = screen.getByRole("button", { name: "Close session work" });
+    const kill = screen.getByRole("button", { name: "Close window work" });
     expect(kill).toHaveTextContent("✕");
 
     await user.click(kill);
-    expect(api.killSession).not.toHaveBeenCalled();
-    const confirm = screen.getByRole("button", { name: "Confirm closing session work" });
-    expect(confirm).toHaveTextContent("kill?");
+    expect(api.closePaneWindow).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "Confirm closing window work" });
+    expect(confirm).toHaveTextContent("close?");
 
     await user.click(confirm);
-    expect(api.killSession).toHaveBeenCalledWith("work", undefined);
+    expect(api.closePaneWindow).toHaveBeenCalledWith("%1", undefined);
     expect(api.reportHumanActivity).toHaveBeenCalled();
   });
 
   it("routes peer sessions to their peer and shows failures inline", async () => {
-    api.killSession.mockResolvedValue({
+    api.closePaneWindow.mockResolvedValue({
       res: { ok: false, status: 500 } as Response,
       data: { error: "kill failed" },
     });
@@ -84,30 +95,30 @@ describe("OverflowMenuContent exit button", () => {
       />,
     );
 
-    const kill = screen.getByRole("button", { name: "Close session remote" });
+    const kill = screen.getByRole("button", { name: "Close window remote" });
     await user.click(kill);
-    await user.click(screen.getByRole("button", { name: "Confirm closing session remote" }));
+    await user.click(screen.getByRole("button", { name: "Confirm closing window remote" }));
 
-    expect(api.killSession).toHaveBeenCalledWith("remote", "z13");
+    expect(api.closePaneWindow).toHaveBeenCalledWith("z13@%2", "z13");
     await waitFor(() =>
       expect(screen.getByText("exit remote: kill failed")).toBeInTheDocument(),
     );
   });
 
-  it("arms and kills from the keyboard with Delete", async () => {
+  it("arms and closes from the keyboard with Delete", async () => {
     const user = userEvent.setup();
     render(<OverflowMenuContent items={items} onSelect={vi.fn()} closeRestoring={vi.fn()} />);
 
     const row = screen.getByRole("menuitem", { name: "Select pane work" });
     row.focus();
     await user.keyboard("{Delete}");
-    expect(api.killSession).not.toHaveBeenCalled();
+    expect(api.closePaneWindow).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: "Confirm closing session work" }),
+      screen.getByRole("button", { name: "Confirm closing window work" }),
     ).toBeInTheDocument();
 
     await user.keyboard("{Delete}");
-    expect(api.killSession).toHaveBeenCalledWith("work", undefined);
+    expect(api.closePaneWindow).toHaveBeenCalledWith("%1", undefined);
   });
 });
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logFrontend } from "../lib/frontendLog";
 import {
+  closePaneWindow,
   fetchSnapshot,
   loadCommandJob,
   startBackgroundCommand,
@@ -37,6 +38,13 @@ class FakeEventSource {
 }
 
 describe("api client logging", () => {
+  it("closes only the peer-local pane window without a session-kill fallback", async () => {
+    const fetcher = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    await closePaneWindow("mini@%11", "mini");
+    expect(fetcher).toHaveBeenCalledWith("/api/window/close?peer=mini", expect.objectContaining({ method: "POST", body: '{"pane":"%11"}' }));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     FakeEventSource.instances = [];

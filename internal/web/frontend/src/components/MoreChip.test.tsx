@@ -11,7 +11,7 @@ vi.mock("../api/client", () => ({
   loadClosedSessions: vi.fn(() =>
     Promise.resolve({ res: { ok: true } as Response, data: { sessions: [] } }),
   ),
-  killSession: vi.fn(() =>
+  closePaneWindow: vi.fn(() =>
     Promise.resolve({ res: { ok: true } as Response, data: { ok: true } }),
   ),
   reopenSession: vi.fn(() =>

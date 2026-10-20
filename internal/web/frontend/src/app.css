@@ -141,7 +141,7 @@
 
   /* Shared overflow popover — rendered by OverflowMenuContent for both the
      statusline "more" chip and the office layout's floor lamp. Rows: state
-     dot + peer badge + session label + runtime badge, an exit (kill-session)
+     dot + peer badge + session label + runtime badge, a close-window
      button with a two-stage confirm, then the recently-closed section. */
   .ovf-pop {
     display: flex; flex-direction: column; gap: 2px;

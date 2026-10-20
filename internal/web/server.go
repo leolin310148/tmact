@@ -112,8 +112,7 @@ type Server struct {
 	// RunCommandInNewSession creates a new tmux session for a command and
 	// returns its session name and pane id so the web UI can switch to it.
 	RunCommandInNewSession func(target, command string) (session, pane string, err error)
-	// KillSession kills one exact tmux session (the overflow menu's exit
-	// button); defaults to tmux.KillSession.
+	// KillSession kills one exact tmux session; defaults to tmux.KillSession.
 	KillSession func(session string) error
 	// NewSession creates a detached tmux session (reopen-from-history);
 	// defaults to tmux.NewSession.
@@ -433,6 +432,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/files/check", s.handleFilesCheck)
 	mux.HandleFunc("/api/dispatch-work", s.handleDispatchWork)
 	mux.HandleFunc("/api/session/kill", s.handleSessionKill)
+	mux.HandleFunc("/api/window/close", s.handleWindowClose)
 	mux.HandleFunc("/api/session/reopen", s.handleSessionReopen)
 	mux.HandleFunc("/api/sessions/closed", s.handleSessionsClosed)
 	mux.HandleFunc("/api/command", s.handleCommand)

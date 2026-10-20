@@ -454,6 +454,13 @@ status clear `4000`, usage poll `60000`, viewport schedule `0/rAF/80/260` ms.
 
 ## 10. Re-render coordination summary
 
+The More menu's exit control closes the window owning the row's stable pane ID,
+using the same CloseWindow operation as the pane's close action. Display labels
+are not mutation targets: ops:0 and ops:1 are separate windows in one session.
+The HTTP window-close endpoint validates a local pane against the snapshot and
+preserves the session-mutation origin/content-type guards and peer routing.
+There is no fallback to session kill. Closing the final window ends its session.
+
 In activity list mode, asking/running/recent panes form one alphabetically
 ordered group. Quiet and stale panes belong in More, including selected panes
 and agent runtimes. Both StatusLine and OfficeDesks share this partition; only

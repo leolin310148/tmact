@@ -226,6 +226,19 @@ export function loadClosedSessions(): Promise<
   return jsonResponse("/api/sessions/closed", { cache: "no-store" });
 }
 
+// closePaneWindow closes only the window containing this stable pane ID.
+export function closePaneWindow(
+  pane: string,
+  peer?: string,
+): Promise<JsonResponse<{ ok?: boolean; error?: string }>> {
+  const localPane = peer && pane.startsWith(peer + "@") ? pane.slice(peer.length + 1) : pane;
+  return jsonResponse("/api/window/close" + peerQuery(peer), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pane: localPane }),
+  });
+}
+
 // killSession kills one exact tmux session (must exist in the snapshot).
 export function killSession(
   session: string,

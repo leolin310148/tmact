@@ -6,13 +6,13 @@
 //     restore — previously duplicated in MoreChip and OfficeDesks.LampMore.
 //   - OverflowMenuContent: the rich row list. Each hidden pane renders a state
 //     dot + peer badge + label + runtime badge plus an exit button that kills
-//     the whole tmux session after a two-stage confirm (first press arms it,
-//     second press kills; it disarms on a timeout). Below the panes, a collapsed
+//     only that row's window after a two-stage confirm (first press arms it,
+//     second press closes; it disarms on a timeout). Below the panes, a collapsed
 //     "recently closed" section loads sessions from /api/sessions/closed —
 //     expanding it exposes rows that recreate a session (same name, old cwd,
 //     plain shell).
 //
-// Session kill/reopen calls are made here (not lifted to App): failures render
+// Window close/session reopen calls are made here (not lifted to App): failures render
 // as an inline error line at the foot of the menu, and success needs no
 // handling — the next snapshot poll updates the pane list naturally.
 
@@ -24,7 +24,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
-  killSession,
+  closePaneWindow,
   loadClosedSessions,
   reopenSession,
   reportHumanActivity,
@@ -37,7 +37,6 @@ import {
   paneRuntime,
   paneStateClass,
   paneStateLabel,
-  sessionLabel,
   type PaneListItem,
 } from "./StatusLine";
 
@@ -157,7 +156,7 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
   const [error, setError] = useState("");
   // armed = pane row whose exit button awaits its confirming second press.
   const [armed, setArmed] = useState<string | null>(null);
-  // busy = session keys with an in-flight kill/reopen (rows render dimmed).
+  // busy = pane/history keys with an in-flight close/reopen (rows render dimmed).
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -201,18 +200,18 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
     });
   };
 
-  const doKill = (item: PaneListItem, key: string) => {
-    const session = sessionLabel(item.pane);
+  const doClose = (item: PaneListItem, key: string) => {
+    const label = item.label;
     const peer = panePeer(item.pane) || undefined;
     setArmed(null);
     setError("");
     setKeyBusy(key, true);
     reportHumanActivity();
-    killSession(session, peer)
+    closePaneWindow(item.pane.pane_id ?? "", peer)
       .then(({ res, data }) => {
-        if (!res.ok) setError("exit " + session + ": " + (data.error || "HTTP " + res.status));
+        if (!res.ok) setError("exit " + label + ": " + (data.error || "HTTP " + res.status));
       })
-      .catch((e) => setError("exit " + session + ": " + (e instanceof Error ? e.message : "failed")))
+      .catch((e) => setError("exit " + label + ": " + (e instanceof Error ? e.message : "failed")))
       .finally(() => setKeyBusy(key, false));
   };
 
@@ -283,7 +282,7 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
                 // Delete/Backspace mirrors the exit button for keyboard users.
                 if (e.key !== "Delete" && e.key !== "Backspace") return;
                 e.preventDefault();
-                if (isArmed) doKill(item, key);
+                if (isArmed) doClose(item, key);
                 else arm(key);
               }}
             >
@@ -298,20 +297,20 @@ export function OverflowMenuContent({ items, onSelect, closeRestoring }: Overflo
               className={"ovf-kill" + (isArmed ? " armed" : "")}
               title={
                 isArmed
-                  ? "Press again to kill session " + sessionLabel(pane)
-                  : "Close session " + sessionLabel(pane)
+                  ? "Press again to close window " + label
+                  : "Close window " + label
               }
               aria-label={
-                (isArmed ? "Confirm closing session " : "Close session ") + sessionLabel(pane)
+                (isArmed ? "Confirm closing window " : "Close window ") + label
               }
-              disabled={isBusy}
+              disabled={isBusy || !pane.pane_id}
               onPointerDown={onPointerDownNoBlur}
               onClick={() => {
-                if (isArmed) doKill(item, key);
+                if (isArmed) doClose(item, key);
                 else arm(key);
               }}
             >
-              {isArmed ? "kill?" : "✕"}
+              {isArmed ? "close?" : "✕"}
             </button>
           </div>
         );
