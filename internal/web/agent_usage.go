@@ -89,6 +89,7 @@ func (s *Server) runUsageRefresh(ctx context.Context) {
 		fctx, cancel := context.WithTimeout(ctx, usageFetchTimeout)
 		defer cancel()
 		fresh := s.fetchUsage(fctx)
+		s.saveUsageHistory(fresh)
 		prev, havePrev := s.usage.load()
 		s.usage.store(carryForwardStale(prev, havePrev, fresh, time.Now()))
 	}

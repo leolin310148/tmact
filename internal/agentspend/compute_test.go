@@ -48,6 +48,18 @@ func TestComputeWindowsAndDedup(t *testing.T) {
 		`{"type":"event_msg","timestamp":"2026-05-29T09:01:00Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":500,"reasoning_output_tokens":100,"total_tokens":1600},"total_token_usage":{"total_tokens":1600}}}}`,
 	}
 	writeFixture(t, filepath.Join(codexHome, "sessions", "2026", "05", "29", "rollout-sess1.jsonl"), codexRows)
+	daily := Daily(time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC), 30)
+	var claudeMay29, claudeMay10 float64
+	for _, d := range daily {
+		if d.Provider == "claude" && d.Date == "2026-05-29" {
+			claudeMay29 = d.USD
+		}
+		if d.Provider == "claude" && d.Date == "2026-05-10" {
+			claudeMay10 = d.USD
+		}
+	}
+	approx(t, "daily dedup", claudeMay29, .005)
+	approx(t, "daily historical", claudeMay10, .005)
 
 	now := time.Date(2026, 5, 30, 12, 0, 0, 0, time.Local)
 	res := compute(now, newFileCache())

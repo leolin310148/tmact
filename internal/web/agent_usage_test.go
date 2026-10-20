@@ -58,8 +58,9 @@ func TestAgentUsageServesCachedSnapshot(t *testing.T) {
 func TestRunUsageRefreshPopulatesCacheOnce(t *testing.T) {
 	calls := 0
 	s := &Server{
-		UsageEnabled:  true,
-		UsageInterval: time.Hour, // long enough that only the immediate fetch runs
+		UsageHistoryDir: t.TempDir(),
+		UsageEnabled:    true,
+		UsageInterval:   time.Hour, // long enough that only the immediate fetch runs
 		FetchUsage: func(context.Context) agentusage.Snapshot {
 			calls++
 			return agentusage.Snapshot{Providers: []agentusage.ProviderUsage{{Provider: "codex"}}}

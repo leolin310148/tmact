@@ -183,6 +183,15 @@ export interface Choice {
 
 // ---------------------------------------------------------------------------
 // Agent usage (GET /api/agent-usage) — internal/agentusage
+export interface AgentUsageHistory {
+  machines: {
+    machine: string;
+    daily: { date: string; provider: string; usd: number }[];
+    usage: { at: string; provider: string; windows: RateWindow[] }[];
+    error?: string;
+  }[];
+  timezone: string;
+}
 // ---------------------------------------------------------------------------
 
 export interface AgentUsage {

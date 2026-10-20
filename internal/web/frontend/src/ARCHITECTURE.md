@@ -1,5 +1,21 @@
 # ARCHITECTURE — tmact web frontend React port (coordination contract)
 
+## Cost / usage history extension
+
+UsagePanel owns the trend dialog's local open state; the dialog uses a native
+modal dialog in a body portal so it also works in split-view roots, traps focus,
+and does not inherit pane clipping. Its on-demand history request is independent
+of the existing current-usage poll. Daily cost uses UTC dates and is reconstructed
+from session logs with current pricing, not an immutable billing ledger. Quota
+samples are persisted by the server in private daily JSONL files under
+`~/.tmact/usage-history/`, excluding account identifiers, errors and credentials.
+Files are retained; the API reads the latest 30 UTC dates. Only fresh successful
+windows are recorded. Missing history is not interpolated. Peer history requests
+use `local=1` to prevent recursive federation; partial failures remain visible.
+Cost may be summed across machines, while quota series stay machine-specific.
+These new local UI states use React state; the original port's ref rules below
+continue to govern its existing mutable store.
+
 **This document governs every component/hook port (Units 7–18). Conform to it
 exactly.** It is the binding contract that lets parallel agents implement
 pieces that wire together without re-reading each other's code. Where this

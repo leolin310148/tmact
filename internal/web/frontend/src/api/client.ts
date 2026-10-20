@@ -12,6 +12,7 @@ import type {
   Snapshot,
   SnapshotHeartbeat,
   AgentUsage,
+  AgentUsageHistory,
   ClosedSession,
   CredRequest,
   STTSettings,
@@ -314,6 +315,10 @@ export function loadVersion(): Promise<JsonResponse<VersionInfo>> {
 
 export function loadAgentUsage(): Promise<JsonResponse<AgentUsage>> {
   return jsonResponse("/api/agent-usage", { cache: "no-store" });
+}
+
+export function loadAgentUsageHistory(signal: AbortSignal): Promise<JsonResponse<AgentUsageHistory>> {
+  return jsonResponse("/api/agent-usage/history", { cache: "no-store", signal });
 }
 
 export function loadVAPIDPublicKey(): Promise<JsonResponse<{ publicKey?: string }>> {

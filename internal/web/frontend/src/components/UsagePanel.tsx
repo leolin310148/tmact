@@ -19,10 +19,11 @@
 // (the verbatim grid in `.usage-panel`) applies. The `#usage-panel` `hidden`
 // attribute is toggled exactly as usage.js toggled `panel.hidden`
 // (true on 0 providers / no data / server-disabled, false otherwise). The
-// static `aria-hidden="true"` from index.html is preserved unchanged (the
-// original render() never touched it).
+// panel is an accessible history trigger; the dialog loads history on demand.
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
+import UsageTrendDialog from "./UsageTrendDialog";
+import { onPointerDownNoBlur } from "../lib/dom";
 import { useUsage } from "../hooks/useUsage";
 import type { AgentUsage, Pace, ProviderUsage, RateWindow } from "../types/server";
 
@@ -221,6 +222,7 @@ function ProviderRows({ p, idx }: { p: ProviderUsage; idx: number }) {
 }
 
 export default function UsagePanel() {
+  const [trendOpen, setTrendOpen] = useState(false);
   const { snap, disabled } = useUsage();
   const providers: ProviderUsage[] = (snap && snap.providers) || [];
   // usage.js render(): 0 providers → panel.hidden = true. Before any data
@@ -228,7 +230,7 @@ export default function UsagePanel() {
   // A 404 disables the panel permanently. Otherwise hidden = false.
   const hidden = disabled || providers.length === 0;
   return (
-    <div className="usage-panel" id="usage-panel" hidden={hidden} aria-hidden="true">
+    <><div className="usage-panel" id="usage-panel" hidden={hidden} role="button" tabIndex={hidden ? -1 : 0} aria-label="開啟 Cost / Usage 趨勢" aria-haspopup="dialog" onPointerDown={onPointerDownNoBlur} onClick={() => setTrendOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setTrendOpen(true); } }}>
       {providers.map((p, i) => (
         <Fragment key={"p" + i}>
           {/* A thin full-width rule between provider blocks (not before the
@@ -238,7 +240,7 @@ export default function UsagePanel() {
           <ProviderRows p={p} idx={i} />
         </Fragment>
       ))}
-    </div>
+    </div>{trendOpen ? <UsageTrendDialog onClose={() => setTrendOpen(false)} /> : null}</>
   );
 }
 

@@ -62,6 +62,7 @@ export function useHotkeys({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
       // Clear-pane chord: only when a pane is selected and settings is closed.
       // app.js gated on `state.selected && $("settings-overlay").hidden`.
       if (state.selected && !settingsOpen()) {

@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentspend"
 	"github.com/leolin310148/tmact/internal/agentusage"
 	"github.com/leolin310148/tmact/internal/credreq"
 	"github.com/leolin310148/tmact/internal/dispatch"
@@ -207,7 +208,12 @@ type Server struct {
 	WebPushHTTPClient webpushHTTPClient
 
 	// usage caches the latest quota snapshot the usage refresher produces.
-	usage usageCache
+	usage             usageCache
+	UsageHistoryDir   string
+	usageHistoryError string // guarded by usageHistoryMu
+	historyCostMu     sync.Mutex
+	historyCostAt     time.Time
+	historyCostRows   []agentspend.DailySpend
 	// spend caches the latest merged (local + peers) per-provider token spend,
 	// refreshed on its own faster cadence and merged with the quota snapshot at
 	// serve time.
@@ -409,6 +415,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/snapshot", s.handleSnapshot)
 	mux.HandleFunc("/api/snapshot/stream", s.handleSnapshotStream)
 	mux.HandleFunc("/api/agent-usage", s.handleAgentUsage)
+	mux.HandleFunc("/api/agent-usage/history", s.handleUsageHistory)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/version", s.handleVersion)
 	mux.HandleFunc("/api/vapid-public-key", s.handleVAPIDPublicKey)

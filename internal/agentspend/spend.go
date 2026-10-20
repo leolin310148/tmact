@@ -2,6 +2,35 @@ package agentspend
 
 import "time"
 
+// DailySpend is API-equivalent spend on a UTC calendar date.
+type DailySpend struct {
+	Date     string  `json:"date"`
+	Provider string  `json:"provider"`
+	USD      float64 `json:"usd"`
+}
+
+// Daily reconstructs historical spend without persisting a second priced ledger.
+func Daily(now time.Time, days int) []DailySpend {
+	start := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1-days)
+	out := []DailySpend{}
+	for _, s := range scanners {
+		seen := map[string]bool{}
+		totals := map[string]float64{}
+		for _, row := range scanRows(s, start, sharedCache) {
+			if seen[row.dedup] || row.ts.Before(start) || row.ts.After(now) {
+				continue
+			}
+			seen[row.dedup] = true
+			totals[row.ts.UTC().Format("2006-01-02")] += row.cost
+		}
+		for day := start; !day.After(now); day = day.AddDate(0, 0, 1) {
+			date := day.Format("2006-01-02")
+			out = append(out, DailySpend{Date: date, Provider: s.provider(), USD: totals[date]})
+		}
+	}
+	return out
+}
+
 // Spend is the dollar-equivalent token spend for one provider over the
 // calendar week-to-date and month-to-date, in USD.
 type Spend struct {
