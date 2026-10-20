@@ -29,7 +29,7 @@ import {
   reopenSession,
   reportHumanActivity,
 } from "../api/client";
-import { focusMenuEdge, isMobile, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
+import { focusMenuEdge, moveMenuFocus, onPointerDownNoBlur } from "../lib/dom";
 import type { ClosedSession } from "../types/server";
 import {
   RUNTIME_ICON,
@@ -153,7 +153,11 @@ interface OverflowMenuContentProps {
 }
 
 export function OverflowMenuContent({ items, onSelect, closeRestoring }: OverflowMenuContentProps) {
-  const [desktop] = useState(() => typeof window.matchMedia !== "function" || !isMobile());
+  // Split-view iframes can be phone-width on a desktop. Use input capability,
+  // not layout width, so narrow slots still receive keyboard search.
+  const [desktop] = useState(() => typeof window.matchMedia !== "function" ||
+    !window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(any-pointer: fine)").matches);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);

@@ -461,6 +461,8 @@ uses native text/IME editing; arrows navigate filtered rows and Enter selects.
 Escape clears a nonempty query before dismissing the menu. Search editing keys
 must never reach pane input or arm a row's destructive action. Mobile menus
 retain their no-blur touch behavior without autofocus or a search field.
+This distinction uses pointer capability, never viewport width: a desktop split
+slot can be narrower than the mobile layout breakpoint and still needs search.
 
 The More menu's exit control closes the window owning the row's stable pane ID,
 using the same CloseWindow operation as the pane's close action. Display labels

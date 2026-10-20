@@ -47,6 +47,18 @@ const items = [
 ];
 
 describe("MoreChip keyboard menu", () => {
+  it("keeps keyboard filtering in a phone-width desktop split slot", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(max-width: 760px)" || query === "(any-pointer: fine)",
+    })));
+    const user = userEvent.setup();
+    render(<MoreChip items={items} onSelect={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /Show 3 more panes/ }));
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+    await user.keyboard("second");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
+    expect(screen.getByRole("menuitem", { name: "Select pane second" })).toBeInTheDocument();
+  });
   it("filters immediately, resumes typing from results, and selects with Enter", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
@@ -180,7 +192,7 @@ describe("MoreChip keyboard menu", () => {
   });
 
   it("preserves no-blur pointer selection for touch input", () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: query === "(pointer: coarse)" })));
     const onSelect = vi.fn();
     render(
       <>
