@@ -178,6 +178,8 @@ type ResultReport struct {
 
 // Report is the outcome of a dispatch-work run.
 type Report struct {
+	ErrorCode    string                `json:"error_code,omitempty"`
+	RoutingError *modelroute.Failure   `json:"routing_error,omitempty"`
 	ApplyCommand string                `json:"apply_command,omitempty"`
 	PlanFiles    []modelroute.TaskFile `json:"plan_files,omitempty"`
 	PlanFile     string                `json:"plan_file,omitempty"`

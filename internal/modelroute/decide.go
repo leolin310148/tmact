@@ -30,24 +30,24 @@ func runDecide(ctx context.Context, input Input, questions any) ([]byte, error) 
 	defer cancel()
 	config, err := trustedConfig()
 	if err != nil {
-		return nil, err
+		return nil, NewFailure("configuration")
 	}
 	data, err := json.Marshal(input)
 	if err != nil {
-		return nil, fmt.Errorf("encode routing input: %w", err)
+		return nil, NewFailure("invalid_request")
 	}
 	f, err := os.CreateTemp("", "tmact-decide-questions-*.json")
 	if err != nil {
-		return nil, err
+		return nil, NewFailure("unavailable")
 	}
 	defer os.Remove(f.Name())
 	err = json.NewEncoder(f).Encode(questions)
 	closeErr := f.Close()
 	if err != nil {
-		return nil, err
+		return nil, NewFailure("invalid_request")
 	}
 	if closeErr != nil {
-		return nil, closeErr
+		return nil, NewFailure("unavailable")
 	}
 	cmd := exec.CommandContext(ctx, "decide", "-config", config, "ask", "--input", "-", "--input-json", "--questions", f.Name(), "--format", "json", "--timeout", "40s", "--retries", "0")
 	cmd.Stdin = bytes.NewReader(data)
@@ -59,8 +59,9 @@ func runDecide(ctx context.Context, input Input, questions any) ([]byte, error) 
 		}
 	}
 	cmd.Env = append(cmd.Env, "DECIDE_USAGE_LOG=off", "DECIDE_CALLER=tmact-auto-model")
-	var stdout cappedBuffer
+	var stdout, stderr cappedBuffer
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	// Provider error text may contain upstream response bodies. Keep it out of
 	// tmact reports, which can be persisted or forwarded to another machine.
 	if err := cmd.Run(); err != nil {
@@ -70,12 +71,15 @@ func runDecide(ctx context.Context, input Input, questions any) ([]byte, error) 
 			return stdout.Bytes(), nil
 		}
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("auto-model: decide timed out or was cancelled")
+			if ctx.Err() == context.Canceled {
+				return nil, NewFailure("cancelled")
+			}
+			return nil, NewFailure("timeout")
 		}
 		if _, ok := err.(*exec.Error); ok {
-			return nil, fmt.Errorf("auto-model requires the decide CLI in PATH")
+			return nil, NewFailure("unavailable")
 		}
-		return nil, fmt.Errorf("auto-model: decide failed; check CLI configuration/authentication; no agent launched")
+		return nil, classifyDecideFailure(stderr.String())
 	}
 	return stdout.Bytes(), nil
 }

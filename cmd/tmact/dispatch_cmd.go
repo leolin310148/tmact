@@ -159,6 +159,8 @@ func runDispatch(args []string) error {
 	if err != nil {
 		if *jsonOutput {
 			report.Error = err.Error()
+			report.ErrorCode = modelroute.ErrorCode(err)
+			report.RoutingError = modelroute.FailureInfo(err)
 			return jsonFailure(report, err)
 		}
 		if opts.Wait && report.Wait != nil && report.Wait.Baseline != nil {

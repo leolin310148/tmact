@@ -112,11 +112,11 @@ func validateSelection(in modelroute.Input, s *modelroute.Selection) error {
 		return fmt.Errorf("auto-model: missing selection")
 	}
 	for _, c := range in.Candidates {
-		if c.Agent == s.Agent && c.Model == s.Model && c.Effort == s.Effort {
+		if c.Agent == s.Agent && c.Model == s.Model && modelroute.SupportsEffort(c, s.Effort) {
 			if _, err := ValidateModel(c.Agent, c.Model); err != nil {
 				return err
 			}
-			return ValidateModelEffort(c.Agent, c.Model, c.Effort)
+			return ValidateModelEffort(c.Agent, c.Model, s.Effort)
 		}
 	}
 	return fmt.Errorf("auto-model: selected profile is outside eligible candidates")

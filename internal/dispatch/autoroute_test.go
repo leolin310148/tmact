@@ -27,7 +27,7 @@ func TestAutoModelDryRunAndEffortLaunch(t *testing.T) {
 	opts.AutoModel = true
 	deps.FetchUsage = healthyQuota
 	deps.ChooseModel = func(_ context.Context, in modelroute.Input) (*modelroute.Selection, error) {
-		if in.Task != opts.Prompt || len(in.Candidates) != 3 {
+		if in.Task != opts.Prompt || len(in.Candidates) != 4 {
 			t.Fatalf("input=%+v", in)
 		}
 		return &modelroute.Selection{Status: "selected", Agent: "codex", Model: "gpt-6.1-sol", Effort: "medium", Confidence: .9}, nil
@@ -344,5 +344,70 @@ func TestDispatchOutcomeLogCorrelatesWithoutCapabilityOrPrompt(t *testing.T) {
 	entries, err := modelroute.ReadLog("d_test", 50, true)
 	if err != nil || len(entries) != 1 || entries[0].Outcome.Status != "planned" {
 		t.Fatalf("records=%+v err=%v", entries, err)
+	}
+}
+
+func TestDynamicCatalogEffortsMatchLauncherValidation(t *testing.T) {
+	for _, c := range modelroute.DefaultCandidates() {
+		if _, err := dispatch.ValidateModel(c.Agent, c.Model); err != nil {
+			t.Fatal(err)
+		}
+		for _, effort := range c.Efforts {
+			if err := dispatch.ValidateModelEffort(c.Agent, c.Model, effort); err != nil {
+				t.Fatalf("catalog cannot launch %s/%s: %v", c.Model, effort, err)
+			}
+		}
+	}
+	for _, tt := range []struct{ agent, model, effort string }{{"claude", "claude-fable-5-1", "medium"}, {"codex", "gpt-5.6-terra", "xhigh"}, {"codex", "gpt-6-astra", "low"}} {
+		t.Run(tt.model, func(t *testing.T) {
+			_, deps := baseDeps()
+			o := baseOpts()
+			o.Agent = tt.agent
+			o.AutoModel = true
+			deps.FetchUsage = func(context.Context) agentusage.Snapshot {
+				now := time.Now()
+				return agentusage.Snapshot{GeneratedAt: now, Providers: []agentusage.ProviderUsage{{Provider: "claude", Windows: []agentusage.RateWindow{{Name: "weekly", UsedPercent: 10}, {Name: "session", UsedPercent: 10}}}, {Provider: "codex", Windows: []agentusage.RateWindow{{Name: "weekly", UsedPercent: 10}}}}}
+			}
+			deps.ChooseModel = func(_ context.Context, in modelroute.Input) (*modelroute.Selection, error) {
+				found := false
+				for _, c := range in.Candidates {
+					if c.Model == tt.model && modelroute.SupportsEffort(c, tt.effort) {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatal("missing eligible combination")
+				}
+				return &modelroute.Selection{Status: "selected", Agent: tt.agent, Model: tt.model, Effort: tt.effort}, nil
+			}
+			r, err := dispatch.RunWithDeps(o, deps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			launch := stepDetail(t, r, "launch-agent")
+			if !strings.Contains(launch, tt.model) || !strings.Contains(launch, tt.effort) {
+				t.Fatalf("launch=%s", launch)
+			}
+		})
+	}
+}
+
+func TestTypedContextFailureStopsBeforeAgentMutation(t *testing.T) {
+	rec, deps := baseDeps()
+	o := baseOpts()
+	o.Agent = "codex"
+	o.Dir = t.TempDir()
+	o.Execute = true
+	o.AutoModel = true
+	deps.FetchUsage = healthyQuota
+	deps.ChooseModel = func(context.Context, modelroute.Input) (*modelroute.Selection, error) {
+		return nil, modelroute.NewFailure("context_too_large")
+	}
+	r, err := dispatch.RunWithDeps(o, deps)
+	if modelroute.ErrorCode(err) != "context_too_large" || r.ErrorCode != "context_too_large" || r.RoutingError == nil || !r.RoutingError.NoAgentLaunched {
+		t.Fatalf("report=%+v err=%v", r, err)
+	}
+	if rec.newSessions != 0 || len(rec.pastes) != 0 || len(rec.keys) != 0 {
+		t.Fatal("routing failure mutated agent")
 	}
 }

@@ -25,6 +25,8 @@ func Run(opts Options) (Report, error) {
 // RunWithDeps dispatches work using the supplied dependencies.
 func RunWithDeps(opts Options, deps Deps) (report Report, runErr error) {
 	defer func() {
+		report.ErrorCode = modelroute.ErrorCode(runErr)
+		report.RoutingError = modelroute.FailureInfo(runErr)
 		if report.DispatchID == "" {
 			report.DispatchID = opts.RoutingTrace.DispatchID
 		}
@@ -40,7 +42,7 @@ func RunWithDeps(opts Options, deps Deps) (report Report, runErr error) {
 		Model:                opts.Model,
 		Effort:               opts.Effort,
 		Selection:            opts.Selection,
-		LaunchOptionsVersion: 3,
+		LaunchOptionsVersion: 5,
 		Prompt:               opts.Prompt,
 		Execute:              opts.Execute,
 		TrustFolder:          opts.TrustFolder,

@@ -30,22 +30,24 @@ const (
 )
 
 type askReport struct {
-	ApplyCommand    string            `json:"apply_command,omitempty"`
-	PlanFile        string            `json:"plan_file,omitempty"`
-	DispatchID      string            `json:"dispatch_id,omitempty"`
-	Status          string            `json:"status"`
-	QuestionID      string            `json:"question_id,omitempty"`
-	Session         string            `json:"session"`
-	Prompt          string            `json:"prompt,omitempty"`
-	Timeout         string            `json:"timeout,omitempty"`
-	Delivery        string            `json:"delivery,omitempty"`
-	ReplyCommand    string            `json:"reply_command,omitempty"`
-	FollowUpCommand string            `json:"follow_up_command,omitempty"`
-	Dispatch        *dispatch.Report  `json:"dispatch,omitempty"`
-	Reply           *askreply.Message `json:"reply,omitempty"`
-	AnswererWaiting bool              `json:"answerer_waiting"`
-	Closed          bool              `json:"closed"`
-	Error           string            `json:"error,omitempty"`
+	ErrorCode       string              `json:"error_code,omitempty"`
+	RoutingError    *modelroute.Failure `json:"routing_error,omitempty"`
+	ApplyCommand    string              `json:"apply_command,omitempty"`
+	PlanFile        string              `json:"plan_file,omitempty"`
+	DispatchID      string              `json:"dispatch_id,omitempty"`
+	Status          string              `json:"status"`
+	QuestionID      string              `json:"question_id,omitempty"`
+	Session         string              `json:"session"`
+	Prompt          string              `json:"prompt,omitempty"`
+	Timeout         string              `json:"timeout,omitempty"`
+	Delivery        string              `json:"delivery,omitempty"`
+	ReplyCommand    string              `json:"reply_command,omitempty"`
+	FollowUpCommand string              `json:"follow_up_command,omitempty"`
+	Dispatch        *dispatch.Report    `json:"dispatch,omitempty"`
+	Reply           *askreply.Message   `json:"reply,omitempty"`
+	AnswererWaiting bool                `json:"answerer_waiting"`
+	Closed          bool                `json:"closed"`
+	Error           string              `json:"error,omitempty"`
 }
 
 type replyReport struct {
@@ -719,6 +721,8 @@ func quoteShellArg(value string) string {
 // askFailure reports a failed ask: in --json mode the error goes into the
 // single JSON document, otherwise the text report precedes the stderr error.
 func askFailure(report askReport, err error, jsonOutput bool) error {
+	report.ErrorCode = modelroute.ErrorCode(err)
+	report.RoutingError = modelroute.FailureInfo(err)
 	report.Status = dispatch.StatusFailed
 	if jsonOutput {
 		report.Error = err.Error()

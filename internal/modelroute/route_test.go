@@ -160,7 +160,7 @@ for arg in "$@"; do
  [ "$arg" != "--min-confidence" ] || exit 9
 done
 cat > "$ROUTING_TEST_INPUT"
-printf '%s\n' '{"model":"fake-decide","answers":{"route":{"choice":"profile_0"}},"confidences":{"route":0.9},"gate_passed":true}'
+printf '%s\n' '{"model":"fake-decide","answers":{"route":{"choice":"profile_0"},"effort_profile_0":{"choice":"high"}},"confidences":{"route":0.9},"gate_passed":true}'
 `
 	if err := os.WriteFile(filepath.Join(dir, "decide"), []byte(script), 0700); err != nil {
 		t.Fatal(err)

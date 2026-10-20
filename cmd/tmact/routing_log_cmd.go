@@ -46,6 +46,15 @@ func runLogRouting(args []string) error {
 		if e.Outcome != nil {
 			fmt.Printf(" status=%s", e.Outcome.Status)
 		}
+		if len(e.Attempts) > 0 {
+			fmt.Printf(" attempts=%d", len(e.Attempts))
+		}
+		if e.ErrorCode != "" {
+			fmt.Printf(" error_code=%s", e.ErrorCode)
+		}
+		if e.Budget != nil {
+			fmt.Printf(" question_bytes=%d/%d request_bytes=%d/%d", e.Budget.QuestionBytes, e.Budget.MaxQuestionBytes, e.Budget.RequestBytes, e.Budget.MaxRequestBytes)
+		}
 		if e.Error != "" {
 			fmt.Printf(" error=%s", e.Error)
 		}

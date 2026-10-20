@@ -16,7 +16,7 @@ func TestPromptPaths(t *testing.T) {
 	}{
 		{"absolute and relative", "Read /tmp/task.md and docs/plan.txt", []string{"/tmp/task.md", "docs/plan.txt"}},
 		{"quoted spaces", "Read `docs/my plan.md` and \"/tmp/my task.TXT\"", []string{"docs/my plan.md", "/tmp/my task.TXT"}},
-		{"Markdown and line references", "Read [plan](./plan.md:12) plus /tmp/task.txt#section", []string{"./plan.md", "/tmp/task.txt"}},
+		{"Markdown and line references", "Read [plan](./plan.md:12) plus /tmp/task.txt#section", []string{"./plan.md", "/tmp/task.txt#section"}},
 		{"URL is not a local path", "https://example.com/task.md ftp://host/task.txt", []string{}},
 		{"file URL", "file:///tmp/my%20task.md", []string{"/tmp/my task.md"}},
 		{"Chinese punctuation", "請讀 /tmp/任務.md，並照做。", []string{"/tmp/任務.md"}},

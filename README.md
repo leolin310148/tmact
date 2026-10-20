@@ -337,8 +337,18 @@ has removed it, generate a new dry-run. Ask reply capabilities are created only
 when executing. Peer plans require updated tmact on the peer; fingerprints and
 target checks run on that peer without reading same-named local files.
 
-Routing chooses a maintained Claude/Codex model + effort profile. Explicit
-`--agent` restricts the provider and `--effort` is preserved. An explicit
+Routing chooses a model and effort independently in a single decide request.
+The catalog includes Claude Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1,
+and Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol, GPT-6 Astra. Each has a
+capability description and legal effort set: Claude and Luna support low,
+medium, high, xhigh, max; Terra, Sol and Astra also support Codex CLI ultra.
+There is no fixed tier-to-effort mapping: Sol high and Astra low are both legal.
+Decide evaluates effort conditional on each candidate and applies only the
+selected model's effort; it does not make a second API call. Generic worker
+rules or unrelated reference files do not by themselves make the task advanced.
+Model and effort confidence are recorded separately and never gate selection.
+
+Explicit `--agent` restricts the provider and `--effort` is preserved. An explicit
 `--model` bypasses decide and uses that model directly, including models outside
 the automatic catalog. Prefer relatively
 generous weekly quota (pace headroom, or remaining per day until reset). Claude
@@ -379,9 +389,49 @@ The agent still receives the original prompt. Quoted/backtick paths with spaces,
 Markdown links, `~/` paths, and `:line` references work. Relative paths resolve
 against the target pane cwd (or `--dir` for a new session), and peer references
 are read on the peer. No URL fetching or recursive reference following occurs.
-Up to 8 files are processed, 64 KiB per file and 128 KiB total. Unreadable or
-non-text files are marked; oversized files are truncated with metadata in
-`selection.files`. These conditions do not add a dispatch gate.
+`docs/x.md#章節標題` attaches only that ATX heading and its children, ending
+at the next same/higher heading; fenced code examples do not create headings.
+Exact titles, generated lowercase/hyphen anchors, and percent-encoded selectors
+are supported. Quote/backtick references containing spaces. Different sections
+of one physical file remain separate; ambiguous or missing selectors are marked
+`section_ambiguous` / `section_not_found` with no whole-file fallback. Correct
+shorthand selectors such as `#Envelope` or `#3` to actual titles/anchors when
+those headings do not exist.
+
+Collection permits 8 physical files and 32 distinct file/section references.
+Sources up to 8 MiB can be scanned to find a late section; collected excerpts
+remain capped at 64 KiB each and 128 KiB total, shared across references.
+Missing/non-text/oversized references are marked; these do not add a dispatch
+gate. Source and excerpt hashes, selector/line range, `source_bytes`,
+`original_bytes`, `included_bytes`, `truncated`, `omitted` and `reason` describe
+exactly what was supplied. Plans validate selectors and full source fingerprints,
+independently of request clipping. Regenerate older file-bearing plans after
+this metadata format changes.
+
+Before decide, tmact budgets the **whole serialized selection request**: task,
+policy, quota, candidates, file metadata/content, and all questions, plus the
+largest individual question with shared state. It uses a conservative UTF-8-byte
+heuristic: 48 KiB per-question envelope and 96 KiB whole-request envelope,
+including a 2 KiB reserve for CLI/API framing. These are **bytes, not tokens**;
+there is no claim they exactly predict Jev's 32k/64k token limits. When needed,
+fair prefix excerpts reduce attachment content, preserving the original task,
+policy and constraints. `selection.budget` reports measured sizes and limits.
+If even an attachment-free request cannot fit, it fails before invoking decide.
+
+Failures expose `error_code` and `routing_error` with `code`, `message`,
+`phase: "routing"`, and `no_agent_launched: true`. Codes include
+`context_too_large`, `auth`, `configuration`, `unavailable`, `timeout`,
+`cancelled`, `invalid_request`, `invalid_response`, and `deferred`.
+Only an explicit upstream `max_tokens_exceeded` triggers an automatic retry:
+halve the remaining attachment excerpts and try **once** more. No changed
+attachment content means no retry. Auth, network/unavailable and other failures
+are not retried or replaced with a default model. Confidence remains informational.
+
+Routing records include `attempts[]` with each exact supplied input, request
+budget, safe error code and response; raw upstream stderr/bodies are never
+persisted. Default log queries redact task/file bodies and responses in every
+attempt. Use `--show-content` only when authorized to inspect private evidence.
+Peer auto routing requires the updated section/budget protocol (version 5).
 
 Routing also asks Jev for intrinsic `difficulty` (lightweight/standard/advanced)
 independently of quota, provider constraints and the selected profile. The

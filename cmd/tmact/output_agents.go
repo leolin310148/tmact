@@ -203,14 +203,24 @@ func printModelSelection(report dispatch.Report) {
 	}
 	fmt.Printf("  auto-model: %s", s.Status)
 	if s.Status == "selected" {
-		fmt.Printf(" agent=%s model=%s effort=%s confidence=%.2f", s.Agent, s.Model, s.Effort, s.Confidence)
+		fmt.Printf(" agent=%s model=%s effort=%s confidence=%.2f effort-confidence=%.2f", s.Agent, s.Model, s.Effort, s.Confidence, s.EffortConfidence)
 		if s.Difficulty != "" {
 			fmt.Printf(" difficulty=%s tier=%s", s.Difficulty, s.SelectedTier)
 		}
 	}
 	fmt.Println()
+	if s.Budget != nil {
+		fmt.Printf("    request budget (UTF-8 byte heuristic): question=%d/%d request=%d/%d attempts=%d\n", s.Budget.QuestionBytes, s.Budget.MaxQuestionBytes, s.Budget.RequestBytes, s.Budget.MaxRequestBytes, s.Attempts)
+	}
 	for _, f := range s.Files {
-		fmt.Printf("    task file: %s [%s]", f.Path, f.Status)
+		fmt.Printf("    task file: %s", f.Path)
+		if f.Section != "" {
+			fmt.Printf("#%s", f.Section)
+		}
+		fmt.Printf(" [%s] bytes=%d/%d source=%d", f.Status, f.IncludedBytes, f.OriginalBytes, f.SourceBytes)
+		if f.Reason != "" {
+			fmt.Printf(" reason=%s", f.Reason)
+		}
 		if f.Truncated {
 			fmt.Print(" (truncated)")
 		}

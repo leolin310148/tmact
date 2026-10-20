@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,9 @@ type RemoteRequest struct {
 
 // RemoteError mirrors statusd's JSON error response.
 type RemoteError struct {
-	Error string `json:"error"`
+	ErrorCode    string              `json:"error_code,omitempty"`
+	RoutingError *modelroute.Failure `json:"routing_error,omitempty"`
+	Error        string              `json:"error"`
 }
 
 // RemoteRequestFromOptions converts local dispatch options into the wire shape.
@@ -133,7 +136,7 @@ func PostRemote(ctx context.Context, client *http.Client, peerName, peerURL stri
 		if (opts.PlanState != nil || opts.CapturePlan) && report.LaunchOptionsVersion < 3 {
 			return report, fmt.Errorf("peer does not support saved plans; update tmact before dispatch")
 		}
-		if report.LaunchOptionsVersion < 1 || opts.AutoModel && (report.LaunchOptionsVersion < 2 || !report.AutoModelSupported) {
+		if report.LaunchOptionsVersion < 1 || opts.AutoModel && (report.LaunchOptionsVersion < 5 || !report.AutoModelSupported) {
 			return report, fmt.Errorf("peer does not support auto-model/effort; update tmact before dispatch")
 		}
 		if opts.AutoModel {
@@ -216,6 +219,10 @@ func postRemote(ctx context.Context, client *http.Client, peerName, peerURL stri
 		}
 		var remoteErr RemoteError
 		if err := json.NewDecoder(resp.Body).Decode(&remoteErr); err == nil && remoteErr.Error != "" {
+			if remoteErr.RoutingError != nil && remoteErr.ErrorCode != "" {
+				failure := modelroute.NewFailure(remoteErr.ErrorCode)
+				return Report{ErrorCode: failure.Code, RoutingError: failure}, failure
+			}
 			return Report{}, fmt.Errorf("peer %s dispatch failed: %s", peerName, remoteErr.Error)
 		}
 		return Report{}, fmt.Errorf("peer %s dispatch returned HTTP %d", peerName, resp.StatusCode)
@@ -271,20 +278,46 @@ func validateRemoteRoutingInput(in *modelroute.Input, opts Options) error {
 	in.Trace.Session = opts.Session
 	allowed := modelroute.DefaultCandidates()
 	filtered := []modelroute.Candidate{}
+
 	for _, c := range in.Candidates {
-		if opts.Agent != "" && c.Agent != opts.Agent || opts.Model != "" && c.Model != opts.Model || opts.Effort != "" && c.Effort != opts.Effort {
+		if opts.Agent != "" && c.Agent != opts.Agent || opts.Model != "" && c.Model != opts.Model {
 			continue
 		}
 		for _, a := range allowed {
-			if a.Agent == c.Agent && a.Model == c.Model && a.Tier == c.Tier && (opts.Effort != "" || a.Effort == c.Effort) {
-				if err := ValidateEffort(c.Agent, c.Effort); err != nil {
-					return err
-				}
-				filtered = append(filtered, c)
-				break
+			if a.Agent != c.Agent || a.Model != c.Model {
+				continue
 			}
+			// Trust the caller's descriptions/capabilities, intersecting the peer's
+			// eligible effort set. Peer text never overrides caller policy.
+			if c.Effort != "" {
+				if !modelroute.SupportsEffort(a, c.Effort) || opts.Effort != "" && c.Effort != opts.Effort {
+					continue
+				}
+				a.Effort = c.Effort
+				a.Efforts = nil
+			} else if opts.Effort != "" {
+				if !modelroute.SupportsEffort(a, opts.Effort) || !slices.Contains(c.Efforts, opts.Effort) {
+					continue
+				}
+				a.Effort = opts.Effort
+				a.Efforts = nil
+			} else {
+				efforts := []string{}
+				for _, e := range a.Efforts {
+					if slices.Contains(c.Efforts, e) {
+						efforts = append(efforts, e)
+					}
+				}
+				if len(efforts) == 0 {
+					continue
+				}
+				a.Efforts = efforts
+			}
+			filtered = append(filtered, a)
+			break
 		}
 	}
+
 	in.Candidates = filtered
 	if len(filtered) == 0 {
 		return fmt.Errorf("peer returned no valid profiles matching explicit constraints")

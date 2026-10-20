@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const PolicyVersion = "routing-v2-files-difficulty"
+const PolicyVersion = "routing-v4-sections-budget-errors"
 
 // Trace correlates a decision with dispatch and ask outcomes. It never holds
 // ask capability IDs or provider credentials.
@@ -38,19 +38,31 @@ type Outcome struct {
 	Steps      map[string]string `json:"steps,omitempty"`
 }
 
+type DecisionAttempt struct {
+	Number    int             `json:"number"`
+	Input     *Input          `json:"input"`
+	Budget    *RequestBudget  `json:"budget"`
+	Response  json.RawMessage `json:"response,omitempty"`
+	ErrorCode string          `json:"error_code,omitempty"`
+	ElapsedMS int64           `json:"elapsed_ms"`
+}
+
 type LogEntry struct {
-	Time          time.Time       `json:"time"`
-	Event         string          `json:"event"`
-	Trace         Trace           `json:"trace"`
-	PolicyVersion string          `json:"policy_version,omitempty"`
-	PolicySHA256  string          `json:"policy_sha256,omitempty"`
-	Input         *Input          `json:"input,omitempty"`
-	Questions     json.RawMessage `json:"questions,omitempty"`
-	Response      json.RawMessage `json:"response,omitempty"`
-	Selection     *Selection      `json:"selection,omitempty"`
-	Outcome       *Outcome        `json:"outcome,omitempty"`
-	Error         string          `json:"error,omitempty"`
-	ElapsedMS     int64           `json:"elapsed_ms,omitempty"`
+	Attempts      []DecisionAttempt `json:"attempts,omitempty"`
+	Budget        *RequestBudget    `json:"budget,omitempty"`
+	ErrorCode     string            `json:"error_code,omitempty"`
+	Time          time.Time         `json:"time"`
+	Event         string            `json:"event"`
+	Trace         Trace             `json:"trace"`
+	PolicyVersion string            `json:"policy_version,omitempty"`
+	PolicySHA256  string            `json:"policy_sha256,omitempty"`
+	Input         *Input            `json:"input,omitempty"`
+	Questions     json.RawMessage   `json:"questions,omitempty"`
+	Response      json.RawMessage   `json:"response,omitempty"`
+	Selection     *Selection        `json:"selection,omitempty"`
+	Outcome       *Outcome          `json:"outcome,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	ElapsedMS     int64             `json:"elapsed_ms,omitempty"`
 }
 
 var fallbackTrace atomic.Uint64
@@ -170,6 +182,17 @@ func ReadLog(dispatchID string, limit int, showContent bool) ([]LogEntry, error)
 			continue
 		}
 		if !showContent {
+			for i := range e.Attempts {
+				a := &e.Attempts[i]
+				a.Response = nil
+				if a.Input != nil {
+					copy := *a.Input
+					copy.Task = ""
+					copy.Files = fileMetadata(copy.Files)
+					a.Input = &copy
+				}
+			}
+
 			e.Response = nil
 			e.Questions = nil
 			if e.Selection != nil {

@@ -71,7 +71,7 @@ func ValidateModel(agent, model string) (string, error) {
 }
 
 // ValidateEffort validates launcher-specific effort overrides. Automatic
-// profiles use low/medium/high; higher explicit values are never inferred.
+// selection uses each catalog model's complete supported effort set.
 func ValidateEffort(agent, effort string) error {
 	if effort == "" {
 		return nil

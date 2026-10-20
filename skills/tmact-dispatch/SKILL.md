@@ -78,8 +78,15 @@ For fresh work without an explicit model, let tmact automatically use decide
 when it is in PATH. `--agent` constrains the provider; `--effort` is preserved.
 An explicit `--model` bypasses decide and is used exactly as requested. Use
 `--auto-model=false` to opt out, or `--auto-model` to require routing. Honor
-repository guidance; only the maintained auto-profile catalog is eligible for
-automatic selection.
+repository guidance; only the maintained model catalog is eligible for
+automatic selection. It includes Claude Haiku/Sonnet/Opus 5.5 and Fable 5.1,
+plus Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol and GPT-6 Astra.
+Decide chooses model and model-specific effort independently in one request;
+do not preassign an effort from the model name or difficulty. Only the selected
+model's conditional effort answer is applied. Claude and Luna support low
+through max; Terra/Sol/Astra also advertise Codex CLI ultra. An explicit
+`--effort` pins the value instead. `selection.effort_confidence` records effort
+certainty separately; it is informational, like model confidence.
 Let tmact call `decide` with the task and sanitized quota; do not duplicate the
 routing policy in the skill. Decide must be in PATH with its normal credentials
 (for example `JEV_API_KEY`). Even dry-run makes a decision request. Inspect
@@ -129,11 +136,35 @@ tmact dispatch-work myjob --dir ~/w/proj \
   --prompt 'Read /tmp/task.md and follow its instructions.' --json
 ```
 
-Inspect `selection.files`: unreadable/non-text references are marked, and long
-files are truncated. Attachments are local, non-recursive, and bounded to 8
-files, 64 KiB each, 128 KiB total. Do not assume a missing attachment was read;
-put the essential task summary in the prompt when context is incomplete.
+Use `docs/x.md#Exact Heading` (quoted/backticked when it contains spaces) to
+supply only that heading and its subheadings. Exact titles, lowercase/hyphen
+anchors and percent encoding work. Fenced code headings are ignored; different
+sections of one file remain separate. `section_not_found` / `section_ambiguous`
+never silently attach the whole file: fix the selector or put essential task
+content in the prompt. Do not assume shorthand such as `#3` matches a longer
+numbered heading.
+
+Inspect `selection.files`: source/excerpt hashes, section/line range,
+`source_bytes`, `original_bytes`, `included_bytes`, `truncated`, `omitted`, and
+`reason` show what was supplied. Limits are 8 physical files / 32 distinct
+file-section references, 8 MiB source scan, 64 KiB per collected excerpt and
+128 KiB total. The whole request is then budgeted conservatively (48 KiB
+per-question and 96 KiB total serialized UTF-8 bytes, including a 2 KiB framing
+reserve); these are not exact token counts. Oversized contexts receive fair
+prefix excerpts or omission metadata; task and routing constraints are preserved.
+Plan/apply checks selectors and full source fingerprints even when excerpts
+were clipped. Regenerate older file-bearing plans after upgrading.
 Continuations still skip routing and file attachment.
+
+Parse `error_code` / `routing_error`, not generic error text. A routing failure
+states `phase: routing` and `no_agent_launched: true`. `context_too_large` is
+distinct from `auth`, `configuration`, `unavailable`, `timeout`, `cancelled`,
+`invalid_request`, `invalid_response`, and `deferred`. tmact retries only an
+explicit upstream context overflow, shrinking attachments once; no blanket
+retry or default-model fallback exists. Do not repeat auth/permission/quota
+failures with another model to hide the cause. `selection.attempts` and routing
+log `attempts[]` show exact supplied contexts, budgets and safe error codes;
+per-attempt private text/responses require `--show-content`.
 
 Use `dispatch_id` to correlate selection, actual dispatch, and ask replies:
 

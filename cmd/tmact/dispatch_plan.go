@@ -76,7 +76,7 @@ func expandApplyPlan(command string, args []string) ([]string, *dispatchPlan, er
 	if err = json.Unmarshal(b, &p); err != nil {
 		return nil, nil, fmt.Errorf("invalid plan: %w", err)
 	}
-	if p.Version != 1 || p.Command != command || p.Digest != p.digest() || p.Report.PlanState == nil {
+	if (p.Version != 1 && p.Version != 2) || p.Command != command || p.Digest != p.digest() || p.Report.PlanState == nil {
 		return nil, nil, fmt.Errorf("invalid, modified, or incompatible plan; regenerate it")
 	}
 	p.SourcePath = path
@@ -170,27 +170,17 @@ func writeDispatchPlan(command string, args []string, report dispatch.Report) (s
 			return "", fmt.Errorf("plan is stale: referenced files changed while planning; run dry-run again")
 		}
 	}
+
 	if report.Selection != nil && report.Selection.Status == "selected" {
+		current := report.PlanFiles
 		if report.Peer == "" {
-			current := modelroute.CollectPromptFiles(report.Prompt, dir)
-			for i := range current {
-				current[i].Content = ""
-			}
-			a, _ := json.Marshal(current)
-			b, _ := json.Marshal(report.Selection.Files)
-			if string(a) != string(b) {
-				return "", fmt.Errorf("plan is stale: routing attachments changed while deciding; run dry-run again")
-			}
-		} else {
-			for _, routed := range report.Selection.Files {
-				for _, fingerprint := range files {
-					if routed.Path == fingerprint.Path && (routed.Status != fingerprint.Status || !routed.Truncated && routed.SHA256 != fingerprint.SHA256) {
-						return "", fmt.Errorf("plan is stale: peer attachments changed while deciding; run dry-run again")
-					}
-				}
-			}
+			current = modelroute.CollectPromptFiles(report.Prompt, dir)
+		}
+		if !modelroute.SameFileEvidence(current, report.Selection.Files) {
+			return "", fmt.Errorf("plan is stale: routing file sources or sections changed while deciding; run dry-run again")
 		}
 	}
+
 	clean := []string{}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -203,7 +193,7 @@ func writeDispatchPlan(command string, args []string, report dispatch.Report) (s
 			clean = append(clean, args[i])
 		}
 	}
-	p := dispatchPlan{Version: 1, Command: command, CreatedAt: time.Now(), Args: clean, Report: report, Files: files}
+	p := dispatchPlan{Version: 2, Command: command, CreatedAt: time.Now(), Args: clean, Report: report, Files: files}
 	p.Digest = p.digest()
 	b, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {

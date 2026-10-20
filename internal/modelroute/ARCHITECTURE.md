@@ -1,13 +1,13 @@
 # Agent routing boundary
 
-`modelroute` owns the task-to-profile decision policy shared by dispatch
+`modelroute` owns model and effort decision policy shared by dispatch
 and ask. The CLI enables it when decide is installed and no model is specified;
 explicit models bypass it, while explicit providers and effort constrain it.
 Library/API callers opt in through options. It depends on quota data types,
 not tmux or the web server. `dispatch`
 owns lifecycle safety and the launcher model/effort allowlists. No model
-response can become a shell fragment: decide returns an opaque profile ID and
-tmact maps it to a maintained, validated tuple.
+response can become a shell fragment: decide returns an opaque model ID and that model's effort choice; tmact maps
+them to a maintained, validated launch tuple.
 
 Provider quota is read by tmact. Only task text, current time, sanitized quota,
 and candidate descriptions cross the decide process/API boundary. Account
@@ -21,8 +21,8 @@ is reported for reference and never blocks a valid selection. Failure stops
 before closing or launching an agent. Provider errors
 exclude that provider rather than hiding the working one. Codex has only a
 weekly limit; Claude additionally needs a five-hour reserve. Relative weekly
-headroom and the task's required capability guide selection. Profile tiers are
-maintained routing assumptions, not benchmark claims.
+headroom and the task's required capability guide selection. Model tiers are coarse descriptions, not equivalence claims or a fixed
+difficulty-to-model/effort mapping.
 
 Routing applies to fresh work. An existing idle Claude/Codex agent is exited
 only after selection succeeds, and the same pane must return to a shell before
@@ -81,3 +81,69 @@ busy/prompt/trust/lease guards remain authoritative at apply. The digest catches
 accidental edits, not hostile rewriting by the local owner; plan files must be
 treated as private executable work instructions. The plan is not an authorization
 capability and never contains an ask reply capability.
+
+## Model catalog and effort decisions
+
+The automatic catalog contains Claude Haiku 5.5, Sonnet 5.5, Opus 5.5,
+Fable 5.1, and Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol, GPT-6 Astra.
+Each model has its own capability description and supported effort list.
+Model-specific weekly caps filter models, independently of effort. The catalog
+is maintained explicitly; it is not whatever a model can recall about new names.
+
+A single decide request asks for the model, intrinsic difficulty, and the effort
+appropriate if each eligible model were used. Only the effort answer for the
+selected model is applied. Missing or unsupported selected effort is an invalid
+answer; answers for unselected models are immaterial. Explicit effort pins that
+value and removes the effort questions. Legacy pinned candidates and saved plans
+remain readable. Explicit CLI model selection still bypasses auto routing.
+
+Separate conditional effort questions avoid an invalid cross-model combination
+without a second API call or a Cartesian expansion repeating model descriptions.
+The state and descriptions are shared once; criteria reference candidate IDs.
+Effort confidence is logged separately, with no acceptance threshold. Generic
+worker rules and irrelevant examples must not alone cause a difficulty escalation.
+
+Capability sources checked 2026-10-21:
+- [Claude effort](https://platform.claude.com/docs/en/build-with-claude/effort)
+  and [Fable 5.1](https://platform.claude.com/docs/en/models/fable-5-1/overview):
+  all four maintained Claude models support low, medium, high, xhigh, max.
+- Codex CLI 0.163.0 model metadata (`models_cache.json`) supplies launcher
+  descriptions and supported reasoning levels: Luna supports low through max;
+  Terra, Sol and Astra also advertise ultra (automatic task delegation).
+  The [Terra API reference](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
+  describes the direct API through max; tmact launches Codex CLI, whose ultra
+  orchestration option is separate from the direct API effort contract.
+
+Peer auto routing requires protocol version 5 so an old fixed-profile peer is
+not silently used as the new catalog. Caller-owned descriptions and effort
+capabilities are authoritative; intersect the peer's eligible efforts and caller
+constraints rather than trusting peer-supplied routing instructions.
+
+## Section evidence, bounded context, and safe failures
+
+File identity includes its canonical path and section selector, not just path.
+ATX headings include their children until the next same/higher heading; fenced
+code is not an outline. Exact title and generated anchor matching must be
+unambiguous. Missing/ambiguous selectors are explicit omitted evidence, never
+whole-file fallback. Eight physical file slots are distinct from the 32 section
+reference slots. Full-source hashes bind selected ranges to saved plans even
+when the routing excerpt is shortened; changed sources or selectors need a new
+plan. Old plans with older file metadata may require regeneration.
+
+Source scanning is bounded at 8 MiB; collected excerpts remain bounded at
+64 KiB each / 128 KiB total. Before crossing the decide boundary, budget the
+entire serialized request and the largest single-question envelope with shared
+state. The 48 KiB / 96 KiB UTF-8 heuristics include a 2 KiB model/framing reserve.
+They are deliberately not called token counts or guaranteed tokenizer limits.
+Only attachments are clipped, fairly across references; core task, policy,
+quota and constraints are never silently changed. Metadata distinguishes source
+size/hash, original selected range, included bytes/hash, and omission reason.
+
+Allowlisted typed routing failures expose no upstream response text or secret
+config data. Only a parsed HTTP max_tokens_exceeded error may halve attachment
+content and retry once; it must actually change the input. Auth, unavailable,
+invalid requests/responses and other errors stop. There is no implicit model
+fallback. If the core request cannot fit without attachments, fail locally with
+context_too_large before creating a reply capability or touching an agent.
+One decision record retains all attempts, exact supplied snapshots, byte budget,
+response and safe error code. Default queries redact per-attempt content too.

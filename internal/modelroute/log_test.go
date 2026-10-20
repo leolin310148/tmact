@@ -96,7 +96,7 @@ func TestChooseLogsActualAttachedInputAndIndependentDifficulty(t *testing.T) {
 	t.Setenv("ROUTING_TEST_INPUT", inputPath)
 	script := `#!/bin/sh
 cat > "$ROUTING_TEST_INPUT"
-printf '%s\n' '{"model":"fake-decide","answers":{"route":{"choice":"profile_1"},"difficulty":{"choice":"advanced"}},"confidences":{"route":0.1,"difficulty":0.3}}'
+printf '%s\n' '{"model":"fake-decide","answers":{"route":{"choice":"profile_1"},"effort_profile_1":{"choice":"high"},"difficulty":{"choice":"advanced"}},"confidences":{"route":0.1,"difficulty":0.3}}'
 `
 	if err := os.WriteFile(filepath.Join(dir, "decide"), []byte(script), 0700); err != nil {
 		t.Fatal(err)

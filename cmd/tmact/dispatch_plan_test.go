@@ -179,3 +179,68 @@ func planTestFileMetadata(prompt, dir string) []modelroute.TaskFile {
 	}
 	return f
 }
+
+func TestSectionPlanValidatesSelectorsAndClippedSourceEvidence(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "doc.md")
+	text := "## A\n" + strings.Repeat("中", 30000) + "\n## B\nsecond section\n"
+	os.WriteFile(file, []byte(text), 0600)
+	prompt := "Read doc.md#A and doc.md#B"
+	source := modelroute.CollectPromptFiles(prompt, dir)
+	fingerprints, err := modelroute.FingerprintPromptFiles(prompt, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := modelroute.Input{Task: prompt, Files: source}
+	questions := map[string]any{"route": map[string]any{"type": "choice", "instructions": "choose", "criteria": map[string]string{"a": "a", "b": "b"}}}
+	fitted, _, err := modelroute.FitRequest(input, questions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fitted.Files[0].Truncated || len(fitted.Files[0].Content) >= len(source[0].Content) {
+		t.Fatal("bad clipped fixture")
+	}
+	for i := range fitted.Files {
+		fitted.Files[i].Content = ""
+	}
+	r := dispatch.Report{Session: "section-work", Dir: dir, Agent: "codex", Model: "gpt-6.1-sol", Effort: "medium", Prompt: prompt, PlanState: &dispatch.PlanState{}, PlanFiles: fingerprints, Selection: &modelroute.Selection{Status: "selected", Files: fitted.Files}}
+	path, err := writeDispatchPlan("dispatch-work", []string{"section-work", "--dir", dir, "--agent", "codex", "--prompt", prompt}, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(filepath.Dir(path))
+	_, plan, err := expandApplyPlan("dispatch-work", []string{"--apply-plan", path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Files) != 2 || plan.Files[0].Section != "A" || plan.Files[1].Section != "B" {
+		t.Fatal("lost selectors in plan")
+	}
+	os.WriteFile(file, []byte(text+"changed outside excerpt"), 0600)
+	if _, _, err = expandApplyPlan("dispatch-work", []string{"--apply-plan", path, "--execute"}); err == nil {
+		t.Fatal("accepted changed source")
+	}
+}
+
+func TestRoutingTypedErrorsReachAskAndDispatchJSON(t *testing.T) {
+	defer stubCLIHooks(t)()
+	for _, command := range []string{"ask", "dispatch-work"} {
+		dispatchRun = func(dispatch.Options) (dispatch.Report, error) {
+			return dispatch.Report{}, modelroute.NewFailure("auth")
+		}
+		out, err := captureRun(t, command, "typed-error-test", "--dir", t.TempDir(), "--agent", "codex", "--auto-model", "--prompt", "task", "--json")
+		if err == nil {
+			t.Fatal("accepted failure")
+		}
+		var r struct {
+			ErrorCode    string              `json:"error_code"`
+			RoutingError *modelroute.Failure `json:"routing_error"`
+		}
+		if e := json.Unmarshal([]byte(out), &r); e != nil {
+			t.Fatal(e)
+		}
+		if r.ErrorCode != "auth" || r.RoutingError == nil || r.RoutingError.Phase != "routing" || !r.RoutingError.NoAgentLaunched {
+			t.Fatalf("missing safe typed error: %s", out)
+		}
+	}
+}

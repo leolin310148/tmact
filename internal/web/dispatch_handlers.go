@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/leolin310148/tmact/internal/dispatch"
+	"github.com/leolin310148/tmact/internal/modelroute"
 )
 
 func (s *Server) handleDispatchWork(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +28,10 @@ func (s *Server) handleDispatchWork(w http.ResponseWriter, r *http.Request) {
 	opts.Context = r.Context()
 	report, err := s.dispatchRun()(opts)
 	if err != nil {
+		if failure := modelroute.FailureInfo(err); failure != nil {
+			writeJSON(w, http.StatusBadRequest, dispatch.RemoteError{Error: failure.Error(), ErrorCode: failure.Code, RoutingError: failure})
+			return
+		}
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
