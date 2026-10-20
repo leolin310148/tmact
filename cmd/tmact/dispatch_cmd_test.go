@@ -248,3 +248,39 @@ func TestDispatchJSONFailurePrintsSingleDocumentWithError(t *testing.T) {
 		t.Fatalf("report = %#v", got)
 	}
 }
+
+func TestDispatchRoutingDefaultsAndOverrides(t *testing.T) {
+	for _, tt := range []struct {
+		name                 string
+		available            bool
+		flags                []string
+		auto                 bool
+		agent, model, effort string
+	}{
+		{name: "available defaults to auto", available: true, auto: true},
+		{name: "provider restricts auto", available: true, flags: []string{"--agent", "claude"}, auto: true, agent: "claude"},
+		{name: "explicit model bypasses decide", available: true, flags: []string{"--agent", "codex", "--model", "gpt-6.1-sol", "--effort", "high"}, agent: "codex", model: "gpt-6.1-sol", effort: "high"},
+		{name: "model identifies provider", available: true, flags: []string{"--model", "gpt-6-astra"}, agent: "codex", model: "gpt-6-astra"},
+		{name: "explicit opt out", available: true, flags: []string{"--agent", "claude", "--auto-model=false"}, agent: "claude"},
+		{name: "without decide", available: false, flags: []string{"--agent", "codex"}, agent: "codex"},
+		{name: "Gemini unaffected", available: true, flags: []string{"--agent", "gemini"}, agent: "gemini"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			defer stubCLIHooks(t)()
+			decideAvailable = func() bool { return tt.available }
+			called := false
+			dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+				called = true
+				if opts.AutoModel != tt.auto || opts.Agent != tt.agent || opts.Model != tt.model || opts.Effort != tt.effort {
+					t.Fatalf("opts=%+v", opts)
+				}
+				return dispatch.Report{}, nil
+			}
+			args := []string{"dispatch-work", "job", "--dir", t.TempDir(), "--prompt", "task", "--json"}
+			args = append(args, tt.flags...)
+			if _, err := captureRun(t, args...); err != nil || !called {
+				t.Fatalf("called=%v err=%v", called, err)
+			}
+		})
+	}
+}

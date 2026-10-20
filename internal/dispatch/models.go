@@ -28,6 +28,10 @@ var supportedModels = map[string][]string{
 		"claude-haiku-4-5",
 	},
 	panestatus.RuntimeCodex: {
+		"gpt-6.1-sol",
+		"gpt-6-astra",
+		"gpt-6-sol",
+		"gpt-6-luna",
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
 		"gpt-5.6-luna",
@@ -64,4 +68,32 @@ func ValidateModel(agent, model string) (string, error) {
 		return "", fmt.Errorf("unsupported model %q for %s; want one of %s", model, agent, strings.Join(models, ", "))
 	}
 	return model, nil
+}
+
+// ValidateEffort validates launcher-specific effort overrides. Automatic
+// profiles use low/medium/high; higher explicit values are never inferred.
+func ValidateEffort(agent, effort string) error {
+	if effort == "" {
+		return nil
+	}
+	levels := []string{"low", "medium", "high", "xhigh", "max"}
+	if agent == "codex" {
+		levels = append(levels, "ultra")
+	}
+	if agent != "claude" && agent != "codex" || !slices.Contains(levels, effort) {
+		return fmt.Errorf("unsupported effort %q for %s", effort, agent)
+	}
+	return nil
+}
+
+// ValidateModelEffort checks known per-model limitations after launcher-level
+// validation. Luna supports up to max, while Sol/Astra also support ultra.
+func ValidateModelEffort(agent, model, effort string) error {
+	if err := ValidateEffort(agent, effort); err != nil {
+		return err
+	}
+	if agent == "codex" && strings.Contains(model, "luna") && effort == "ultra" {
+		return fmt.Errorf("model %s does not support ultra effort", model)
+	}
+	return nil
 }

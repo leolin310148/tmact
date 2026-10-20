@@ -12,6 +12,7 @@ import (
 
 	"github.com/leolin310148/tmact/internal/askreply"
 	"github.com/leolin310148/tmact/internal/dispatch"
+	"github.com/leolin310148/tmact/internal/modelroute"
 )
 
 const (
@@ -29,6 +30,9 @@ const (
 )
 
 type askReport struct {
+	ApplyCommand    string            `json:"apply_command,omitempty"`
+	PlanFile        string            `json:"plan_file,omitempty"`
+	DispatchID      string            `json:"dispatch_id,omitempty"`
 	Status          string            `json:"status"`
 	QuestionID      string            `json:"question_id,omitempty"`
 	Session         string            `json:"session"`
@@ -54,11 +58,16 @@ type replyReport struct {
 }
 
 type askFlags struct {
+	planArgs    []string
+	appliedPlan *dispatchPlan
+
 	session      string
 	target       string
 	dir          string
 	agent        string
 	model        string
+	effort       string
+	autoModel    bool
 	prompt       string
 	thread       string
 	closeThread  bool
@@ -79,7 +88,14 @@ func runAsk(args []string) error {
 		return printCommandHelp("ask")
 	}
 
+	originalArgs := append([]string{}, args...)
+	args, appliedPlan, planErr := expandApplyPlan("ask", args)
+	if planErr != nil {
+		return planErr
+	}
 	var f askFlags
+	f.planArgs = originalArgs
+	f.appliedPlan = appliedPlan
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		f.session = args[0]
 		args = args[1:]
@@ -90,6 +106,8 @@ func runAsk(args []string) error {
 	fs.StringVar(&f.dir, "dir", "", "working directory; sets cwd when the session is created")
 	fs.StringVar(&f.agent, "agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
 	fs.StringVar(&f.model, "model", "", dispatchModelHelp())
+	fs.StringVar(&f.effort, "effort", "", "effort for a new Claude/Codex agent")
+	fs.BoolVar(&f.autoModel, "auto-model", false, "use decide CLI and provider quota to select agent/model/effort")
 	fs.StringVar(&f.prompt, "prompt", "", "question, task, or follow-up sent to the answering agent")
 	fs.StringVar(&f.thread, "thread", "", "continue an existing question ID instead of dispatching a new one")
 	fs.BoolVar(&f.closeThread, "close", false, "with --thread: close the question so no further replies are accepted")
@@ -133,7 +151,8 @@ func runAsk(args []string) error {
 	if f.dir == "" {
 		return errors.New("ask requires --dir")
 	}
-	if f.agent == "" {
+	f.autoModel, f.agent = resolveAutoModel(fs, f.autoModel, f.agent, f.model)
+	if f.agent == "" && !f.autoModel {
 		return errors.New("ask requires --agent")
 	}
 	if strings.TrimSpace(f.prompt) == "" {
@@ -154,6 +173,23 @@ func runAskNew(f askFlags) error {
 		return askStageFailure(report, err, f)
 	}
 	if !f.execute {
+		if report.Dispatch != nil {
+			if f.appliedPlan != nil {
+				report.PlanFile = f.appliedPlan.SourcePath
+			} else {
+				saved := *report.Dispatch
+				saved.Prompt = f.prompt
+				path, err := writeDispatchPlan("ask", f.planArgs, saved)
+				if err != nil {
+					return err
+				}
+				report.PlanFile = path
+			}
+		}
+
+		if report.PlanFile != "" {
+			report.ApplyCommand = planApplyCommand("ask", report.PlanFile)
+		}
 		return printAskOutput(report, f.jsonOutput)
 	}
 	return awaitAskAnswer(ctx, store, report, report.QuestionID, 0, f.timeout, f.jsonOutput)
@@ -195,20 +231,43 @@ func askStageFailure(report askReport, err error, f askFlags) error {
 // records the delivery. It does not wait for the answer.
 func startAsk(ctx context.Context, store *askreply.Store, f askFlags) (askReport, error) {
 	questionID := "<question-id>"
+	trace := modelroute.Trace{DispatchID: modelroute.NewDispatchID(), Command: "ask", Session: f.session, Execute: f.execute}
 	report := askReport{
-		Status:   dispatch.StatusPlanned,
-		Session:  f.session,
-		Prompt:   f.prompt,
-		Timeout:  f.timeout.String(),
-		Delivery: askreply.DeliveryPane,
+		Status:     dispatch.StatusPlanned,
+		DispatchID: trace.DispatchID,
+		Session:    f.session,
+		Prompt:     f.prompt,
+		Timeout:    f.timeout.String(),
+		Delivery:   askreply.DeliveryPane,
 	}
 	report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(questionID, store.Dir, f.storeDir != "")
 
+	// Resolve routing before creating the reply capability. Neither its ID
+	// nor the appended protocol instructions are sent to decide.
+	var selection *modelroute.Selection
+	restartAgent := false
+	if f.appliedPlan != nil {
+		selection = f.appliedPlan.Report.Selection
+		trace.DispatchID = f.appliedPlan.Report.DispatchID
+		report.DispatchID = trace.DispatchID
+	}
+	if f.autoModel {
+		planned, err := dispatchRun(dispatch.Options{Session: f.session, Target: f.target, Dir: f.dir, Agent: f.agent, Model: f.model, Effort: f.effort, AutoModel: true, Prompt: f.prompt, ReadyTimeout: f.readyTimeout, ReadySettle: f.readySettle, TrustFolder: f.trustFolder, NoClear: f.noClear || f.queue, Queue: f.queue, Context: ctx, RoutingTrace: trace, RoutingPreflight: true})
+		report.Dispatch = &planned
+		if err != nil {
+			return report, askDispatchError{err}
+		}
+		f.agent = planned.Agent
+		f.model = planned.Model
+		f.effort = planned.Effort
+		selection = planned.Selection
+		restartAgent = planned.AgentWasRunning && selection != nil && selection.Status == "selected"
+	}
 	var request askreply.Request
 	var err error
 	if f.execute {
 		expiry := f.timeout + f.readyTimeout + f.readySettle + askExpiryDispatchAllowance
-		request, err = store.Create(f.session, f.dir, f.agent, os.Getenv("TMUX_PANE"), expiry)
+		request, err = store.Create(f.session, f.dir, f.agent, os.Getenv("TMUX_PANE"), expiry, trace.DispatchID)
 		if err != nil {
 			return report, err
 		}
@@ -223,6 +282,10 @@ func startAsk(ctx context.Context, store *askreply.Store, f askFlags) (askReport
 		Dir:          f.dir,
 		Agent:        f.agent,
 		Model:        f.model,
+		Effort:       f.effort,
+		Selection:    selection,
+		RestartAgent: restartAgent,
+		RoutingTrace: trace,
 		Prompt:       buildAskPrompt(f.prompt, questionID, report.ReplyCommand),
 		Execute:      f.execute,
 		ReadyTimeout: f.readyTimeout,
@@ -232,6 +295,11 @@ func startAsk(ctx context.Context, store *askreply.Store, f askFlags) (askReport
 		Queue:        f.queue,
 		Context:      ctx,
 	}
+	if f.appliedPlan != nil {
+		opts.PlanState = f.appliedPlan.Report.PlanState
+		opts.PlanFiles = &f.appliedPlan.Files
+	}
+	opts.CapturePlan = !f.execute
 	dispatchReport, err := dispatchRun(opts)
 	report.Dispatch = &dispatchReport
 	if err != nil {
@@ -261,6 +329,8 @@ func runAskThread(f askFlags) error {
 	switch {
 	case f.session != "":
 		return errors.New("--thread continues the question's recorded session; do not pass a session name")
+	case f.autoModel || f.effort != "":
+		return errors.New("--thread reuses the current agent; --auto-model and --effort only apply to a new ask")
 	case f.dir != "" || f.agent != "" || f.model != "":
 		return errors.New("--thread reuses the question's recorded dir and agent; do not pass --dir, --agent, or --model")
 	case f.target != "":
@@ -332,6 +402,7 @@ func deliverAskFollowUp(ctx context.Context, store *askreply.Store, f askFlags) 
 	}
 	report := askReport{
 		Status:     dispatch.StatusPlanned,
+		DispatchID: thread.Request.DispatchID,
 		QuestionID: f.thread,
 		Session:    thread.Request.Session,
 		Prompt:     f.prompt,
@@ -385,6 +456,7 @@ func deliverAskFollowUp(ctx context.Context, store *askreply.Store, f askFlags) 
 			Target:       thread.LastTarget(),
 			Dir:          thread.Request.Dir,
 			Agent:        thread.Request.Agent,
+			RoutingTrace: modelroute.Trace{DispatchID: thread.Request.DispatchID, Command: "ask-thread", Session: thread.Request.Session, Execute: f.execute},
 			Prompt:       buildFollowUpPrompt(f.prompt, f.thread, report.ReplyCommand),
 			Execute:      f.execute,
 			ReadyTimeout: f.readyTimeout,
@@ -436,7 +508,7 @@ func runAskAwait(f askFlags, store *askreply.Store) error {
 			// The answerer closed the thread with a reply the asker never saw.
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			report := askReport{Status: dispatch.StatusPlanned, QuestionID: f.thread, Session: thread.Request.Session, Timeout: f.timeout.String(), Delivery: askreply.DeliveryMailbox}
+			report := askReport{Status: dispatch.StatusPlanned, DispatchID: thread.Request.DispatchID, QuestionID: f.thread, Session: thread.Request.Session, Timeout: f.timeout.String(), Delivery: askreply.DeliveryMailbox}
 			report.ReplyCommand, report.FollowUpCommand = buildProtocolCommands(f.thread, store.Dir, f.storeDir != "")
 			return awaitAskAnswer(ctx, store, report, f.thread, afterSeq, f.timeout, f.jsonOutput)
 		}
@@ -447,6 +519,7 @@ func runAskAwait(f askFlags, store *askreply.Store) error {
 	}
 	report := askReport{
 		Status:     dispatch.StatusPlanned,
+		DispatchID: thread.Request.DispatchID,
 		QuestionID: f.thread,
 		Session:    thread.Request.Session,
 		Timeout:    f.timeout.String(),
@@ -463,15 +536,31 @@ func hasAnswerAfter(thread askreply.Thread, afterSeq int) bool {
 }
 
 func awaitAskAnswer(ctx context.Context, store *askreply.Store, report askReport, id string, afterSeq int, timeout time.Duration, jsonOutput bool) error {
+	replyOutcome := modelroute.Outcome{Status: "failed"}
+	defer func() {
+		if report.DispatchID != "" {
+			modelroute.Log(modelroute.LogEntry{Event: "ask-reply", Trace: modelroute.Trace{DispatchID: report.DispatchID, Command: "ask", Session: report.Session, Execute: true}, Outcome: &replyOutcome})
+		}
+	}()
+
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	reply, err := store.AwaitAnswer(waitCtx, id, afterSeq)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			replyOutcome.Status = "timeout"
+		} else if errors.Is(err, context.Canceled) {
+			replyOutcome.Status = "cancelled"
+		}
+	}
 	if err != nil {
 		return askFailure(report, err, jsonOutput)
 	}
 	if err := store.MarkAnswerRead(id, reply.Seq); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 	}
+	replyOutcome.Status = "answered"
+	replyOutcome.ReplyKind = reply.Kind
 	report.Status = askStatusAnswered
 	report.Reply = &reply
 	report.AnswererWaiting = reply.Kind == askreply.KindQuestion
@@ -649,6 +738,9 @@ func askFailureIfJSON(report askReport, err error, jsonOutput bool) error {
 }
 
 func printAskOutput(report askReport, jsonOutput bool) error {
+	if !jsonOutput && report.PlanFile != "" {
+		fmt.Printf("  plan file: %s\n  apply: %s\n", report.PlanFile, report.ApplyCommand)
+	}
 	if jsonOutput {
 		return printJSON(report)
 	}
@@ -665,6 +757,12 @@ func printAskOutput(report askReport, jsonOutput bool) error {
 		id = "<question-id>"
 	}
 	fmt.Printf("%sask %s [session=%s status=%s timeout=%s]\n", prefix, id, report.Session, report.Status, report.Timeout)
+	if report.DispatchID != "" {
+		fmt.Printf("  dispatch id: %s\n", report.DispatchID)
+	}
+	if report.Dispatch != nil {
+		printModelSelection(*report.Dispatch)
+	}
 	if report.Dispatch != nil && report.Dispatch.Target != "" {
 		fmt.Printf("  target: %s\n", report.Dispatch.Target)
 	}

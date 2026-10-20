@@ -24,6 +24,7 @@ func (s *Server) handleDispatchWork(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	opts.Context = r.Context()
 	report, err := s.dispatchRun()(opts)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -768,5 +769,98 @@ func TestAskJSONFailurePrintsSingleDocumentWithError(t *testing.T) {
 		if got.Status != dispatch.StatusFailed || !strings.Contains(got.Error, "--trust-folder") {
 			t.Fatalf("execute=%v report = %#v", execute, got)
 		}
+	}
+}
+
+func TestAskAutoModelPreflightsBeforeCreatingCapability(t *testing.T) {
+	defer stubCLIHooks(t)()
+	storeDir := t.TempDir()
+	calls := 0
+	dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+		calls++
+		if calls == 1 {
+			if !opts.AutoModel || opts.Execute || opts.Prompt != "investigate" || strings.Contains(opts.Prompt, "tmact reply") {
+				t.Fatalf("routing opts=%+v", opts)
+			}
+			return dispatch.Report{Agent: "codex", Model: "gpt-6.1-sol", Effort: "medium"}, nil
+		}
+		if opts.AutoModel || !opts.Execute || opts.Agent != "codex" || opts.Model != "gpt-6.1-sol" || opts.Effort != "medium" {
+			t.Fatalf("launch opts=%+v", opts)
+		}
+		id := questionIDInPrompt.FindString(opts.Prompt)
+		store, err := askreply.New(storeDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		thread, err := store.Load(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if thread.Request.Agent != "codex" {
+			t.Fatal("selected agent not persisted")
+		}
+		if thread.Request.DispatchID == "" || thread.Request.DispatchID != opts.RoutingTrace.DispatchID || thread.Request.DispatchID == id {
+			t.Fatal("routing correlation must be persisted separately from the ask capability")
+		}
+		if _, err := store.Reply(id, "done"); err != nil {
+			t.Fatal(err)
+		}
+		return dispatch.Report{Agent: opts.Agent, Target: "%9", Execute: true}, nil
+	}
+	_, err := captureRun(t, "ask", "auto-job", "--dir", t.TempDir(), "--auto-model", "--prompt", "investigate", "--store-dir", storeDir, "--execute", "--json")
+	if err != nil || calls != 2 {
+		t.Fatalf("calls=%d err=%v", calls, err)
+	}
+}
+
+func TestAskThreadRejectsAutoModelAndEffort(t *testing.T) {
+	for _, flag := range []string{"--auto-model", "--effort"} {
+		args := []string{"ask", "--thread", "q_abcdefghijklmnopqrstuvwxyz", "--prompt", "followup", flag}
+		if flag == "--effort" {
+			args = append(args, "high")
+		}
+		_, err := captureRun(t, args...)
+		if err == nil || !strings.Contains(err.Error(), "only apply to a new ask") {
+			t.Fatalf("err=%v", err)
+		}
+	}
+}
+
+func TestAskImplicitAutoModelAndExplicitModel(t *testing.T) {
+	for _, explicitModel := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicitModel), func(t *testing.T) {
+			defer stubCLIHooks(t)()
+			decideAvailable = func() bool { return true }
+			calls := 0
+			dispatchRun = func(opts dispatch.Options) (dispatch.Report, error) {
+				calls++
+				if explicitModel {
+					if opts.AutoModel || opts.Model != "gpt-6.1-sol" || opts.Agent != "codex" {
+						t.Fatalf("opts=%+v", opts)
+					}
+				} else if calls == 1 {
+					if !opts.AutoModel || opts.Agent != "claude" {
+						t.Fatalf("provider not constrained: %+v", opts)
+					}
+				}
+				return dispatch.Report{Agent: opts.Agent, Model: opts.Model, Effort: opts.Effort}, nil
+			}
+			args := []string{"ask", "job", "--dir", t.TempDir(), "--prompt", "task", "--json"}
+			if explicitModel {
+				args = append(args, "--model", "gpt-6.1-sol")
+			} else {
+				args = append(args, "--agent", "claude")
+			}
+			if _, err := captureRun(t, args...); err != nil {
+				t.Fatal(err)
+			}
+			want := 2
+			if explicitModel {
+				want = 1
+			}
+			if calls != want {
+				t.Fatalf("calls=%d want=%d", calls, want)
+			}
+		})
 	}
 }

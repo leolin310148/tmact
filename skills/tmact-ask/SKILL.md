@@ -40,16 +40,18 @@ Feedback stays local in `~/.tmact/feedback.jsonl` and is never uploaded.
 
 ```bash
 tmact ask SESSION [--target WINDOW[.PANE]] --dir DIR --agent claude|codex|gemini \
-  [--model MODEL] --prompt TEXT [--trust-folder] \
+  [--model MODEL] [--effort LEVEL] [--auto-model] --prompt TEXT [--trust-folder] \
   [--timeout 30m] [--execute] [--json]
 ```
 
 - `SESSION` is the first positional argument.
 - `--target` pins a window or pane inside an existing session (same forms as
   `dispatch-work --target`); without it the session's active pane is used.
-- `--dir`, `--agent`, and `--prompt` are required.
-- `--model` is allowed only for a newly launched Claude or Codex agent and must
-  match the installed CLI's allowlist.
+- `--dir` and `--prompt` are required. Without an explicit model, decide in PATH
+  enables automatic routing; otherwise supply `--agent` (a full model name may
+  identify its provider).
+- `--model`/`--effort` apply to fresh work and must match the launcher allowlists.
+  Fresh work replaces an idle existing agent; continuation rejects launch overrides.
 - `--execute` enables side effects; without it the command is a dry-run.
 - `--timeout` bounds the wait for the next explicit reply.
 - `--trust-folder` is the only opt-in trust exception. It supports Claude and
@@ -64,13 +66,88 @@ tmact ask investigation --dir ~/w/proj --agent codex \
   --prompt "find the root cause and return a concise verdict"
 ```
 
-Once the plan is correct and authorized, repeat it with `--execute --json`.
+Every new-ask dry-run automatically saves a plan and returns `plan_file` and
+`apply_command`. Inspect the JSON plan; once correct and authorized, use the
+returned command: `tmact ask --apply-plan FILE --execute --json`.
+Do not repeat the original command with `--execute`: that makes a fresh decision.
 Do not replace `ask` with `dispatch-work --wait` when a returned answer is
 required.
 
-If the user did not choose an agent, select one based on the task and active
-repository guidance. Prefer Claude for implementation-heavy work and Codex for
-review or a second opinion when no stronger signal exists.
+For fresh work without an explicit model, let tmact automatically use decide
+when it is in PATH. `--agent` constrains the provider; `--effort` is preserved.
+An explicit `--model` bypasses decide and is used exactly as requested. Use
+`--auto-model=false` to opt out, or `--auto-model` to require routing. Honor
+repository guidance; only the maintained auto-profile catalog is eligible for
+automatic selection.
+Let tmact call `decide` with the task and sanitized quota; do not duplicate the
+routing policy in the skill. Decide must be in PATH with its normal credentials
+(for example `JEV_API_KEY`). Even dry-run makes a decision request. Inspect
+`selection` and the launch steps. Confidence is informational and must not
+block a valid selection. On missing credentials or unavailable quota, report
+the error instead of silently choosing a fallback.
+
+For a fresh task in an existing idle Claude/Codex pane, `--auto-model` chooses
+first, exits the old agent, verifies the shell, then starts the chosen agent
+with model/effort. This may switch Claude to Codex or vice versa. For continuing
+work use `--no-clear` (queue implies it): tmact preserves the agent and does not
+call decide. Do not pass explicit model/effort when reusing a live agent.
+
+`--thread` always continues existing work; do not pass `--auto-model` or `--effort`.
+
+## Apply the saved plan
+
+No `--plan-out` flag is needed. `--apply-plan FILE` permits only `--execute`
+and `--json`; do not repeat session, prompt, model, provider, trust or other task
+flags. Omit `--execute` to preview the same saved plan. Apply reuses the selected
+model/effort and dispatch ID without calling decide or fetching routing quota.
+
+Apply checks referenced file fingerprints and the session/pane identity,
+runtime and cwd, then runs the usual live busy/prompt/trust/lease checks. If the
+task, files or target changed, make a new dry-run; do not silently reroute or
+edit the plan. Time or quota changes alone do not invalidate it. Peer dispatch
+requires an updated peer; file checks run there. Ask thread follow-ups retain
+the existing protocol and are not saved as new-work plans.
+
+Plans contain private task text, with `0600` file permissions in a `0700`
+temporary directory. Read the generated JSON to review it, keep it local, and
+remove its directory after use. If the OS removed it, regenerate the plan.
+Ask creates the reply capability only when the saved plan is executed.
+
+## File-based tasks and routing records
+
+Put the actual `.md`/`.txt` paths in `--prompt` when delegating via a task file.
+Tmact automatically reads those references for Jev and preserves the original
+prompt sent to the agent. Use explicit paths, and quote/backtick paths with
+spaces inside the prompt. Relative references use the target pane cwd (or
+`--dir` for a new session); peer dispatch reads files on the peer. Do not add
+`--prompt-file` or `--task-file` flags.
+
+```bash
+tmact ask myjob --dir ~/w/proj \
+  --prompt 'Read /tmp/task.md and follow its instructions.' --json
+```
+
+Inspect `selection.files`: unreadable/non-text references are marked, and long
+files are truncated. Attachments are local, non-recursive, and bounded to 8
+files, 64 KiB each, 128 KiB total. Do not assume a missing attachment was read;
+put the essential task summary in the prompt when context is incomplete.
+Continuations still skip routing and file attachment.
+
+Use `dispatch_id` to correlate selection, actual dispatch, and ask replies:
+
+```bash
+tmact log routing --dispatch-id DISPATCH_ID --json
+```
+
+`difficulty` is the task's independent complexity assessment; `selected_tier`
+and model can differ because of constraints. Confidence is informational.
+Logs include policy version/hash, quota, candidates, exact task/file snapshots,
+and structured Jev response in `~/.tmact/routing.jsonl` (0600). `TMACT_ROUTING_LOG`
+can override the path or be `off`; write failures warn without blocking work.
+Even dry-runs log `execute: false`. Metadata queries hide task/file text; add
+`--show-content` only when the operator requests inspection of private content.
+A successful dispatch or reply proves delivery, not task correctness; evaluate
+routing using the task evidence and subsequent results.
 
 ## Read the reply
 

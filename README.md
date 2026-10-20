@@ -295,11 +295,112 @@ tmact dispatch-work work --dir ~/work/repo --agent codex \
 ```
 
 Model selection applies when tmact launches the agent. If the named session
-already has that agent running, tmact rejects `--model` instead of silently
-reusing an agent whose model it cannot verify. Model names are checked against
+already has an idle Claude/Codex agent running, fresh work with explicit launch
+settings exits it and starts the requested agent. Continuation (`--no-clear` or
+`--queue`) rejects model/effort overrides instead of silently ignoring them. Model names are checked against
 an explicit per-agent allowlist; run `tmact help dispatch-work` to see the
 accepted values. Unknown names are rejected locally before tmux or a remote
 peer is touched.
+
+For task- and quota-aware routing through the separately installed `decide`
+CLI, omit the model: when decide is in PATH, routing is automatic. `--auto-model`
+explicitly requires routing and `--auto-model=false` disables it:
+
+```sh
+tmact dispatch-work work --dir ~/work/repo --auto-model \
+  --prompt "implement and test the fix" --json
+tmact ask investigation --dir ~/work/repo --auto-model \
+  --prompt "find the root cause" --execute --json
+```
+
+Every `dispatch-work` or new `ask` dry-run automatically saves a private plan.
+JSON output includes `plan_file` and `apply_command`; text output prints both.
+Review the plan, then apply it without repeating the decision:
+
+```sh
+tmact dispatch-work --apply-plan /path/from/plan_file --execute --json
+tmact ask --apply-plan /path/from/plan_file --execute --json
+```
+
+No `--plan-out` flag is needed. Apply fixes the original task/options and chosen
+model/effort, calls neither decide nor quota routing, and retains the dispatch
+ID. Only `--execute` and `--json` can accompany `--apply-plan`; omit `--execute`
+to preview the same plan. Referenced file fingerprints and session/pane/runtime/
+cwd must still match; busy, permission, trust and lease checks still run live.
+Changed tasks require a new dry-run. Time and quota movement alone do not expire
+or reroute a saved decision. Running the original command with `--execute`
+remains supported, but makes a fresh decision instead of applying the preview.
+
+Plans contain private task text and selection metadata in a `0600` JSON file
+inside a `0700` temporary directory. Remove that directory after use; if the OS
+has removed it, generate a new dry-run. Ask reply capabilities are created only
+when executing. Peer plans require updated tmact on the peer; fingerprints and
+target checks run on that peer without reading same-named local files.
+
+Routing chooses a maintained Claude/Codex model + effort profile. Explicit
+`--agent` restricts the provider and `--effort` is preserved. An explicit
+`--model` bypasses decide and uses that model directly, including models outside
+the automatic catalog. Prefer relatively
+generous weekly quota (pace headroom, or remaining per day until reset). Claude
+also needs more than 20% five-hour reserve; long tasks should favor Codex when
+Claude has at most 40%. Codex has no five-hour limit. These are routing policies,
+not predictions of task cost or model benchmark equivalence.
+
+Fresh work in an existing idle Claude/Codex pane uses `/exit`, confirms the
+shell, then starts the chosen agent; it may switch providers. `--no-clear` and
+`--queue` preserve the current agent without calling decide. Ask thread
+follow-ups also preserve it and reject `--auto-model`/`--effort`.
+
+Decide uses its normal authentication, including `JEV_API_KEY`. tmact ignores
+repository-local `decide.yaml`: use the global decide config, an absolute
+`DECIDE_CLI_CONFIG`, or `DECIDE_CLI_CONFIG=none` for environment-only auth. Task
+text and sanitized quota are sent even during dry-run; account identifiers,
+provider error bodies, credentials, and ask reply capability IDs are excluded.
+Decide's full usage log is disabled for these calls. Missing quota excludes the
+affected provider; decision errors or defer stop without launching or exiting
+an agent. Confidence is informational and does not block a valid selection.
+JSON reports include `selection` with quota and confidence. Manual `--effort` is also supported for new agents.
+
+Peer auto routing requires an updated peer. It reads quota on the peer, runs
+decide on the caller, and sends only the resulting launch settings back; no
+API key is forwarded. An older peer is rejected before execution.
+
+When a prompt delegates through a text file, automatic routing detects explicit
+`.md`/`.txt` paths and sends readable contents to Jev as separate task context:
+
+```sh
+tmact dispatch-work work --dir ~/work/repo \
+  --prompt 'Read /tmp/task.md and follow the instructions.' --json
+tmact ask investigation --dir ~/work/repo \
+  --prompt 'Investigate the issue described in "docs/task notes.md".' --json
+```
+
+The agent still receives the original prompt. Quoted/backtick paths with spaces,
+Markdown links, `~/` paths, and `:line` references work. Relative paths resolve
+against the target pane cwd (or `--dir` for a new session), and peer references
+are read on the peer. No URL fetching or recursive reference following occurs.
+Up to 8 files are processed, 64 KiB per file and 128 KiB total. Unreadable or
+non-text files are marked; oversized files are truncated with metadata in
+`selection.files`. These conditions do not add a dispatch gate.
+
+Routing also asks Jev for intrinsic `difficulty` (lightweight/standard/advanced)
+independently of quota, provider constraints and the selected profile. The
+`dispatch_id` in dispatch/ask reports correlates decision, dispatch and ask-reply
+events in the local `~/.tmact/routing.jsonl` log (0600):
+
+```sh
+tmact log routing --json
+tmact log routing --dispatch-id d_example --show-content --json
+```
+
+Decision records retain the exact task and attachment snapshots/hash, policy
+version/hash, quota, candidates, independent difficulty, structured response,
+and model/effort choice. Dry-runs record `execute: false`. Default queries hide
+private task/file content and raw responses; `--show-content` exposes them for
+review. Logs do not include authentication values or appended ask capability
+instructions. Set `TMACT_ROUTING_LOG` to a path or `off`; logging errors warn
+without blocking dispatch. Delivery/reply outcomes do not establish correctness:
+review the task evidence and subsequent results when evaluating routing.
 
 For a local dispatch that should stay attached until the agent returns to a
 stable input-ready prompt, opt into bounded waiting and a final pane capture:

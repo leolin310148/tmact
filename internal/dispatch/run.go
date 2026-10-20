@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/foldertrust"
+	"github.com/leolin310148/tmact/internal/modelroute"
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/prompt"
@@ -22,21 +23,39 @@ func Run(opts Options) (Report, error) {
 }
 
 // RunWithDeps dispatches work using the supplied dependencies.
-func RunWithDeps(opts Options, deps Deps) (Report, error) {
-	report := Report{
-		Session:     opts.Session,
-		Dir:         opts.Dir,
-		Agent:       opts.Agent,
-		Model:       opts.Model,
-		Prompt:      opts.Prompt,
-		Execute:     opts.Execute,
-		TrustFolder: opts.TrustFolder,
+func RunWithDeps(opts Options, deps Deps) (report Report, runErr error) {
+	defer func() {
+		if report.DispatchID == "" {
+			report.DispatchID = opts.RoutingTrace.DispatchID
+		}
+		if report.DispatchID == "" && report.Selection != nil {
+			report.DispatchID = report.Selection.DispatchID
+		}
+		logDispatchOutcome(opts, report, runErr)
+	}()
+	report = Report{
+		Session:              opts.Session,
+		Dir:                  opts.Dir,
+		Agent:                opts.Agent,
+		Model:                opts.Model,
+		Effort:               opts.Effort,
+		Selection:            opts.Selection,
+		LaunchOptionsVersion: 3,
+		Prompt:               opts.Prompt,
+		Execute:              opts.Execute,
+		TrustFolder:          opts.TrustFolder,
 	}
 
 	if strings.TrimSpace(opts.Session) == "" {
 		return report, fmt.Errorf("session name is required")
 	}
-	if !supportedAgents[opts.Agent] {
+	var err error
+	opts, err = normalizeAutoConstraints(opts)
+	if err != nil {
+		return report, err
+	}
+	report.Agent = opts.Agent
+	if !supportedAgents[opts.Agent] && !(opts.Agent == "" && (opts.AutoModel || opts.ProbeAutoModel)) {
 		return report, fmt.Errorf("unsupported agent %q; want one of %s", opts.Agent, strings.Join(SupportedAgents(), ", "))
 	}
 	model, err := ValidateModel(opts.Agent, opts.Model)
@@ -44,12 +63,17 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 		return report, err
 	}
 	opts.Model = model
+	if opts.Agent != "" {
+		if err := ValidateModelEffort(opts.Agent, opts.Model, opts.Effort); err != nil {
+			return report, err
+		}
+	}
 	report.Model = opts.Model
-	if opts.TrustFolder && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
+	if opts.TrustFolder && opts.Agent != "" && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
 		return report, fmt.Errorf("trust-folder only supports claude or codex, got %q", opts.Agent)
 	}
 	if opts.Queue {
-		if opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
+		if opts.Agent != "" && opts.Agent != panestatus.RuntimeClaude && opts.Agent != panestatus.RuntimeCodex {
 			return report, fmt.Errorf("queue only supports claude or codex, got %q", opts.Agent)
 		}
 		if !opts.NoClear {
@@ -123,6 +147,10 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 		return report, err
 	}
 	report.SessionExisted = layout.Sessions[opts.Session]
+	report.PlanState = &PlanState{SessionExisted: report.SessionExisted}
+	if opts.PlanState != nil && opts.PlanState.SessionExisted != report.SessionExisted {
+		return report, fmt.Errorf("plan is stale: session existence changed; regenerate it")
+	}
 
 	if opts.Target != "" && !report.SessionExisted {
 		return report, fmt.Errorf("--target %s requires session %s to already exist", opts.Target, opts.Session)
@@ -139,6 +167,14 @@ func RunWithDeps(opts Options, deps Deps) (Report, error) {
 // agent drops back to a live shell instead of tearing the session down, so a
 // human can take over and run git or other commands.
 func dispatchNew(opts Options, deps Deps, report Report) (Report, error) {
+	if err := checkPlanFiles(opts, &report, opts.Dir); err != nil {
+		return report, err
+	}
+	var err error
+	opts, report, err = prepareAutoLaunch(opts, deps, report)
+	if err != nil || report.RoutingInput != nil {
+		return report, err
+	}
 	command := launchCommand(opts)
 	create := Step{
 		Name:   "create-session",
@@ -215,21 +251,38 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 	}
 	target := paneTarget(pane)
 	report.Target = target
+	opts.RoutingDir = pane.CurrentPath
+	if err := checkPlanFiles(opts, &report, pane.CurrentPath); err != nil {
+		return report, err
+	}
 
 	raw, err := deps.CapturePane(target, captureLines)
 	if err != nil {
 		return report, err
 	}
 	runtime := detectRuntime(deps, pane, raw)
+	report.PlanState = &PlanState{SessionExisted: true, SessionID: pane.SessionID, PaneID: pane.PaneID, Runtime: runtime, Dir: pane.CurrentPath}
+	if opts.PlanState != nil && *opts.PlanState != *report.PlanState {
+		return report, fmt.Errorf("plan is stale: target pane, runtime or directory changed; regenerate it")
+	}
 	classified, err := classifyPane(deps, target, raw)
 	if err != nil {
 		return report, err
 	}
 
+	if (opts.AutoModel || opts.ProbeAutoModel || opts.RestartAgent || opts.Model != "" || opts.Effort != "") && !opts.NoClear && !opts.Queue && (runtime == panestatus.RuntimeClaude || runtime == panestatus.RuntimeCodex) {
+		return dispatchRestart(opts, deps, report, pane, target, runtime, classified)
+	}
+	if (opts.AutoModel || opts.ProbeAutoModel) && (runtime == panestatus.RuntimeClaude || runtime == panestatus.RuntimeCodex) && (opts.Agent == "" || opts.Agent == runtime) {
+		opts.Agent = runtime
+		report.Agent = runtime
+		report.Selection = &modelroute.Selection{Status: "reused", Agent: runtime}
+		report.AutoModelSupported = opts.ProbeAutoModel
+	}
 	switch {
 	case runtime == opts.Agent:
-		if opts.Model != "" {
-			return report, fmt.Errorf("session %s is already running %s; --model only applies when launching a new agent", opts.Session, opts.Agent)
+		if opts.Model != "" || opts.Effort != "" {
+			return report, fmt.Errorf("session %s is already running %s; --model only applies when launching a new agent; --effort also requires a new agent", opts.Session, opts.Agent)
 		}
 		if classified.State == panestate.StateWaitingQuota {
 			if err := validateQuotaResume(opts, deps, classified); err != nil {
@@ -395,6 +448,11 @@ func dispatchReuse(opts Options, deps Deps, report Report, target string) (Repor
 }
 
 func dispatchLaunch(opts Options, deps Deps, report Report, target string) (Report, error) {
+	var err error
+	opts, report, err = prepareAutoLaunch(opts, deps, report)
+	if err != nil || report.RoutingInput != nil {
+		return report, err
+	}
 	command := launchCommand(opts)
 	launch := Step{Name: "launch-agent", Detail: fmt.Sprintf("send %q to the shell", command), Status: StatusPlanned}
 	ready := Step{Name: "wait-ready", Detail: readyDetail(opts), Status: StatusPlanned}
@@ -446,10 +504,18 @@ func appendWaitStep(opts Options, steps []Step) []Step {
 }
 
 func launchCommand(opts Options) string {
-	if opts.Model == "" {
-		return opts.Agent
+	command := opts.Agent
+	if opts.Model != "" {
+		command += " --model " + shellQuote(opts.Model)
 	}
-	return opts.Agent + " --model " + shellQuote(opts.Model)
+	if opts.Effort != "" {
+		if opts.Agent == "codex" {
+			command += " -c " + shellQuote("model_reasoning_effort="+`"`+opts.Effort+`"`)
+		} else {
+			command += " --effort " + shellQuote(opts.Effort)
+		}
+	}
+	return command
 }
 
 // shellQuote returns one POSIX-shell argument. dispatch-work pastes the

@@ -5,11 +5,28 @@ func logCommandHelpCatalog() []commandHelp {
 		{
 			Command:     "log",
 			Summary:     "Search and summarize normalized local Claude and Codex session logs with privacy-safe defaults.",
-			Usage:       []string{"tmact log search QUERY [--provider claude|codex] [--since DURATION|RFC3339] [--cwd DIR] [--kind KIND] [--limit N] [--json] [--show-content]", "tmact log stats [--since DURATION|RFC3339] [--json]", "tmact log doctor [--json]"},
-			Subcommands: []string{"search", "stats", "doctor"},
+			Usage:       []string{"tmact log search QUERY [--provider claude|codex] [--since DURATION|RFC3339] [--cwd DIR] [--kind KIND] [--limit N] [--json] [--show-content]", "tmact log stats [--since DURATION|RFC3339] [--json]", "tmact log doctor [--json]", "tmact log routing [--dispatch-id ID] [--limit N] [--show-content] [--json]"},
+			Subcommands: []string{"search", "stats", "doctor", "routing"},
 			Examples:    []string{`tmact log search "failing test"`, `tmact log stats --since 24h --json`, `tmact log doctor`},
 			Safety:      []string{"Read-only toward provider logs. Raw prompts, tool output, environment values, and full command arguments are omitted unless search content is explicitly requested."},
 			Notes:       []string{"Searches both Claude and Codex by default through their normalized streaming readers.", "Search and doctor expose parser coverage and errors so partial scans are visible.", "Stats and doctor maintain a privacy-safe plain-file index under ~/.tmact; the index never stores prompt or tool content."},
+		},
+		{
+			Command: "log routing",
+			Summary: "Inspect persistent dispatch/ask routing decisions, intrinsic difficulty, attached task-file metadata, and correlated dispatch/reply outcomes.",
+			Usage:   []string{"tmact log routing [--dispatch-id ID] [--limit N] [--show-content] [--json]"},
+			Flags: []helpFlag{
+				{Name: "--dispatch-id", Value: "ID", Description: "filter decision and outcome records by the dispatch_id printed by dispatch/ask"},
+				{Name: "--limit", Value: "N", Description: "maximum newest matching events; default 50"},
+				{Name: "--show-content", Description: "include private task, attached .md/.txt snapshots, questions, and full decision response"},
+				{Name: "--json", Description: "print structured records; private contents omitted unless --show-content"},
+			},
+			Examples: []string{`tmact log routing --json`, `tmact log routing --dispatch-id d_example --show-content --json`},
+			Notes: []string{
+				"Default log: ~/.tmact/routing.jsonl, mode 0600. TMACT_ROUTING_LOG overrides its path; off disables it. Log write failures warn without blocking dispatch.",
+				"decision records retain actual Jev input including referenced text-file snapshots, policy version/hash, independent difficulty, candidate profiles, quota, raw structured response and choice. dispatch/ask-reply events share dispatch_id; dry-run execute=false is distinguishable from real execution.",
+				"difficulty is assessed independently of provider/model constraints and quota. Dispatch acceptance or an explicit reply is not proof that the task succeeded or the difficulty estimate was correct; correlate outcomes and review the actual task to evaluate routing.",
+			},
 		},
 		{
 			Command: "log search",

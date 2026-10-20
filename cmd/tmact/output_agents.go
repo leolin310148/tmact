@@ -17,7 +17,14 @@ func printDispatchReport(report dispatch.Report) {
 	if report.Model != "" {
 		model = " model=" + report.Model
 	}
+	if report.Effort != "" {
+		model += " effort=" + report.Effort
+	}
 	fmt.Printf("%sdispatch-work %s [agent=%s%s dir=%s]\n", prefix, report.Session, report.Agent, model, report.Dir)
+	if report.DispatchID != "" {
+		fmt.Printf("  dispatch id: %s\n", report.DispatchID)
+	}
+	printModelSelection(report)
 	if report.Peer != "" {
 		fmt.Printf("  peer: %s\n", report.Peer)
 	}
@@ -184,6 +191,49 @@ func printPanelReport(report agents.PanelReport) {
 		}
 		if op.Error != "" {
 			fmt.Printf("\terror:%s", op.Error)
+		}
+		fmt.Println()
+	}
+}
+
+func printModelSelection(report dispatch.Report) {
+	s := report.Selection
+	if s == nil {
+		return
+	}
+	fmt.Printf("  auto-model: %s", s.Status)
+	if s.Status == "selected" {
+		fmt.Printf(" agent=%s model=%s effort=%s confidence=%.2f", s.Agent, s.Model, s.Effort, s.Confidence)
+		if s.Difficulty != "" {
+			fmt.Printf(" difficulty=%s tier=%s", s.Difficulty, s.SelectedTier)
+		}
+	}
+	fmt.Println()
+	for _, f := range s.Files {
+		fmt.Printf("    task file: %s [%s]", f.Path, f.Status)
+		if f.Truncated {
+			fmt.Print(" (truncated)")
+		}
+		fmt.Println()
+	}
+	for _, q := range s.Quotas {
+		fmt.Printf("    %s:", q.Provider)
+		if q.WeeklyRemaining != nil {
+			fmt.Printf(" weekly remaining=%.1f%%", *q.WeeklyRemaining)
+		}
+		if q.WeeklyHeadroom != nil {
+			fmt.Printf(" weekly headroom=%+.1fpp", *q.WeeklyHeadroom)
+		}
+		if q.WeeklyRemainingPerDay != nil {
+			fmt.Printf(" remaining/day=%.1fpp", *q.WeeklyRemainingPerDay)
+		}
+		if q.Provider == "codex" {
+			fmt.Print(" (no five-hour limit)")
+		} else if q.SessionRemaining != nil {
+			fmt.Printf(" five-hour remaining=%.1f%%", *q.SessionRemaining)
+		}
+		if q.Reason != "" {
+			fmt.Printf(" [%s]", q.Reason)
 		}
 		fmt.Println()
 	}

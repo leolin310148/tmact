@@ -43,6 +43,7 @@ func captureRun(t *testing.T, args ...string) (string, error) {
 
 func stubCLIHooks(t *testing.T) func() {
 	t.Helper()
+	t.Setenv("TMACT_ROUTING_LOG", "off")
 
 	oldListAllTmuxPanes := listAllTmuxPanes
 	oldListTargetTmuxPanes := listTargetTmuxPanes
@@ -60,6 +61,8 @@ func stubCLIHooks(t *testing.T) func() {
 	oldLoopRegistryDir := loopRegistryDir
 	oldLoopPaneStartCommand := loopPaneStartCommand
 	oldTrustFolderRun := trustFolderRun
+	oldDecideAvailable := decideAvailable
+	decideAvailable = func() bool { return false }
 	oldDispatchRun := dispatchRun
 	oldDispatchRemoteRun := dispatchRemoteRun
 	oldSendPeerPaneInput := sendPeerPaneInput
@@ -88,6 +91,7 @@ func stubCLIHooks(t *testing.T) func() {
 		loopRegistryDir = oldLoopRegistryDir
 		loopPaneStartCommand = oldLoopPaneStartCommand
 		trustFolderRun = oldTrustFolderRun
+		decideAvailable = oldDecideAvailable
 		dispatchRun = oldDispatchRun
 		dispatchRemoteRun = oldDispatchRemoteRun
 		sendPeerPaneInput = oldSendPeerPaneInput

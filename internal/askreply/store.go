@@ -69,6 +69,7 @@ var (
 // Request is the durable, metadata-only side of an ask. The original prompt is
 // deliberately not persisted in the mailbox.
 type Request struct {
+	DispatchID    string    `json:"dispatch_id,omitempty"`
 	Version       int       `json:"version"`
 	ID            string    `json:"id"`
 	Session       string    `json:"session"`
@@ -186,7 +187,7 @@ func New(dir string) (*Store, error) {
 }
 
 // Create allocates and persists a new question.
-func (s *Store) Create(session, dir, agent, requesterPane string, timeout time.Duration) (Request, error) {
+func (s *Store) Create(session, dir, agent, requesterPane string, timeout time.Duration, dispatchIDs ...string) (Request, error) {
 	if timeout <= 0 {
 		return Request{}, errors.New("ask timeout must be positive")
 	}
@@ -212,7 +213,12 @@ func (s *Store) Create(session, dir, agent, requesterPane string, timeout time.D
 			return Request{}, fmt.Errorf("create question mailbox: %w", err)
 		}
 		now := s.now()
+		dispatchID := ""
+		if len(dispatchIDs) > 0 {
+			dispatchID = dispatchIDs[0]
+		}
 		request := Request{
+			DispatchID:    dispatchID,
 			Version:       Version,
 			ID:            id,
 			Session:       session,

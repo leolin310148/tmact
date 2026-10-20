@@ -36,6 +36,7 @@ Usage:
   tmact log search QUERY [--provider claude|codex] [--since 24h] [--cwd DIR] [--kind KIND] [--limit 100] [--json] [--show-content]
   tmact log stats [--since 24h] [--json]
   tmact log doctor [--json]
+  tmact log routing [--dispatch-id ID] [--limit N] [--show-content] [--json]
   tmact human-active [--threshold 10m] [--json | --quiet]
   tmact stt-set --provider openai --api-key KEY [--model gpt-4o-transcribe]
   tmact inbox [--config examples/agents.yaml] [--agent sample-codex] [--role maintenance] [--json]
@@ -62,9 +63,11 @@ Usage:
   tmact workflow plan-report --dispatch-id ID --file PATH
   tmact workflow stop (--id ID | --config workflow.yaml) --wait
   tmact watch --config examples/accept-question-watch.yaml [--dry-run] [--once]
-  tmact dispatch-work SESSION --dir DIR --agent claude [--target WINDOW[.PANE]] [--model MODEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
-  tmact dispatch-work SESSION --peer NAME --dir DIR --agent claude [--model MODEL] --prompt "..." [--trust-folder] [--execute]
-  tmact ask SESSION --dir DIR --agent claude [--model MODEL] --prompt "..." [--timeout 30m] [--trust-folder] [--execute] [--json]
+  tmact dispatch-work --apply-plan FILE [--execute] [--json]
+  tmact ask --apply-plan FILE [--execute] [--json]
+  tmact dispatch-work SESSION --dir DIR [--agent claude] [--auto-model] [--target WINDOW[.PANE]] [--model MODEL] [--effort LEVEL] --prompt "..." [--trust-folder] [--ready-timeout 30s] [--ready-settle 1.5s] [--wait] [--wait-timeout 5m] [--wait-settle 1s] [--result-lines 200] [--execute]
+  tmact dispatch-work SESSION --peer NAME --dir DIR [--agent claude] [--auto-model] [--model MODEL] [--effort LEVEL] --prompt "..." [--trust-folder] [--execute]
+  tmact ask SESSION --dir DIR [--agent claude] [--auto-model] [--model MODEL] [--effort LEVEL] --prompt "..." [--timeout 30m] [--trust-folder] [--execute] [--json]
   tmact ask --thread QUESTION_ID --prompt "..." [--timeout 30m] [--execute] [--json]
   tmact reply QUESTION_ID (--text TEXT | --file PATH) [--wait [--timeout 10m] | --final] [--json]
   tmact trust-folder --target work:0.0 --dir /repo --agent claude [--execute]

@@ -5,6 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/leolin310148/tmact/internal/agentusage"
+	"github.com/leolin310148/tmact/internal/modelroute"
 	"github.com/leolin310148/tmact/internal/panestatus"
 	"github.com/leolin310148/tmact/internal/panewait"
 	"github.com/leolin310148/tmact/internal/tmux"
@@ -57,12 +59,37 @@ func SupportedAgents() []string {
 }
 
 // Options configures a single dispatch-work run.
+type PlanState struct {
+	SessionExisted bool   `json:"session_existed"`
+	SessionID      string `json:"session_id,omitempty"`
+	PaneID         string `json:"pane_id,omitempty"`
+	Runtime        string `json:"runtime,omitempty"`
+	Dir            string `json:"dir,omitempty"`
+}
+
 type Options struct {
-	Session      string
-	Target       string
-	Dir          string
-	Agent        string
-	Model        string
+	PlanState   *PlanState
+	CapturePlan bool
+	PlanFiles   *[]modelroute.TaskFile
+
+	Session   string
+	Target    string
+	Dir       string
+	Agent     string
+	Model     string
+	Effort    string
+	AutoModel bool
+	// RoutingTask keeps ask capability IDs and reply instructions out of decide.
+	RoutingTask      string
+	RoutingDir       string
+	RoutingTrace     modelroute.Trace
+	RoutingPreflight bool
+	// Selection is carried from an explicit read-only preflight (ask).
+	Selection *modelroute.Selection
+	// ProbeAutoModel requests read-only routing context for a peer caller.
+	ProbeAutoModel bool
+	// RestartAgent is set after routing preflight to replace an idle agent.
+	RestartAgent bool
 	Prompt       string
 	Execute      bool
 	ReadyTimeout time.Duration
@@ -151,27 +178,40 @@ type ResultReport struct {
 
 // Report is the outcome of a dispatch-work run.
 type Report struct {
-	Peer            string        `json:"peer,omitempty"`
-	Session         string        `json:"session"`
-	Target          string        `json:"target,omitempty"`
-	Dir             string        `json:"dir"`
-	Agent           string        `json:"agent"`
-	Model           string        `json:"model,omitempty"`
-	Prompt          string        `json:"prompt"`
-	SessionExisted  bool          `json:"session_existed"`
-	AgentWasRunning bool          `json:"agent_was_running"`
-	Execute         bool          `json:"execute"`
-	TrustFolder     bool          `json:"trust_folder,omitempty"`
-	TrustedFolder   bool          `json:"trusted_folder,omitempty"`
-	Steps           []Step        `json:"steps"`
-	Wait            *WaitReport   `json:"wait,omitempty"`
-	Result          *ResultReport `json:"result,omitempty"`
+	ApplyCommand string                `json:"apply_command,omitempty"`
+	PlanFiles    []modelroute.TaskFile `json:"plan_files,omitempty"`
+	PlanFile     string                `json:"plan_file,omitempty"`
+	PlanState    *PlanState            `json:"plan_state,omitempty"`
+
+	DispatchID           string                `json:"dispatch_id,omitempty"`
+	Peer                 string                `json:"peer,omitempty"`
+	Session              string                `json:"session"`
+	Target               string                `json:"target,omitempty"`
+	Dir                  string                `json:"dir"`
+	Agent                string                `json:"agent"`
+	Model                string                `json:"model,omitempty"`
+	Effort               string                `json:"effort,omitempty"`
+	Selection            *modelroute.Selection `json:"selection,omitempty"`
+	RoutingInput         *modelroute.Input     `json:"routing_input,omitempty"`
+	AutoModelSupported   bool                  `json:"auto_model_supported,omitempty"`
+	LaunchOptionsVersion int                   `json:"launch_options_version,omitempty"`
+	Prompt               string                `json:"prompt"`
+	SessionExisted       bool                  `json:"session_existed"`
+	AgentWasRunning      bool                  `json:"agent_was_running"`
+	Execute              bool                  `json:"execute"`
+	TrustFolder          bool                  `json:"trust_folder,omitempty"`
+	TrustedFolder        bool                  `json:"trusted_folder,omitempty"`
+	Steps                []Step                `json:"steps"`
+	Wait                 *WaitReport           `json:"wait,omitempty"`
+	Result               *ResultReport         `json:"result,omitempty"`
 	// Error is set only by --json callers reporting a failed dispatch.
 	Error string `json:"error,omitempty"`
 }
 
 // Deps holds the tmux side effects so callers can be tested without a live session.
 type Deps struct {
+	FetchUsage         func(context.Context) agentusage.Snapshot
+	ChooseModel        func(context.Context, modelroute.Input) (*modelroute.Selection, error)
 	ListLayout         func() (tmux.Layout, error)
 	ListSessionPanes   func(string) ([]tmux.Pane, error)
 	CapturePane        func(string, int) (string, error)
@@ -189,6 +229,8 @@ type Deps struct {
 // DefaultDeps wires Deps to the real tmux helpers.
 func DefaultDeps() Deps {
 	return Deps{
+		FetchUsage:         func(ctx context.Context) agentusage.Snapshot { return agentusage.Fetch(ctx) },
+		ChooseModel:        modelroute.Choose,
 		ListLayout:         tmux.ListLayout,
 		ListSessionPanes:   tmux.ListSessionPanes,
 		CapturePane:        tmux.CapturePane,

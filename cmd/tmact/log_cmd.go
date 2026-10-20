@@ -18,6 +18,8 @@ func runLog(args []string) error {
 		return printCommandHelp("log")
 	}
 	switch args[0] {
+	case "routing":
+		return runLogRouting(args[1:])
 	case "search":
 		return runLogSearch(args[1:])
 	case "stats":
@@ -25,7 +27,7 @@ func runLog(args []string) error {
 	case "doctor":
 		return runLogDoctor(args[1:])
 	default:
-		return fmt.Errorf("unknown log subcommand %q (want search, stats, or doctor)", args[0])
+		return fmt.Errorf("unknown log subcommand %q (want search, stats, doctor, or routing)", args[0])
 	}
 }
 

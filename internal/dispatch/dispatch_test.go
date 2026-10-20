@@ -1071,6 +1071,7 @@ func TestExistingRunningAgentRejectsModel(t *testing.T) {
 	}
 	opts := baseOpts()
 	opts.Model = "sonnet"
+	opts.NoClear = true
 	if _, err := dispatch.RunWithDeps(opts, deps); err == nil || !strings.Contains(err.Error(), "--model only applies when launching") {
 		t.Fatalf("err = %v", err)
 	}

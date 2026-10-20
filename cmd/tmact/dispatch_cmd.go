@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/leolin310148/tmact/internal/dispatch"
+	"github.com/leolin310148/tmact/internal/modelroute"
 	"github.com/leolin310148/tmact/internal/statusd"
 )
 
@@ -23,6 +24,12 @@ var (
 func runDispatch(args []string) error {
 	if wantsHelp(args) {
 		return printCommandHelp("dispatch-work")
+	}
+
+	originalArgs := append([]string{}, args...)
+	args, appliedPlan, planErr := expandApplyPlan("dispatch-work", args)
+	if planErr != nil {
+		return planErr
 	}
 
 	var session string
@@ -38,6 +45,8 @@ func runDispatch(args []string) error {
 	dir := fs.String("dir", "", "working directory; sets cwd when the session is created")
 	agent := fs.String("agent", "", "agent to launch: "+strings.Join(dispatch.SupportedAgents(), "|"))
 	model := fs.String("model", "", dispatchModelHelp())
+	effort := fs.String("effort", "", "effort for a new Claude/Codex agent")
+	autoModel := fs.Bool("auto-model", false, "use decide CLI and provider quota to select agent/model/effort")
 	promptText := fs.String("prompt", "", "prompt text to send to the agent")
 	readyTimeout := fs.Duration("ready-timeout", 30*time.Second, "max wait for the agent to become ready")
 	readySettle := fs.Duration("ready-settle", dispatch.DefaultReadySettleDelay, "stable idle time after ready before sending the prompt")
@@ -65,7 +74,8 @@ func runDispatch(args []string) error {
 	if *dir == "" {
 		return errors.New("dispatch-work requires --dir")
 	}
-	if *agent == "" {
+	*autoModel, *agent = resolveAutoModel(fs, *autoModel, *agent, *model)
+	if *agent == "" && !*autoModel {
 		return errors.New("dispatch-work requires --agent")
 	}
 	if *promptText == "" {
@@ -112,10 +122,13 @@ func runDispatch(args []string) error {
 
 	opts := dispatch.Options{
 		Session:      session,
+		RoutingTrace: modelroute.Trace{DispatchID: modelroute.NewDispatchID(), Command: "dispatch-work", Session: session, Peer: *peerName, Execute: *execute},
 		Target:       *target,
 		Dir:          *dir,
 		Agent:        *agent,
 		Model:        *model,
+		Effort:       *effort,
+		AutoModel:    *autoModel,
 		Prompt:       *promptText,
 		Execute:      *execute,
 		ReadyTimeout: *readyTimeout,
@@ -129,10 +142,17 @@ func runDispatch(args []string) error {
 		ResultLines:  *resultLines,
 		Context:      ctx,
 	}
+	if appliedPlan != nil {
+		opts.Selection = appliedPlan.Report.Selection
+		opts.PlanFiles = &appliedPlan.Files
+		opts.PlanState = appliedPlan.Report.PlanState
+		opts.RoutingTrace.DispatchID = appliedPlan.Report.DispatchID
+	}
+	opts.CapturePlan = !*execute
 	var report dispatch.Report
 	var err error
 	if *peerName != "" {
-		report, err = runRemoteDispatch(context.Background(), *peerName, *configPath, opts)
+		report, err = runRemoteDispatch(ctx, *peerName, *configPath, opts)
 	} else {
 		report, err = dispatchRun(opts)
 	}
@@ -148,10 +168,28 @@ func runDispatch(args []string) error {
 		}
 		return err
 	}
+	if !*execute {
+		if appliedPlan != nil {
+			report.PlanFile = appliedPlan.SourcePath
+		} else {
+			path, err := writeDispatchPlan("dispatch-work", originalArgs, report)
+			if err != nil {
+				return err
+			}
+			report.PlanFile = path
+		}
+	}
+
+	if report.PlanFile != "" {
+		report.ApplyCommand = planApplyCommand("dispatch-work", report.PlanFile)
+	}
 	return printDispatchOutput(report, *jsonOutput)
 }
 
 func printDispatchOutput(report dispatch.Report, jsonOutput bool) error {
+	if !jsonOutput && report.PlanFile != "" {
+		fmt.Printf("  plan file: %s\n  apply: %s\n", report.PlanFile, report.ApplyCommand)
+	}
 	if jsonOutput {
 		return printJSON(report)
 	}
