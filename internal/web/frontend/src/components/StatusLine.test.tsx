@@ -94,10 +94,9 @@ describe("sortedPaneList", () => {
     expect(ids(sortedPaneList(panes))).toEqual(["%1", "%2", "%3", "%4", "%5", "%6", "%7"]);
   });
 
-  it("puts asking/working, then recently changed panes first in activity order", () => {
+  it("combines asking/working and recent panes in alphabetical order", () => {
     expect(ids(sortedPaneList(panes, "activity", now))).toEqual([
-      "%2", "%3", "%5", // asking + working, name order (not by last change)
-      "%4", // changed 2 min ago
+      "%2", "%3", "%4", "%5", // active and recent share name order
       "%1", "%6", "%7", // the rest: old change, stale, just past the window
     ]);
   });
@@ -107,15 +106,39 @@ describe("sortedPaneList", () => {
     expect(ids(sortedPaneList(panes, "activity", now, 60 * 1000))).toEqual([
       "%2", "%3", "%5", "%1", "%4", "%6", "%7",
     ]);
-    // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it, and the
-    // recent group runs newest first rather than by name.
+    // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it;
+    // the recent group stays in machine/name order.
     expect(ids(sortedPaneList(panes, "activity", now, 2 * 60 * 60 * 1000))).toEqual([
-      "%2", "%3", "%5", "%4", "%7", "%1", "%6",
+      "%1", "%2", "%3", "%4", "%5", "%7", "%6",
     ]);
+  });
+
+  it("keeps recent panes alphabetical when their timestamps change", () => {
+    const recent = [
+      pane({ pane_id: "%a", session: "alpha", last_changed_at: ago(5 * 60 * 1000) }),
+      pane({ pane_id: "%z", session: "zulu", last_changed_at: ago(1000) }),
+    ];
+    expect(ids(sortedPaneList(recent, "activity", now))).toEqual(["%a", "%z"]);
+    const updated = recent.map((p, i) => ({ ...p, last_changed_at: ago(i === 0 ? 1000 : 5000) }));
+    expect(ids(sortedPaneList(updated, "activity", now))).toEqual(["%a", "%z"]);
   });
 });
 
 describe("splitPaneItems", () => {
+  it("shows active and recent panes and collapses quiet or stale panes in activity mode", () => {
+    const now = Date.now();
+    const items = [
+      item(pane({ pane_id: "%1", last_changed_at: new Date(now - 30_000).toISOString() })),
+      item(pane({ pane_id: "%2", running: true })),
+      item(pane({ pane_id: "%3", runtime: "claude" })),
+      item(pane({ pane_id: "%4", asking: true, stale: true })),
+      item(pane({ pane_id: "%5", asking: true })),
+    ];
+    const split = splitPaneItems(items, "%3", "activity", 60_000);
+    expect(split.visible.map((v) => v.pane.pane_id)).toEqual(["%1", "%2", "%5"]);
+    expect(split.overflow.map((v) => v.pane.pane_id)).toEqual(["%3", "%4"]);
+    expect(splitPaneItems(items, null, "activity", 1000).visible.map((v) => v.pane.pane_id)).toEqual(["%2", "%5"]);
+  });
   it("partitions while preserving order within each group", () => {
     const items = [
       item(pane({ pane_id: "%1", runtime: "claude" })),
@@ -243,15 +266,20 @@ describe("StatusLine overflow", () => {
     expect(more!.querySelector(".more-count")).toBeNull();
   });
 
-  it("divides quiet panes from active ones in activity order", () => {
+  it("moves quiet agents into more, even when selected, without a divider", async () => {
     const panes = [
       pane({ target: "a", pane_id: "%1", session: "a", runtime: "claude" }),
       pane({ target: "b", pane_id: "%2", session: "b", runtime: "claude", running: true }),
     ];
     const seps = (c: HTMLElement) => c.querySelectorAll("#chips .chips-sep");
-    const activity = mount(panes, null, vi.fn(), "activity");
-    expect(seps(activity.container).length).toBe(1);
-    expect(seps(activity.container)[0]?.nextElementSibling?.textContent).toContain("a");
+    const selectPane = vi.fn();
+    const activity = mount(panes, "%1", selectPane, "activity");
+    expect(seps(activity.container).length).toBe(0);
+    expect(activity.getOrder()).toEqual(["%2"]);
+    expect(activity.container.querySelector(".more-count")?.textContent).toBe("1");
+    await userEvent.click(activity.container.querySelector(".more-chip")!);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Select pane a" }));
+    expect(selectPane).toHaveBeenCalledWith("%1");
     cleanup();
     expect(seps(mount(panes, null).container).length).toBe(0);
     cleanup();

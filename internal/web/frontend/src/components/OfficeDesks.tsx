@@ -274,7 +274,7 @@ export function OfficeDesks({
   const [modeOverride, setModeOverride] = useState<SceneMode | null>(null);
 
   const items = paneListItems(panes, sortMode, recentMs);
-  const { visible, overflow } = splitPaneItems(items, selected);
+  const { visible, overflow } = splitPaneItems(items, selected, sortMode, recentMs);
   // Chunk the visible desks into groups of three so one ceiling pendant hangs
   // centered over each group (ceil(n/3) pendants — the middle desk of each).
   const deskGroups: PaneListItem[][] = [];

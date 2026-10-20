@@ -231,6 +231,6 @@ describe("OfficeDesks order", () => {
     const { container } = render(
       <OfficeDesks panes={panes} selected={null} onSelect={() => {}} sortMode="activity" />,
     );
-    expect(deskOrder(container)).toEqual(["%2", "%3", "%1"]);
+    expect(deskOrder(container)).toEqual(["%2", "%3"]);
   });
 });

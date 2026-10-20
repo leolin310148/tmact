@@ -15,7 +15,6 @@
 // The original re-ran renderStatusline imperatively after a mutation; here the
 // component re-renders on each bump() (it reads the live state object).
 
-import { Fragment } from "react";
 import { useAppState } from "../store/AppStateContext";
 import { PANE_HOTKEYS } from "../lib/keymap";
 import type { PaneStatus } from "../types/server";
@@ -70,8 +69,8 @@ export interface PaneListItem {
 }
 
 // PaneSortMode picks the chip order: "name" is peer → session → window → pane;
-// "activity" floats asking/working, then recently-changed panes ahead of
-// the rest; recently-changed panes go newest first, other groups keep name order.
+// "activity" combines asking/working and recently-changed panes in one group;
+// every group keeps name order so timestamp updates cannot reshuffle it.
 export type PaneSortMode = "name" | "activity";
 
 // RECENT_ACTIVITY_MS is the default for how long after its last screen change
@@ -92,7 +91,7 @@ export function paneActivityRank(
   // separate buckets would make its chip jump each time.
   if (p.asking || p.running) return 1;
   const changed = p.last_changed_at ? Date.parse(p.last_changed_at) : NaN;
-  if (Number.isFinite(changed) && now - changed <= recentMs) return 2;
+  if (Number.isFinite(changed) && now - changed <= recentMs) return 1;
   return 3;
 }
 
@@ -114,23 +113,24 @@ export function sortedPaneList(
     const ra = paneActivityRank(a, now, recentMs);
     const rb = paneActivityRank(b, now, recentMs);
     if (ra !== rb) return ra - rb;
-    // Recently-changed panes are idle, so their timestamps rarely move:
-    // newest first here won't reshuffle chips the way raw-time order would
-    // for working panes.
-    if (ra === 2) {
-      const d = Date.parse(b.last_changed_at ?? "") - Date.parse(a.last_changed_at ?? "");
-      if (d) return d;
-    }
     return compareByName(a, b);
   });
 }
 
 // shouldPinPane decides which panes stay as always-visible chips vs. collapse
 // into the "more" overflow popover. A pane is pinned when it carries an agent
-// runtime, is the currently-selected pane (so the selection never vanishes into
-// the overflow), or needs the user's attention (asking / has a prompt menu).
-// Everything else — idle, agent-less panes — collapses.
-export function shouldPinPane(pane: PaneStatus, selectedId: string | null): boolean {
+// runtime, is selected, or needs attention in name mode. In activity mode only
+// asking, running and recently changed panes stay visible; quiet panes collapse
+// even when selected or carrying an agent runtime.
+export function shouldPinPane(
+  pane: PaneStatus,
+  selectedId: string | null,
+  mode: PaneSortMode = "name",
+  now: number = Date.now(),
+  recentMs: number = RECENT_ACTIVITY_MS,
+): boolean {
+  // Activity mode sends every quiet pane to more, including selected agents.
+  if (mode === "activity") return paneActivityRank(pane, now, recentMs) === 1;
   if (RUNTIME_ICON[paneRuntime(pane)]) return true;
   if (selectedId && pane.pane_id === selectedId) return true;
   if (pane.asking || pane.prompt) return true;
@@ -145,11 +145,17 @@ export interface PaneSplit {
 // splitPaneItems partitions the (already sorted/labeled) pane list into the
 // chips shown inline and the ones tucked behind the "more" chip, preserving the
 // input order within each group.
-export function splitPaneItems(items: PaneListItem[], selectedId: string | null): PaneSplit {
+export function splitPaneItems(
+  items: PaneListItem[],
+  selectedId: string | null,
+  mode: PaneSortMode = "name",
+  recentMs: number = RECENT_ACTIVITY_MS,
+): PaneSplit {
   const visible: PaneListItem[] = [];
   const overflow: PaneListItem[] = [];
+  const now = Date.now();
   for (const item of items) {
-    if (shouldPinPane(item.pane, selectedId)) visible.push(item);
+    if (shouldPinPane(item.pane, selectedId, mode, now, recentMs)) visible.push(item);
     else overflow.push(item);
   }
   return { visible, overflow };
@@ -201,7 +207,7 @@ export function StatusLine({
   }
 
   const items = paneListItems(panes, sortMode, recentMs);
-  const { visible, overflow } = splitPaneItems(items, state.selected);
+  const { visible, overflow } = splitPaneItems(items, state.selected, sortMode, recentMs);
 
   // Freeze the rendered order so Option+key hotkeys map to the same chips, in
   // the same left-to-right sequence. Only the inline (visible) chips get a slot;
@@ -211,13 +217,6 @@ export function StatusLine({
   // through state).
   state.paneOrder = visible.map(({ pane }) => pane.pane_id ?? "");
 
-  // In "activity" order, a divider sets the quiet panes (rank 3) apart from
-  // the asking / working / recently changed ones — only when both exist.
-  const now = Date.now();
-  const sepAt = sortMode === "activity"
-    ? visible.findIndex(({ pane }) => paneActivityRank(pane, now, recentMs) === 3)
-    : -1;
-
   return (
     <div className="chips" id="chips">
       {visible.map(({ pane: p, label }, i) => {
@@ -226,18 +225,14 @@ export function StatusLine({
         return (
           // pane_id is stable within a tmux server; index is the fallback for
           // the rare empty-id case. Keep keys stable so React reuses chips.
-          <Fragment key={paneID || "pane-" + i}>
-            {i === sepAt && i > 0 ? (
-              <span className="chips-sep" aria-hidden="true">|</span>
-            ) : null}
-            <Chip
-              pane={p}
-              label={label}
-              hotkey={key}
-              selected={p.pane_id === state.selected}
-              onSelect={() => callbacks.selectPane(paneID)}
-            />
-          </Fragment>
+          <Chip
+            key={paneID || "pane-" + i}
+            pane={p}
+            label={label}
+            hotkey={key}
+            selected={p.pane_id === state.selected}
+            onSelect={() => callbacks.selectPane(paneID)}
+          />
         );
       })}
       {/* Always rendered: with no hidden panes it still opens the

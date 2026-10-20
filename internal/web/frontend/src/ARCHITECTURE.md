@@ -454,6 +454,12 @@ status clear `4000`, usage poll `60000`, viewport schedule `0/rAF/80/260` ms.
 
 ## 10. Re-render coordination summary
 
+In activity list mode, asking/running/recent panes form one alphabetically
+ordered group. Quiet and stale panes belong in More, including selected panes
+and agent runtimes. Both StatusLine and OfficeDesks share this partition; only
+visible panes receive paneOrder hotkey slots. Name mode retains its existing
+agent/selected/attention pinning rules.
+
 The original re-ran imperative render functions after mutations. In the port,
 those become React renders triggered by `bump()`:
 
