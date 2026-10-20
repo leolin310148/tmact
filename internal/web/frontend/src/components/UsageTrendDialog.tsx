@@ -40,7 +40,8 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
     return date.toISOString().slice(0, 10);
   });
   const machines = (data?.machines || []).filter((m) => machine === "all" || m.machine === machine);
-  const providers = [...new Set((data?.machines || []).flatMap((m) => [...m.daily.map((d) => d.provider), ...m.usage.map((u) => u.provider)]))].sort();
+  const accountHistory = data?.machines.find((m) => m.machine === "local");
+  const providers = [...new Set([...(data?.machines || []).flatMap((m) => m.daily.map((d) => d.provider)), ...(accountHistory?.usage || []).map((u) => u.provider)])].sort();
   const daily = dates.map((date) => ({ date, usd: machines.reduce((sum, m) => sum + m.daily.filter((d) => d.date === date && (provider === "all" || d.provider === provider)).reduce((n, d) => n + d.usd, 0), 0) }));
   const maxCost = Math.max(1, ...daily.map((d) => d.usd));
   const start = new Date(dates[0] + "T00:00:00Z").getTime();
@@ -50,7 +51,7 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
       <div className="settings-head"><span id="usage-trend-title">Cost / Usage 趨勢</span><button type="button" className="settings-close" aria-label="關閉趨勢" onPointerDown={onPointerDownNoBlur} onClick={onClose}>×</button></div>
       <div className="usage-trend-filters">
         <label>期間 <select value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>近 7 天</option><option value={30}>近 30 天</option></select></label>
-        <label>機器 <select value={machine} onChange={(e) => setMachine(e.target.value)}><option value="all">全部機器</option>{data?.machines.map((m) => <option key={m.machine} value={m.machine}>{m.machine}</option>)}</select></label>
+        <label>Cost 機器 <select value={machine} onChange={(e) => setMachine(e.target.value)}><option value="all">全部機器</option>{data?.machines.map((m) => <option key={m.machine} value={m.machine}>{m.machine}</option>)}</select></label>
         <label>Provider <select value={provider} onChange={(e) => setProvider(e.target.value)}><option value="all">全部</option>{providers.map((p) => <option key={p}>{p}</option>)}</select></label>
       </div>
       {!data && !error ? <p role="status">載入趨勢中…</p> : null}
@@ -68,14 +69,17 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
           {daily.map((d, i) => <g key={d.date}><title>{d.date}: ${d.usd.toFixed(2)}</title><rect x={i * 700 / days + 10} y={155 - d.usd / maxCost * 140} width={Math.max(2, 700 / days - 5)} height={Math.max(1, d.usd / maxCost * 140)} fill="var(--green)"/><text x={i * 700 / days + 10} y={177} fill="currentColor" fontSize="11">{days === 7 || i % 5 === 0 ? d.date.slice(5) : ""}</text></g>)}
         </svg>
         <details><summary>每日金額明細</summary><table className="usage-trend-table"><thead><tr><th>日期 UTC</th><th>USD</th></tr></thead><tbody>{daily.map((d) => <tr key={d.date}><td>{d.date}</td><td>${d.usd.toFixed(2)}</td></tr>)}</tbody></table></details>
+        </> : null}
+        {data.machines.some((m) => !m.pending) ? <>
         <h3>Usage · 已使用額度 %</h3>
-        <p className="usage-trend-note">從啟用記錄後開始累積。各機器分開顯示；重設與超過 20 分鐘的缺口不連線。</p>
-        {machines.map((m) => {
+        <p className="usage-trend-note">四台共用同一帳號額度，僅顯示一份 usage，不隨 Cost 機器篩選改變。重設與超過 20 分鐘的缺口不連線。</p>
+        {!accountHistory ? <p>尚無 usage 歷史紀錄</p> : null}
+        {(accountHistory ? [accountHistory] : []).map((m) => {
           const samples = m.usage.filter((u) => new Date(u.at).getTime() >= start && (provider === "all" || u.provider === provider));
           const keys = [...new Set(samples.flatMap((u) => u.windows.map((w) => u.provider + "/" + w.name)))].sort();
-          return <section key={m.machine}><h4>{m.machine}</h4>{keys.length === 0 ? <p>尚無 usage 歷史紀錄</p> : keys.map((key) => {
+          return <section key="account"><h4>共用帳號</h4>{m.updated_at ? <p className="usage-trend-note">Usage 更新：{new Date(m.updated_at).toLocaleString()}</p> : null}{keys.length === 0 ? <p>尚無 usage 歷史紀錄</p> : keys.map((key) => {
             const points = samples.flatMap((u) => u.windows.filter((w) => u.provider + "/" + w.name === key).map((w) => ({ at: new Date(u.at).getTime(), value: w.used_percent, reset: w.resets_at })) ).sort((a, b) => a.at - b.at);
-            return <div key={key}><div>{key}</div><svg className="usage-trend-chart" viewBox="0 0 720 150" role="img" aria-label={m.machine + " " + key + " 已使用額度趨勢"}>
+            return <div key={key}><div>{key}</div><svg className="usage-trend-chart" viewBox="0 0 720 150" role="img" aria-label={"共用帳號 " + key + " 已使用額度趨勢"}>
               {[0, 50, 100].map((v) => <g key={v}><text x="0" y={130 - v * 1.1} fill="currentColor" fontSize="11">{v}%</text><line x1="35" x2="710" y1={126 - v * 1.1} y2={126 - v * 1.1} stroke="currentColor" opacity=".12"/></g>)}
               {points.map((p, i) => {
                 const x = 35 + (p.at - start) / Math.max(1, end - start) * 675;

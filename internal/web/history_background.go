@@ -66,6 +66,8 @@ func (s *Server) historySnapshot(localOnly bool) []machineHistory {
 			if !ok {
 				row = pendingHistory(peer.Name)
 			}
+			// Quota is shared by the account; peers contribute cost only.
+			row.Usage = []usageSample{}
 			rows = append(rows, row)
 		}
 	}
@@ -106,6 +108,10 @@ func (s *Server) loadHistoryCache() {
 	if err != nil || state.Version != 1 {
 		s.history.persistError = "趨勢快取無法讀取，背景重新建立中"
 		return
+	}
+	for name, row := range state.Peers {
+		row.Usage = []usageSample{}
+		state.Peers[name] = row
 	}
 	s.history.state = state
 }
@@ -200,7 +206,7 @@ func (s *Server) refreshLocalHistory(now time.Time) {
 }
 
 func (s *Server) fetchPeerHistory(ctx context.Context, peer statusd.Peer) (machineHistory, error) {
-	endpoint, err := peerHTTPURL(peer.URL, "/api/agent-usage/history", url.Values{"local": {"1"}})
+	endpoint, err := peerHTTPURL(peer.URL, "/api/agent-usage/history", url.Values{"local": {"1"}, "cost_only": {"1"}})
 	if err != nil {
 		return machineHistory{}, err
 	}
@@ -232,9 +238,8 @@ func (s *Server) fetchPeerHistory(ctx context.Context, peer statusd.Peer) (machi
 	if row.Daily == nil {
 		row.Daily = []agentspend.DailySpend{}
 	}
-	if row.Usage == nil {
-		row.Usage = []usageSample{}
-	}
+	// Also discard duplicate usage returned by older peers that ignore cost_only.
+	row.Usage = []usageSample{}
 	return row, nil
 }
 
@@ -261,6 +266,7 @@ func (s *Server) refreshPeerHistory(ctx context.Context, now time.Time) {
 			} else if row.UpdatedAt == nil && !row.Pending {
 				row.UpdatedAt = &now
 			}
+			row.Usage = []usageSample{}
 			results[i] = row
 		}(i, peer)
 	}

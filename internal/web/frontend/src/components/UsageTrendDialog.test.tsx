@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadAgentUsageHistory } from "../api/client";
 import UsageTrendDialog from "./UsageTrendDialog";
@@ -13,6 +13,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); });
 
 describe("background usage trends", () => {
+  it("shows shared account usage once while keeping machine cost totals and filters", async () => {
+    const now = new Date().toISOString();
+    vi.mocked(loadAgentUsageHistory).mockResolvedValue({ res: { ok: true } as Response, data: { timezone: "UTC", machines: ["local", "mini", "nb429", "mbp26"].map((machine, i) => ({
+      machine,
+      daily: [{ date: now.slice(0, 10), provider: "codex", usd: i + 1 }],
+      // Legacy peers may still return duplicate quota histories.
+      usage: [{ at: now, provider: "codex", windows: [{ name: "weekly", used_percent: 30 }] }],
+    })) } });
+    render(<UsageTrendDialog onClose={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.getByText("每日 Cost · $10.00 USD")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /已使用額度趨勢/ })).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Cost 機器"), { target: { value: "mini" } });
+    expect(screen.getByText("每日 Cost · $2.00 USD")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "共用帳號 codex/weekly 已使用額度趨勢" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /已使用額度趨勢/ })).toHaveLength(1);
+  });
   it("shows preparation rather than zero cost, then polls until ready and cleans up", async () => {
     vi.mocked(loadAgentUsageHistory)
       .mockResolvedValueOnce({ res: { ok: true } as Response, data: { timezone: "UTC", machines: [{ machine: "local", daily: [], usage: [], pending: true }] } })

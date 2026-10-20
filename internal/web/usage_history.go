@@ -127,6 +127,11 @@ func (s *Server) handleUsageHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	// Request handling never scans session files or waits for remote machines.
 	rows := s.historySnapshot(r.URL.Query().Get("local") == "1")
+	if r.URL.Query().Get("cost_only") == "1" {
+		for i := range rows {
+			rows[i].Usage = []usageSample{}
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(struct {

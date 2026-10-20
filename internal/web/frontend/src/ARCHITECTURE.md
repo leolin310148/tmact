@@ -12,7 +12,10 @@ samples are persisted by the server in private daily JSONL files under
 Files are retained; background collection reads the latest 30 UTC dates. Only fresh successful
 windows are recorded. Missing history is not interpolated. Peer history requests
 use `local=1` to prevent recursive federation; partial failures remain visible.
-Cost may be summed across machines, while quota series stay machine-specific.
+Cost is summed across machines. These machines share provider accounts, so the
+serving machine's quota history is authoritative: show one account series per
+provider/window, independent of the cost machine filter. Peer requests use
+`cost_only=1`; peer quota samples are discarded, including legacy cached samples.
 The history HTTP handler serves immutable memory snapshots only: it never scans
 session logs or fetches peers. The background worker restores a versioned private
 `trend-cache.json` on startup, prices 30 days once per UTC date and only today's
