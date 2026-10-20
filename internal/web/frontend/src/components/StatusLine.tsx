@@ -70,7 +70,7 @@ export interface PaneListItem {
 
 // PaneSortMode picks the chip order: "name" is peer → session → window → pane;
 // "activity" floats asking, then working, then recently-changed panes ahead of
-// the rest, keeping the name order inside each group.
+// the rest; recently-changed panes go newest first, other groups keep name order.
 export type PaneSortMode = "name" | "activity";
 
 // RECENT_ACTIVITY_MS is the default for how long after its last screen change
@@ -108,9 +108,19 @@ export function sortedPaneList(
   recentMs: number = RECENT_ACTIVITY_MS,
 ): PaneStatus[] {
   if (mode !== "activity") return panes.slice().sort(compareByName);
-  return panes.slice().sort((a, b) =>
-    paneActivityRank(a, now, recentMs) - paneActivityRank(b, now, recentMs) ||
-    compareByName(a, b));
+  return panes.slice().sort((a, b) => {
+    const ra = paneActivityRank(a, now, recentMs);
+    const rb = paneActivityRank(b, now, recentMs);
+    if (ra !== rb) return ra - rb;
+    // Recently-changed panes are idle, so their timestamps rarely move:
+    // newest first here won't reshuffle chips the way raw-time order would
+    // for working panes.
+    if (ra === 2) {
+      const d = Date.parse(b.last_changed_at ?? "") - Date.parse(a.last_changed_at ?? "");
+      if (d) return d;
+    }
+    return compareByName(a, b);
+  });
 }
 
 // shouldPinPane decides which panes stay as always-visible chips vs. collapse

@@ -107,9 +107,10 @@ describe("sortedPaneList", () => {
     expect(ids(sortedPaneList(panes, "activity", now, 60 * 1000))).toEqual([
       "%3", "%2", "%5", "%1", "%4", "%6", "%7",
     ]);
-    // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it.
+    // 2 hours: alpha (1 h ago) and golf (just past 10 min) join it, and the
+    // recent group runs newest first rather than by name.
     expect(ids(sortedPaneList(panes, "activity", now, 2 * 60 * 60 * 1000))).toEqual([
-      "%3", "%2", "%5", "%1", "%4", "%7", "%6",
+      "%3", "%2", "%5", "%4", "%7", "%1", "%6",
     ]);
   });
 });
