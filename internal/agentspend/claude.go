@@ -24,8 +24,13 @@ func (claudeScanner) discover() []string {
 }
 
 func (claudeScanner) parseFile(path string) []pricedRow {
+	rows, _ := (claudeScanner{}).parseFileChecked(path)
+	return rows
+}
+
+func (claudeScanner) parseFileChecked(path string) ([]pricedRow, error) {
 	var rows []pricedRow
-	_, _ = sessionlog.Stream(sessionlog.Source{Provider: sessionlog.ProviderClaude, Path: path}, func(record sessionlog.Record) error {
+	_, err := sessionlog.Stream(sessionlog.Source{Provider: sessionlog.ProviderClaude, Path: path}, func(record sessionlog.Record) error {
 		usage := record.Usage
 		if record.ProviderEvent != "assistant" || usage == nil || record.Timestamp.IsZero() {
 			return nil
@@ -54,5 +59,5 @@ func (claudeScanner) parseFile(path string) []pricedRow {
 		rows = append(rows, pricedRow{ts: record.Timestamp, cost: cost, dedup: dedup})
 		return nil
 	})
-	return rows
+	return rows, err
 }

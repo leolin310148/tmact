@@ -207,12 +207,11 @@ type Server struct {
 	WebPushHTTPClient webpushHTTPClient
 
 	// usage caches the latest quota snapshot the usage refresher produces.
-	usage             usageCache
-	UsageHistoryDir   string
-	usageHistoryError string // guarded by usageHistoryMu
-	historyCostMu     sync.Mutex
-	historyCostAt     time.Time
-	historyCostRows   []agentspend.DailySpend
+	usage               usageCache
+	UsageHistoryDir     string
+	usageHistoryError   string // guarded by usageHistoryMu
+	history             trendCache
+	computeHistoryDaily func(time.Time, int) ([]agentspend.DailySpend, error)
 	// spend caches the latest merged (local + peers) per-provider token spend,
 	// refreshed on its own faster cadence and merged with the quota snapshot at
 	// serve time.
@@ -624,6 +623,9 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 
 	go s.runUploadsGC(serveCtx)
+	if s.UsageEnabled || s.SpendEnabled {
+		go s.runHistoryRefresh(serveCtx)
+	}
 	// Quota and cost are independently gated: a peer can run cost-only (spend
 	// served for a hub to aggregate) without ever hitting the rate-limited
 	// quota endpoints.

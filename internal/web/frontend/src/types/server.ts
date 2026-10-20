@@ -189,6 +189,9 @@ export interface AgentUsageHistory {
     daily: { date: string; provider: string; usd: number }[];
     usage: { at: string; provider: string; windows: RateWindow[] }[];
     error?: string;
+    updated_at?: string;
+    cost_updated_at?: string;
+    pending?: boolean;
   }[];
   timezone: string;
 }

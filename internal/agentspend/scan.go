@@ -15,12 +15,12 @@ type pricedRow struct {
 }
 
 // scanner discovers a provider's on-disk session files and prices the rows in
-// one file. parseFile must be pure with respect to the file's bytes (no shared
+// one file. parseFileChecked must be pure with respect to the file's bytes (no shared
 // state) so results can be cached by path+mtime+size.
 type scanner interface {
 	provider() string
 	discover() []string
-	parseFile(path string) []pricedRow
+	parseFileChecked(path string) ([]pricedRow, error)
 }
 
 // fileCache memoizes parsed+priced rows per file, keyed by path and invalidated
@@ -40,20 +40,21 @@ type cachedFile struct {
 
 func newFileCache() *fileCache { return &fileCache{m: map[string]cachedFile{}} }
 
-func (c *fileCache) get(path string, info os.FileInfo, parse func(string) []pricedRow) []pricedRow {
+func (c *fileCache) getChecked(path string, info os.FileInfo, parse func(string) ([]pricedRow, error)) ([]pricedRow, error) {
 	c.mu.Lock()
-	if ent, ok := c.m[path]; ok && ent.mtime.Equal(info.ModTime()) && ent.size == info.Size() {
-		c.mu.Unlock()
-		return ent.rows
-	}
+	ent, ok := c.m[path]
 	c.mu.Unlock()
-
-	rows := parse(path)
-
+	if ok && ent.mtime.Equal(info.ModTime()) && ent.size == info.Size() {
+		return ent.rows, nil
+	}
+	rows, err := parse(path)
+	if err != nil {
+		return nil, err
+	}
 	c.mu.Lock()
 	c.m[path] = cachedFile{mtime: info.ModTime(), size: info.Size(), rows: rows}
 	c.mu.Unlock()
-	return rows
+	return rows, nil
 }
 
 // scanRows runs a scanner over its session files, skipping files last modified
@@ -68,7 +69,10 @@ func scanRows(s scanner, earliest time.Time, fc *fileCache) []pricedRow {
 		if info.ModTime().Before(earliest) {
 			continue
 		}
-		out = append(out, fc.get(path, info, s.parseFile)...)
+		rows, err := fc.getChecked(path, info, s.parseFileChecked)
+		if err == nil {
+			out = append(out, rows...)
+		}
 	}
 	return out
 }

@@ -6,13 +6,23 @@ UsagePanel owns the trend dialog's local open state; the dialog uses a native
 modal dialog in a body portal so it also works in split-view roots, traps focus,
 and does not inherit pane clipping. Its on-demand history request is independent
 of the existing current-usage poll. Daily cost uses UTC dates and is reconstructed
-from session logs with current pricing, not an immutable billing ledger. Quota
+in the background from session logs with current pricing, not an immutable billing ledger. Quota
 samples are persisted by the server in private daily JSONL files under
 `~/.tmact/usage-history/`, excluding account identifiers, errors and credentials.
-Files are retained; the API reads the latest 30 UTC dates. Only fresh successful
+Files are retained; background collection reads the latest 30 UTC dates. Only fresh successful
 windows are recorded. Missing history is not interpolated. Peer history requests
 use `local=1` to prevent recursive federation; partial failures remain visible.
 Cost may be summed across machines, while quota series stay machine-specific.
+The history HTTP handler serves immutable memory snapshots only: it never scans
+session logs or fetches peers. The background worker restores a versioned private
+`trend-cache.json` on startup, prices 30 days once per UTC date and only today's
+cost at the spend interval (one hour by default). Quota history and peer snapshots
+refresh on the usage interval (five minutes by default). Cold peers are retried
+more quickly. Atomic cache replacement preserves the previous durable snapshot
+on failure; remote failures retain each machine's last result and timestamps.
+The modal displays preparation and update times, polling while open; a cold start
+is explicit pending data, not a zero-cost result. Cache files are derived and can
+be rebuilt; original quota JSONL logs remain the historical source of truth.
 These new local UI states use React state; the original port's ref rules below
 continue to govern its existing mutable store.
 

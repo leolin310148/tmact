@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,7 @@ func TestUsageHistoryPeerBoundaryAndFailures(t *testing.T) {
 	}))
 	defer peer.Close()
 	s := &Server{UsageEnabled: true, UsageHistoryDir: t.TempDir(), CostPeers: []statusd.Peer{{Name: "peer", URL: peer.URL}, {Name: "offline", URL: "http://127.0.0.1:1"}}}
+	s.refreshPeerHistory(context.Background(), time.Now())
 	rec := httptest.NewRecorder()
 	s.handleUsageHistory(rec, httptest.NewRequest("GET", "/api/agent-usage/history", nil))
 	var got struct {

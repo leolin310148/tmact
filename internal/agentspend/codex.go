@@ -21,12 +21,17 @@ func (codexScanner) discover() []string {
 }
 
 func (codexScanner) parseFile(path string) []pricedRow {
+	rows, _ := (codexScanner{}).parseFileChecked(path)
+	return rows
+}
+
+func (codexScanner) parseFileChecked(path string) ([]pricedRow, error) {
 	havePrevCumulative := false
 	prevCumulative := 0
 	var prevInput, prevCached, prevOutput int
 	var rows []pricedRow
 
-	_, _ = sessionlog.Stream(sessionlog.Source{Provider: sessionlog.ProviderCodex, Path: path}, func(record sessionlog.Record) error {
+	_, err := sessionlog.Stream(sessionlog.Source{Provider: sessionlog.ProviderCodex, Path: path}, func(record sessionlog.Record) error {
 		if record.Kind != sessionlog.KindUsage || record.TotalUsage == nil {
 			return nil
 		}
@@ -67,7 +72,7 @@ func (codexScanner) parseFile(path string) []pricedRow {
 		})
 		return nil
 	})
-	return rows
+	return rows, err
 }
 
 const codexLongContextThreshold = 272_000

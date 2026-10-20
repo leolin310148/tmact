@@ -16,12 +16,24 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
     const el = dialog.current;
     el?.showModal();
     const controller = new AbortController();
-    void loadAgentUsageHistory(controller.signal)
-      .then(({ res, data: history }) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      let delay = 60_000;
+      try {
+        const { res, data: history } = await loadAgentUsageHistory(controller.signal);
         if (!res.ok || !Array.isArray(history.machines)) throw new Error("無法取得趨勢，請稍後重試");
+        if (controller.signal.aborted) return;
         setData(history);
-      }).catch((err: unknown) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "無法取得趨勢"); });
-    return () => { controller.abort(); el?.close(); if (invoking instanceof HTMLElement && invoking.isConnected) invoking.focus(); };
+        setError("");
+        if (history.machines.some((m) => m.pending && !m.error)) delay = 5_000;
+      } catch (err: unknown) {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "無法取得趨勢");
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(() => { void refresh(); }, delay);
+      }
+    };
+    void refresh();
+    return () => { controller.abort(); clearTimeout(timer); el?.close(); if (invoking instanceof HTMLElement && invoking.isConnected) invoking.focus(); };
   }, []);
   const dates = Array.from({ length: days }, (_, i) => {
     const date = new Date(); date.setUTCDate(date.getUTCDate() - days + 1 + i);
@@ -41,10 +53,15 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
         <label>機器 <select value={machine} onChange={(e) => setMachine(e.target.value)}><option value="all">全部機器</option>{data?.machines.map((m) => <option key={m.machine} value={m.machine}>{m.machine}</option>)}</select></label>
         <label>Provider <select value={provider} onChange={(e) => setProvider(e.target.value)}><option value="all">全部</option>{providers.map((p) => <option key={p}>{p}</option>)}</select></label>
       </div>
-      {!data && !error ? <p role="status">載入趨勢中…首次需掃描各機器的 session 紀錄，可能需要一些時間。</p> : null}
+      {!data && !error ? <p role="status">載入趨勢中…</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       {data ? <>
+        {machines.map((m) => <div key={m.machine} className="usage-trend-note">
+          {m.pending ? <p role="status">{m.machine}：背景正在準備趨勢資料，完成後會自動顯示。</p> : null}
+          {m.updated_at ? <p>{m.machine} · 趨勢更新：{new Date(m.updated_at).toLocaleString()}{m.cost_updated_at ? " · Cost 更新：" + new Date(m.cost_updated_at).toLocaleString() : ""}</p> : null}
+        </div>)}
         {machines.filter((m) => m.error).map((m) => <p role="status" key={m.machine}>{m.machine}：{m.error}（總計可能不完整）</p>)}
+        {machines.some((m) => !m.pending) ? <>
         <h3>每日 Cost · ${daily.reduce((sum, d) => sum + d.usd, 0).toFixed(2)} USD</h3>
         <p className="usage-trend-note">API 價格換算估值，非實際帳單。日期以 UTC 計算；無紀錄日期顯示 $0。</p>
         <svg className="usage-trend-chart" viewBox="0 0 720 190" role="img" aria-label="每日 cost 長條圖">
@@ -69,6 +86,7 @@ export default function UsageTrendDialog({ onClose }: { onClose: () => void }) {
             </svg></div>;
           })}</section>;
         })}
+        </> : null}
       </> : null}
     </dialog>, document.body,
   );

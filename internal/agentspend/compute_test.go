@@ -20,6 +20,18 @@ func TestWindowBounds(t *testing.T) {
 	}
 }
 
+func TestDailyCheckedReportsDiscoveryFailure(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(config, []byte("file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIRS", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+	if _, err := DailyChecked(time.Now(), 30); err == nil {
+		t.Fatal("failed discovery must not look like zero cost")
+	}
+}
+
 // End-to-end over fixture files: one in-week row, one earlier-in-month row, one
 // last-month row (excluded), and a duplicate message id (counted once).
 func TestComputeWindowsAndDedup(t *testing.T) {

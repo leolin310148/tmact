@@ -1,6 +1,12 @@
 package agentspend
 
-import "time"
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/leolin310148/tmact/internal/sessionlog"
+)
 
 // DailySpend is API-equivalent spend on a UTC calendar date.
 type DailySpend struct {
@@ -11,12 +17,38 @@ type DailySpend struct {
 
 // Daily reconstructs historical spend without persisting a second priced ledger.
 func Daily(now time.Time, days int) []DailySpend {
+	rows, _ := DailyChecked(now, days)
+	return rows
+}
+
+// DailyChecked preserves a caller's last-known ledger when discovery or reads
+// fail, rather than silently publishing a misleading zero/partial total.
+func DailyChecked(now time.Time, days int) ([]DailySpend, error) {
 	start := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1-days)
 	out := []DailySpend{}
 	for _, s := range scanners {
+		discovery, err := sessionlog.Discover(sessionlog.Provider(s.provider()))
+		if err != nil || len(discovery.Errors) > 0 {
+			return nil, fmt.Errorf("%s session discovery failed", s.provider())
+		}
+		rows := []pricedRow{}
+		for _, source := range discovery.Sources {
+			info, err := os.Stat(source.Path)
+			if err != nil {
+				return nil, fmt.Errorf("%s session stat failed: %w", s.provider(), err)
+			}
+			if info.IsDir() || info.ModTime().Before(start) {
+				continue
+			}
+			priced, err := sharedCache.getChecked(source.Path, info, s.parseFileChecked)
+			if err != nil {
+				return nil, fmt.Errorf("%s session read failed: %w", s.provider(), err)
+			}
+			rows = append(rows, priced...)
+		}
 		seen := map[string]bool{}
 		totals := map[string]float64{}
-		for _, row := range scanRows(s, start, sharedCache) {
+		for _, row := range rows {
 			if seen[row.dedup] || row.ts.Before(start) || row.ts.After(now) {
 				continue
 			}
@@ -28,7 +60,7 @@ func Daily(now time.Time, days int) []DailySpend {
 			out = append(out, DailySpend{Date: date, Provider: s.provider(), USD: totals[date]})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // Spend is the dollar-equivalent token spend for one provider over the

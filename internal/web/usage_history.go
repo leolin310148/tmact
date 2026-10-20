@@ -2,11 +2,8 @@ package web
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,10 +20,13 @@ type usageSample struct {
 }
 
 type machineHistory struct {
-	Machine string                  `json:"machine"`
-	Daily   []agentspend.DailySpend `json:"daily"`
-	Usage   []usageSample           `json:"usage"`
-	Error   string                  `json:"error,omitempty"`
+	Machine       string                  `json:"machine"`
+	Daily         []agentspend.DailySpend `json:"daily"`
+	Usage         []usageSample           `json:"usage"`
+	Error         string                  `json:"error,omitempty"`
+	UpdatedAt     *time.Time              `json:"updated_at,omitempty"`
+	CostUpdatedAt *time.Time              `json:"cost_updated_at,omitempty"`
+	Pending       bool                    `json:"pending,omitempty"`
 }
 
 var usageHistoryMu sync.Mutex
@@ -72,9 +72,6 @@ func (s *Server) recordUsage(snap agentusage.Snapshot) error {
 
 func (s *Server) localHistory(now time.Time) machineHistory {
 	out := machineHistory{Machine: "local", Daily: []agentspend.DailySpend{}, Usage: []usageSample{}}
-	if s.SpendEnabled {
-		out.Daily = s.dailyHistory(now)
-	}
 	if !s.UsageEnabled {
 		return out
 	}
@@ -99,6 +96,11 @@ func (s *Server) localHistory(now time.Time) machineHistory {
 		for scanner.Scan() {
 			var row usageSample
 			if json.Unmarshal(scanner.Bytes(), &row) == nil {
+				// Pace is derived for the current quota panel, not used by history.
+				// Keep the durable JSONL intact but omit it from published snapshots.
+				for i := range row.Windows {
+					row.Windows[i].Pace = nil
+				}
 				out.Usage = append(out.Usage, row)
 			}
 		}
@@ -123,64 +125,14 @@ func (s *Server) handleUsageHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 404, "agent usage disabled")
 		return
 	}
-	rows := []machineHistory{s.localHistory(time.Now())}
-	// local=1 is an explicit non-recursive peer boundary. Quotas belong to each
-	// machine/account; they must never be summed across machines.
-	if r.URL.Query().Get("local") != "1" {
-		peers := s.spendPeers()
-		results := make([]machineHistory, len(peers))
-		var wg sync.WaitGroup
-		for i, peer := range peers {
-			wg.Add(1)
-			go func(i int, name, base string) {
-				defer wg.Done()
-				results[i] = machineHistory{Machine: name, Daily: []agentspend.DailySpend{}, Usage: []usageSample{}, Error: "此機器的趨勢暫時無法取得"}
-				endpoint, err := peerHTTPURL(base, "/api/agent-usage/history", url.Values{"local": {"1"}})
-				if err != nil {
-					return
-				}
-				ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-				defer cancel()
-				req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-				if err != nil {
-					return
-				}
-				resp, err := s.httpClient().Do(req)
-				if err != nil {
-					return
-				}
-				defer resp.Body.Close()
-				var data struct {
-					Machines []machineHistory `json:"machines"`
-				}
-				if resp.StatusCode != 200 || json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&data) != nil || len(data.Machines) != 1 {
-					return
-				}
-				results[i] = data.Machines[0]
-				results[i].Machine = name
-			}(i, peer.Name, peer.URL)
-		}
-		wg.Wait()
-		rows = append(rows, results...)
-	}
+	// Request handling never scans session files or waits for remote machines.
+	rows := s.historySnapshot(r.URL.Query().Get("local") == "1")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(struct {
 		Machines []machineHistory `json:"machines"`
 		Timezone string           `json:"timezone"`
 	}{rows, "UTC"})
-}
-
-// History opens on demand; share its potentially expensive first scan across
-// concurrent readers and reuse for the spend refresh interval, or UTC rollover.
-func (s *Server) dailyHistory(now time.Time) []agentspend.DailySpend {
-	s.historyCostMu.Lock()
-	defer s.historyCostMu.Unlock()
-	if s.historyCostAt.IsZero() || now.Sub(s.historyCostAt) >= s.spendInterval() || now.UTC().Format("2006-01-02") != s.historyCostAt.UTC().Format("2006-01-02") {
-		s.historyCostRows = agentspend.Daily(now, 30)
-		s.historyCostAt = now
-	}
-	return s.historyCostRows
 }
 
 func (s *Server) saveUsageHistory(snap agentusage.Snapshot) {
