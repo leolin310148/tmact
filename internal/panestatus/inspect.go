@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/leolin310148/tmact/internal/panestate"
 	"github.com/leolin310148/tmact/internal/prompt"
@@ -416,6 +417,14 @@ func (i inspector) inspectPane(pane tmux.Pane) PaneStatus {
 	status.Runtime = runtime.Runtime
 	status.Confidence = runtime.Confidence
 	status.Signals = append([]string{}, runtime.Signals...)
+	if status.Runtime == RuntimeClaude {
+		// Claude's footer below the input box (statusline, update notice,
+		// hints) repaints on events like a settings reload in every session at
+		// once; that isn't activity in the pane.
+		if body, ok := claudeAboveFooter(raw); ok {
+			status.NormalizedHash = i.idleHash(body)
+		}
+	}
 	classified := panestate.Classify(raw)
 	if i.captureANSI != nil && (status.Runtime == RuntimeClaude || status.Runtime == RuntimeCodex) {
 		ansi, captureErr := i.captureANSI(pane.PaneID, i.options.Lines)
@@ -661,6 +670,41 @@ func looksLikeCodexRunningChrome(raw string) bool {
 	}
 	last := strings.ToLower(panestate.LastMeaningfulLine(raw))
 	return hasPrompt && hasStatus && strings.Contains(last, "context ") && strings.Contains(last, "% used") && strings.Contains(last, "window")
+}
+
+// claudeFooterSearchLines bounds how far up from the bottom the input box's
+// closing rule may sit; the footer under it is a few lines at most.
+const claudeFooterSearchLines = 12
+
+// claudeAboveFooter cuts raw at the rule closing Claude's input box, keeping
+// the transcript and the input box but dropping the footer under it. ok is
+// false unless an input box — two rules, the lower one
+// near the bottom — is found; the caller then keeps the whole-screen hash.
+func claudeAboveFooter(raw string) (string, bool) {
+	lines := strings.Split(strings.TrimRight(raw, "\n "), "\n")
+	bottom := -1
+	for n := len(lines) - 1; n >= 0 && n >= len(lines)-claudeFooterSearchLines; n-- {
+		if isBoxRule(lines[n]) {
+			bottom = n
+			break
+		}
+	}
+	if bottom < 1 {
+		return "", false
+	}
+	for n := bottom - 1; n >= 0 && n >= bottom-claudeFooterSearchLines; n-- {
+		if isBoxRule(lines[n]) {
+			return strings.Join(lines[:bottom+1], "\n"), true
+		}
+	}
+	return "", false
+}
+
+// isBoxRule reports a full-width horizontal rule like Claude's input box
+// border: only '─' after trimming, and long enough not to be prose.
+func isBoxRule(line string) bool {
+	line = strings.TrimSpace(line)
+	return utf8.RuneCountInString(line) >= 20 && strings.Trim(line, "─") == ""
 }
 
 func looksLikeClaudeCurrentChrome(raw string) bool {

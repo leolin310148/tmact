@@ -112,3 +112,29 @@ func TestRunningStateRestoredChangedScreenStampsWithoutFlashingRunning(t *testin
 		t.Fatal("a pane classified working on the first scan still reads as running")
 	}
 }
+
+func TestRunningStateOldHashSchemeKeepsHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPaneMemoryName)
+	changed := time.Date(2026, 10, 18, 1, 0, 0, 0, time.UTC)
+	data := `{"version":1,"panes":{"%1":{"hash":"v1","last_changed_at":"2026-10-18T01:00:00Z"}}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mem := NewMemory()
+	if err := LoadPaneMemory(path, mem); err != nil {
+		t.Fatalf("load v1: %v", err)
+	}
+
+	// The rehashed screen differs from the v1 hash, but that's the scheme,
+	// not the pane: keep the saved change time.
+	cfg := Config{}.withDefaults()
+	now := changed.Add(time.Hour)
+	idle := panestatus.PaneStatus{PaneID: "%1", NormalizedHash: "v2", State: panestate.StateIdle}
+	running, at, _ := runningState(idle, cfg, mem, now)
+	if running || !at.Equal(changed) {
+		t.Fatalf("running=%v at=%v; want idle with saved time %v", running, at, changed)
+	}
+	if got := mem.panes["%1"]; got.Hash != "v2" || got.oldHash || got.restored {
+		t.Fatalf("entry after first scan = %+v; want adopted v2 hash", got)
+	}
+}

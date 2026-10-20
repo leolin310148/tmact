@@ -111,6 +111,9 @@ type paneMemory struct {
 	// restored marks an entry loaded from the previous run (LoadPaneMemory)
 	// that no scan has confirmed yet.
 	restored bool
+	// oldHash marks a restored hash computed by an older scheme: it can't be
+	// compared, so the first scan adopts the new hash and keeps the history.
+	oldHash bool
 }
 
 // runtimeCacheTTL bounds how long statusd reuses a pane's cached process-tree
@@ -282,7 +285,8 @@ func runningState(pane panestatus.PaneStatus, cfg Config, mem *Memory, now time.
 		// pane id was reused). Stamp the change just outside the running
 		// debounce and judge running from this scan alone, so a stale hash
 		// doesn't flash every such pane as working for the next few seconds.
-		if previous.Hash != pane.NormalizedHash {
+		changed := previous.Hash != pane.NormalizedHash && !previous.oldHash
+		if changed {
 			lastChangedAt = now.Add(-cfg.RunningDebounce - time.Millisecond)
 		}
 		mem.panes[pane.PaneID] = paneMemory{Hash: pane.NormalizedHash, LastChangedAt: lastChangedAt}

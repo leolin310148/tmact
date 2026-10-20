@@ -17,7 +17,10 @@ const (
 	// DefaultPaneMemorySaveInterval bounds how much change history a crash
 	// can lose; a clean shutdown saves immediately.
 	DefaultPaneMemorySaveInterval = 30 * time.Second
-	paneMemoryFileVersion         = 1
+	// Version 2 hashes Claude panes without the footer under the input box;
+	// version 1 hashes still load, but only for their change times.
+	paneMemoryFileVersion        = 2
+	paneMemoryFileVersionOldHash = 1
 )
 
 // DefaultPaneMemoryPath returns ~/.tmact/statusd-pane-memory.json, or "" when
@@ -59,9 +62,10 @@ func LoadPaneMemory(path string, mem *Memory) error {
 	if err := json.Unmarshal(data, &file); err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	if file.Version != paneMemoryFileVersion {
+	if file.Version != paneMemoryFileVersion && file.Version != paneMemoryFileVersionOldHash {
 		return fmt.Errorf("%s: unsupported version %d", path, file.Version)
 	}
+	oldHash := file.Version == paneMemoryFileVersionOldHash
 	for paneID, entry := range file.Panes {
 		if paneID == "" || entry.Hash == "" {
 			continue
@@ -70,6 +74,7 @@ func LoadPaneMemory(path string, mem *Memory) error {
 			Hash:          entry.Hash,
 			LastChangedAt: entry.LastChangedAt,
 			restored:      true,
+			oldHash:       oldHash,
 		}
 	}
 	return nil

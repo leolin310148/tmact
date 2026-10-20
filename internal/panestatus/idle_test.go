@@ -68,3 +68,24 @@ func TestIdleMatcherMemoStaysBounded(t *testing.T) {
 		t.Fatalf("memo grew to %d entries, limit %d", len(matcher.ignored), idleLineMemoLimit)
 	}
 }
+
+func TestClaudeAboveFooterDropsFooter(t *testing.T) {
+	rule := strings.Repeat("─", 40)
+	screen := func(footer string) string {
+		return "⏺ done\n\n" + rule + "\n❯ next\n" + rule + "\n" + footer + "\n"
+	}
+	a, ok := claudeAboveFooter(screen("  Cost: $1  new task? /clear to save 9k tokens"))
+	if !ok {
+		t.Fatal("input box not found")
+	}
+	b, _ := claudeAboveFooter(screen("  Cost: $1  ✔ Update installed · Restart to update\n  ⏵⏵ accept edits on"))
+	if a != b {
+		t.Fatalf("footer leaked into body:\n%q\n%q", a, b)
+	}
+	if !strings.HasSuffix(a, "❯ next\n"+rule) {
+		t.Fatalf("body = %q; want transcript and input box kept", a)
+	}
+	if _, ok := claudeAboveFooter("⏺ done\n" + rule + "\nfooter\n"); ok {
+		t.Fatal("a single rule is not an input box")
+	}
+}
