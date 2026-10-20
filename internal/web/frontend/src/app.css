@@ -78,6 +78,11 @@
     display: flex; flex-wrap: wrap; gap: 4px;
     padding: 6px 0;
   }
+  .chips-sep {
+    flex: 0 0 auto; align-self: center;
+    padding: 0 4px; color: var(--fg-dim);
+    user-select: none;
+  }
   .chip {
     flex: 0 0 auto;
     min-width: 0;

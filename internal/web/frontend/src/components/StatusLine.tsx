@@ -15,6 +15,7 @@
 // The original re-ran renderStatusline imperatively after a mutation; here the
 // component re-renders on each bump() (it reads the live state object).
 
+import { Fragment } from "react";
 import { useAppState } from "../store/AppStateContext";
 import { PANE_HOTKEYS } from "../lib/keymap";
 import type { PaneStatus } from "../types/server";
@@ -209,22 +210,33 @@ export function StatusLine({
   // through state).
   state.paneOrder = visible.map(({ pane }) => pane.pane_id ?? "");
 
+  // In "activity" order, a divider sets the quiet panes (rank 3) apart from
+  // the asking / working / recently changed ones — only when both exist.
+  const now = Date.now();
+  const sepAt = sortMode === "activity"
+    ? visible.findIndex(({ pane }) => paneActivityRank(pane, now, recentMs) === 3)
+    : -1;
+
   return (
     <div className="chips" id="chips">
       {visible.map(({ pane: p, label }, i) => {
         const key = PANE_HOTKEYS[i];
         const paneID = p.pane_id ?? "";
         return (
-          <Chip
-            // pane_id is stable within a tmux server; index is the fallback for
-            // the rare empty-id case. Keep keys stable so React reuses chips.
-            key={paneID || "pane-" + i}
-            pane={p}
-            label={label}
-            hotkey={key}
-            selected={p.pane_id === state.selected}
-            onSelect={() => callbacks.selectPane(paneID)}
-          />
+          // pane_id is stable within a tmux server; index is the fallback for
+          // the rare empty-id case. Keep keys stable so React reuses chips.
+          <Fragment key={paneID || "pane-" + i}>
+            {i === sepAt && i > 0 ? (
+              <span className="chips-sep" aria-hidden="true">|</span>
+            ) : null}
+            <Chip
+              pane={p}
+              label={label}
+              hotkey={key}
+              selected={p.pane_id === state.selected}
+              onSelect={() => callbacks.selectPane(paneID)}
+            />
+          </Fragment>
         );
       })}
       {/* Always rendered: with no hidden panes it still opens the

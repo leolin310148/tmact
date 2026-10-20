@@ -16,6 +16,7 @@ import {
   sortedPaneList,
   splitPaneItems,
   StatusLine,
+  type PaneSortMode,
 } from "./StatusLine";
 
 beforeAll(() => {
@@ -131,7 +132,12 @@ describe("splitPaneItems", () => {
 
 // ---- StatusLine render ----------------------------------------------------
 
-function mount(panes: PaneStatus[], selected: string | null, selectPane = vi.fn()) {
+function mount(
+  panes: PaneStatus[],
+  selected: string | null,
+  selectPane = vi.fn(),
+  sortMode: PaneSortMode = "name",
+) {
   const snapshot: Snapshot = {
     version: 1,
     ts: "2026-01-01T00:00:00Z",
@@ -151,7 +157,7 @@ function mount(panes: PaneStatus[], selected: string | null, selectPane = vi.fn(
     state = store.value.state;
     return (
       <AppStateProvider store={store}>
-        <StatusLine />
+        <StatusLine sortMode={sortMode} />
       </AppStateProvider>
     );
   }
@@ -236,6 +242,22 @@ describe("StatusLine overflow", () => {
     const more = container.querySelector(".more-chip");
     expect(more).not.toBeNull();
     expect(more!.querySelector(".more-count")).toBeNull();
+  });
+
+  it("divides quiet panes from active ones in activity order", () => {
+    const panes = [
+      pane({ target: "a", pane_id: "%1", session: "a", runtime: "claude" }),
+      pane({ target: "b", pane_id: "%2", session: "b", runtime: "claude", running: true }),
+    ];
+    const seps = (c: HTMLElement) => c.querySelectorAll("#chips .chips-sep");
+    const activity = mount(panes, null, vi.fn(), "activity");
+    expect(seps(activity.container).length).toBe(1);
+    expect(seps(activity.container)[0]?.nextElementSibling?.textContent).toContain("a");
+    cleanup();
+    expect(seps(mount(panes, null).container).length).toBe(0);
+    cleanup();
+    // Only quiet panes: nothing to divide.
+    expect(seps(mount(panes.slice(0, 1), null, vi.fn(), "activity").container).length).toBe(0);
   });
 
   it("freezes paneOrder to the inline chips only", () => {
