@@ -13,6 +13,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); });
 
 describe("background usage trends", () => {
+  it("uses Taiwan today and Taiwan midnight for the range even before UTC rolls over", async () => {
+    vi.setSystemTime(new Date("2026-10-20T16:30:00Z")); // Taiwan Oct 21, 00:30.
+    vi.mocked(loadAgentUsageHistory).mockResolvedValue({ res: { ok: true } as Response, data: { timezone: "Asia/Taipei", machines: [{
+      machine: "local", updated_at: "2026-10-20T16:15:00Z",
+      daily: [{ date: "2026-10-21", provider: "codex", usd: 7 }],
+      usage: ["2026-10-14T15:59:59Z", "2026-10-14T16:00:00Z", "2026-10-20T16:15:00Z"].map((at) => ({ at, provider: "codex", windows: [{ name: "weekly", used_percent: 30 }] })),
+    }] } });
+    render(<UsageTrendDialog onClose={vi.fn()} />);
+    await act(async () => {});
+    expect(screen.getByText("每日 Cost · $7.00 USD")).toBeInTheDocument();
+    const usage = screen.getByRole("img", { name: "共用帳號 codex/weekly 已使用額度趨勢" });
+    expect(usage.querySelectorAll("circle")).toHaveLength(2);
+    expect(usage.textContent).toContain("2026/10/21");
+    expect(screen.getByText(/local · 趨勢更新/)).toHaveTextContent("2026/10/21");
+  });
   it("shows shared account usage once while keeping machine cost totals and filters", async () => {
     const now = new Date().toISOString();
     vi.mocked(loadAgentUsageHistory).mockResolvedValue({ res: { ok: true } as Response, data: { timezone: "UTC", machines: ["local", "mini", "nb429", "mbp26"].map((machine, i) => ({

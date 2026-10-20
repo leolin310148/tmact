@@ -29,7 +29,10 @@ type historyState struct {
 	Local        machineHistory            `json:"local"`
 	Peers        map[string]machineHistory `json:"peers"`
 	HistoricalAt time.Time                 `json:"historical_at"`
+	Timezone     string                    `json:"timezone"`
 }
+
+const trendCacheVersion = 2
 
 func pendingHistory(name string) machineHistory {
 	return machineHistory{Machine: name, Daily: []agentspend.DailySpend{}, Usage: []usageSample{}, Pending: true}
@@ -105,9 +108,23 @@ func (s *Server) loadHistoryCache() {
 	}
 	s.history.mu.Lock()
 	defer s.history.mu.Unlock()
-	if err != nil || state.Version != 1 {
+	if err != nil || (state.Version != 1 && state.Version != trendCacheVersion) {
 		s.history.persistError = "趨勢快取無法讀取，背景重新建立中"
 		return
+	}
+	if state.Version != trendCacheVersion || state.Timezone != agentspend.TrendTimezone {
+		// Daily totals are derived; UTC buckets cannot be relabeled as Taiwan
+		// dates. Preserve absolute quota samples and rebuild cost in background.
+		state.Local.Daily = []agentspend.DailySpend{}
+		state.Local.CostUpdatedAt = nil
+		state.Local.Pending = s.SpendEnabled
+		state.HistoricalAt = time.Time{}
+		for name, row := range state.Peers {
+			row.Daily = []agentspend.DailySpend{}
+			row.CostUpdatedAt = nil
+			row.Pending = true
+			state.Peers[name] = row
+		}
 	}
 	for name, row := range state.Peers {
 		row.Usage = []usageSample{}
@@ -161,7 +178,7 @@ func (s *Server) refreshLocalHistory(now time.Time) {
 	fresh.Daily = previous.Daily
 	fresh.CostUpdatedAt = previous.CostUpdatedAt
 	if s.SpendEnabled {
-		full := state.HistoricalAt.IsZero() || state.HistoricalAt.UTC().Format("2006-01-02") != now.UTC().Format("2006-01-02")
+		full := state.HistoricalAt.IsZero() || agentspend.TrendDay(state.HistoricalAt) != agentspend.TrendDay(now)
 		due := full || previous.CostUpdatedAt == nil || now.Sub(*previous.CostUpdatedAt) >= s.spendInterval()
 		if due {
 			days := 1
@@ -181,7 +198,7 @@ func (s *Server) refreshLocalHistory(now time.Time) {
 					fresh.Daily = rows
 					state.HistoricalAt = now
 				} else {
-					today := now.UTC().Format("2006-01-02")
+					today := agentspend.TrendDay(now)
 					fresh.Daily = make([]agentspend.DailySpend, 0, len(previous.Daily))
 					for _, row := range previous.Daily {
 						if row.Date != today {
@@ -198,7 +215,8 @@ func (s *Server) refreshLocalHistory(now time.Time) {
 	if fresh.Daily == nil {
 		fresh.Daily = []agentspend.DailySpend{}
 	}
-	state.Version = 1
+	state.Version = trendCacheVersion
+	state.Timezone = agentspend.TrendTimezone
 	state.Local = fresh
 	s.history.mu.Lock()
 	s.history.state = state
@@ -223,6 +241,7 @@ func (s *Server) fetchPeerHistory(ctx context.Context, peer statusd.Peer) (machi
 	defer resp.Body.Close()
 	var data struct {
 		Machines []machineHistory `json:"machines"`
+		Timezone string           `json:"timezone"`
 	}
 	if resp.StatusCode != 200 {
 		return machineHistory{}, fmt.Errorf("history HTTP %d", resp.StatusCode)
@@ -232,6 +251,9 @@ func (s *Server) fetchPeerHistory(ctx context.Context, peer statusd.Peer) (machi
 	}
 	if len(data.Machines) != 1 {
 		return machineHistory{}, fmt.Errorf("expected one local history")
+	}
+	if data.Timezone != agentspend.TrendTimezone {
+		return machineHistory{}, fmt.Errorf("peer history timezone must be %s", agentspend.TrendTimezone)
 	}
 	row := data.Machines[0]
 	row.Machine = peer.Name
@@ -304,7 +326,7 @@ func (s *Server) runHistoryRefresh(ctx context.Context) {
 		}
 		s.history.mu.Unlock()
 		// Re-read quota history and peers on the quota cadence. Cost has its own
-		// hourly gate, while full historical pricing runs at UTC day rollover.
+		// hourly gate, while full historical pricing runs at Taiwan day rollover.
 		delay := s.usageInterval()
 		for _, row := range s.historySnapshot(false) {
 			if row.Pending && row.Error == "" && delay > 5*time.Second {
@@ -314,8 +336,7 @@ func (s *Server) runHistoryRefresh(ctx context.Context) {
 		if s.spendInterval() < delay {
 			delay = s.spendInterval()
 		}
-		current := time.Now().UTC()
-		midnight := time.Date(current.Year(), current.Month(), current.Day()+1, 0, 0, 0, 0, time.UTC)
+		midnight := agentspend.TrendDayStart(time.Now()).AddDate(0, 0, 1)
 		if until := time.Until(midnight); until < delay {
 			delay = until
 		}

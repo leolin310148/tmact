@@ -82,7 +82,10 @@ func (s *Server) localHistory(now time.Time) machineHistory {
 	}
 	usageHistoryMu.Lock()
 	defer usageHistoryMu.Unlock()
-	for i := 29; i >= 0; i-- {
+	start := agentspend.TrendDayStart(now).AddDate(0, 0, -29)
+	// Physical JSONL filenames stay UTC for compatibility. A 30-day Taiwan
+	// interval can overlap 31 UTC files; filter by absolute sample time below.
+	for i := 30; i >= 0; i-- {
 		path := filepath.Join(dir, now.UTC().AddDate(0, 0, -i).Format("2006-01-02")+".jsonl")
 		f, err := os.Open(path)
 		if os.IsNotExist(err) {
@@ -95,7 +98,7 @@ func (s *Server) localHistory(now time.Time) machineHistory {
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			var row usageSample
-			if json.Unmarshal(scanner.Bytes(), &row) == nil {
+			if json.Unmarshal(scanner.Bytes(), &row) == nil && !row.At.Before(start) && !row.At.After(now) {
 				// Pace is derived for the current quota panel, not used by history.
 				// Keep the durable JSONL intact but omit it from published snapshots.
 				for i := range row.Windows {
@@ -137,7 +140,7 @@ func (s *Server) handleUsageHistory(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(struct {
 		Machines []machineHistory `json:"machines"`
 		Timezone string           `json:"timezone"`
-	}{rows, "UTC"})
+	}{rows, agentspend.TrendTimezone})
 }
 
 func (s *Server) saveUsageHistory(snap agentusage.Snapshot) {

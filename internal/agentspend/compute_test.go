@@ -32,6 +32,35 @@ func TestDailyCheckedReportsDiscoveryFailure(t *testing.T) {
 	}
 }
 
+func TestDailyTaiwanMidnightBoundaries(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIRS", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude"))
+	t.Setenv("CODEX_HOME", filepath.Join(root, "codex"))
+	const row = `{"type":"assistant","timestamp":"%s","message":{"id":"%s","model":"claude-opus-4-8","usage":{"input_tokens":1000}}}`
+	writeFixture(t, filepath.Join(root, "claude", "projects", "test", "s.jsonl"), []string{
+		fmt.Sprintf(row, "2026-10-19T15:59:59Z", "before"),
+		fmt.Sprintf(row, "2026-10-19T16:00:00Z", "midnight"),
+		fmt.Sprintf(row, "2026-10-20T00:30:00Z", "after-utc-midnight"),
+	})
+	now := time.Date(2026, 10, 20, 1, 0, 0, 0, time.UTC)
+	rows, err := DailyChecked(now, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	totals := map[string]float64{}
+	for _, r := range rows {
+		if r.Provider == "claude" {
+			totals[r.Date] = r.USD
+		}
+	}
+	approx(t, "before Taiwan midnight", totals["2026-10-19"], .005)
+	approx(t, "after Taiwan midnight", totals["2026-10-20"], .010)
+	if got := TrendDayStart(now).UTC().Format(time.RFC3339); got != "2026-10-19T16:00:00Z" {
+		t.Fatalf("day start = %s", got)
+	}
+}
+
 // End-to-end over fixture files: one in-week row, one earlier-in-month row, one
 // last-month row (excluded), and a duplicate message id (counted once).
 func TestComputeWindowsAndDedup(t *testing.T) {

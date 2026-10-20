@@ -5,11 +5,14 @@
 UsagePanel owns the trend dialog's local open state; the dialog uses a native
 modal dialog in a body portal so it also works in split-view roots, traps focus,
 and does not inherit pane clipping. Its on-demand history request is independent
-of the existing current-usage poll. Daily cost uses UTC dates and is reconstructed
+of the existing current-usage poll. Daily cost uses Asia/Taipei dates and is reconstructed
 in the background from session logs with current pricing, not an immutable billing ledger. Quota
 samples are persisted by the server in private daily JSONL files under
 `~/.tmact/usage-history/`, excluding account identifiers, errors and credentials.
-Files are retained; background collection reads the latest 30 UTC dates. Only fresh successful
+Files are retained; background collection covers the latest 30 Taiwan dates. Raw
+quota JSONL filenames remain UTC for compatibility; read 31 UTC files and filter
+absolute timestamps so the earliest Taiwan day's first eight hours are included.
+Only fresh successful
 windows are recorded. Missing history is not interpolated. Peer history requests
 use `local=1` to prevent recursive federation; partial failures remain visible.
 Cost is summed across machines. These machines share provider accounts, so the
@@ -18,7 +21,7 @@ provider/window, independent of the cost machine filter. Peer requests use
 `cost_only=1`; peer quota samples are discarded, including legacy cached samples.
 The history HTTP handler serves immutable memory snapshots only: it never scans
 session logs or fetches peers. The background worker restores a versioned private
-`trend-cache.json` on startup, prices 30 days once per UTC date and only today's
+`trend-cache.json` on startup, prices 30 days once per Taiwan date and only today's
 cost at the spend interval (one hour by default). Quota history and peer snapshots
 refresh on the usage interval (five minutes by default). Cold peers are retried
 more quickly. Atomic cache replacement preserves the previous durable snapshot
@@ -26,6 +29,11 @@ on failure; remote failures retain each machine's last result and timestamps.
 The modal displays preparation and update times, polling while open; a cold start
 is explicit pending data, not a zero-cost result. Cache files are derived and can
 be rebuilt; original quota JSONL logs remain the historical source of truth.
+Cache version 2 records its timezone. Legacy UTC daily totals are discarded and
+rebuilt in background, preserving absolute quota samples and source JSONL files.
+Never merge a peer's daily totals with an unknown/different timezone. The client
+uses Taiwan midnight for ranges and Taiwan time for timestamps regardless of the
+browser's own timezone.
 These new local UI states use React state; the original port's ref rules below
 continue to govern its existing mutable store.
 

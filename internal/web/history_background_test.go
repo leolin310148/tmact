@@ -22,7 +22,7 @@ func TestHistoryCadencesPersistAndRestart(t *testing.T) {
 	s := &Server{SpendEnabled: true, UsageHistoryDir: t.TempDir()}
 	s.computeHistoryDaily = func(at time.Time, days int) ([]agentspend.DailySpend, error) {
 		calls = append(calls, days)
-		rows := []agentspend.DailySpend{{Date: at.UTC().Format("2006-01-02"), Provider: "codex", USD: float64(len(calls))}}
+		rows := []agentspend.DailySpend{{Date: agentspend.TrendDay(at), Provider: "codex", USD: float64(len(calls))}}
 		if days == 30 {
 			rows = append(rows, agentspend.DailySpend{Date: at.AddDate(0, 0, -1).Format("2006-01-02"), Provider: "codex", USD: 5})
 		}
@@ -55,7 +55,7 @@ func TestHistoryCadencesPersistAndRestart(t *testing.T) {
 	restarted.refreshLocalHistory(now.AddDate(0, 0, 1))
 	restarted.refreshLocalHistory(now.AddDate(0, 0, 1).Add(10 * time.Minute))
 	if !reflect.DeepEqual(calls, []int{30, 1, 30}) {
-		t.Fatalf("UTC daily rollover: %v", calls)
+		t.Fatalf("Taiwan daily rollover: %v", calls)
 	}
 	// A failed new-hour refresh keeps yesterday's successful cost values/time.
 	previous := restarted.historySnapshot(true)[0]
@@ -116,7 +116,7 @@ func TestPeerHistoryRetainsLastGoodResultsAndRestoresThem(t *testing.T) {
 		if r.URL.Query().Get("local") != "1" {
 			t.Error("recursive peer request")
 		}
-		_, _ = w.Write([]byte(`{"machines":[{"machine":"local","daily":[{"date":"2026-10-20","provider":"codex","usd":7}],"usage":[]}]}`))
+		_, _ = w.Write([]byte(`{"timezone":"Asia/Taipei","machines":[{"machine":"local","daily":[{"date":"2026-10-20","provider":"codex","usd":7}],"usage":[]}]}`))
 	}))
 	defer peer.Close()
 	s := &Server{SpendEnabled: true, UsageHistoryDir: t.TempDir(), CostPeers: []statusd.Peer{{Name: "mini", URL: peer.URL}}}
@@ -127,7 +127,8 @@ func TestPeerHistoryRetainsLastGoodResultsAndRestoresThem(t *testing.T) {
 	if got.Error == "" || got.Pending || len(got.Daily) != 1 || got.Daily[0].USD != 7 || !got.UpdatedAt.Equal(now) {
 		t.Fatalf("peer cache fallback failed: %+v", got)
 	}
-	s.history.state.Version = 1
+	s.history.state.Version = trendCacheVersion
+	s.history.state.Timezone = agentspend.TrendTimezone
 	if err := s.persistHistoryCache(); err != nil {
 		t.Fatal(err)
 	}

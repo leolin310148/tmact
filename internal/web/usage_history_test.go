@@ -50,7 +50,7 @@ func TestUsageHistoryPeerBoundaryAndFailures(t *testing.T) {
 		if r.URL.Query().Get("local") != "1" {
 			t.Error("recursive peer request")
 		}
-		_, _ = w.Write([]byte(`{"machines":[{"machine":"local","daily":[],"usage":[]}]}`))
+		_, _ = w.Write([]byte(`{"timezone":"Asia/Taipei","machines":[{"machine":"local","daily":[],"usage":[]}]}`))
 	}))
 	defer peer.Close()
 	s := &Server{UsageEnabled: true, UsageHistoryDir: t.TempDir(), CostPeers: []statusd.Peer{{Name: "peer", URL: peer.URL}, {Name: "offline", URL: "http://127.0.0.1:1"}}}

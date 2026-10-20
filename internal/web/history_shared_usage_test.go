@@ -44,7 +44,7 @@ func TestPeerHistoryRequestsOnlyCostAndDiscardsLegacyUsage(t *testing.T) {
 		if r.URL.Query().Get("cost_only") != "1" || r.URL.Query().Get("local") != "1" {
 			t.Errorf("wrong peer query: %s", r.URL)
 		}
-		_, _ = w.Write([]byte(`{"machines":[{"machine":"local","daily":[{"date":"2026-10-20","provider":"codex","usd":7}],"usage":[{"provider":"codex","windows":[{"name":"weekly","used_percent":30}]}]}]}`))
+		_, _ = w.Write([]byte(`{"timezone":"Asia/Taipei","machines":[{"machine":"local","daily":[{"date":"2026-10-20","provider":"codex","usd":7}],"usage":[{"provider":"codex","windows":[{"name":"weekly","used_percent":30}]}]}]}`))
 	}))
 	defer peer.Close()
 	s := &Server{}

@@ -8,7 +8,19 @@ import (
 	"github.com/leolin310148/tmact/internal/sessionlog"
 )
 
-// DailySpend is API-equivalent spend on a UTC calendar date.
+const TrendTimezone = "Asia/Taipei"
+
+// Trend history covers recent dates, for which Taiwan is UTC+8 without DST.
+var trendLocation = time.FixedZone(TrendTimezone, 8*60*60)
+
+func TrendDay(t time.Time) string { return t.In(trendLocation).Format("2006-01-02") }
+
+func TrendDayStart(t time.Time) time.Time {
+	local := t.In(trendLocation)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, trendLocation)
+}
+
+// DailySpend is API-equivalent spend on a Taiwan calendar date.
 type DailySpend struct {
 	Date     string  `json:"date"`
 	Provider string  `json:"provider"`
@@ -24,7 +36,7 @@ func Daily(now time.Time, days int) []DailySpend {
 // DailyChecked preserves a caller's last-known ledger when discovery or reads
 // fail, rather than silently publishing a misleading zero/partial total.
 func DailyChecked(now time.Time, days int) ([]DailySpend, error) {
-	start := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1-days)
+	start := TrendDayStart(now).AddDate(0, 0, 1-days)
 	out := []DailySpend{}
 	for _, s := range scanners {
 		discovery, err := sessionlog.Discover(sessionlog.Provider(s.provider()))
@@ -53,7 +65,7 @@ func DailyChecked(now time.Time, days int) ([]DailySpend, error) {
 				continue
 			}
 			seen[row.dedup] = true
-			totals[row.ts.UTC().Format("2006-01-02")] += row.cost
+			totals[TrendDay(row.ts)] += row.cost
 		}
 		for day := start; !day.After(now); day = day.AddDate(0, 0, 1) {
 			date := day.Format("2006-01-02")
