@@ -16,7 +16,9 @@
 
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import CredentialRequests from "./components/CredentialRequests";
 import UsagePanel from "./components/UsagePanel";
+import type { CredRequest } from "./types/server";
 
 const COLS_KEY = "tmact.split.cols";
 const MAX_COLS = 3;
@@ -171,6 +173,31 @@ export function initSplitShell(rootEl: HTMLElement): () => void {
     roots.push(usageRoot);
     usageRoot.render(createElement(UsagePanel));
   }
+
+  // One shared credential badge/dialog too (slots suppress theirs). The shell
+  // has no snapshot stream, so each slot posts its pending list (main App);
+  // they all see the same statusd, so the latest message wins. The dialog
+  // living here also keeps a secret out of every slot's input bar.
+  const credHost = document.createElement("div");
+  rootEl.appendChild(credHost);
+  const credRoot = createRoot(credHost);
+  roots.push(credRoot);
+  const renderCred = (pending: CredRequest[]): void =>
+    credRoot.render(createElement(CredentialRequests, { pending }));
+  renderCred([]);
+  window.addEventListener(
+    "message",
+    (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const data = e.data as { tmact?: string; list?: unknown } | null;
+      if (!data || data.tmact !== "cred-requests" || !Array.isArray(data.list)) return;
+      const fromSlot = Array.from(grid.querySelectorAll("iframe")).some(
+        (f) => f.contentWindow === e.source,
+      );
+      if (fromSlot) renderCred(data.list as CredRequest[]);
+    },
+    { signal: shellGone.signal },
+  );
 
   const menuWrap = rootEl.querySelector<HTMLElement>("#split-menu-wrap");
   const menuBtn = rootEl.querySelector<HTMLButtonElement>("#split-menu-btn");

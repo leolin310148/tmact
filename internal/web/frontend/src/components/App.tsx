@@ -1082,6 +1082,21 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
   // ----- viewport (§3) -----
   useViewport({ positionRecOverlay });
 
+  // Split slots don't show the credential badge themselves; they hand the
+  // pending list to the shell, which shows one badge for the whole view.
+  const credRequestsJSON = JSON.stringify(state.snapshot?.cred_requests ?? []);
+  useEffect(() => {
+    if (!inSplitSlot || window.parent === window) return;
+    try {
+      window.parent.postMessage(
+        { tmact: "cred-requests", list: JSON.parse(credRequestsJSON) },
+        window.location.origin,
+      );
+    } catch {
+      /* shell gone */
+    }
+  }, [credRequestsJSON]);
+
   // ===== register the shared callbacks (§4) — once, synchronously =====
   // setCallbacks is read through a ref in the store, so a post-first-render
   // registration is observed without a bump. We keep the latest implementations

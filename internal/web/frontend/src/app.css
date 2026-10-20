@@ -1658,7 +1658,12 @@
     font: 600 12px/1 var(--mono); cursor: pointer;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   }
-  .cred-overlay { z-index: 80; }
+  /* Track the visual viewport so the soft keyboard pushes the card (and its
+     input) up instead of covering it. */
+  .cred-overlay {
+    z-index: 80;
+    inset: 0 0 auto 0; height: var(--tmact-vvh, 100%);
+  }
   .cred-meta {
     display: grid; grid-template-columns: auto 1fr; gap: 4px 10px;
     margin: 0 0 14px; font-size: 12px;
