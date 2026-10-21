@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-func TestModelCatalogIncludesFableTerraAndIndependentEfforts(t *testing.T) {
+func TestModelCatalogIncludesFableSolAndIndependentEfforts(t *testing.T) {
 	catalog := DefaultCandidates()
-	if len(catalog) != 8 {
+	if len(catalog) != 7 {
 		t.Fatalf("catalog=%d", len(catalog))
 	}
 	models := map[string]Candidate{}
@@ -30,10 +30,10 @@ func TestModelCatalogIncludesFableTerraAndIndependentEfforts(t *testing.T) {
 			t.Fatal("Claude ultra")
 		}
 	}
-	if models["claude-fable-5-1"].Model == "" || models["gpt-5.6-terra"].Model == "" {
-		t.Fatal("omitted Fable/Terra")
+	if models["claude-fable-5-1"].Model == "" || models["gpt-6.1-sol"].Model == "" {
+		t.Fatal("omitted Fable/Sol")
 	}
-	if SupportsEffort(models["gpt-6-luna"], "ultra") || !SupportsEffort(models["gpt-5.6-terra"], "ultra") {
+	if SupportsEffort(models["gpt-6-luna"], "ultra") || !SupportsEffort(models["gpt-6.1-sol"], "ultra") {
 		t.Fatal("wrong Codex CLI effort capabilities")
 	}
 	catalog[0].Efforts[0] = "bad"
@@ -45,7 +45,7 @@ func TestModelCatalogIncludesFableTerraAndIndependentEfforts(t *testing.T) {
 func TestEffortQuestionsArePerModelInOneBatch(t *testing.T) {
 	in := Input{Candidates: DefaultCandidates()}
 	q, profiles := decisionQuestions(in)
-	if len(q) != 10 || len(profiles) != 8 {
+	if len(q) != 9 || len(profiles) != 7 {
 		t.Fatalf("questions=%d models=%d", len(q), len(profiles))
 	}
 	for key, c := range profiles {
@@ -72,7 +72,7 @@ func TestEffortQuestionsArePerModelInOneBatch(t *testing.T) {
 }
 
 func TestSelectionUsesSelectedModelsEffort(t *testing.T) {
-	for _, tt := range []struct{ model, effort string }{{"claude-fable-5-1", "medium"}, {"claude-haiku-5-5", "max"}, {"gpt-5.6-terra", "xhigh"}, {"gpt-6.1-sol", "high"}, {"gpt-6-astra", "low"}} {
+	for _, tt := range []struct{ model, effort string }{{"claude-fable-5-1", "medium"}, {"claude-haiku-5-5", "max"}, {"gpt-6.1-sol", "high"}, {"gpt-6-astra", "low"}} {
 		t.Run(tt.model+"/"+tt.effort, func(t *testing.T) {
 			var candidate Candidate
 			for _, c := range DefaultCandidates() {
@@ -115,17 +115,17 @@ cat >/dev/null
 printf '%s\n' '{"answers":{"route":{"choice":"profile_0"},"effort_profile_0":{"choice":"xhigh"}},"confidences":{"route":0.1,"effort_profile_0":0.0}}'
 `
 	os.WriteFile(filepath.Join(dir, "decide"), []byte(script), 0700)
-	var terra Candidate
+	var sol Candidate
 	for _, c := range DefaultCandidates() {
-		if c.Model == "gpt-5.6-terra" {
-			terra = c
+		if c.Model == "gpt-6.1-sol" {
+			sol = c
 		}
 	}
-	s, err := Choose(context.Background(), Input{Candidates: []Candidate{terra}})
+	s, err := Choose(context.Background(), Input{Candidates: []Candidate{sol}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Model != "gpt-5.6-terra" || s.Effort != "xhigh" {
+	if s.Model != "gpt-6.1-sol" || s.Effort != "xhigh" {
 		t.Fatal(s)
 	}
 	calls, _ := os.ReadFile(filepath.Join(dir, "calls"))

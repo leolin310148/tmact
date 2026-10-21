@@ -27,7 +27,7 @@ func TestAutoModelDryRunAndEffortLaunch(t *testing.T) {
 	opts.AutoModel = true
 	deps.FetchUsage = healthyQuota
 	deps.ChooseModel = func(_ context.Context, in modelroute.Input) (*modelroute.Selection, error) {
-		if in.Task != opts.Prompt || len(in.Candidates) != 4 {
+		if in.Task != opts.Prompt || len(in.Candidates) != 3 {
 			t.Fatalf("input=%+v", in)
 		}
 		return &modelroute.Selection{Status: "selected", Agent: "codex", Model: "gpt-6.1-sol", Effort: "medium", Confidence: .9}, nil
@@ -358,7 +358,7 @@ func TestDynamicCatalogEffortsMatchLauncherValidation(t *testing.T) {
 			}
 		}
 	}
-	for _, tt := range []struct{ agent, model, effort string }{{"claude", "claude-fable-5-1", "medium"}, {"codex", "gpt-5.6-terra", "xhigh"}, {"codex", "gpt-6-astra", "low"}} {
+	for _, tt := range []struct{ agent, model, effort string }{{"claude", "claude-fable-5-1", "medium"}, {"codex", "gpt-6.1-sol", "xhigh"}, {"codex", "gpt-6-astra", "low"}} {
 		t.Run(tt.model, func(t *testing.T) {
 			_, deps := baseDeps()
 			o := baseOpts()

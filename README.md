@@ -339,12 +339,13 @@ target checks run on that peer without reading same-named local files.
 
 Routing chooses a model and effort independently in a single decide request.
 The catalog includes Claude Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1,
-and Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol, GPT-6 Astra. Each has a
+and Codex GPT-6 Luna, GPT-6.1 Sol, GPT-6 Astra. Each has a
 capability description and legal effort set: Claude and Luna support low,
-medium, high, xhigh, max; Terra, Sol and Astra also support Codex CLI ultra.
-Capability descriptions follow official model positioning; Terra is not assumed
-cheaper or faster than GPT-6 models, and API prices are not subscription quota
-weights. There is no fixed tier-to-effort mapping: Sol high and Astra low are both legal.
+medium, high, xhigh, max; Sol and Astra also support Codex CLI ultra.
+Capability descriptions follow official model positioning plus published
+agentic-coding results; GPT-5.6 Terra is excluded because GPT-6.1 Sol supersedes
+it (still launchable with an explicit --model). API prices are not subscription
+quota weights. There is no fixed tier-to-effort mapping: Sol high and Astra low are both legal.
 Decide evaluates effort conditional on each candidate and applies only the
 selected model's effort; it does not make a second API call. Generic worker
 rules or unrelated reference files do not by themselves make the task advanced.

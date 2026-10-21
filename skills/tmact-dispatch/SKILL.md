@@ -80,11 +80,11 @@ An explicit `--model` bypasses decide and is used exactly as requested. Use
 `--auto-model=false` to opt out, or `--auto-model` to require routing. Honor
 repository guidance; only the maintained model catalog is eligible for
 automatic selection. It includes Claude Haiku/Sonnet/Opus 5.5 and Fable 5.1,
-plus Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol and GPT-6 Astra.
+plus Codex GPT-6 Luna, GPT-6.1 Sol and GPT-6 Astra.
 Decide chooses model and model-specific effort independently in one request;
 do not preassign an effort from the model name or difficulty. Only the selected
 model's conditional effort answer is applied. Claude and Luna support low
-through max; Terra/Sol/Astra also advertise Codex CLI ultra. An explicit
+through max; Sol/Astra also advertise Codex CLI ultra. An explicit
 `--effort` pins the value instead. `selection.effort_confidence` records effort
 certainty separately; it is informational, like model confidence.
 Let tmact call `decide` with the task and sanitized quota; do not duplicate the

@@ -85,7 +85,7 @@ capability and never contains an ask reply capability.
 ## Model catalog and effort decisions
 
 The automatic catalog contains Claude Haiku 5.5, Sonnet 5.5, Opus 5.5,
-Fable 5.1, and Codex GPT-6 Luna, GPT-5.6 Terra, GPT-6.1 Sol, GPT-6 Astra.
+Fable 5.1, and Codex GPT-6 Luna, GPT-6.1 Sol, GPT-6 Astra.
 Each model has its own capability description and supported effort list.
 Model-specific weekly caps filter models, independently of effort. The catalog
 is maintained explicitly; it is not whatever a model can recall about new names.
@@ -109,11 +109,12 @@ Capability descriptions checked 2026-10-21:
   [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra),
   [Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and
   [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra): Luna targets
-  focused high-volume work; Terra balances intelligence and cost in the GPT-5.6
-  family and roughly corresponds to earlier mini models; Sol targets complex
-  work with near-Astra performance at lower cost than Astra; Astra targets the
-  most demanding work. Terra's historical positioning does not establish a
-  price or latency advantage over GPT-6 models.
+  focused high-volume work; Sol targets complex work with near-Astra
+  performance at lower cost than Astra; Astra targets the most demanding work.
+  Terra (GPT-5.6) is no longer in the current catalog and is excluded from
+  automatic routing: third-party results (Vals AI, Artificial Analysis) put Sol
+  far ahead on agentic coding (Terminal-Bench 4.0 ~55% vs ~23%) and only a few
+  points behind Astra (~58-60%). Sol/Astra descriptions cite that small margin.
 - [Claude model comparison](https://platform.claude.com/docs/en/models/overview):
   Haiku targets high-volume, latency-sensitive work; Sonnet balances speed and
   intelligence; Opus targets long-running agentic coding and knowledge work;
@@ -131,7 +132,7 @@ Launcher effort sources checked 2026-10-21:
   all four maintained Claude models support low, medium, high, xhigh, max.
 - Codex CLI 0.163.0 model metadata (`models_cache.json`) supplies launcher
   supported reasoning levels: Luna supports low through max;
-  Terra, Sol and Astra also advertise ultra (automatic task delegation).
+  Sol and Astra also advertise ultra (automatic task delegation).
   The [Terra API reference](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
   describes the direct API through max; tmact launches Codex CLI, whose ultra
   orchestration option is separate from the direct API effort contract.
