@@ -34,21 +34,23 @@ type Candidate struct {
 }
 
 // DefaultCandidates describes model capabilities independently of effort.
-// Claude effort support follows official effort docs (2026-10-21). Codex CLI
+// Capability descriptions follow official model pages (2026-10-21); sources
+// and API-versus-subscription cost boundaries are in ARCHITECTURE.md.
+// Claude effort support follows official effort docs. Codex CLI
 // 0.163.0 model metadata supplies descriptions and reasoning levels, including
 // its ultra orchestration level; these are launcher capabilities, not API tiers.
 func DefaultCandidates() []Candidate {
 	claude := []string{"low", "medium", "high", "xhigh", "max"}
 	codex := []string{"low", "medium", "high", "xhigh", "max", "ultra"}
 	return []Candidate{
-		{Agent: "claude", Model: "claude-haiku-5-5", Tier: "lightweight", Efforts: slices.Clone(claude), Description: "Fast, economical Claude for bounded edits, extraction, straightforward fixes and tool tasks; increase effort when a small task still needs careful checking."},
-		{Agent: "claude", Model: "claude-sonnet-5-5", Tier: "standard", Efforts: slices.Clone(claude), Description: "Balanced Claude for ordinary coding, testing, review and multistep tool use with established designs; effort can rise for harder implementation."},
-		{Agent: "claude", Model: "claude-opus-5-5", Tier: "advanced", Efforts: slices.Clone(claude), Description: "Strong Claude for complex coding, difficult debugging, architecture and ambiguity; evaluate whether its additional capability is needed rather than escalating by prompt length."},
-		{Agent: "claude", Model: "claude-fable-5-1", Tier: "advanced", Efforts: slices.Clone(claude), Description: "Claude for especially demanding reasoning and long-horizon agentic coding/research, or work where Opus at higher effort is insufficient. Higher capability and latency; not the default for ordinary implementation."},
-		{Agent: "codex", Model: "gpt-6-luna", Tier: "lightweight", Efforts: slices.Clone(claude), Description: "Fast, affordable Codex for easier tasks, narrow changes, simple fixes and bounded investigation; supports more reasoning when the task warrants it."},
-		{Agent: "codex", Model: "gpt-5.6-terra", Tier: "standard", Efforts: slices.Clone(codex), Description: "Older balanced Codex for straightforward work, routine implementation, testing and review; balances capability and cost between small-task and workhorse roles."},
-		{Agent: "codex", Model: "gpt-6.1-sol", Tier: "standard", Efforts: slices.Clone(codex), Description: "Latest Codex workhorse for coding and everyday work: general implementation, testing, debugging and review. Can use higher effort without automatically escalating to Astra."},
-		{Agent: "codex", Model: "gpt-6-astra", Tier: "advanced", Efforts: slices.Clone(codex), Description: "Frontier Codex for the most demanding work, difficult reasoning, ambiguous design and complex debugging; reserve for tasks needing more model capability, independently of effort."},
+		{Agent: "claude", Model: "claude-haiku-5-5", Tier: "lightweight", Efforts: slices.Clone(claude), Description: "Claude optimized for high-volume, latency-sensitive tasks such as classification, extraction and routing; the fastest model in the maintained Claude lineup."},
+		{Agent: "claude", Model: "claude-sonnet-5-5", Tier: "standard", Efforts: slices.Clone(claude), Description: "Claude combining speed and intelligence, with fast comparative latency; consider when task quality and response speed both matter."},
+		{Agent: "claude", Model: "claude-opus-5-5", Tier: "advanced", Efforts: slices.Clone(claude), Description: "Claude built for long-running agentic coding and knowledge work, with moderate comparative latency. Anthropic recommends starting here for most workloads, then evaluating the quality, cost and latency tradeoff."},
+		{Agent: "claude", Model: "claude-fable-5-1", Tier: "advanced", Efforts: slices.Clone(claude), Description: "Claude for demanding reasoning and long-horizon agentic work, including coding, multistep research and document work; consider when evaluations of Opus 5.5 at higher effort still fall short. Slower comparative latency than Opus."},
+		{Agent: "codex", Model: "gpt-6-luna", Tier: "lightweight", Efforts: slices.Clone(claude), Description: "OpenAI model optimized for efficiency on focused, high-volume tasks, including summarization, extraction and focused coding. Evaluate the required capability and effort for the actual task."},
+		{Agent: "codex", Model: "gpt-5.6-terra", Tier: "standard", Efforts: slices.Clone(codex), Description: "GPT-5.6 model designed to balance intelligence and cost, roughly corresponding to the mini tier in earlier GPT-5 families. Do not infer a price or latency advantage over GPT-6 models from that historical positioning; choose based on task fit and evaluation evidence."},
+		{Agent: "codex", Model: "gpt-6.1-sol", Tier: "standard", Efforts: slices.Clone(codex), Description: "OpenAI model delivering near-Astra performance at lower cost than Astra for complex coding, computer use and professional work. Consider for repeated, long-running complex work; compare with Astra on task quality and cost."},
+		{Agent: "codex", Model: "gpt-6-astra", Tier: "advanced", Efforts: slices.Clone(codex), Description: "OpenAI's most capable model for the most demanding work, including complex reasoning, coding, computer use, research and document creation. Evaluate its additional capability against Sol for the actual task, with effort chosen independently."},
 	}
 }
 

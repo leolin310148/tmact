@@ -103,12 +103,34 @@ The state and descriptions are shared once; criteria reference candidate IDs.
 Effort confidence is logged separately, with no acceptance threshold. Generic
 worker rules and irrelevant examples must not alone cause a difficulty escalation.
 
-Capability sources checked 2026-10-21:
+Capability descriptions checked 2026-10-21:
+- [OpenAI model catalog](https://developers.openai.com/api/docs/models) and
+  model pages for [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
+  [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra),
+  [Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and
+  [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra): Luna targets
+  focused high-volume work; Terra balances intelligence and cost in the GPT-5.6
+  family and roughly corresponds to earlier mini models; Sol targets complex
+  work with near-Astra performance at lower cost than Astra; Astra targets the
+  most demanding work. Terra's historical positioning does not establish a
+  price or latency advantage over GPT-6 models.
+- [Claude model comparison](https://platform.claude.com/docs/en/models/overview):
+  Haiku targets high-volume, latency-sensitive work; Sonnet balances speed and
+  intelligence; Opus targets long-running agentic coding and knowledge work;
+  Fable targets demanding reasoning and long-horizon agentic work, including
+  when Opus at higher effort falls short. Anthropic's general starting-point
+  recommendation is capability context, not an override of tmact quota policy.
+- [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) does not
+  establish Codex subscription quota consumption. Descriptions do not encode
+  API dollar rates as subscription quota weights, assume equal capability at
+  equal tiers, or target a model's selection share. Effort remains independent.
+
+Launcher effort sources checked 2026-10-21:
 - [Claude effort](https://platform.claude.com/docs/en/build-with-claude/effort)
   and [Fable 5.1](https://platform.claude.com/docs/en/models/fable-5-1/overview):
   all four maintained Claude models support low, medium, high, xhigh, max.
 - Codex CLI 0.163.0 model metadata (`models_cache.json`) supplies launcher
-  descriptions and supported reasoning levels: Luna supports low through max;
+  supported reasoning levels: Luna supports low through max;
   Terra, Sol and Astra also advertise ultra (automatic task delegation).
   The [Terra API reference](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
   describes the direct API through max; tmact launches Codex CLI, whose ultra
