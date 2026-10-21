@@ -38,6 +38,7 @@ web-test: web-deps
 
 ## skills-test: run canonical skill installer checks
 skills-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_deploy_skills.py
 	bash scripts/install-skills_test.sh
 
 ## codesign-test: test macOS code-signing script behavior with mock tools
