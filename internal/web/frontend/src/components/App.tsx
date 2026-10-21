@@ -53,7 +53,7 @@ import type { AppCallbacks, AppState } from "../store/AppStateContext";
 import type { InputMsg, PaneStatus, Question, Snapshot } from "../types/server";
 import { isMobile } from "../lib/dom";
 import { reportHumanActivity } from "../api/client";
-import { translateKey } from "../lib/keymap";
+import { translateDirectKey } from "../lib/keymap";
 import { normalizePaneID, paneIDFromURL, removePaneParamFromCurrentURL } from "../lib/paneIntent";
 
 import { StatusLine, panePeer } from "./StatusLine";
@@ -985,8 +985,7 @@ function AppInner({ store }: { store: ReturnType<typeof useAppStateStore> }) {
         renderMode();
         return;
       }
-      if (e.nativeEvent.isComposing || e.keyCode === 229) return; // let the IME compose
-      const msg = translateKey(e.nativeEvent);
+      const msg = translateDirectKey(e.nativeEvent, direct.readOnly);
       if (!msg) return;
       e.preventDefault();
       sendDirect(msg);

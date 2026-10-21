@@ -25,8 +25,7 @@
 //   control this textarea's value. All four direct-mode behaviors are App-owned
 //   handlers (they need sendDirect/ctrlArmed/state.selectionMode, all of which
 //   live in App per ARCHITECTURE §4) and are forwarded here as props:
-//     onDirectKeyDown   ← keydown: selectionMode blur; IME guard
-//                          (isComposing || keyCode===229); translateKey →
+//     onDirectKeyDown   ← keydown: selectionMode blur; translateDirectKey →
 //                          preventDefault + sendDirect.
 //     onDirectComposition ← compositionend: sendDirect({t:"text",s:e.data});
 //                            direct.value = ""; drop .composing.
@@ -45,6 +44,8 @@ import type {
   KeyboardEvent,
   Ref,
 } from "react";
+
+import { isMobile } from "../lib/dom";
 
 interface DirectInputProps {
   /** Ref to the #direct-input textarea; owned by App (focus/blur + value clear). */
@@ -97,6 +98,8 @@ export default function DirectInput({
         aria-label="Direct terminal input"
         aria-describedby="direct-input-description"
         disabled={!inputAvailable}
+        // Read-only fields stay focusable and receive keydown without IME editing.
+        readOnly={!isMobile()}
         spellCheck={false}
         autoCapitalize="off"
         autoComplete="off"

@@ -57,3 +57,38 @@ export function translateKey(e: KeyboardEvent): InputMsg | null {
   if (e.key.length === 1) return { t: "text", s: e.key };
   return null;
 }
+
+// Desktop direct mode uses US physical keys so an active IME cannot turn
+// terminal commands into composition text. Mobile keeps its soft-keyboard path.
+export function translateDirectKey(e: KeyboardEvent, physical: boolean): InputMsg | null {
+  if (e.metaKey) return null;
+  if (e.ctrlKey && /^Key[A-Z]$/.test(e.code)) {
+    return { t: "key", k: "C-" + e.code.slice(3).toLowerCase() };
+  }
+  if (!physical) {
+    if (e.isComposing || e.keyCode === 229) return null;
+    return translateKey(e);
+  }
+  let key = e.key;
+  if (/^Key[A-Z]$/.test(e.code)) {
+    const upper = e.shiftKey !== e.getModifierState("CapsLock");
+    key = upper ? e.code.slice(3) : e.code.slice(3).toLowerCase();
+  } else if (/^Digit[0-9]$/.test(e.code)) {
+    const digit = e.code.slice(5);
+    key = e.shiftKey ? ")!@#$%^&*("[Number(digit)]! : digit;
+  } else {
+    const punctuation: Record<string, [string, string]> = {
+      Backquote: ["`", "~"], Minus: ["-", "_"], Equal: ["=", "+"],
+      BracketLeft: ["[", "{"], BracketRight: ["]", "}"],
+      Backslash: ["\\", "|"], Semicolon: [";", ":"], Quote: ["'", '\"'],
+      Comma: [",", "<"], Period: [".", ">"], Slash: ["/", "?"], Space: [" ", " "],
+    };
+    const pair = punctuation[e.code];
+    if (pair) key = pair[e.shiftKey ? 1 : 0];
+    else if (KEYMAP[e.code]) key = e.code;
+    else if (e.isComposing || e.keyCode === 229) return null;
+  }
+  return translateKey(new KeyboardEvent("keydown", {
+    key, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey,
+  }));
+}

@@ -1,9 +1,12 @@
 import { createRef } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DirectInput from "./DirectInput";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function renderDirectInput(paneSelected: boolean, selectionMode: boolean) {
   const handlers = {
@@ -31,6 +34,7 @@ describe("DirectInput accessibility state", () => {
     const input = renderDirectInput(true, false);
 
     expect(input).toBeEnabled();
+    expect(input).toHaveAttribute("readonly");
     expect(input).toHaveAccessibleDescription(
       "Input is available for the selected pane. Keystrokes are sent directly to the terminal.",
     );
@@ -80,4 +84,9 @@ describe("DirectInput IME composition wiring", () => {
 
     expect(document.querySelector(".ime-hint")?.textContent).toContain("組字中");
   });
+});
+
+it("keeps the mobile textarea editable for soft keyboards", () => {
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+  expect(renderDirectInput(true, false)).not.toHaveAttribute("readonly");
 });
