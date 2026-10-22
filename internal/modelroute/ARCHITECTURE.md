@@ -119,8 +119,11 @@ Capability descriptions checked 2026-10-21:
   Haiku targets high-volume, latency-sensitive work; Sonnet balances speed and
   intelligence; Opus targets long-running agentic coding and knowledge work;
   Fable targets demanding reasoning and long-horizon agentic work, including
-  when Opus at higher effort falls short. Anthropic's general starting-point
-  recommendation is capability context, not an override of tmact quota policy.
+  when Opus at higher effort falls short. Anthropic's general "start with Opus"
+  recommendation is omitted from the Opus description: it biased decide toward
+  Opus even for standard-difficulty work (Opus 49-68% vs Sonnet 26-31% in
+  2026-10-21 routing logs). Sonnet/Opus descriptions instead cite third-party
+  results: SWE-Bench Pro ~81% vs ~90%, AutomationBench ~45% vs ~43%.
 - [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) does not
   establish Codex subscription quota consumption. Descriptions do not encode
   API dollar rates as subscription quota weights, assume equal capability at
