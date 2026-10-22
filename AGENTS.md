@@ -98,7 +98,9 @@ ignored unless their host and path configuration has first been externalized.
 This tool presses keys in live tmux panes. Default to dry-runs, keep targets
 explicit, preserve watcher allowlists, and do not auto-confirm permission,
 approval, or broad path prompts. Folder trust is the only opt-in exception: it
-must use `--trust-folder`, `--trust-folders`, or `trust_folder: true`, support
-only Claude/Codex, and require exact canonical pane-cwd/allowed-dir equality.
+must use `--trust-folder`, `--trust-folders`, or `trust_folder: true` (or
+dispatch's automatic trust of an empty dir / linked git worktree root, never
+over MCP), support only Claude/Codex, and require exact canonical
+pane-cwd/allowed-dir equality.
 Keep the web UI on `127.0.0.1`
 unless the operator explicitly chooses a trusted-network bind.

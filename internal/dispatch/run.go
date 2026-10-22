@@ -106,6 +106,13 @@ func RunWithDeps(opts Options, deps Deps) (report Report, runErr error) {
 	}
 	opts.Dir = dir
 	report.Dir = dir
+	if !opts.TrustFolder && !opts.NoAutoTrust && (opts.Agent == "" || opts.Agent == panestatus.RuntimeClaude || opts.Agent == panestatus.RuntimeCodex) {
+		if reason := autoTrustReason(dir); reason != "" {
+			opts.TrustFolder = true
+			report.TrustFolder = true
+			report.AutoTrust = reason
+		}
+	}
 	if opts.Execute {
 		if err := workspacelease.CheckAvailable(dir, opts.WorkspaceLeaseOwner); err != nil {
 			return report, fmt.Errorf("dispatch workspace unavailable: %w", err)

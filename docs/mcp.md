@@ -53,7 +53,8 @@ panes present in the current snapshot.
   get the lexical check only and expand `~` against their own home
   (`dispatch.ExpandHome`), which needs a peer binary that includes it.
 - Workspace trust is never accepted (`TrustFolder` is hard-coded false and not
-  on the wire). Trust a new dir once with `tmact trust-folder`.
+  on the wire; `NoAutoTrust` also disables dispatch's empty-dir/worktree
+  auto-trust, including on peers). Trust a new dir once with `tmact trust-folder`.
 - `session` must match `[A-Za-z0-9_-]{1,64}`; `agent` is codex/claude/gemini.
   `continue_conversation` (no clear) is hub-only, like the CLI's `--peer` rule.
 - `send_text` refuses shell panes, stale panes, panes showing a prompt, and

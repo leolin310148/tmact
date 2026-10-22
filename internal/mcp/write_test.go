@@ -108,7 +108,7 @@ func TestDispatchWorkLocal(t *testing.T) {
 		t.Fatalf("error: %v", res.Content[0].(*sdk.TextContent).Text)
 	}
 	o := rec.dispatched[0]
-	if !o.Execute || o.TrustFolder || o.Wait || o.ReadyTimeout != dispatchReadyTimeout {
+	if !o.Execute || o.TrustFolder || !o.NoAutoTrust || o.Wait || o.ReadyTimeout != dispatchReadyTimeout {
 		t.Fatalf("opts = %+v", o)
 	}
 	if want, _ := filepath.EvalSymlinks(filepath.Join(home, "w", "repo")); o.Dir != want {

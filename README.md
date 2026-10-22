@@ -278,8 +278,12 @@ The check reports these paths but never deletes them.
 
 ### Exact-directory workspace trust
 
-Workspace trust is opt-in and limited to Claude/Codex. `dispatch-work` can
-handle the startup prompt while it waits for the agent:
+Workspace trust is limited to Claude/Codex. `dispatch-work` and `ask` can
+handle the startup prompt while they wait for the agent. Pass `--trust-folder`
+for any folder the agent has not opened before; it is applied automatically
+(reported as `auto_trust`) only when `--dir` is empty or is a linked git
+worktree root, since neither holds code that has not already been vetted. MCP
+dispatch never auto-trusts:
 
 ```sh
 tmact dispatch-work work --dir ~/work/repo --agent codex \
@@ -846,7 +850,8 @@ keys. Watchers keep allowlist checks, and loops stop on known permission,
 approval, trust-folder, and confirmation prompts instead of auto-confirming
 them. The only exception is explicit exact-directory workspace trust through
 `dispatch-work --trust-folder`, `panels ensure --trust-folders`, an agent's
-`trust_folder: true`, or the dry-run-first `tmact trust-folder` command.
+`trust_folder: true`, the dry-run-first `tmact trust-folder` command, or
+dispatch's automatic trust of an empty dir or linked git worktree root.
 
 A loop can also back off on quota: an optional `quota` block (see
 [`examples/quota-aware-loop.yaml`](examples/quota-aware-loop.yaml)) reads the

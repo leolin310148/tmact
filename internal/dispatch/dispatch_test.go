@@ -2,7 +2,9 @@ package dispatch_test
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -469,6 +471,10 @@ func TestExecuteNewSessionRefusesToPromptUnrecognizedScreen(t *testing.T) {
 func TestExecuteNewSessionStillRefusesTrustPromptWithoutOptIn(t *testing.T) {
 	_, deps := baseDeps()
 	dir := t.TempDir()
+	// A non-empty, non-worktree dir: neither auto-trust reason applies.
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	pane := codexPane()
 	pane.CurrentPath = dir
 	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
@@ -1497,5 +1503,47 @@ func TestExistingSessionRestartAcceptsPendingClaudeTrustFirst(t *testing.T) {
 	}
 	if len(rec.pastes) != 0 {
 		t.Fatalf("pane received pastes after trust: %#v", rec.pastes)
+	}
+}
+
+func TestExecuteNewSessionAutoTrustsEmptyClaudeDirectory(t *testing.T) {
+	for _, noAuto := range []bool{false, true} {
+		rec, deps := baseDeps()
+		dir := t.TempDir()
+		pane := claudePane()
+		pane.CurrentPath = dir
+		deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+		deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+			return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+		}
+		deps.CapturePane = func(string, int) (string, error) {
+			if len(rec.keys) == 0 {
+				return claudeWorkspaceTrustScreen(dir), nil
+			}
+			if len(rec.pastes) < 2 {
+				return "Claude Code\n\u276f ", nil
+			}
+			return "Claude Code\nWorking... esc to interrupt", nil
+		}
+		opts := baseOpts()
+		opts.Dir = dir
+		opts.Agent = "claude"
+		opts.Execute = true
+		opts.ReadySettle = 0
+		opts.NoAutoTrust = noAuto
+
+		report, err := dispatch.RunWithDeps(opts, deps)
+		if noAuto {
+			if err == nil || !strings.Contains(err.Error(), "refusing to auto-confirm") || len(rec.keys) != 0 {
+				t.Fatalf("NoAutoTrust: err=%v keys=%#v", err, rec.keys)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("RunWithDeps: %v", err)
+		}
+		if report.AutoTrust != dispatch.AutoTrustEmptyDir || !report.TrustFolder || !report.TrustedFolder {
+			t.Fatalf("report = %#v", report)
+		}
 	}
 }

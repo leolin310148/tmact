@@ -189,3 +189,15 @@ Target:
 Result:
 Follow-up:
 ```
+
+## Dispatch Auto-Trust (2026-10-23)
+
+- Claude 2.1.308. Without `--trust-folder`, `dispatch-work` auto-accepted the
+  trust screen for an empty dir (`auto_trust: empty_dir`) and a linked
+  worktree root (`auto_trust: linked_worktree`); a fresh `git init` repo still
+  stopped with `refusing to auto-confirm`.
+- Claude records a linked worktree's trust under the main checkout's path in
+  `~/.claude.json`, so accepting trust in a worktree also trusts its main repo.
+- A launch stuck on the trust screen, retried with `--trust-folder` while
+  auto-model routing is on, now accepts the prompt before the restart path
+  (previously refused with `not input-ready (waiting_permission)`).

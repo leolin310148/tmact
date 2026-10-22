@@ -174,9 +174,11 @@ func (t tools) dispatchWork(ctx context.Context, _ *sdk.CallToolRequest, in disp
 		ReadySettle:  dispatch.DefaultReadySettleDelay,
 		Context:      ctx,
 		// Fixed by design: MCP never dry-runs (ChatGPT confirms the call),
-		// never accepts workspace trust, and never blocks on the agent.
+		// never accepts workspace trust (not even the empty-dir/worktree
+		// auto-trust), and never blocks on the agent.
 		Execute:     true,
 		TrustFolder: false,
+		NoAutoTrust: true,
 		Wait:        false,
 	}
 	var report dispatch.Report

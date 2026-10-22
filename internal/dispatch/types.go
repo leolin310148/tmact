@@ -95,6 +95,9 @@ type Options struct {
 	ReadyTimeout time.Duration
 	ReadySettle  time.Duration
 	TrustFolder  bool
+	// NoAutoTrust disables the implicit TrustFolder opt-in for an empty dir or
+	// a linked git worktree. MCP sets it: workspace trust stays off that wire.
+	NoAutoTrust bool
 	// NoClear reuses an idle same-agent pane without sending /clear first, so
 	// the new prompt continues the pane's current conversation.
 	NoClear bool
@@ -203,6 +206,7 @@ type Report struct {
 	Execute              bool                  `json:"execute"`
 	TrustFolder          bool                  `json:"trust_folder,omitempty"`
 	TrustedFolder        bool                  `json:"trusted_folder,omitempty"`
+	AutoTrust            string                `json:"auto_trust,omitempty"`
 	Steps                []Step                `json:"steps"`
 	Wait                 *WaitReport           `json:"wait,omitempty"`
 	Result               *ResultReport         `json:"result,omitempty"`

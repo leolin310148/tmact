@@ -71,8 +71,16 @@ nothing locally, starts no polling, and lists only panes local to that peer.
   `tmact wait --target mini@%7 --until input-ready --require-transition` and
   `tmact capture --target mini@%7`; `tmact ls --peer mini` shows each pane's
   agent state.
-- `--trust-folder` is the only opt-in trust exception. It supports Claude and
+- **Pass `--trust-folder` whenever `--dir` is a folder this agent may not have
+  opened before** (a fresh clone, a new project, any repo you are unsure of).
+  Without it a new Claude/Codex launch stops at the workspace-trust screen and
+  the dispatch fails with `refusing to auto-confirm`. It supports Claude and
   Codex only and requires exact canonical pane-cwd/`--dir` equality.
+- Trust is automatic (report shows `auto_trust`) only when `--dir` is empty or
+  is the root of a linked git worktree (`git worktree add`). A main checkout or
+  fresh clone is neither — still pass `--trust-folder`.
+- If a dispatch already stopped on the trust screen, repeat the same command
+  with `--trust-folder`; it accepts the pending prompt and continues.
 
 For fresh work without an explicit model, let tmact automatically use decide
 when it is in PATH. `--agent` constrains the provider; `--effort` is preserved.
@@ -225,7 +233,8 @@ Session behavior:
 | Existing busy agent | Refuses; with `--queue` (Claude/Codex) types the prompt so the agent queues it |
 | Existing prompt wait | Refuses, even with `--queue` |
 | Permission or approval prompt | Refuses |
-| Trust prompt without valid opt-in | Refuses |
+| Trust prompt with `--trust-folder`, or empty dir / linked worktree root | Accepts after exact cwd match |
+| Trust prompt otherwise | Refuses (`refusing to auto-confirm`); rerun with `--trust-folder` |
 
 ## Monitor and follow up
 

@@ -60,8 +60,12 @@ agents. The safety design is intentional — do not weaken it:
   bypass for "convenience".
 - **Loops stop on permission prompts.** Don't change that to auto-confirm.
 - **Workspace trust is a narrow opt-in exception.** Only the `trust-folder`
-  command, `dispatch-work --trust-folder`, `panels ensure --trust-folders`, or
-  per-agent `trust_folder: true` may accept it. The runtime must be Claude or
+  command, `dispatch-work --trust-folder`, `panels ensure --trust-folders`,
+  per-agent `trust_folder: true`, or dispatch's automatic trust may accept it.
+  Automatic trust covers only an empty `--dir` or the root of a linked git
+  worktree (`.git` file with a back-linked `worktrees/` admin dir) — not a
+  main checkout or fresh clone — and MCP sets `NoAutoTrust` so it never applies
+  there. The runtime must be Claude or
   Codex and canonical pane cwd must exactly equal the explicitly allowed dir.
   Never reuse this path for command, patch, directory-access, or general
   approval prompts.

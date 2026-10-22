@@ -54,8 +54,16 @@ tmact ask SESSION [--target WINDOW[.PANE]] --dir DIR --agent claude|codex|gemini
   Fresh work replaces an idle existing agent; continuation rejects launch overrides.
 - `--execute` enables side effects; without it the command is a dry-run.
 - `--timeout` bounds the wait for the next explicit reply.
-- `--trust-folder` is the only opt-in trust exception. It supports Claude and
+- **Pass `--trust-folder` whenever `--dir` is a folder this agent may not have
+  opened before** (a fresh clone, a new project, any repo you are unsure of).
+  Without it a new Claude/Codex launch stops at the workspace-trust screen and
+  the ask fails with `refusing to auto-confirm`. It supports Claude and
   Codex only and requires exact canonical pane-cwd/`--dir` equality.
+- Trust is automatic (report shows `auto_trust`) only when `--dir` is empty or
+  is the root of a linked git worktree (`git worktree add`). A main checkout or
+  fresh clone is neither — still pass `--trust-folder`.
+- If a launch already stopped on the trust screen, repeat the same command
+  with `--trust-folder`; it accepts the pending prompt and continues.
 - `--json` returns a machine-readable report.
 
 Dry-run the exact session, directory, agent, model, prompt, timeout, and trust
