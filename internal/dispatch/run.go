@@ -272,8 +272,35 @@ func dispatchExisting(opts Options, deps Deps, report Report) (Report, error) {
 		return report, err
 	}
 
-	if (opts.AutoModel || opts.ProbeAutoModel || opts.RestartAgent || opts.Model != "" || opts.Effort != "") && !opts.NoClear && !opts.Queue && (runtime == panestatus.RuntimeClaude || runtime == panestatus.RuntimeCodex) {
-		return dispatchRestart(opts, deps, report, pane, target, runtime, classified)
+	restart := (opts.AutoModel || opts.ProbeAutoModel || opts.RestartAgent || opts.Model != "" || opts.Effort != "") && !opts.NoClear && !opts.Queue && (runtime == panestatus.RuntimeClaude || runtime == panestatus.RuntimeCodex)
+	// A restart refuses any asking pane, so an opted-in trust prompt left by
+	// an earlier launch must be answered first or --trust-folder could never
+	// recover it whenever auto-model is on.
+	if restart && opts.Execute && opts.TrustFolder && runtime == opts.Agent && classified.Asking && classified.InteractivePrompt != nil && classified.InteractivePrompt.Type == prompt.TypeTrustFolder {
+		result, err := foldertrust.AcceptPrompt(foldertrust.Options{Target: target, Dir: opts.Dir, Agent: opts.Agent}, pane, raw, runtime, deps.SendKeys)
+		if err != nil {
+			return report, err
+		}
+		if !result.Accepted {
+			return report, fmt.Errorf("%s trust-folder prompt was detected but not accepted", opts.Agent)
+		}
+		report.TrustedFolder = true
+		if _, err := waitReady(opts, deps, target, true); err != nil {
+			return report, err
+		}
+		if raw, err = deps.CapturePane(target, captureLines); err != nil {
+			return report, err
+		}
+		if classified, err = classifyPane(deps, target, raw); err != nil {
+			return report, err
+		}
+	}
+
+	if restart {
+		trusted := report.TrustedFolder
+		report, err = dispatchRestart(opts, deps, report, pane, target, runtime, classified)
+		report.TrustedFolder = report.TrustedFolder || trusted
+		return report, err
 	}
 	if (opts.AutoModel || opts.ProbeAutoModel) && (runtime == panestatus.RuntimeClaude || runtime == panestatus.RuntimeCodex) && (opts.Agent == "" || opts.Agent == runtime) {
 		opts.Agent = runtime

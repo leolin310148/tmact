@@ -1453,3 +1453,49 @@ func TestExpandHome(t *testing.T) {
 		}
 	}
 }
+
+// A launch that stopped on the trust screen must stay recoverable with
+// --trust-folder even when a model/auto-model choice routes through restart,
+// which otherwise refuses any asking pane.
+func TestExistingSessionRestartAcceptsPendingClaudeTrustFirst(t *testing.T) {
+	rec, deps := baseDeps()
+	dir := t.TempDir()
+	pane := claudePane()
+	pane.CurrentPath = dir
+	deps.ListLayout = func() (tmux.Layout, error) {
+		return tmux.Layout{Sessions: map[string]bool{"work": true}}, nil
+	}
+	deps.ListSessionPanes = func(string) ([]tmux.Pane, error) { return []tmux.Pane{pane}, nil }
+	deps.ProcessRuntime = func(int) panestatus.RuntimeDetection {
+		return panestatus.RuntimeDetection{Runtime: panestatus.RuntimeClaude}
+	}
+	deps.CapturePane = func(string, int) (string, error) {
+		if len(rec.keys) == 0 {
+			return claudeWorkspaceTrustScreen(dir), nil
+		}
+		return "Claude Code\nWorking... esc to interrupt", nil
+	}
+
+	opts := baseOpts()
+	opts.Dir = dir
+	opts.Agent = "claude"
+	opts.Model = "sonnet"
+	opts.Execute = true
+	opts.TrustFolder = true
+	opts.ReadySettle = 0
+	opts.ReadyTimeout = time.Second
+	now := time.Unix(0, 0)
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) { now = now.Add(d) }
+
+	report, _ := dispatch.RunWithDeps(opts, deps)
+	if len(rec.keys) == 0 || strings.Join(rec.keys[0].keys, ",") != "Down,Enter" {
+		t.Fatalf("trust keys = %#v, want Down,Enter before any restart", rec.keys)
+	}
+	if !report.TrustedFolder {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(rec.pastes) != 0 {
+		t.Fatalf("pane received pastes after trust: %#v", rec.pastes)
+	}
+}
