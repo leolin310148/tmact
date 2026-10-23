@@ -281,7 +281,7 @@ func (s *Server) applyInputWithResult(target string, m inputMsg) (inputResult, e
 
 var allowedNamedKeys = map[string]bool{
 	"Enter": true, "BSpace": true, "Tab": true, "BTab": true, "Escape": true,
-	"Up": true, "Down": true, "Left": true, "Right": true,
+	"Up": true, "Down": true, "Left": true, "Right": true, "S-Left": true,
 	"Home": true, "End": true, "PageUp": true, "PageDown": true,
 	"Delete": true, "Space": true,
 }

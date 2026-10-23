@@ -56,6 +56,7 @@ const HELPER_KEYS: readonly HelperKey[] = [
   { label: "End", accessibleName: "End", key: "End" },
   { label: "PgUp", accessibleName: "Page up", key: "PageUp" },
   { label: "PgDn", accessibleName: "Page down", key: "PageDown" },
+  { label: "⇧←", accessibleName: "Shift arrow left", key: "S-Left" },
 ];
 
 export interface KeyBarProps {

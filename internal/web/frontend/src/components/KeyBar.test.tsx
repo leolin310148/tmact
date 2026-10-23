@@ -46,6 +46,7 @@ describe("KeyBar accessibility", () => {
     expect(screen.getByRole("button", { name: "Arrow up" })).toHaveTextContent("↑");
     expect(screen.getByRole("button", { name: "Arrow down" })).toHaveTextContent("↓");
     expect(screen.getByRole("button", { name: "Arrow left" })).toHaveTextContent("←");
+    expect(screen.getByRole("button", { name: "Shift arrow left" })).toHaveTextContent("⇧←");
     expect(screen.getByRole("button", { name: "Arrow right" })).toHaveTextContent("→");
   });
 
